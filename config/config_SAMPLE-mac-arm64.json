@@ -1,0 +1,20 @@
+{
+  "directories": [
+    "/Users/admin/dev/backup-tool/test/input-01"
+   ,"/Users/admin/dev/backup-tool/test/input-02"
+   ,"/Users/admin/dev/backup-tool/test/input-03"
+  ],
+  "backup_dir": "/Users/admin/dev/backup-tool/test/output",
+  "temp_dir": "/Users/admin/dev/backup-tool/test/tmp",
+  "password": "StaticBackupPassword123!",
+  "retain_recent_backups": 2,
+  "log_file_name": "backup.log",
+  "debug_mode": true,
+  "email_recipient": "recipient@example.com",
+  "email_sender": "sender@example.com",
+  "email_smtp_server": "smtp.example.com",
+  "email_smtp_port": 587,
+  "email_smtp_auth_enabled": true,
+  "email_smtp_user": "user@example.com",
+  "email_smtp_password": "password123"
+}
