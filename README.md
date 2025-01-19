@@ -15,17 +15,11 @@ A simple and effective command-line tool for creating encrypted archives from di
 3. Amend "config.json" to your needs.
 4. On macOS you need to code sign the application and remove the malware check. Copy "config\macOS\mac.entitlements" to the same folder.
     1. Open the terminal and navigate to the folder where you moved RestoreSafe.
-    '''
-    cd "/path/to/RestoreSafe"
-    '''
+       > cd "/path/to/RestoreSafe"
     2. Code sign RestoreSafe.
-    '''
-    codesign --entitlements mac.entitlements -s - "RestoreSafe"
-    '''
+       > codesign --entitlements mac.entitlements -s - "RestoreSafe"
     3. Remove malware check (quarantine attribute)
-    '''
-    xattr -d com.apple.quarantine $appPath "RestoreSafe"
-    '''
+       > xattr -d com.apple.quarantine $appPath "RestoreSafe"
 
 ## Usage
 tbd
