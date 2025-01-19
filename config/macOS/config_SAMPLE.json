@@ -9,11 +9,11 @@
   "password": "StaticBackupPassword123!",
   "retain_recent_backups": 2,
   "log_file_name": "backup.log",
-  "debug_mode": true,
+  "debug_mode": false,
   "email_recipient": "recipient@example.com",
   "email_sender": "sender@example.com",
   "email_smtp_server": "smtp.example.com",
-  "email_smtp_port": 587,
+  "email_smtp_port": 465,
   "email_smtp_auth_enabled": true,
   "email_smtp_user": "user@example.com",
   "email_smtp_password": "password123"
