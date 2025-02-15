@@ -1,5 +1,10 @@
 # build.ps1 - Cross-platform build script for Windows and macOS
 
+# Example usage:
+#.\build.ps1
+#.\build.ps1 -prod 1.0.0
+#.\build.ps1 -prod -version 1.0.0
+
 # Parse command-line arguments
 param (
     [switch]$prod,      # -prod switch for production build
@@ -54,7 +59,7 @@ $targets = @()
 if ($prodBuild) {
     # Production builds
     $targets += @{ GOOS = "windows"; GOARCH = "amd64"; Output = "$outputDir/$appName-$buildVersion" + "_win-x64.exe" }
-    $targets += @{ GOOS = "darwin"; GOARCH = "arm64"; Output = "$outputDir/$appName-$buildVersion" + "_mac-arm64" }
+    $targets += @{ GOOS = "darwin"; GOARCH = "arm64"; Output = "$outputDir/$appName-$buildVersion" + "_mac-arm64.app" }
 } else {
     # Dev build (only Windows for faster local development)
     $targets += @{ GOOS = "windows"; GOARCH = "amd64"; Output = "$outputDir/$appName" + ".exe" }
