@@ -1,0 +1,145 @@
+// Package archive provides streaming TAR creation and extraction.
+package engine
+
+import (
+	"archive/tar"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// WriteTar walks srcDir and writes all files as a TAR stream to w.
+// File paths inside the archive are relative to srcDir.
+// Any provided exclude directories are skipped (useful to avoid including
+// the target backup folder when it resides within the source tree).
+func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
+	tw := tar.NewWriter(w)
+	defer tw.Close()
+
+	srcDir = filepath.Clean(srcDir)
+
+	// Prepare cleaned exclude dirs
+	exs := make([]string, 0, len(excludeDirs))
+	for _, e := range excludeDirs {
+		if e == "" {
+			continue
+		}
+		exs = append(exs, filepath.Clean(e))
+	}
+
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return fmt.Errorf("Failed to scan source folder at %q: %w", path, err)
+		}
+
+		// Skip any path that is inside one of the exclude directories.
+		for _, ex := range exs {
+			rel, relErr := filepath.Rel(ex, path)
+			if relErr == nil && rel != "" && !strings.HasPrefix(rel, "..") {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
+		// Compute relative path inside the archive.
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return fmt.Errorf("Failed to compute relative path: %w", err)
+		}
+		// Use forward slashes inside the archive (portable).
+		rel = filepath.ToSlash(rel)
+
+		hdr, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return fmt.Errorf("Failed to create TAR header for %q: %w", path, err)
+		}
+		hdr.Name = rel
+
+		if err := tw.WriteHeader(hdr); err != nil {
+			return fmt.Errorf("Failed to write TAR header for %q: %w", path, err)
+		}
+
+		if info.IsDir() || !info.Mode().IsRegular() {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("Failed to open file %q: %w", path, err)
+		}
+
+		if _, err := io.Copy(tw, f); err != nil {
+			f.Close() //nolint:errcheck
+			return fmt.Errorf("Failed to copy file content %q: %w", path, err)
+		}
+
+		if err := f.Close(); err != nil {
+			return fmt.Errorf("Failed to close file %q: %w", path, err)
+		}
+
+		return nil
+	})
+}
+
+// ExtractTar reads a TAR stream from r and extracts all entries to destDir.
+func ExtractTar(r io.Reader, destDir string) error {
+	tr := tar.NewReader(r)
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("Failed to read TAR entry: %w", err)
+		}
+
+		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
+
+		// Security: prevent path traversal attacks.
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator),
+			filepath.Clean(destDir)+string(os.PathSeparator)) {
+			return fmt.Errorf("Invalid path in archive (path traversal): %q", hdr.Name)
+		}
+
+		switch hdr.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0o750); err != nil {
+				return fmt.Errorf("Failed to create folder %q: %w", target, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+				return fmt.Errorf("Failed to create parent folder: %w", err)
+			}
+			if err := writeFile(target, tr); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func writeFile(target string, r io.Reader) error {
+	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+	if err != nil {
+		return fmt.Errorf("Failed to create archive file %q: %w", target, err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, r); err != nil {
+		return fmt.Errorf("Failed to write file content %q: %w", target, err)
+	}
+	return nil
+}
+
+func resolveDir(path, base string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(base, path)
+}

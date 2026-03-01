@@ -1,0 +1,33 @@
+{
+    "FixedFileInfo":  {
+                          "FileVersion":  {
+                                              "Major":  1,
+                                              "Minor":  0,
+                                              "Patch":  0,
+                                              "Build":  0
+                                          },
+                          "ProductVersion":  {
+                                                 "Major":  1,
+                                                 "Minor":  0,
+                                                 "Patch":  0,
+                                                 "Build":  0
+                                             }
+                      },
+    "StringFileInfo":  {
+                           "CompanyName":  "phsc84",
+                           "FileDescription":  "RestoreSafe - Secure Backup",
+                           "FileVersion":  "1.0.0.0",
+                           "InternalName":  "RestoreSafe",
+                           "LegalCopyright":  "Copyright (c) 2026 phsc84 and contributors",
+                           "OriginalFilename":  "RestoreSafe.exe",
+                           "ProductName":  "RestoreSafe",
+                           "ProductVersion":  "1.0.0"
+                       },
+    "VarFileInfo":  {
+                        "Translation":  {
+                                            "LangID":  1033,
+                                            "CharsetID":  1200
+                                        }
+                    },
+    "IconPath":  "assets/RestoreSafe.ico"
+}

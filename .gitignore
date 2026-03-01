@@ -1,0 +1,9 @@
+.gitconfig
+config.yaml
+dev_setup.txt
+RestoreSafe.exe
+cmd/resource.syso
+
+assets/**
+!assets/
+!assets/RestoreSafe.ico

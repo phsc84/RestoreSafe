@@ -1,0 +1,28 @@
+# RestoreSafe configuration file
+# Place this file in the same directory as RestoreSafe.exe.
+
+# Source folders to back up.
+# Paths may be absolute or relative to RestoreSafe.exe.
+source_folders:
+  - "C:\\Users\\Username\\Documents"
+  - "C:\\Users\\Username\\Pictures"
+
+# Destination folder for encrypted backup files.
+# Path may be absolute or relative to RestoreSafe.exe.
+target_folder: "C:\\Backup"
+
+# Maximum size of each split file (in MB).
+# Default: 4096 MB (= 4 GB)
+split_size_mb: 4096
+
+# Log level: "info" (default) or "debug" (verbose output)
+log_level: "info"
+
+# Additional I/O diagnostics in debug log/console (write calls, average write size).
+# Enable this only for storage or write-amplification troubleshooting.
+io_diagnostics: false
+
+# Enable YubiKey as a second factor (2FA).
+# true  = YubiKey required (ykchalresp must be installed)
+# false = Password only
+yubikey_enable: false
