@@ -14,44 +14,16 @@ func main() {
 	// Set working directory to the location of the executable
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error determining executable path: %v\n", err)
-		waitForKeyPress()
-		os.Exit(1)
+		exitWithError("Error determining executable path", err)
 	}
 	exeDir := filepath.Dir(exePath)
 	if err := os.Chdir(exeDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Error setting working directory: %v\n", err)
-		waitForKeyPress()
-		os.Exit(1)
+		exitWithError("Error setting working directory", err)
 	}
 
 	cfg, err := util.Load(filepath.Join(exeDir, "config.yaml"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
-		waitForKeyPress()
-		os.Exit(1)
-	}
-
-	// Handle command-line arguments if provided
-	if len(os.Args) >= 2 {
-		switch os.Args[1] {
-		case "-backup":
-			if err := engine.RunBackup(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
-				waitForKeyPress()
-				os.Exit(1)
-			}
-			waitForKeyPress()
-			return
-		case "-restore":
-			if err := engine.RunRestore(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Restore failed: %v\n", err)
-				waitForKeyPress()
-				os.Exit(1)
-			}
-			waitForKeyPress()
-			return
-		}
+		exitWithError("Error loading configuration", err)
 	}
 
 	// Interactive menu mode
@@ -63,6 +35,7 @@ func main() {
 		case "1":
 			if err := engine.RunBackup(cfg, exeDir); err != nil {
 				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
+				waitForKeyPress()
 			}
 			fmt.Println()
 		case "2":
@@ -95,13 +68,25 @@ func printMenu() {
 func getUserInput(prompt string) string {
 	fmt.Print(prompt)
 	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
+	input, err := reader.ReadString('\n')
+	if err != nil && err.Error() != "EOF" {
+		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+	}
 	return input
+}
+
+func exitWithError(message string, err error) {
+	fmt.Fprintf(os.Stderr, "%s: %v\n", message, err)
+	waitForKeyPress()
+	os.Exit(1)
 }
 
 func waitForKeyPress() {
 	fmt.Println()
 	fmt.Println("Press any key to exit...")
 	buf := make([]byte, 1)
-	os.Stdin.Read(buf) //nolint:errcheck
+	_, err := os.Stdin.Read(buf)
+	if err != nil && err.Error() != "EOF" {
+		fmt.Fprintf(os.Stderr, "Error reading key press: %v\n", err)
+	}
 }

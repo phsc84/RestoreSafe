@@ -161,7 +161,10 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 
 		n, err := r.current.Read(p)
 		if err == io.EOF {
-			r.current.Close()
+			if closeErr := r.current.Close(); closeErr != nil {
+				r.current = nil
+				return n, fmt.Errorf("Failed to close part file: %w", closeErr)
+			}
 			r.current = nil
 			if n > 0 {
 				return n, nil

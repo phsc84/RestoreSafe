@@ -368,6 +368,7 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 
 func logRestoreProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
 	if log == nil {
+		<-done // Just wait for completion without logging
 		return
 	}
 
@@ -377,24 +378,10 @@ func logRestoreProgress(log *util.Logger, folderName string, inBytes, outBytes, 
 	for {
 		select {
 		case <-done:
-			inMB := float64(inBytes.Load()) / (1024 * 1024)
-			outMB := float64(outBytes.Load()) / (1024 * 1024)
-			calls := outWriteCalls.Load()
-			avgDecryptWriteKB := 0.0
-			if calls > 0 {
-				avgDecryptWriteKB = float64(outBytes.Load()) / float64(calls) / 1024
-			}
-			log.Debug("I/O progress restore [%s] final: input=%.2f MB, decrypted=%.2f MB, decrypt writes=%d, avg decrypt write=%.2f KB", folderName, inMB, outMB, calls, avgDecryptWriteKB)
+			logStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, true)
 			return
 		case <-ticker.C:
-			inMB := float64(inBytes.Load()) / (1024 * 1024)
-			outMB := float64(outBytes.Load()) / (1024 * 1024)
-			calls := outWriteCalls.Load()
-			avgDecryptWriteKB := 0.0
-			if calls > 0 {
-				avgDecryptWriteKB = float64(outBytes.Load()) / float64(calls) / 1024
-			}
-			log.Debug("I/O progress restore [%s]: input=%.2f MB, decrypted=%.2f MB, decrypt writes=%d, avg decrypt write=%.2f KB", folderName, inMB, outMB, calls, avgDecryptWriteKB)
+			logStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, false)
 		}
 	}
 }
@@ -486,9 +473,7 @@ func verifyPassword(partPath string, password []byte) error {
 	// lets us detect a successful authentication quickly.
 	var errVerifyStop = errors.New("verify-stop")
 
-	// Implement io.Writer interface
-	w := &struct{ done bool }{}
-	err = security.Decrypt(&verifyWriter{vw: w, errVerifyStop: errVerifyStop}, f, password)
+	err = security.Decrypt(&verifyWriter{errVerifyStop: errVerifyStop}, f, password)
 	if err == nil {
 		// Decrypt finished without error (small file) — password is valid.
 		return nil
@@ -602,15 +587,15 @@ func sortedEntries(index []util.BackupEntry) []util.BackupEntry {
 }
 
 type verifyWriter struct {
-	vw            *struct{ done bool }
+	done          bool
 	errVerifyStop error
 }
 
 func (vw *verifyWriter) Write(p []byte) (int, error) {
-	if vw.vw.done {
+	if vw.done {
 		return 0, vw.errVerifyStop
 	}
-	vw.vw.done = true
+	vw.done = true
 	// Indicate we consumed the data.
 	return len(p), nil
 }

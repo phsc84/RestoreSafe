@@ -84,6 +84,12 @@ func (e BackupEntry) String() string {
 }
 
 // partFilePattern matches:  [name]_{YYYY-MM-DD}_{ID}-{seq}.enc
+// Named capture groups:
+//
+//	1 (.+?)              - Folder name (non-greedy)
+//	2 (\d{4}-\d{2}-\d{2}) - Date in YYYY-MM-DD format
+//	3 ([A-Z0-9]{6})      - 6-character backup ID
+//	4 (\d{3})            - 3-digit sequence number (001, 002, ...)
 var partFilePattern = regexp.MustCompile(
 	`^\[(.+?)\]_(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})-(\d{3})\.enc$`,
 )

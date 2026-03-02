@@ -12,6 +12,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - 
 
+## [1.1.0] - 2026-03-02
+
+### Added / Changed
+- Startup mode simplified: removed CLI flags (`-backup`, `-restore`) and standardized operation via interactive menu / double-click flow.
+- Improved startup error handling in `main`: introduced shared `exitWithError(...)` helper for cleaner and consistent fatal error behavior.
+- Improved runtime I/O diagnostics architecture:
+	- extracted shared stream progress logger into `internal/engine/progress.go`.
+	- renamed helper to `logStreamProgress` for clearer intent.
+	- clarified progress output labels to be operation-specific (`encrypted` during backup, `decrypted` during restore).
+- Improved maintainability of restore password verification writer by simplifying internal state handling (`verifyWriter`).
+- Improved developer readability of filename parsing by documenting `partFilePattern` capture groups in `internal/util/naming.go`.
+
+### Fixed
+- Fixed inconsistent menu error UX: backup failures now also wait for key press before returning.
+- Fixed silent stdin read handling in `main` by checking read errors in both `getUserInput` and `waitForKeyPress`.
+- Fixed potential silent close error in `SequentialReader.Read` (`internal/util/split.go`) when switching part files.
+
 ## [1.0.0] - 2026-03-01
 
 ### Added / Changed

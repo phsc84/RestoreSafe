@@ -346,34 +346,21 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 }
 
 func logBackupProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, ioDiagnostics bool, done <-chan struct{}) {
+	if !ioDiagnostics {
+		<-done // Just wait for completion without logging
+		return
+	}
+
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-done:
-			if ioDiagnostics {
-				inMB := float64(inBytes.Load()) / (1024 * 1024)
-				outMB := float64(outBytes.Load()) / (1024 * 1024)
-				calls := outWriteCalls.Load()
-				avgEncryptWriteKB := 0.0
-				if calls > 0 {
-					avgEncryptWriteKB = float64(outBytes.Load()) / float64(calls) / 1024
-				}
-				log.Debug("I/O progress [%s] final: input=%.2f MB, encrypted=%.2f MB, encrypt writes=%d, avg encrypt write=%.2f KB", folderName, inMB, outMB, calls, avgEncryptWriteKB)
-			}
+			logStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, true)
 			return
 		case <-ticker.C:
-			if ioDiagnostics {
-				inMB := float64(inBytes.Load()) / (1024 * 1024)
-				outMB := float64(outBytes.Load()) / (1024 * 1024)
-				calls := outWriteCalls.Load()
-				avgEncryptWriteKB := 0.0
-				if calls > 0 {
-					avgEncryptWriteKB = float64(outBytes.Load()) / float64(calls) / 1024
-				}
-				log.Debug("I/O progress [%s]: input=%.2f MB, encrypted=%.2f MB, encrypt writes=%d, avg encrypt write=%.2f KB", folderName, inMB, outMB, calls, avgEncryptWriteKB)
-			}
+			logStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, false)
 		}
 	}
 }
