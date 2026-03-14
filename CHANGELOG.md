@@ -12,7 +12,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Restore authentication detection no longer depends on `config.yaml` alone: YubiKey requirement is now inferred from backup-side challenge files when available.
 - Added simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source folder, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
 - Added unit and integration tests for config validation, TAR verification, health/retention helpers, backup/restore selection logic, and backup/restore round-trip behavior.
-- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe now appends a deterministic path-derived alias to backup naming to avoid filename collisions.
+- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe now appends a readable full path-derived alias (including drive hint, e.g. `Documents__RootA-C`) to backup naming; true identical source-path duplicates are warned and skipped, and non-identical alias collisions now fail preflight with a clear error instead of numeric-suffix fallback.
+- Alias normalization now preserves distinctions between `-`, `_`, and spaces (spaces are encoded as `~`), reducing avoidable collisions in generated backup names.
 - Restore/verify ID selection is now constrained to the newest date for a matching ID, with an explicit confirmation prompt if the same ID exists on multiple dates.
 - Retention safety improved: if backup metadata inspection fails during retention ordering, cleanup is skipped entirely and only a warning is shown to avoid accidental deletion.
 - Unified TAR path validation rules between verify and restore flows and removed unused restore dead code.

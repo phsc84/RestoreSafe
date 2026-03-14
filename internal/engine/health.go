@@ -53,6 +53,14 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 			})
 			continue
 		}
+		if src.Warning != "" {
+			items = append(items, healthItem{
+				Severity: healthWarn,
+				Scope:    "Source folder",
+				Detail:   fmt.Sprintf("%s -> %s", src.Resolved, src.Warning),
+			})
+			continue
+		}
 		items = append(items, healthItem{
 			Severity: healthOK,
 			Scope:    "Source folder",

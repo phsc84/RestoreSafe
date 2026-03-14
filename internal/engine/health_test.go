@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/util"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,80 @@ func TestRunKey(t *testing.T) {
 	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	if got := runKey(entry); got != "2026-03-14|ABC123" {
 		t.Fatalf("unexpected runKey: %q", got)
+	}
+}
+
+func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing.T) {
+	t.Parallel()
+
+	exeDir := t.TempDir()
+	shared := filepath.Join(exeDir, "root-a", "Documents")
+	target := filepath.Join(exeDir, "target")
+
+	if err := os.MkdirAll(shared, 0o750); err != nil {
+		t.Fatalf("failed to create shared source: %v", err)
+	}
+	if err := os.MkdirAll(target, 0o750); err != nil {
+		t.Fatalf("failed to create target directory: %v", err)
+	}
+
+	cfg := &util.Config{
+		SourceFolders: []string{shared, shared},
+		TargetFolder:  target,
+		SplitSizeMB:   64,
+		LogLevel:      "INFO",
+	}
+
+	items := collectStartupHealthItems(cfg, exeDir)
+	hasDuplicateWarn := false
+	for _, item := range items {
+		if item.Scope == "Source folder" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
+			hasDuplicateWarn = true
+			break
+		}
+	}
+
+	if !hasDuplicateWarn {
+		t.Fatalf("expected source-folder warning for true identical duplicate, got items: %#v", items)
+	}
+}
+
+func TestCollectStartupHealthItemsErrorsOnAliasCollision(t *testing.T) {
+	t.Parallel()
+
+	exeDir := t.TempDir()
+	first := filepath.Join(exeDir, "root-a", "Documents")
+	second := filepath.Join(exeDir, "root.a", "Documents")
+	target := filepath.Join(exeDir, "target")
+
+	if err := os.MkdirAll(first, 0o750); err != nil {
+		t.Fatalf("failed to create first source: %v", err)
+	}
+	if err := os.MkdirAll(second, 0o750); err != nil {
+		t.Fatalf("failed to create second source: %v", err)
+	}
+	if err := os.MkdirAll(target, 0o750); err != nil {
+		t.Fatalf("failed to create target directory: %v", err)
+	}
+
+	cfg := &util.Config{
+		SourceFolders: []string{first, second},
+		TargetFolder:  target,
+		SplitSizeMB:   64,
+		LogLevel:      "INFO",
+	}
+
+	items := collectStartupHealthItems(cfg, exeDir)
+	hasCollisionError := false
+	for _, item := range items {
+		if item.Scope == "Source folder" && item.Severity == healthError && strings.Contains(strings.ToLower(item.Detail), "alias collision") {
+			hasCollisionError = true
+			break
+		}
+	}
+
+	if !hasCollisionError {
+		t.Fatalf("expected source-folder error for alias collision, got items: %#v", items)
 	}
 }
 

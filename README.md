@@ -81,17 +81,72 @@ If a backup ID exists on multiple dates, ID-based selection verifies only the ne
 
 ### Backup files
 
-Naming structure: `[SourceFolderName]_YYYY-MM-DD_ID-Seq.enc`
+Each backup file name follows this pattern:
 
-Samples:
+`[FolderName]_YYYY-MM-DD_ID-001.enc`
+
+What this means in plain words:
+
+- `FolderName`: the source folder name
+- `YYYY-MM-DD`: the backup date
+- `ID`: a short code for one backup run
+- `001`, `002`, ...: part number when a backup is split into multiple files
+
+Basic examples:
 ```text
 [Documents]_2026-01-15_ABC123-001.enc
-[Documents]_2026-01-15_ABC123-002.enc   (if source folder size > split_size_mb)
 [Pictures]_2026-01-15_ABC123-001.enc
-[Documents]_2026-01-15_ABC123.challenge  (YubiKey mode only)
-[Pictures]_2026-01-15_ABC123.challenge  (YubiKey mode only)
-[Documents__7B3FA4C1]_2026-01-15_ABC123-001.enc  (auto-alias for duplicate source basenames)
 ```
+
+Examples for common if-cases:
+
+1. If one folder is larger than `split_size_mb`, it is split into multiple parts:
+
+```text
+[Documents]_2026-01-15_ABC123-001.enc
+[Documents]_2026-01-15_ABC123-002.enc
+[Documents]_2026-01-15_ABC123-003.enc
+```
+
+2. If YubiKey mode is enabled, a matching `.challenge` file is created per folder:
+
+```text
+[Documents]_2026-01-15_ABC123.challenge
+[Pictures]_2026-01-15_ABC123.challenge
+```
+
+3. If two different source paths have the same folder name (for example both end with `Documents`), RestoreSafe adds a readable path hint:
+
+```text
+[Documents__RootA-C]_2026-01-15_ABC123-001.enc
+[Documents__RootB-D]_2026-01-15_ABC123-001.enc
+```
+
+4. If the exact same source folder appears twice in `config.yaml`, RestoreSafe warns and skips the duplicate entry:
+
+```text
+[WARN] C:\Work\Documents -> identical duplicate of C:\Work\Documents; this entry will be skipped
+```
+
+Result: only one backup file set is written for that path.
+
+5. If two different source paths still produce the same generated backup name, RestoreSafe stops before backup starts and shows an error:
+
+These paths stay distinct in backup names:
+
+```text
+C:\Root-A\Documents  -> Documents__Root-A-C
+C:\Root_A\Documents  -> Documents__Root_A-C
+C:\Root A\Documents  -> Documents__Root~A-C
+```
+
+A real collision example is:
+
+```text
+[ERROR] C:\Root-A\Documents -> backup name alias collision: C:\Root-A\Documents and C:\Root.A\Documents both resolve to "Documents__Root-A-C"; adjust one source path to avoid ambiguity
+```
+
+Result: backup is aborted so file names stay unambiguous.
 
 > **Important**
 >
@@ -107,14 +162,14 @@ Sample:
 2026-01-15_ABC123.log
 ```
 
-### Description
+### Quick reference
 
-| Placeholder | Meaning |
+| Name part | Meaning |
 |---|---|
-| SourceFolderName | Name of the source folder (without path) |
+| FolderName | Name of the source folder |
 | YYYY-MM-DD | Backup date |
-| ID | Backup ID, random 6-character identifier (A-Z, 0-9) |
-| Seq | Sequence number, ascending 3-digit number (001, 002, ...) |
+| ID | Short backup run code (6 characters, A-Z and 0-9) |
+| 001 / 002 / ... | File part number when the backup is split |
 
 ## YubiKey setup
 

@@ -8,8 +8,6 @@ import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"bufio"
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 )
 
 const splitWriteBufferSize = 32 * 1024 * 1024
@@ -85,10 +84,17 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 	}
 
 	fmt.Println("Backup started...")
-	log.Info("Backup started – %d source folders", len(cfg.SourceFolders))
+	log.Info("Backup started – %d source folders", runnableSourceCount(sources))
 
 	// Back up each source folder.
 	for _, source := range sources {
+		if source.Warning != "" {
+			log.Warn("Source folder warning: %s -> %s", source.Resolved, source.Warning)
+		}
+		if source.Skip {
+			continue
+		}
+
 		srcAbs := source.Resolved
 		folderName := source.BackupName
 		if folderName == "" {
@@ -129,6 +135,8 @@ type sourceFolderStatus struct {
 	Configured string
 	Resolved   string
 	BackupName string
+	Warning    string
+	Skip       bool
 	Err        error
 }
 
@@ -155,31 +163,179 @@ func inspectSourceFolders(sourceFolders []string, exeDir string) []sourceFolderS
 
 		result = append(result, status)
 	}
+	markIdenticalSourceDuplicates(result)
 	assignSourceBackupNames(result)
 	return result
 }
 
-func assignSourceBackupNames(sources []sourceFolderStatus) {
-	baseNameCounts := make(map[string]int)
-	for _, source := range sources {
-		baseName := util.FolderBaseName(source.Resolved)
-		baseNameCounts[baseName]++
-	}
-
+func markIdenticalSourceDuplicates(sources []sourceFolderStatus) {
+	seenByPath := make(map[string]int)
 	for i := range sources {
-		baseName := util.FolderBaseName(sources[i].Resolved)
-		if baseNameCounts[baseName] <= 1 {
-			sources[i].BackupName = baseName
+		if sources[i].Err != nil {
 			continue
 		}
-		sources[i].BackupName = fmt.Sprintf("%s__%s", baseName, sourceAliasFromPath(sources[i].Resolved))
+
+		pathKey := normalizedSourcePathKey(sources[i].Resolved)
+		if firstIndex, exists := seenByPath[pathKey]; exists {
+			sources[i].Skip = true
+			sources[i].Warning = fmt.Sprintf("identical duplicate of %s; this entry will be skipped", sources[firstIndex].Resolved)
+			continue
+		}
+
+		seenByPath[pathKey] = i
 	}
 }
 
-func sourceAliasFromPath(path string) string {
-	normalized := strings.ToLower(filepath.Clean(path))
-	sum := sha1.Sum([]byte(normalized))
-	return strings.ToUpper(hex.EncodeToString(sum[:4]))
+func normalizedSourcePathKey(path string) string {
+	cleaned := filepath.Clean(path)
+	cleaned = strings.ReplaceAll(cleaned, "/", "\\")
+	return strings.ToLower(cleaned)
+}
+
+func assignSourceBackupNames(sources []sourceFolderStatus) {
+	groupedIndices := make(map[string][]int)
+	for i, source := range sources {
+		if source.Err != nil || source.Skip {
+			continue
+		}
+		baseName := util.FolderBaseName(source.Resolved)
+		groupedIndices[baseName] = append(groupedIndices[baseName], i)
+	}
+
+	for baseName, indices := range groupedIndices {
+		if len(indices) <= 1 {
+			sources[indices[0]].BackupName = baseName
+			continue
+		}
+
+		aliasOwners := make(map[string]int)
+		for _, index := range indices {
+			pathAlias := sourceAliasFromFullPath(sources[index].Resolved)
+			backupName := fmt.Sprintf("%s__%s", baseName, pathAlias)
+			sources[index].BackupName = backupName
+
+			if ownerIndex, exists := aliasOwners[backupName]; exists {
+				ownerPath := sources[ownerIndex].Resolved
+				currentPath := sources[index].Resolved
+				errText := fmt.Sprintf("backup name alias collision: %s and %s both resolve to %q; adjust one source path to avoid ambiguity", ownerPath, currentPath, backupName)
+				sources[ownerIndex].Err = fmt.Errorf("%s", errText)
+				sources[index].Err = fmt.Errorf("%s", errText)
+				continue
+			}
+
+			aliasOwners[backupName] = index
+		}
+	}
+
+	nameByPath := make(map[string]string)
+	for i := range sources {
+		if sources[i].Err != nil || sources[i].Skip {
+			continue
+		}
+		if sources[i].BackupName == "" {
+			sources[i].BackupName = util.FolderBaseName(sources[i].Resolved)
+		}
+		nameByPath[normalizedSourcePathKey(sources[i].Resolved)] = sources[i].BackupName
+	}
+
+	for i := range sources {
+		if sources[i].BackupName != "" {
+			continue
+		}
+
+		if sources[i].Skip {
+			if name, exists := nameByPath[normalizedSourcePathKey(sources[i].Resolved)]; exists {
+				sources[i].BackupName = name
+				continue
+			}
+		}
+
+		sources[i].BackupName = util.FolderBaseName(sources[i].Resolved)
+	}
+}
+
+func sourceAliasFromFullPath(path string) string {
+	parts := pathHintParts(path)
+	return aliasFromParts(parts)
+}
+
+func pathHintParts(path string) []string {
+	cleaned := filepath.Clean(path)
+	volumeName := filepath.VolumeName(cleaned)
+	volume := strings.TrimSuffix(volumeName, ":")
+
+	withoutVolume := strings.TrimPrefix(cleaned, volumeName)
+	withoutVolume = strings.TrimLeft(withoutVolume, "\\/")
+
+	rawSegments := strings.FieldsFunc(withoutVolume, func(r rune) bool {
+		return r == '\\' || r == '/'
+	})
+	if len(rawSegments) > 0 {
+		rawSegments = rawSegments[:len(rawSegments)-1]
+	}
+
+	parts := make([]string, 0, len(rawSegments)+1)
+	for _, segment := range rawSegments {
+		if normalized := sanitizeAliasPart(segment); normalized != "" {
+			parts = append(parts, normalized)
+		}
+	}
+
+	if normalized := sanitizeAliasPart(volume); normalized != "" {
+		parts = append(parts, normalized)
+	}
+
+	if len(parts) == 0 {
+		return []string{"source"}
+	}
+
+	return parts
+}
+
+func aliasFromParts(parts []string) string {
+	alias := strings.Join(parts, "-")
+	if alias == "" {
+		return "source"
+	}
+	return alias
+}
+
+func sanitizeAliasPart(part string) string {
+	trimmed := strings.TrimSpace(part)
+	if trimmed == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	lastWasDash := false
+
+	for _, r := range trimmed {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastWasDash = false
+		case r == '_':
+			b.WriteRune(r)
+			lastWasDash = false
+		case unicode.IsSpace(r):
+			b.WriteByte('~')
+			lastWasDash = false
+		case r == '-':
+			if !lastWasDash {
+				b.WriteByte('-')
+				lastWasDash = true
+			}
+		default:
+			if !lastWasDash {
+				b.WriteByte('-')
+				lastWasDash = true
+			}
+		}
+	}
+
+	cleaned := strings.Trim(b.String(), "-")
+	return cleaned
 }
 
 func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFolderStatus) {
@@ -205,6 +361,14 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 				fmt.Printf("          -> backup name: %s\n", backupName)
 			}
 			fmt.Printf("          -> %v\n", src.Err)
+			continue
+		}
+		if src.Warning != "" {
+			fmt.Printf("  [WARN]  %s\n", src.Resolved)
+			if backupName != baseName {
+				fmt.Printf("          -> backup name: %s\n", backupName)
+			}
+			fmt.Printf("          -> %s\n", src.Warning)
 			continue
 		}
 		fmt.Printf("  [OK]    %s\n", src.Resolved)
@@ -250,6 +414,17 @@ func yesNo(v bool) string {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+func runnableSourceCount(sources []sourceFolderStatus) int {
+	count := 0
+	for _, source := range sources {
+		if source.Err != nil || source.Skip {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // backupFolder streams folder → TAR → encrypt → split-writer.
