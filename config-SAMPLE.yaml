@@ -3,13 +3,14 @@
 
 # Source folders to back up.
 # Paths may be absolute or relative to RestoreSafe.exe.
+# On Windows, prefer forward slashes in YAML paths (C:/Users/...) to avoid escape issues.
 source_folders:
-  - "C:\\Users\\Username\\Documents"
-  - "C:\\Users\\Username\\Pictures"
+  - "C:/Users/Username/Documents"
+  - "C:/Users/Username/Pictures"
 
 # Destination folder for encrypted backup files.
 # Path may be absolute or relative to RestoreSafe.exe.
-target_folder: "C:\\Backup"
+target_folder: "C:/Backup"
 
 # Maximum size of each split file (in MB).
 # Default: 4096 MB (= 4 GB)

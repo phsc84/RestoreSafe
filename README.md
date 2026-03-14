@@ -29,7 +29,6 @@ RestoreSafe is a standalone Windows 64-bit backup tool that securely encrypts an
 - Optional 2FA: YubiKey (HMAC-SHA1, slot 2)
 - Both file content and metadata (file/folder names) are encrypted
 
-
 ## Requirements
 
 Windows 64-bit

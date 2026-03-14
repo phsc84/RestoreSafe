@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+// Version is set at build time via -ldflags
+var Version = "dev"
+
 func main() {
 	// Set working directory to the location of the executable
 	exePath, err := os.Executable()
@@ -56,7 +59,8 @@ func main() {
 
 func printMenu() {
 	fmt.Println("========================================")
-	fmt.Println("RestoreSafe - Secure backup application")
+	fmt.Printf("RestoreSafe v%s\n", Version)
+	fmt.Println("Secure backup application")
 	fmt.Println("========================================")
 	fmt.Println()
 	fmt.Println("1. Create backup")

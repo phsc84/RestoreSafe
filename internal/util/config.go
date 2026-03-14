@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -30,7 +31,13 @@ func Load(path string) (*Config, error) {
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("Config file is invalid: %w", err)
+		hint := ""
+		errMsg := strings.ToLower(err.Error())
+		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
+			hint = "\nHint: Windows paths in YAML need escaping in double quotes (e.g. C:\\\\Users\\\\Name) or use forward slashes (C:/Users/Name)."
+		}
+
+		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
 	}
 
 	return cfg.withDefaults(), cfg.validate()

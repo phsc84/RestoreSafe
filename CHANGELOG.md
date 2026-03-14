@@ -6,11 +6,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-14
+
 ### Added / Changed
-- 
+- Updated Go toolchain version to 1.26.1.
+- Added dynamic version display in interactive menu: version is now extracted from `versioninfo.json` at build time and displayed as "RestoreSafe v1.1.0" when the application starts.
+- Updated `config-SAMPLE.yaml` to use forward-slash Windows path examples (`C:/...`) and added a note to avoid YAML escaping pitfalls.
 
 ### Fixed
-- 
+- Improved config parse error guidance: invalid YAML path escape errors now include a hint explaining valid Windows path formats in YAML.
 
 ## [1.1.0] - 2026-03-02
 
