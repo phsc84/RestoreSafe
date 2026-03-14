@@ -16,6 +16,10 @@ target_folder: "C:/Backup"
 # Default: 4096 MB (= 4 GB)
 split_size_mb: 4096
 
+# Retention: number of backup sets to keep per source folder.
+# 0 = keep all backups (no automatic cleanup)
+retention_keep: 0
+
 # Log level: "info" (default) or "debug" (verbose output)
 log_level: "info"
 

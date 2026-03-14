@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -98,6 +99,10 @@ func ExtractTar(r io.Reader, destDir string) error {
 			return fmt.Errorf("Failed to read TAR entry: %w", err)
 		}
 
+		if err := validateTarPath(hdr.Name); err != nil {
+			return err
+		}
+
 		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
 
 		// Security: prevent path traversal attacks.
@@ -124,6 +129,34 @@ func ExtractTar(r io.Reader, destDir string) error {
 	return nil
 }
 
+// ValidateTar reads a TAR stream and verifies that all headers and regular
+// file payloads can be consumed without extracting anything to disk.
+func ValidateTar(r io.Reader) error {
+	tr := tar.NewReader(r)
+
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("Failed to read TAR entry: %w", err)
+		}
+
+		if err := validateTarPath(hdr.Name); err != nil {
+			return err
+		}
+
+		if hdr.Typeflag == tar.TypeReg {
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				return fmt.Errorf("Failed to read TAR entry payload %q: %w", hdr.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func writeFile(target string, r io.Reader) error {
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
@@ -142,4 +175,24 @@ func resolveDir(path, base string) string {
 		return path
 	}
 	return filepath.Join(base, path)
+}
+
+func validateTarPath(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("Invalid path in archive: empty TAR entry name")
+	}
+
+	normalized := strings.ReplaceAll(name, "\\", "/")
+	cleaned := path.Clean(normalized)
+	if strings.HasPrefix(cleaned, "/") || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("Invalid path in archive (path traversal): %q", name)
+	}
+	if strings.Contains(cleaned, ":") {
+		return fmt.Errorf("Invalid path in archive (absolute path): %q", name)
+	}
+	if vol := filepath.VolumeName(filepath.FromSlash(cleaned)); vol != "" {
+		return fmt.Errorf("Invalid path in archive (absolute path): %q", name)
+	}
+
+	return nil
 }

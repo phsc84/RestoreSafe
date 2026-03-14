@@ -13,6 +13,7 @@ type Config struct {
 	SourceFolders []string `yaml:"source_folders"`
 	TargetFolder  string   `yaml:"target_folder"`
 	SplitSizeMB   int64    `yaml:"split_size_mb"`
+	RetentionKeep int      `yaml:"retention_keep"`
 	LogLevel      string   `yaml:"log_level"`
 	IODiagnostics bool     `yaml:"io_diagnostics"`
 	YubikeyEnable bool     `yaml:"yubikey_enable"`
@@ -64,6 +65,9 @@ func (c *Config) validate() error {
 	case "debug", "info":
 	default:
 		return fmt.Errorf("Invalid 'log_level': %q (allowed: debug, info)", c.LogLevel)
+	}
+	if c.RetentionKeep < 0 {
+		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0)", c.RetentionKeep)
 	}
 	return nil
 }

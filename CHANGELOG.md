@@ -6,6 +6,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added / Changed
+- Added automatic startup health check. RestoreSafe now performs a non-interactive diagnostic pass on launch and reports configuration, source/target folder access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
+- Added interactive verify mode for existing backups. Verification checks selected backup sets for missing parts, validates decryption with password and optional YubiKey challenge-response, and confirms the decrypted stream is a readable TAR archive without restoring files.
+- Restore authentication detection no longer depends on `config.yaml` alone: YubiKey requirement is now inferred from backup-side challenge files when available.
+- Added simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source folder, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
+- Added unit and integration tests for config validation, TAR verification, health/retention helpers, backup/restore selection logic, and backup/restore round-trip behavior.
+- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe now appends a deterministic path-derived alias to backup naming to avoid filename collisions.
+- Restore/verify ID selection is now constrained to the newest date for a matching ID, with an explicit confirmation prompt if the same ID exists on multiple dates.
+- Retention safety improved: if backup metadata inspection fails during retention ordering, cleanup is skipped entirely and only a warning is shown to avoid accidental deletion.
+- Unified TAR path validation rules between verify and restore flows and removed unused restore dead code.
+
 ## [1.2.0] - 2026-03-14
 
 ### Added / Changed

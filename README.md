@@ -10,6 +10,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that securely encrypts an
   - [Installation & Configuration](#installation--configuration)
   - [Create a backup](#create-a-backup)
   - [Restore a backup](#restore-a-backup)
+  - [Verify a backup](#verify-a-backup)
 - [Naming scheme of created files](#naming-scheme-of-created-files)
 - [YubiKey setup](#yubikey-setup)
 
@@ -43,6 +44,9 @@ Windows 64-bit
 2. [Download](https://github.com/phsc84/RestoreSafe/releases) `config-SAMPLE.yaml`, rename it to `config.yaml` and put it into the same directory as RestoreSafe.exe.
 3. Edit `config.yaml` (at least parameters `source folders` and `target folder` have to be set, all other options may remain default).
 
+Recommended: set `retention_keep` in `config.yaml` to keep only the newest N backup sets per source folder.
+Older backup part/challenge files are deleted automatically, and logs are removed only when no backup parts remain for the same backup run (date + ID).
+
 **Updating**
 
 [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and replace the existing version on your computer.
@@ -53,6 +57,8 @@ Windows 64-bit
 >
 > This won’t be needed when updating to a new minor version (v1.0.x -> v1.1.x) or a new bugfix version (v1.0.1 -> v1.0.2).
 
+At startup, RestoreSafe automatically runs a non-interactive health check. It validates configured source folders, target folder and temp directory access, optional YubiKey CLI availability, and the structural integrity of existing backup parts and challenge files.
+
 ### Create a backup
 
 Double-click `RestoreSafe.exe` and follow the prompts.
@@ -60,6 +66,16 @@ Double-click `RestoreSafe.exe` and follow the prompts.
 ### Restore a backup
 
 Double-click `RestoreSafe.exe` and follow the prompts.
+
+If a backup ID exists on multiple dates, ID-based selection restores only the newest date and asks for confirmation first.
+
+### Verify a backup
+
+Double-click `RestoreSafe.exe`, choose `Verify backup`, and follow the prompts.
+
+Verify mode checks that all selected backup parts are present, decryptable with the provided password (and YubiKey if required), and readable as a complete TAR archive without restoring any files to disk.
+
+If a backup ID exists on multiple dates, ID-based selection verifies only the newest date and asks for confirmation first.
 
 ## Naming scheme of created files
 
@@ -74,6 +90,7 @@ Samples:
 [Pictures]_2026-01-15_ABC123-001.enc
 [Documents]_2026-01-15_ABC123.challenge  (YubiKey mode only)
 [Pictures]_2026-01-15_ABC123.challenge  (YubiKey mode only)
+[Documents__7B3FA4C1]_2026-01-15_ABC123-001.enc  (auto-alias for duplicate source basenames)
 ```
 
 > **Important**

@@ -8,6 +8,8 @@ import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"bufio"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -88,7 +90,10 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 	// Back up each source folder.
 	for _, source := range sources {
 		srcAbs := source.Resolved
-		folderName := util.FolderBaseName(srcAbs)
+		folderName := source.BackupName
+		if folderName == "" {
+			folderName = util.FolderBaseName(srcAbs)
+		}
 
 		log.Info("Processing source folder: %s", srcAbs)
 		log.Debug("Folder name in archive: %s", folderName)
@@ -111,6 +116,10 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 		log.Info("Source folder %q successfully backed up", folderName)
 	}
 
+	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {
+		log.Warn("Retention cleanup failed: %v", err)
+	}
+
 	log.Info("Backup completed successfully")
 	fmt.Printf("\nBackup completed. Log: %s\n", logPath)
 	return nil
@@ -119,6 +128,7 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 type sourceFolderStatus struct {
 	Configured string
 	Resolved   string
+	BackupName string
 	Err        error
 }
 
@@ -145,7 +155,31 @@ func inspectSourceFolders(sourceFolders []string, exeDir string) []sourceFolderS
 
 		result = append(result, status)
 	}
+	assignSourceBackupNames(result)
 	return result
+}
+
+func assignSourceBackupNames(sources []sourceFolderStatus) {
+	baseNameCounts := make(map[string]int)
+	for _, source := range sources {
+		baseName := util.FolderBaseName(source.Resolved)
+		baseNameCounts[baseName]++
+	}
+
+	for i := range sources {
+		baseName := util.FolderBaseName(sources[i].Resolved)
+		if baseNameCounts[baseName] <= 1 {
+			sources[i].BackupName = baseName
+			continue
+		}
+		sources[i].BackupName = fmt.Sprintf("%s__%s", baseName, sourceAliasFromPath(sources[i].Resolved))
+	}
+}
+
+func sourceAliasFromPath(path string) string {
+	normalized := strings.ToLower(filepath.Clean(path))
+	sum := sha1.Sum([]byte(normalized))
+	return strings.ToUpper(hex.EncodeToString(sum[:4]))
 }
 
 func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFolderStatus) {
@@ -154,16 +188,29 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	fmt.Println("----------------")
 	fmt.Printf("Target folder : %s\n", targetDir)
 	fmt.Printf("Split size    : %d MB\n", cfg.SplitSizeMB)
+	fmt.Printf("Retention keep: %d\n", cfg.RetentionKeep)
 	fmt.Printf("YubiKey 2FA   : %s\n", yesNo(cfg.YubikeyEnable))
 	fmt.Printf("Log level     : %s\n", strings.ToLower(cfg.LogLevel))
 	fmt.Println("Source folders:")
 	for _, src := range sources {
+		baseName := util.FolderBaseName(src.Resolved)
+		backupName := src.BackupName
+		if backupName == "" {
+			backupName = baseName
+		}
+
 		if src.Err != nil {
 			fmt.Printf("  [ERROR] %s\n", src.Resolved)
+			if backupName != baseName {
+				fmt.Printf("          -> backup name: %s\n", backupName)
+			}
 			fmt.Printf("          -> %v\n", src.Err)
 			continue
 		}
 		fmt.Printf("  [OK]    %s\n", src.Resolved)
+		if backupName != baseName {
+			fmt.Printf("          -> backup name: %s\n", backupName)
+		}
 	}
 	fmt.Println()
 }

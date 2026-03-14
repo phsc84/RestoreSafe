@@ -64,12 +64,21 @@ func CombineWithPasswordForRestore(password []byte, challengeHex string) ([]byte
 	return append(password, response...), nil
 }
 
+// CheckYubiKeyAvailability verifies that the required ykchalresp CLI is
+// available on PATH without prompting or contacting the device.
+func CheckYubiKeyAvailability() error {
+	_, err := exec.LookPath("ykchalresp")
+	if err != nil {
+		return ErrYubikeyNotFound
+	}
+	return nil
+}
+
 // queryYubikey sends a raw challenge to YubiKey slot 2 and returns the
 // HMAC-SHA1 response bytes.
 func queryYubikey(challenge []byte) ([]byte, error) {
-	_, err := exec.LookPath("ykchalresp")
-	if err != nil {
-		return nil, ErrYubikeyNotFound
+	if err := CheckYubiKeyAvailability(); err != nil {
+		return nil, err
 	}
 
 	challengeHex := hex.EncodeToString(challenge)

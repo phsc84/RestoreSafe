@@ -29,10 +29,12 @@ func main() {
 		exitWithError("Error loading configuration", err)
 	}
 
+	engine.RunStartupHealthCheck(cfg, exeDir)
+
 	// Interactive menu mode
 	for {
 		printMenu()
-		choice := getUserInput("Select an option (1-3): ")
+		choice := getUserInput("Select an option (1-4): ")
 
 		switch strings.TrimSpace(choice) {
 		case "1":
@@ -48,6 +50,12 @@ func main() {
 			}
 			fmt.Println()
 		case "3":
+			if err := engine.RunVerify(cfg, exeDir); err != nil {
+				fmt.Fprintf(os.Stderr, "Verification failed: %v\n", err)
+				waitForKeyPress()
+			}
+			fmt.Println()
+		case "4":
 			fmt.Println("Goodbye!")
 			return
 		default:
@@ -65,7 +73,8 @@ func printMenu() {
 	fmt.Println()
 	fmt.Println("1. Create backup")
 	fmt.Println("2. Restore backup")
-	fmt.Println("3. Exit")
+	fmt.Println("3. Verify backup")
+	fmt.Println("4. Exit")
 	fmt.Println()
 }
 
