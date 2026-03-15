@@ -99,7 +99,7 @@ func TestVerifyEntryWrongPassword(t *testing.T) {
 	}
 	t.Cleanup(logger.Close)
 
-	if err := backupFolder(srcDir, entry.FolderName, targetDir, entry.Date, entry.ID, []byte("correct-pass"), cfg, logger); err != nil {
+	if _, err := backupFolder(srcDir, entry.FolderName, targetDir, entry.Date, entry.ID, []byte("correct-pass"), cfg, logger); err != nil {
 		t.Fatalf("backupFolder returned error: %v", err)
 	}
 

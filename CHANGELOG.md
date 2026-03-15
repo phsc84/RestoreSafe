@@ -6,16 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added / Changed
-- Added automatic startup health check. RestoreSafe now performs a non-interactive diagnostic pass on launch and reports configuration, source/target folder access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
-- Added interactive verify mode for existing backups. Verification checks selected backup sets for missing parts, validates decryption with password and optional YubiKey challenge-response, and confirms the decrypted stream is a readable TAR archive without restoring files.
-- Restore authentication detection no longer depends on `config.yaml` alone: YubiKey requirement is now inferred from backup-side challenge files when available.
-- Added simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source folder, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
+### Added
+- Added automatic startup health check. RestoreSafe now runs a non-interactive diagnostic pass on launch and reports configuration, source/target folder access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
+- Added interactive verify mode for existing backups. Verification checks selected backup sets for missing parts, validates decryption with password and optional YubiKey challenge-response, and confirms that the decrypted stream is a readable TAR archive without restoring files.
+- Added backup and restore completion summaries showing processed folders, total part files created/processed, log file location, and whether warnings occurred.
+- Added a simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source folder, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
 - Added unit and integration tests for config validation, TAR verification, health/retention helpers, backup/restore selection logic, and backup/restore round-trip behavior.
-- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe now appends a readable full path-derived alias (including drive hint, e.g. `Documents__RootA-C`) to backup naming; true identical source-path duplicates are warned and skipped, and non-identical alias collisions now fail preflight with a clear error instead of numeric-suffix fallback.
-- Alias normalization now preserves distinctions between `-`, `_`, and spaces (spaces are encoded as `~`), reducing avoidable collisions in generated backup names.
-- Restore/verify ID selection is now constrained to the newest date for a matching ID, with an explicit confirmation prompt if the same ID exists on multiple dates.
-- Retention safety improved: if backup metadata inspection fails during retention ordering, cleanup is skipped entirely and only a warning is shown to avoid accidental deletion.
+
+### Changed
+- Improved backup preflight output: RestoreSafe now shows estimated total source size, free target disk space, and a warning when estimated size likely exceeds currently free target space.
+- Improved restore/verify backup selection and ID handling: backup sets are grouped by `date + ID`, support date filtering, include a quick `newest` shortcut, and when the same backup ID exists on multiple dates RestoreSafe warns and automatically uses the newest date.
+- Changed restore authentication detection so it no longer depends on `config.yaml` alone: YubiKey requirement is inferred from backup-side challenge files when available.
+- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe appends a full path-derived alias (including drive hint) to backup naming. Every non-alphanumeric character in that alias is encoded as UTF-8 hex (`~XX~`, for example `-` -> `~2D~`, `_` -> `~5F~`, space -> `~20~`), and true identical source-path duplicates are warned and skipped.
+- Improved user-facing messaging across config, backup, restore, verify, health check, YubiKey, and low-level crypto/split/logging/retention/archive paths: messages use clearer punctuation and include concrete remediation steps (for example forward-slash path hints, missing part/challenge guidance, and permission checks).
+
+### Fixed
 - Unified TAR path validation rules between verify and restore flows and removed unused restore dead code.
 
 ## [1.2.0] - 2026-03-14

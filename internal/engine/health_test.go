@@ -107,12 +107,15 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	}
 }
 
-func TestCollectStartupHealthItemsErrorsOnAliasCollision(t *testing.T) {
+func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
-	first := filepath.Join(exeDir, "root-a", "Documents")
-	second := filepath.Join(exeDir, "root.a", "Documents")
+	first := filepath.Join(exeDir, "Root-A", "Documents")
+	second := filepath.Join(exeDir, "Root_A", "Documents")
+	third := filepath.Join(exeDir, "Root A", "Documents")
+	fourth := filepath.Join(exeDir, "Root.A", "Documents")
+	fifth := filepath.Join(exeDir, "Root~A", "Documents")
 	target := filepath.Join(exeDir, "target")
 
 	if err := os.MkdirAll(first, 0o750); err != nil {
@@ -121,12 +124,21 @@ func TestCollectStartupHealthItemsErrorsOnAliasCollision(t *testing.T) {
 	if err := os.MkdirAll(second, 0o750); err != nil {
 		t.Fatalf("failed to create second source: %v", err)
 	}
+	if err := os.MkdirAll(third, 0o750); err != nil {
+		t.Fatalf("failed to create third source: %v", err)
+	}
+	if err := os.MkdirAll(fourth, 0o750); err != nil {
+		t.Fatalf("failed to create fourth source: %v", err)
+	}
+	if err := os.MkdirAll(fifth, 0o750); err != nil {
+		t.Fatalf("failed to create fifth source: %v", err)
+	}
 	if err := os.MkdirAll(target, 0o750); err != nil {
 		t.Fatalf("failed to create target directory: %v", err)
 	}
 
 	cfg := &util.Config{
-		SourceFolders: []string{first, second},
+		SourceFolders: []string{first, second, third, fourth, fifth},
 		TargetFolder:  target,
 		SplitSizeMB:   64,
 		LogLevel:      "INFO",
@@ -134,15 +146,21 @@ func TestCollectStartupHealthItemsErrorsOnAliasCollision(t *testing.T) {
 
 	items := collectStartupHealthItems(cfg, exeDir)
 	hasCollisionError := false
+	hasSourceFolderError := false
 	for _, item := range items {
 		if item.Scope == "Source folder" && item.Severity == healthError && strings.Contains(strings.ToLower(item.Detail), "alias collision") {
 			hasCollisionError = true
-			break
+		}
+		if item.Scope == "Source folder" && item.Severity == healthError {
+			hasSourceFolderError = true
 		}
 	}
 
-	if !hasCollisionError {
-		t.Fatalf("expected source-folder error for alias collision, got items: %#v", items)
+	if hasCollisionError {
+		t.Fatalf("did not expect alias-collision error, got items: %#v", items)
+	}
+	if hasSourceFolderError {
+		t.Fatalf("did not expect source-folder errors for encoded special-character variants, got items: %#v", items)
 	}
 }
 

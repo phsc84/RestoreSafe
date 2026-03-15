@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestResolveSelectionByIDAndFullName(t *testing.T) {
@@ -83,6 +84,145 @@ func TestSortedBackupIDDatesDeduplicatesAndSorts(t *testing.T) {
 	}
 	if items[2].Date != "2026-03-13" || items[2].ID != "ZZZ999" {
 		t.Fatalf("unexpected third item: %#v", items[2])
+	}
+}
+
+func TestSortedBackupDatesDeduplicatesAndCounts(t *testing.T) {
+	t.Parallel()
+
+	index := []util.BackupEntry{
+		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("AAA111")},
+		{FolderName: "Pics", Date: "2026-03-14", ID: util.BackupID("AAA111")},
+		{FolderName: "Old", Date: "2026-03-14", ID: util.BackupID("BBB222")},
+		{FolderName: "Music", Date: "2026-03-13", ID: util.BackupID("CCC333")},
+	}
+
+	items := sortedBackupDates(index)
+	if len(items) != 2 {
+		t.Fatalf("expected 2 date summaries, got %d", len(items))
+	}
+	if items[0].Date != "2026-03-14" || items[0].EntryCount != 3 || items[0].RunCount != 2 {
+		t.Fatalf("unexpected first date summary: %#v", items[0])
+	}
+	if items[1].Date != "2026-03-13" || items[1].EntryCount != 1 || items[1].RunCount != 1 {
+		t.Fatalf("unexpected second date summary: %#v", items[1])
+	}
+}
+
+func TestBuildBackupRunSummariesGroupsEntriesByDateAndID(t *testing.T) {
+	t.Parallel()
+
+	index := []util.BackupEntry{
+		{FolderName: "Pics", Date: "2026-03-14", ID: util.BackupID("AAA111")},
+		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("AAA111")},
+		{FolderName: "Music", Date: "2026-03-14", ID: util.BackupID("BBB222")},
+	}
+
+	runs := buildBackupRunSummaries(index)
+	if len(runs) != 2 {
+		t.Fatalf("expected 2 run summaries, got %d", len(runs))
+	}
+	if runs[0].ID != util.BackupID("BBB222") {
+		t.Fatalf("expected first run to sort by date/id desc, got %#v", runs[0])
+	}
+	if runs[1].ID != util.BackupID("AAA111") || len(runs[1].Entries) != 2 {
+		t.Fatalf("unexpected grouped run: %#v", runs[1])
+	}
+	if runs[1].Entries[0].FolderName != "Docs" || runs[1].Entries[1].FolderName != "Pics" {
+		t.Fatalf("expected grouped run entries to be folder-sorted, got %#v", runs[1].Entries)
+	}
+}
+
+func TestFilterRunSummariesByDate(t *testing.T) {
+	t.Parallel()
+
+	runs := []backupRunSummary{
+		{Date: "2026-03-14", ID: util.BackupID("AAA111")},
+		{Date: "2026-03-14", ID: util.BackupID("BBB222")},
+		{Date: "2026-03-13", ID: util.BackupID("CCC333")},
+	}
+
+	filtered := filterRunSummariesByDate(runs, "2026-03-14")
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered runs, got %d", len(filtered))
+	}
+
+	all := filterRunSummariesByDate(runs, "")
+	if len(all) != len(runs) {
+		t.Fatalf("expected %d runs without filter, got %d", len(runs), len(all))
+	}
+	if &all[0] == &runs[0] {
+		t.Fatal("expected filterRunSummariesByDate to return a copy for empty filter")
+	}
+}
+
+func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
+	t.Parallel()
+
+	targetDir := t.TempDir()
+	oldEntry := util.BackupEntry{FolderName: "Old", Date: "2026-03-15", ID: util.BackupID("ZZZ999")}
+	newDocs := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("AAA111")}
+	newPics := util.BackupEntry{FolderName: "Pics", Date: "2026-03-15", ID: util.BackupID("AAA111")}
+
+	oldPart := util.PartFileName(targetDir, oldEntry.FolderName, oldEntry.Date, oldEntry.ID, 1)
+	newDocsPart := util.PartFileName(targetDir, newDocs.FolderName, newDocs.Date, newDocs.ID, 1)
+	newPicsPart := util.PartFileName(targetDir, newPics.FolderName, newPics.Date, newPics.ID, 1)
+
+	for _, part := range []string{oldPart, newDocsPart, newPicsPart} {
+		if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
+			t.Fatalf("failed to create parent dir: %v", err)
+		}
+		if err := os.WriteFile(part, []byte("x"), 0o600); err != nil {
+			t.Fatalf("failed to create part file: %v", err)
+		}
+	}
+
+	olderTime := time.Date(2026, 3, 15, 8, 0, 0, 0, time.UTC)
+	newerTime := olderTime.Add(2 * time.Hour)
+	if err := os.Chtimes(oldPart, olderTime, olderTime); err != nil {
+		t.Fatalf("failed to set old part time: %v", err)
+	}
+	if err := os.Chtimes(newDocsPart, newerTime, newerTime); err != nil {
+		t.Fatalf("failed to set new docs part time: %v", err)
+	}
+	if err := os.Chtimes(newPicsPart, newerTime, newerTime); err != nil {
+		t.Fatalf("failed to set new pics part time: %v", err)
+	}
+
+	selected, label, err := resolveNewestBackupRunSelection(targetDir, []util.BackupEntry{oldEntry, newDocs, newPics})
+	if err != nil {
+		t.Fatalf("resolveNewestBackupRunSelection returned error: %v", err)
+	}
+	if len(selected) != 2 {
+		t.Fatalf("expected 2 entries in newest run, got %d", len(selected))
+	}
+	for _, entry := range selected {
+		if entry.ID != util.BackupID("AAA111") {
+			t.Fatalf("expected newest run ID AAA111, got %s", entry.ID)
+		}
+	}
+	if label == "" {
+		t.Fatal("expected non-empty newest selection label")
+	}
+}
+
+func TestIsDateFilterInput(t *testing.T) {
+	t.Parallel()
+
+	if !isDateFilterInput("2026-03-15") {
+		t.Fatal("expected valid ISO date to be accepted")
+	}
+	if isDateFilterInput("15.03.2026") {
+		t.Fatal("expected non-ISO date to be rejected")
+	}
+}
+
+func TestFormatRunFolderList(t *testing.T) {
+	t.Parallel()
+
+	entries := []util.BackupEntry{{FolderName: "A"}, {FolderName: "B"}, {FolderName: "C"}, {FolderName: "D"}}
+	if got := formatRunFolderList(entries); got != "A, B, C, +1 more" {
+		t.Fatalf("unexpected folder list summary: %q", got)
 	}
 }
 

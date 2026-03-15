@@ -66,8 +66,8 @@ func TestInspectSourceFoldersAssignsAliasForDuplicateBasename(t *testing.T) {
 	}
 
 	joined := strings.ToLower(statuses[0].BackupName + "|" + statuses[1].BackupName)
-	if !strings.Contains(joined, "root-a") || !strings.Contains(joined, "root-b") {
-		t.Fatalf("expected readable path-based aliases containing root-a/root-b, got %q and %q", statuses[0].BackupName, statuses[1].BackupName)
+	if !strings.Contains(joined, "root~2d~a") || !strings.Contains(joined, "root~2d~b") {
+		t.Fatalf("expected aliases containing encoded root~2d~a/root~2d~b, got %q and %q", statuses[0].BackupName, statuses[1].BackupName)
 	}
 	if !strings.Contains(joined, "-c") {
 		t.Fatalf("expected aliases to include drive letter hint (e.g. -C), got %q and %q", statuses[0].BackupName, statuses[1].BackupName)
@@ -106,9 +106,6 @@ func TestInspectSourceFoldersWarnsOnTrueIdenticalDuplicate(t *testing.T) {
 	if statuses[0].BackupName != statuses[1].BackupName {
 		t.Fatalf("expected identical duplicates to share backup name, got %q / %q", statuses[0].BackupName, statuses[1].BackupName)
 	}
-	if strings.Contains(statuses[1].BackupName, "-2") {
-		t.Fatalf("expected no numeric suffix for true identical duplicate, got %q", statuses[1].BackupName)
-	}
 }
 
 func TestInspectSourceFoldersDistinguishesHyphenAndUnderscoreAliases(t *testing.T) {
@@ -146,14 +143,11 @@ func TestInspectSourceFoldersDistinguishesHyphenAndUnderscoreAliases(t *testing.
 	}
 	firstLower := strings.ToLower(firstName)
 	secondLower := strings.ToLower(secondName)
-	if !(strings.Contains(firstLower, "root-a-c") || strings.Contains(secondLower, "root-a-c")) {
-		t.Fatalf("expected one alias to include root-a-c, got %q / %q", firstName, secondName)
+	if !(strings.Contains(firstLower, "root~2d~a-c") || strings.Contains(secondLower, "root~2d~a-c")) {
+		t.Fatalf("expected one alias to include root~2d~a-c, got %q / %q", firstName, secondName)
 	}
-	if !(strings.Contains(firstLower, "root_a-c") || strings.Contains(secondLower, "root_a-c")) {
-		t.Fatalf("expected one alias to include root_a-c, got %q / %q", firstName, secondName)
-	}
-	if strings.Contains(firstName, "-2") || strings.Contains(secondName, "-2") {
-		t.Fatalf("expected no numeric suffix fallback, got %q / %q", firstName, secondName)
+	if !(strings.Contains(firstLower, "root~5f~a-c") || strings.Contains(secondLower, "root~5f~a-c")) {
+		t.Fatalf("expected one alias to include root~5f~a-c, got %q / %q", firstName, secondName)
 	}
 }
 
@@ -189,55 +183,92 @@ func TestInspectSourceFoldersDistinguishesSpaceFromHyphenAndUnderscoreAliases(t 
 	}
 
 	joined := strings.ToLower(statuses[0].BackupName + "|" + statuses[1].BackupName + "|" + statuses[2].BackupName)
-	if !strings.Contains(joined, "root-a-c") {
-		t.Fatalf("expected alias for root-a to contain root-a-c, got %q", joined)
+	if !strings.Contains(joined, "root~2d~a-c") {
+		t.Fatalf("expected alias for root-a to contain root~2d~a-c, got %q", joined)
 	}
-	if !strings.Contains(joined, "root_a-c") {
-		t.Fatalf("expected alias for root_a to contain root_a-c, got %q", joined)
+	if !strings.Contains(joined, "root~5f~a-c") {
+		t.Fatalf("expected alias for root_a to contain root~5f~a-c, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~a-c") {
-		t.Fatalf("expected alias for root a to contain root~a-c, got %q", joined)
+	if !strings.Contains(joined, "root~20~a-c") {
+		t.Fatalf("expected alias for root a to contain root~20~a-c, got %q", joined)
 	}
 }
 
-func TestInspectSourceFoldersFailsOnNonIdenticalAliasCollision(t *testing.T) {
+func TestInspectSourceFoldersEncodesSpecialCharactersUniquely(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
-	first := filepath.Join(exeDir, "root-a", "Documents")
-	second := filepath.Join(exeDir, "root.a", "Documents")
+	first := filepath.Join(exeDir, "Root-A", "Documents")
+	second := filepath.Join(exeDir, "Root_A", "Documents")
+	third := filepath.Join(exeDir, "Root A", "Documents")
+	fourth := filepath.Join(exeDir, "Root.A", "Documents")
+	fifth := filepath.Join(exeDir, "Root~A", "Documents")
 	if err := os.MkdirAll(first, 0o750); err != nil {
 		t.Fatalf("failed to create first source: %v", err)
 	}
 	if err := os.MkdirAll(second, 0o750); err != nil {
 		t.Fatalf("failed to create second source: %v", err)
 	}
-
-	statuses := inspectSourceFolders([]string{first, second}, exeDir)
-	if len(statuses) != 2 {
-		t.Fatalf("expected 2 statuses, got %d", len(statuses))
+	if err := os.MkdirAll(third, 0o750); err != nil {
+		t.Fatalf("failed to create third source: %v", err)
+	}
+	if err := os.MkdirAll(fourth, 0o750); err != nil {
+		t.Fatalf("failed to create fourth source: %v", err)
+	}
+	if err := os.MkdirAll(fifth, 0o750); err != nil {
+		t.Fatalf("failed to create fifth source: %v", err)
 	}
 
-	if statuses[0].Skip || statuses[1].Skip {
-		t.Fatal("expected non-identical sources to remain active (not skipped)")
+	statuses := inspectSourceFolders([]string{first, second, third, fourth, fifth}, exeDir)
+	if len(statuses) != 5 {
+		t.Fatalf("expected 5 statuses, got %d", len(statuses))
 	}
-	if statuses[0].Err == nil || statuses[1].Err == nil {
-		t.Fatalf("expected both sources to fail on alias collision, got %v / %v", statuses[0].Err, statuses[1].Err)
+
+	for i, status := range statuses {
+		if status.Skip {
+			t.Fatalf("expected status[%d] to remain active, but it was skipped", i)
+		}
+		if status.Err != nil {
+			t.Fatalf("expected status[%d] to be valid, got error: %v", i, status.Err)
+		}
 	}
-	if !strings.Contains(strings.ToLower(statuses[0].Err.Error()), "alias collision") {
-		t.Fatalf("expected alias collision error, got %v", statuses[0].Err)
+
+	joined := strings.ToLower(statuses[0].BackupName + "|" + statuses[1].BackupName + "|" + statuses[2].BackupName + "|" + statuses[3].BackupName + "|" + statuses[4].BackupName)
+	if !strings.Contains(joined, "root~2d~a-c") {
+		t.Fatalf("expected encoded alias fragment root~2d~a-c, got %q", joined)
 	}
-	if !strings.Contains(strings.ToLower(statuses[1].Err.Error()), "alias collision") {
-		t.Fatalf("expected alias collision error, got %v", statuses[1].Err)
+	if !strings.Contains(joined, "root~5f~a-c") {
+		t.Fatalf("expected encoded alias fragment root~5f~a-c, got %q", joined)
 	}
-	if statuses[0].BackupName == "" || statuses[1].BackupName == "" {
-		t.Fatalf("expected colliding backup names to be populated, got %q / %q", statuses[0].BackupName, statuses[1].BackupName)
+	if !strings.Contains(joined, "root~20~a-c") {
+		t.Fatalf("expected encoded alias fragment root~20~a-c, got %q", joined)
 	}
-	if statuses[0].BackupName != statuses[1].BackupName {
-		t.Fatalf("expected both entries to report the same colliding name, got %q / %q", statuses[0].BackupName, statuses[1].BackupName)
+	if !strings.Contains(joined, "root~2e~a-c") {
+		t.Fatalf("expected encoded alias fragment root~2e~a-c, got %q", joined)
 	}
-	if strings.Contains(statuses[0].BackupName, "-2") || strings.Contains(statuses[1].BackupName, "-2") {
-		t.Fatalf("expected no numeric suffix fallback, got %q / %q", statuses[0].BackupName, statuses[1].BackupName)
+	if !strings.Contains(joined, "root~7e~a-c") {
+		t.Fatalf("expected encoded alias fragment root~7e~a-c, got %q", joined)
+	}
+}
+
+func TestSanitizeAliasPartEncodesNonAlphaNumericAsUTF8Hex(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "Root-A", want: "Root~2D~A"},
+		{input: "Root_A", want: "Root~5F~A"},
+		{input: "Root A", want: "Root~20~A"},
+		{input: "Root.A", want: "Root~2E~A"},
+		{input: "Root~A", want: "Root~7E~A"},
+	}
+
+	for _, tc := range tests {
+		if got := sanitizeAliasPart(tc.input); got != tc.want {
+			t.Fatalf("sanitizeAliasPart(%q): got %q, want %q", tc.input, got, tc.want)
+		}
 	}
 }
 
@@ -264,5 +295,58 @@ func TestYesNo(t *testing.T) {
 	}
 	if got := yesNo(false); got != "disabled" {
 		t.Fatalf("expected disabled, got %q", got)
+	}
+}
+
+func TestEstimateSelectedSourceBytes(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	srcA := filepath.Join(root, "A")
+	srcB := filepath.Join(root, "B")
+	if err := os.MkdirAll(srcA, 0o750); err != nil {
+		t.Fatalf("failed to create source A: %v", err)
+	}
+	if err := os.MkdirAll(srcB, 0o750); err != nil {
+		t.Fatalf("failed to create source B: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcA, "one.bin"), []byte("12345"), 0o600); err != nil {
+		t.Fatalf("failed to write source A file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcB, "two.bin"), []byte("1234567890"), 0o600); err != nil {
+		t.Fatalf("failed to write source B file: %v", err)
+	}
+
+	sources := []sourceFolderStatus{
+		{Resolved: srcA},
+		{Resolved: srcB, Skip: true},
+		{Resolved: filepath.Join(root, "missing"), Err: os.ErrNotExist},
+	}
+
+	total, warnings := estimateSelectedSourceBytes(sources)
+	if total != 5 {
+		t.Fatalf("expected total 5 bytes from runnable source, got %d", total)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("expected no warnings, got %#v", warnings)
+	}
+}
+
+func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	filePath := filepath.Join(root, "not-a-dir-file")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write file path: %v", err)
+	}
+
+	total, warnings := estimateSelectedSourceBytes([]sourceFolderStatus{{Resolved: filePath}})
+	if total != 0 {
+		t.Fatalf("expected total 0 bytes when estimation fails, got %d", total)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected one warning, got %#v", warnings)
 	}
 }

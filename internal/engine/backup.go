@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
-	"unicode"
 )
 
 const splitWriteBufferSize = 32 * 1024 * 1024
@@ -25,7 +24,7 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 	// Resolve target folder (may be relative to exe dir).
 	targetDir := resolveDir(cfg.TargetFolder, exeDir)
 	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		return fmt.Errorf("Failed to create target folder: %w", err)
+		return fmt.Errorf("Failed to create target folder: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
 
 	sources := inspectSourceFolders(cfg.SourceFolders, exeDir)
@@ -45,7 +44,7 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 	}
 	defer log.Close()
 
-	log.Info("RestoreSafe backup started – ID: %s, date: %s", string(id), date)
+	log.Info("RestoreSafe backup started - ID: %s, date: %s", string(id), date)
 
 	printBackupPreflight(cfg, targetDir, sources)
 	if err := validateSourceFolders(sources); err != nil {
@@ -68,28 +67,32 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 	password, err := security.ReadPasswordConfirmedWithPrompts("Enter backup password: ", "Re-enter backup password: ")
 	if err != nil {
 		log.Error("Password input failed: %v", err)
-		return fmt.Errorf("Password input failed: %w", err)
+		return fmt.Errorf("Password input failed: %w. Remedy: Enter a non-empty password and confirm it exactly.", err)
 	}
 
 	// Optional YubiKey 2FA.
 	var challengeHex string
 	if cfg.YubikeyEnable {
-		fmt.Println("YubiKey detected – please touch YubiKey button...")
+		fmt.Println("YubiKey detected. Please touch the YubiKey button.")
 		password, challengeHex, err = security.CombineWithPassword(password)
 		if err != nil {
 			log.Error("YubiKey authentication failed: %v", err)
-			return fmt.Errorf("YubiKey authentication failed: %w", err)
+			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykchalresp is available on PATH.", err)
 		}
 		log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
 	}
 
-	fmt.Println("Backup started...")
-	log.Info("Backup started – %d source folders", runnableSourceCount(sources))
+	fmt.Println("Backup started.")
+	log.Info("Backup started - %d source folders", runnableSourceCount(sources))
+	warningCount := 0
+	totalPartsCreated := 0
+	processedFolders := make([]string, 0)
 
 	// Back up each source folder.
 	for _, source := range sources {
 		if source.Warning != "" {
 			log.Warn("Source folder warning: %s -> %s", source.Resolved, source.Warning)
+			warningCount++
 		}
 		if source.Skip {
 			continue
@@ -104,17 +107,20 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 		log.Info("Processing source folder: %s", srcAbs)
 		log.Debug("Folder name in archive: %s", folderName)
 
-		if err := backupFolder(srcAbs, folderName, targetDir, date, id, password, cfg, log); err != nil {
+		partCount, err := backupFolder(srcAbs, folderName, targetDir, date, id, password, cfg, log)
+		if err != nil {
 			log.Error("Backup of %q failed: %v", srcAbs, err)
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
+		totalPartsCreated += partCount
+		processedFolders = append(processedFolders, folderName)
 
 		// Write YubiKey challenge file if needed.
 		if cfg.YubikeyEnable && challengeHex != "" {
 			challengePath := util.ChallengeFileName(targetDir, folderName, date, id)
 			if err := os.WriteFile(challengePath, []byte(challengeHex), 0o600); err != nil {
 				log.Error("Failed to write challenge file: %v", err)
-				return fmt.Errorf("Failed to write challenge file: %w", err)
+				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target folder; for YubiKey backups, the .challenge file must be in the same folder as the .enc files.", err)
 			}
 			log.Debug("Challenge file written: %s", challengePath)
 		}
@@ -124,9 +130,11 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 
 	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {
 		log.Warn("Retention cleanup failed: %v", err)
+		warningCount++
 	}
 
 	log.Info("Backup completed successfully")
+	printBackupCompletionSummary(processedFolders, totalPartsCreated, logPath, warningCount)
 	fmt.Printf("\nBackup completed. Log: %s\n", logPath)
 	return nil
 }
@@ -148,17 +156,17 @@ func inspectSourceFolders(sourceFolders []string, exeDir string) []sourceFolderS
 
 		info, err := os.Stat(resolved)
 		if err != nil {
-			status.Err = fmt.Errorf("not found or inaccessible: %w", err)
+			status.Err = fmt.Errorf("Not found or inaccessible: %w. Remedy: Check the path in config.yaml and use forward slashes on Windows (e.g. C:/Users/Name/Documents).", err)
 			result = append(result, status)
 			continue
 		}
 		if !info.IsDir() {
-			status.Err = fmt.Errorf("path is not a directory")
+			status.Err = fmt.Errorf("Path is not a directory. Remedy: Provide a folder path, not a file path.")
 			result = append(result, status)
 			continue
 		}
 		if _, err := os.ReadDir(resolved); err != nil {
-			status.Err = fmt.Errorf("directory not readable: %w", err)
+			status.Err = fmt.Errorf("Directory not readable: %w. Remedy: Check permissions and ensure this user can read the folder.", err)
 		}
 
 		result = append(result, status)
@@ -308,34 +316,23 @@ func sanitizeAliasPart(part string) string {
 
 	var b strings.Builder
 	b.Grow(len(trimmed))
-	lastWasDash := false
 
 	for _, r := range trimmed {
 		switch {
 		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
 			b.WriteRune(r)
-			lastWasDash = false
-		case r == '_':
-			b.WriteRune(r)
-			lastWasDash = false
-		case unicode.IsSpace(r):
-			b.WriteByte('~')
-			lastWasDash = false
-		case r == '-':
-			if !lastWasDash {
-				b.WriteByte('-')
-				lastWasDash = true
-			}
 		default:
-			if !lastWasDash {
-				b.WriteByte('-')
-				lastWasDash = true
+			for _, by := range []byte(string(r)) {
+				b.WriteString(fmt.Sprintf("~%02X~", by))
 			}
 		}
 	}
 
-	cleaned := strings.Trim(b.String(), "-")
-	return cleaned
+	if b.Len() == 0 {
+		return "source"
+	}
+
+	return b.String()
 }
 
 func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFolderStatus) {
@@ -347,6 +344,27 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	fmt.Printf("Retention keep: %d\n", cfg.RetentionKeep)
 	fmt.Printf("YubiKey 2FA   : %s\n", yesNo(cfg.YubikeyEnable))
 	fmt.Printf("Log level     : %s\n", strings.ToLower(cfg.LogLevel))
+
+	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
+	if estimatedBytes > 0 {
+		fmt.Printf("Est. source size: %s\n", formatBytesBinary(uint64(estimatedBytes)))
+	} else {
+		fmt.Println("Est. source size: unknown")
+	}
+	for _, warning := range estimateWarnings {
+		fmt.Printf("  [WARN] size estimate: %s\n", warning)
+	}
+
+	freeBytes, freeErr := queryFreeSpaceBytes(targetDir)
+	if freeErr != nil {
+		fmt.Printf("Free space      : unknown (%v)\n", freeErr)
+	} else {
+		fmt.Printf("Free space      : %s\n", formatBytesBinary(freeBytes))
+		if estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes {
+			fmt.Println("  [WARN] estimated source size exceeds currently free space on target")
+		}
+	}
+
 	fmt.Println("Source folders:")
 	for _, src := range sources {
 		baseName := util.FolderBaseName(src.Resolved)
@@ -387,7 +405,7 @@ func validateSourceFolders(sources []sourceFolderStatus) error {
 		}
 	}
 	if invalid > 0 {
-		return fmt.Errorf("Backup preflight failed: %d source folder(s) are invalid or inaccessible", invalid)
+		return fmt.Errorf("Backup preflight failed: %d source folder(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.", invalid)
 	}
 	return nil
 }
@@ -404,7 +422,7 @@ func promptStartBackup() (bool, error) {
 		case "n", "no":
 			return false, nil
 		default:
-			fmt.Println("Please enter Y (yes) or N (no).")
+			fmt.Println("Please enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.")
 		}
 	}
 }
@@ -427,6 +445,62 @@ func runnableSourceCount(sources []sourceFolderStatus) int {
 	return count
 }
 
+func estimateSelectedSourceBytes(sources []sourceFolderStatus) (int64, []string) {
+	var total int64
+	warnings := make([]string, 0)
+
+	for _, source := range sources {
+		if source.Err != nil || source.Skip {
+			continue
+		}
+
+		size, err := directorySizeBytes(source.Resolved)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s (%v)", source.Resolved, err))
+			continue
+		}
+		total += size
+	}
+
+	return total, warnings
+}
+
+func directorySizeBytes(root string) (int64, error) {
+	var total int64
+
+	info, err := os.Stat(root)
+	if err != nil {
+		return 0, err
+	}
+	if !info.IsDir() {
+		return 0, fmt.Errorf("Path is not a directory. Remedy: Use only directory paths in source_folders.")
+	}
+
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return total, err
+	}
+
+	return total, nil
+}
+
 // backupFolder streams folder → TAR → encrypt → split-writer.
 func backupFolder(
 	srcDir, folderName, targetDir, date string,
@@ -434,7 +508,7 @@ func backupFolder(
 	password []byte,
 	cfg *util.Config,
 	log *util.Logger,
-) error {
+) (int, error) {
 	sw, bw := newSplitOutput(targetDir, folderName, date, id, cfg.SplitSizeMB)
 	pr, pw := io.Pipe()
 	counters := &backupCounters{}
@@ -449,17 +523,41 @@ func backupFolder(
 	closeErr := closeSplitOutput(bw, sw)
 
 	if encErr != nil {
-		return fmt.Errorf("Encryption failed: %w", encErr)
+		return 0, fmt.Errorf("Encryption failed: %w. Remedy: Check password/YubiKey and retry.", encErr)
 	}
 	if closeErr != nil {
-		return closeErr
+		return 0, closeErr
 	}
 	if tarErr != nil {
-		return fmt.Errorf("Creating TAR failed: %w", tarErr)
+		return 0, fmt.Errorf("Creating TAR failed: %w. Remedy: Check source-folder access and file permissions.", tarErr)
 	}
 
 	logPartSummary(sw, folderName, cfg.IODiagnostics, counters, log)
-	return nil
+	return len(sw.Paths()), nil
+}
+
+func printBackupCompletionSummary(processedFolders []string, totalPartsCreated int, logPath string, warningCount int) {
+	fmt.Println()
+	fmt.Println("Backup summary")
+	fmt.Println("--------------")
+	fmt.Printf("Processed folders: %d (%s)\n", len(processedFolders), summarizeNames(processedFolders))
+	fmt.Printf("Parts created    : %d\n", totalPartsCreated)
+	fmt.Printf("Log file         : %s\n", logPath)
+	if warningCount > 0 {
+		fmt.Printf("Warnings         : %d\n", warningCount)
+	} else {
+		fmt.Println("Warnings         : none")
+	}
+}
+
+func summarizeNames(names []string) string {
+	if len(names) == 0 {
+		return "none"
+	}
+	if len(names) <= 3 {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s, %s, %s, +%d more", names[0], names[1], names[2], len(names)-3)
 }
 
 type backupCounters struct {
@@ -502,10 +600,10 @@ func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, pass
 
 func closeSplitOutput(bw *bufio.Writer, sw *util.Writer) error {
 	if err := bw.Flush(); err != nil {
-		return fmt.Errorf("Flushing split buffer failed: %w", err)
+		return fmt.Errorf("Flushing split buffer failed: %w. Remedy: Check free disk space and write permissions in target_folder.", err)
 	}
 	if err := sw.Close(); err != nil {
-		return fmt.Errorf("Closing split-writer failed: %w", err)
+		return fmt.Errorf("Closing split-writer failed: %w. Remedy: Check free disk space and write permissions in target_folder.", err)
 	}
 	return nil
 }

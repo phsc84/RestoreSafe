@@ -27,15 +27,15 @@ func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("Config file not found: %w\n"+
-			"Make sure 'config.yaml' is in the same directory as the application.", err)
+			"Remedy: Place 'config.yaml' in the same folder as the application or start RestoreSafe from that folder.", err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		hint := ""
+		hint := "\nRemedy: Check YAML syntax (space indentation, correct colons, no tabs)."
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
-			hint = "\nHint: Windows paths in YAML need escaping in double quotes (e.g. C:\\\\Users\\\\Name) or use forward slashes (C:/Users/Name)."
+			hint += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
 		}
 
 		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
@@ -56,18 +56,18 @@ func (c *Config) withDefaults() *Config {
 
 func (c *Config) validate() error {
 	if len(c.SourceFolders) == 0 {
-		return fmt.Errorf("No 'source_folders' specified in config file.")
+		return fmt.Errorf("No 'source_folders' specified in config file. Remedy: Add at least one source folder under 'source_folders', e.g. ['C:/Users/Name/Documents'].")
 	}
 	if c.TargetFolder == "" {
-		return fmt.Errorf("No 'target_folder' specified in config file.")
+		return fmt.Errorf("No 'target_folder' specified in config file. Remedy: Set a target folder, e.g. 'C:/Backups'.")
 	}
 	switch c.LogLevel {
 	case "debug", "info":
 	default:
-		return fmt.Errorf("Invalid 'log_level': %q (allowed: debug, info)", c.LogLevel)
+		return fmt.Errorf("Invalid 'log_level': %q (allowed: debug, info). Remedy: Set 'log_level' to 'info' or 'debug'.", c.LogLevel)
 	}
 	if c.RetentionKeep < 0 {
-		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0)", c.RetentionKeep)
+		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0). Remedy: Use 0 (disabled) or a positive number, e.g. 7.", c.RetentionKeep)
 	}
 	return nil
 }

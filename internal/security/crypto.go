@@ -75,18 +75,18 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
 	// Generate a random salt.
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("Failed to generate salt: %w", err)
+		return fmt.Errorf("Failed to generate salt: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
 	}
 
 	key := deriveKey(password, salt)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("Failed to create AES-Cipher: %w", err)
+		return fmt.Errorf("Failed to create AES cipher: %w. Remedy: Verify the runtime environment and restart the application.", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w", err)
+		return fmt.Errorf("Failed to create GCM: %w. Remedy: Verify the runtime environment and restart the application.", err)
 	}
 
 	// Write file header.
@@ -104,7 +104,7 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
 			break
 		}
 		if readErr != nil && readErr != io.ErrUnexpectedEOF && readErr != io.EOF {
-			return fmt.Errorf("Failed to read plaintext: %w", readErr)
+			return fmt.Errorf("Failed to read plaintext: %w. Remedy: Check source-file readability and permissions.", readErr)
 		}
 
 		nonce := chunkNonce(chunkIndex)
@@ -113,10 +113,10 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
 		// Write 4-byte length prefix + ciphertext.
 		length := uint32(len(encrypted))
 		if err := binary.Write(dst, binary.BigEndian, length); err != nil {
-			return fmt.Errorf("Failed to write chunk length: %w", err)
+			return fmt.Errorf("Failed to write chunk length: %w. Remedy: Check destination write permissions and free disk space.", err)
 		}
 		if _, err := dst.Write(encrypted); err != nil {
-			return fmt.Errorf("Failed to write chunk data: %w", err)
+			return fmt.Errorf("Failed to write chunk data: %w. Remedy: Check destination write permissions and free disk space.", err)
 		}
 
 		chunkIndex++
@@ -140,11 +140,11 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("Failed to create AES-Cipher: %w", err)
+		return fmt.Errorf("Failed to create AES cipher: %w. Remedy: Verify the runtime environment and restart the application.", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w", err)
+		return fmt.Errorf("Failed to create GCM: %w. Remedy: Verify the runtime environment and restart the application.", err)
 	}
 
 	var chunkIndex uint64
@@ -155,12 +155,12 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return fmt.Errorf("Failed to read chunk length: %w", err)
+			return fmt.Errorf("Failed to read chunk length: %w. Remedy: Check backup-part completeness and file readability.", err)
 		}
 
 		encrypted := make([]byte, length)
 		if _, err := io.ReadFull(src, encrypted); err != nil {
-			return fmt.Errorf("Failed to read chunk data: %w", err)
+			return fmt.Errorf("Failed to read chunk data: %w. Remedy: Check backup-part completeness and file readability.", err)
 		}
 
 		nonce := chunkNonce(chunkIndex)
@@ -170,7 +170,7 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 		}
 
 		if _, err := dst.Write(plaintext); err != nil {
-			return fmt.Errorf("Failed to write decrypted data: %w", err)
+			return fmt.Errorf("Failed to write decrypted data: %w. Remedy: Check destination write permissions and free disk space.", err)
 		}
 
 		chunkIndex++
@@ -182,16 +182,16 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 // writeHeader writes the fixed-size file header to w.
 func writeHeader(w io.Writer, salt []byte) error {
 	if _, err := io.WriteString(w, magic); err != nil {
-		return fmt.Errorf("Failed to write magic: %w", err)
+		return fmt.Errorf("Failed to write magic: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, uint32(saltLen)); err != nil {
-		return fmt.Errorf("Failed to write salt length: %w", err)
+		return fmt.Errorf("Failed to write salt length: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
 	if _, err := w.Write(salt); err != nil {
-		return fmt.Errorf("Failed to write salt: %w", err)
+		return fmt.Errorf("Failed to write salt: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, uint32(chunkSize)); err != nil {
-		return fmt.Errorf("Failed to write chunk size: %w", err)
+		return fmt.Errorf("Failed to write chunk size: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
 	return nil
 }
@@ -200,29 +200,29 @@ func writeHeader(w io.Writer, salt []byte) error {
 func readHeader(r io.Reader) ([]byte, error) {
 	magicBuf := make([]byte, len(magic))
 	if _, err := io.ReadFull(r, magicBuf); err != nil {
-		return nil, fmt.Errorf("Failed to read magic: %w", err)
+		return nil, fmt.Errorf("Failed to read magic: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 	if string(magicBuf) != magic {
-		return nil, fmt.Errorf("Invalid file format (not a RestoreSafe backup).")
+		return nil, fmt.Errorf("Invalid file format (not a RestoreSafe backup). Remedy: Select a valid RestoreSafe .enc backup file.")
 	}
 
 	var saltLength uint32
 	if err := binary.Read(r, binary.BigEndian, &saltLength); err != nil {
-		return nil, fmt.Errorf("Failed to read salt length: %w", err)
+		return nil, fmt.Errorf("Failed to read salt length: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 	if saltLength != saltLen {
-		return nil, fmt.Errorf("Invalid salt length: %d", saltLength)
+		return nil, fmt.Errorf("Invalid salt length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", saltLength)
 	}
 
 	salt := make([]byte, saltLen)
 	if _, err := io.ReadFull(r, salt); err != nil {
-		return nil, fmt.Errorf("Failed to read salt: %w", err)
+		return nil, fmt.Errorf("Failed to read salt: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 
 	// Read (and ignore) stored chunk size — we use the embedded value.
 	var storedChunkSize uint32
 	if err := binary.Read(r, binary.BigEndian, &storedChunkSize); err != nil {
-		return nil, fmt.Errorf("Failed to read stored chunk size: %w", err)
+		return nil, fmt.Errorf("Failed to read stored chunk size: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 
 	return salt, nil

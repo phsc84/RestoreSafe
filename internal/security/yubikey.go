@@ -22,8 +22,8 @@ const challengeLen = 32
 
 // ErrYubikeyNotFound is returned when ykchalresp is not on PATH.
 var ErrYubikeyNotFound = errors.New(
-	"ykchalresp not found – please install YubiKey-Manager: " +
-		"(https://www.yubico.com/support/download/yubikey-manager/)")
+	"ykchalresp not found - please install YubiKey-Manager: " +
+		"(https://www.yubico.com/support/download/yubikey-manager/) and ensure ykchalresp is available on PATH")
 
 // CombineWithPassword generates a random challenge, sends it to the YubiKey
 // (slot 2 by default), and appends the HMAC-SHA1 response to password.
@@ -35,7 +35,7 @@ var ErrYubikeyNotFound = errors.New(
 func CombineWithPassword(password []byte) (combined []byte, challengeHex string, err error) {
 	challenge := make([]byte, challengeLen)
 	if _, err := rand.Read(challenge); err != nil {
-		return nil, "", fmt.Errorf("Failed to generate challenge: %w", err)
+		return nil, "", fmt.Errorf("Failed to generate challenge: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
 	}
 
 	response, err := queryYubikey(challenge)
@@ -53,7 +53,7 @@ func CombineWithPassword(password []byte) (combined []byte, challengeHex string,
 func CombineWithPasswordForRestore(password []byte, challengeHex string) ([]byte, error) {
 	challenge, err := hex.DecodeString(challengeHex)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to decode challenge: %w", err)
+		return nil, fmt.Errorf("Failed to decode challenge: %w. Remedy: Ensure the .challenge file is unchanged and belongs to the same backup run as the .enc files.", err)
 	}
 
 	response, err := queryYubikey(challenge)
@@ -84,13 +84,13 @@ func queryYubikey(challenge []byte) ([]byte, error) {
 	challengeHex := hex.EncodeToString(challenge)
 	out, err := exec.Command("ykchalresp", "-2", "-x", challengeHex).Output()
 	if err != nil {
-		return nil, fmt.Errorf("YubiKey query failed (please touch the key): %w", err)
+		return nil, fmt.Errorf("YubiKey query failed (please touch the key): %w. Remedy: Keep the YubiKey connected, touch it, and verify HMAC is configured in slot 2.", err)
 	}
 
 	responseHex := strings.TrimSpace(string(out))
 	response, err := hex.DecodeString(responseHex)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to decode YubiKey response: %w", err)
+		return nil, fmt.Errorf("Failed to decode YubiKey response: %w. Remedy: Check ykchalresp version and verify YubiKey configuration (slot 2, HMAC-SHA1).", err)
 	}
 
 	return response, nil

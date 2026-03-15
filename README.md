@@ -63,11 +63,15 @@ At startup, RestoreSafe automatically runs a non-interactive health check. It va
 
 Double-click `RestoreSafe.exe` and follow the prompts.
 
+Before backup starts, RestoreSafe shows a preflight summary including estimated total source size, free target disk space, and source reachability checks.
+
 ### Restore a backup
 
 Double-click `RestoreSafe.exe` and follow the prompts.
 
-If a backup ID exists on multiple dates, ID-based selection restores only the newest date and asks for confirmation first.
+The backup picker groups backups by backup set (`date + ID`) and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
+
+If a backup ID exists on multiple dates, ID-based selection warns and automatically uses the newest date.
 
 ### Verify a backup
 
@@ -75,7 +79,9 @@ Double-click `RestoreSafe.exe`, choose `Verify backup`, and follow the prompts.
 
 Verify mode checks that all selected backup parts are present, decryptable with the provided password (and YubiKey if required), and readable as a complete TAR archive without restoring any files to disk.
 
-If a backup ID exists on multiple dates, ID-based selection verifies only the newest date and asks for confirmation first.
+The same backup picker groups backups by backup set (`date + ID`) and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
+
+If a backup ID exists on multiple dates, ID-based selection warns and automatically uses the newest date.
 
 ## Naming scheme of created files
 
@@ -115,12 +121,31 @@ Examples for common if-cases:
 [Pictures]_2026-01-15_ABC123.challenge
 ```
 
-3. If two different source paths have the same folder name (for example both end with `Documents`), RestoreSafe adds a readable path hint:
+> **Important**
+>
+> The automatically generated `.challenge` file(s) must be stored together with the corresponding `.enc` file(s).
+> The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
+
+3. If several configured source folders have the same folder name (for example all end with `Documents`), RestoreSafe keeps the folder name and adds an extra alias derived from the remaining path and the drive letter. Only this added alias part is adjusted. The source folder name itself stays unchanged. In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8 hex bytes in the form `~XX~`:
+
+Examples **WITHOUT** special characters in that added alias part:
 
 ```text
-[Documents__RootA-C]_2026-01-15_ABC123-001.enc
-[Documents__RootB-D]_2026-01-15_ABC123-001.enc
+C:\RootA\Documents -> [Documents__RootA-C]_2026-01-15_ABC123-001.enc
+D:\RootB\Documents -> [Documents__RootB-D]_2026-01-15_ABC123-001.enc
 ```
+
+Examples **WITH** special characters in that added alias part:
+
+```text
+C:\Root A\Documents -> [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
+C:\Root-A\Documents -> [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
+C:\Root_A\Documents -> [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
+C:\Root.A\Documents -> [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
+C:\Root~A\Documents -> [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
+```
+
+Result: aliases remain deterministic and distinct across special characters.
 
 4. If the exact same source folder appears twice in `config.yaml`, RestoreSafe warns and skips the duplicate entry:
 
@@ -129,29 +154,6 @@ Examples for common if-cases:
 ```
 
 Result: only one backup file set is written for that path.
-
-5. If two different source paths still produce the same generated backup name, RestoreSafe stops before backup starts and shows an error:
-
-These paths stay distinct in backup names:
-
-```text
-C:\Root-A\Documents  -> Documents__Root-A-C
-C:\Root_A\Documents  -> Documents__Root_A-C
-C:\Root A\Documents  -> Documents__Root~A-C
-```
-
-A real collision example is:
-
-```text
-[ERROR] C:\Root-A\Documents -> backup name alias collision: C:\Root-A\Documents and C:\Root.A\Documents both resolve to "Documents__Root-A-C"; adjust one source path to avoid ambiguity
-```
-
-Result: backup is aborted so file names stay unambiguous.
-
-> **Important**
->
-> The automatically generated `.challenge` file(s) must be stored together with the corresponding `.enc` file(s).
-> The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
 
 ### Log files
 

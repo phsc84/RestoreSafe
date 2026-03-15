@@ -70,7 +70,7 @@ func (s *Writer) Write(p []byte) (int, error) {
 		p = p[written:]
 
 		if err != nil {
-			return total, fmt.Errorf("Failed to write to part file: %w", err)
+			return total, fmt.Errorf("Failed to write to part file: %w. Remedy: Check target-folder write permissions and free disk space.", err)
 		}
 
 		if s.written >= s.maxBytes {
@@ -107,12 +107,12 @@ func (s *Writer) openNext() error {
 	path := filepath.Clean(s.nameFunc(s.seq))
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("Failed to create target directory: %w", err)
+		return fmt.Errorf("Failed to create target directory: %w. Remedy: Check path validity and write permissions.", err)
 	}
 
 	f, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("Failed to create part file %q: %w", path, err)
+		return fmt.Errorf("Failed to create part file %q: %w. Remedy: Check target-folder write permissions and free disk space.", path, err)
 	}
 
 	s.current = f
@@ -153,7 +153,7 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 			}
 			f, err := os.Open(r.paths[r.idx])
 			if err != nil {
-				return 0, fmt.Errorf("Failed to open part file %q: %w", r.paths[r.idx], err)
+				return 0, fmt.Errorf("Failed to open part file %q: %w. Remedy: Check that the part file exists and is readable.", r.paths[r.idx], err)
 			}
 			r.current = f
 			r.idx++
@@ -163,7 +163,7 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 		if err == io.EOF {
 			if closeErr := r.current.Close(); closeErr != nil {
 				r.current = nil
-				return n, fmt.Errorf("Failed to close part file: %w", closeErr)
+				return n, fmt.Errorf("Failed to close part file: %w. Remedy: Retry the operation; if it persists, check file-system health.", closeErr)
 			}
 			r.current = nil
 			if n > 0 {

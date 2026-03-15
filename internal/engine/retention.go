@@ -35,7 +35,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 
 	index, err := scanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backups for retention: %w", err)
+		return fmt.Errorf("Failed to scan backups for retention: %w. Remedy: Check target-folder readability and path configuration.", err)
 	}
 
 	type datedEntry struct {
@@ -80,7 +80,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 		for _, candidate := range toDelete {
 			removed, err := deleteBackupEntryFiles(targetDir, candidate.entry)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old backup set %s: %w", candidate.entry.String(), err)
+				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the target folder.", candidate.entry.String(), err)
 			}
 			deletedSets++
 			deletedFiles += removed
@@ -101,7 +101,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 func newestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
 	parts := collectParts(targetDir, entry)
 	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("No part files found")
+		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
 	}
 
 	var newest time.Time

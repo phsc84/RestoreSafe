@@ -47,7 +47,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(logger.Close)
 
-	if err := backupFolder(srcDir, folderName, targetDir, backupDate, backupID, password, cfg, logger); err != nil {
+	if _, err := backupFolder(srcDir, folderName, targetDir, backupDate, backupID, password, cfg, logger); err != nil {
 		t.Fatalf("backupFolder returned error: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 		t.Fatalf("expected multiple split parts, got %d", len(parts))
 	}
 
-	if err := restoreEntry(entry, targetDir, restoreRoot, password, nil); err != nil {
+	if _, err := restoreEntry(entry, targetDir, restoreRoot, password, nil); err != nil {
 		t.Fatalf("restoreEntry returned error: %v", err)
 	}
 
@@ -93,12 +93,12 @@ func TestRestoreEntryWrongPassword(t *testing.T) {
 	}
 	t.Cleanup(logger.Close)
 
-	if err := backupFolder(srcDir, folderName, targetDir, backupDate, backupID, []byte("correct-password"), cfg, logger); err != nil {
+	if _, err := backupFolder(srcDir, folderName, targetDir, backupDate, backupID, []byte("correct-password"), cfg, logger); err != nil {
 		t.Fatalf("backupFolder returned error: %v", err)
 	}
 
 	entry := util.BackupEntry{FolderName: folderName, Date: backupDate, ID: backupID}
-	err = restoreEntry(entry, targetDir, restoreRoot, []byte("wrong-password"), nil)
+	_, err = restoreEntry(entry, targetDir, restoreRoot, []byte("wrong-password"), nil)
 	if err == nil {
 		t.Fatal("expected restoreEntry to fail for wrong password")
 	}

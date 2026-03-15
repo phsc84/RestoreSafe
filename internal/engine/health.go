@@ -89,7 +89,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Target folder",
-			Detail:   fmt.Sprintf("%s -> %v", targetDir, err),
+			Detail:   fmt.Sprintf("%s -> %v. Remedy: Check target_folder in config.yaml and ensure read access.", targetDir, err),
 		}}
 	}
 
@@ -97,7 +97,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Target folder",
-			Detail:   fmt.Sprintf("%s is not a directory", targetDir),
+			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a folder path, not a file path.", targetDir),
 		}}
 	}
 
@@ -106,7 +106,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Target folder",
-			Detail:   fmt.Sprintf("%s is not writable: %v", targetDir, err),
+			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Adjust write permissions or choose a different target_folder.", targetDir, err),
 		}}
 	}
 	probePath := probe.Name()
@@ -124,7 +124,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		items = append(items, healthItem{
 			Severity: healthWarn,
 			Scope:    "Target folder",
-			Detail:   fmt.Sprintf("Free disk space could not be determined: %v", err),
+			Detail:   fmt.Sprintf("Free disk space could not be determined: %v. Remedy: Check drive availability and Windows permissions.", err),
 		})
 		return items
 	}
@@ -145,7 +145,7 @@ func checkTempDirHealth() []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Temp directory",
-			Detail:   fmt.Sprintf("%s is not writable: %v", tempDir, err),
+			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Point TEMP/TMP to a writable folder or adjust permissions.", tempDir, err),
 		}}
 	}
 	probePath := probe.Name()
@@ -196,7 +196,7 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Backup inventory",
-			Detail:   fmt.Sprintf("Failed to scan backups: %v", err),
+			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in target_folder.", err),
 		}}
 	}
 
@@ -204,7 +204,7 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    "Backup inventory",
-			Detail:   "No backup sets found",
+			Detail:   "No backup sets found. Remedy: Check target_folder or create a new backup run.",
 		}}
 	}
 
@@ -227,7 +227,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Backup inventory",
-			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v", err),
+			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in target_folder.", err),
 		}}
 	}
 
@@ -263,7 +263,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			items = append(items, healthItem{
 				Severity: healthError,
 				Scope:    "Challenge file",
-				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run", entry.String()),
+				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run. Remedy: Put the matching .challenge file in the same folder as the .enc files.", entry.String()),
 			})
 		}
 	}
@@ -272,7 +272,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 		items = append(items, healthItem{
 			Severity: healthWarn,
 			Scope:    "Challenge file",
-			Detail:   fmt.Sprintf("%s has no matching backup parts", orphan),
+			Detail:   fmt.Sprintf("%s has no matching backup parts. Remedy: Remove the file or restore the related backup parts.", orphan),
 		})
 	}
 
@@ -384,7 +384,7 @@ func formatBytesBinary(bytes uint64) string {
 func queryFreeSpaceBytes(path string) (uint64, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to encode path: %w", err)
+		return 0, fmt.Errorf("Failed to encode path: %w. Remedy: Check the path format and use a valid Windows path.", err)
 	}
 
 	var freeBytesAvailable uint64
@@ -393,7 +393,7 @@ func queryFreeSpaceBytes(path string) (uint64, error) {
 
 	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytesAvailable, &totalNumberOfBytes, &totalNumberOfFreeBytes)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to query free space for %q: %w", path, err)
+		return 0, fmt.Errorf("Failed to query free space for %q: %w. Remedy: Check drive availability and access rights.", path, err)
 	}
 
 	return freeBytesAvailable, nil

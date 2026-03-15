@@ -13,7 +13,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -28,30 +27,35 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 	// Enumerate backups.
 	index, err := scanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan target folder %q: %w", targetDir, err)
+		return fmt.Errorf("Failed to scan target folder %q: %w. Remedy: Check the target_folder path in config.yaml and ensure the folder exists and is readable.", targetDir, err)
 	}
 	if len(index) == 0 {
-		fmt.Println("No backups found in target folder.")
+		fmt.Println("No backups found in target folder. Remedy: Check whether .enc files are in target_folder and whether the correct folder is configured.")
 		return nil
 	}
 
-	selected, selection, err := promptRestoreSelection(index)
+	selected, selection, err := promptRestoreSelection(targetDir, index)
 	if err != nil {
 		return err
 	}
+	warningCount := restoreSelectionWarningCount(selection, index)
 
 	requiresYubiKey, err := backupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
-		return fmt.Errorf("Failed to inspect backup authentication: %w", err)
+		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and verify .challenge filenames.", err)
 	}
 
+	logPath := util.LogFileName(targetDir, selected[0].Date, selected[0].ID)
 	log := openOperationLogger(cfg, targetDir, selected[0])
+	if log == nil {
+		warningCount++
+	}
 	if log != nil {
 		defer log.Close()
 	}
 
 	if log != nil {
-		log.Info("Restore started – Selection: %q", selection)
+		log.Info("Restore started - Selection: %q", selection)
 	}
 
 	restorePath, err := promptRestoreDestination(targetDir)
@@ -96,112 +100,29 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	fmt.Println("Restore started...")
+	fmt.Println("Restore started.")
 	if log != nil {
 		log.Info("Restore destination: %s", restorePath)
 	}
 
-	if err := restoreSelectedEntries(selected, targetDir, restorePath, password, log); err != nil {
+	totalPartsProcessed, err := restoreSelectedEntries(selected, targetDir, restorePath, password, log)
+	if err != nil {
 		return err
 	}
 
 	if log != nil {
 		log.Info("Restore completed successfully.")
 	}
+	printRestoreCompletionSummary(selected, totalPartsProcessed, logPath, warningCount)
 	fmt.Println("\nRestore completed successfully.")
 	return nil
-}
-
-func promptRestoreSelection(index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	return promptBackupSelection("restore", index)
-}
-
-func promptBackupSelection(action string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	fmt.Println("Available backups:")
-	entries := sortedEntries(index)
-	for _, e := range entries {
-		fmt.Printf("  %s\n", e.String())
-	}
-	fmt.Println()
-
-	fmt.Println("Available backup IDs (with date):")
-	for _, item := range sortedBackupIDDates(index) {
-		fmt.Printf("  %s  ->  %s\n", item.Date, item.ID)
-	}
-	fmt.Println()
-
-	fmt.Printf("Select backup(s) to %s:\n", action)
-	completedAction := completedActionLabel(action)
-	fmt.Printf("  - Enter backup ID only (e.g. ABC123) → all folders with this ID will be %s\n", completedAction)
-	fmt.Printf("  - Enter specific backup (e.g. MyFolder_2024-01-15_ABC123) → only this folder will be %s\n", completedAction)
-	fmt.Println()
-
-	selection, err := security.ReadLine("Selection: ")
-	if err != nil {
-		return nil, "", err
-	}
-	selection = strings.TrimSpace(selection)
-	normalized := strings.ToUpper(selection)
-
-	if isRawBackupID(normalized) {
-		selected, newestDate, allDates, found := resolveSelectionForIDNewestDate(normalized, index)
-		if !found {
-			return nil, "", fmt.Errorf("Backup %q not found.", normalized)
-		}
-
-		if len(allDates) > 1 {
-			confirmed, err := confirmNewestIDSelection(normalized, newestDate, allDates)
-			if err != nil {
-				return nil, "", err
-			}
-			if !confirmed {
-				return nil, "", fmt.Errorf("Selection cancelled.")
-			}
-		}
-
-		return selected, normalized, nil
-	}
-
-	selected, err := resolveSelection(selection, index)
-	if err != nil {
-		return nil, "", err
-	}
-	return selected, selection, nil
-}
-
-type backupIDDate struct {
-	Date string
-	ID   string
-}
-
-func sortedBackupIDDates(index []util.BackupEntry) []backupIDDate {
-	seen := make(map[string]bool)
-	items := make([]backupIDDate, 0)
-	for _, e := range index {
-		item := backupIDDate{Date: e.Date, ID: string(e.ID)}
-		key := item.Date + "|" + item.ID
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		items = append(items, item)
-	}
-
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].Date != items[j].Date {
-			return items[i].Date > items[j].Date
-		}
-		return items[i].ID < items[j].ID
-	})
-
-	return items
 }
 
 func openOperationLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.Logger {
 	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
-		fmt.Printf("Warning: Failed to open log file: %v\n", err)
+		fmt.Printf("Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
 		return nil
 	}
 	return log
@@ -223,7 +144,7 @@ func promptRestoreDestination(targetDir string) (string, error) {
 		restorePath = targetDir
 	}
 	if restorePath == "" {
-		return "", fmt.Errorf("Restore destination must not be empty.")
+		return "", fmt.Errorf("Restore destination must not be empty. Remedy: Provide a destination folder (e.g. C:/Restore) or '.' for target_folder.")
 	}
 	return restorePath, nil
 }
@@ -244,10 +165,10 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 			OutputDir: filepath.Join(restorePath, entry.FolderName),
 		}
 		if item.PartCount == 0 {
-			item.Err = fmt.Errorf("No part files found")
+			item.Err = fmt.Errorf("No part files found. Remedy: Ensure all .enc parts of this backup are in the same target_folder.")
 		}
 		if _, err := os.Stat(item.OutputDir); err == nil {
-			item.Err = fmt.Errorf("Target directory already exists")
+			item.Err = fmt.Errorf("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory.")
 		}
 		items = append(items, item)
 	}
@@ -282,7 +203,7 @@ func validateRestorePreflight(items []restorePreflightItem) error {
 		}
 	}
 	if invalid > 0 {
-		return fmt.Errorf("Restore preflight failed: %d selected item(s) are invalid", invalid)
+		return fmt.Errorf("Restore preflight failed: %d selected item(s) are invalid. Remedy: Fix the [ERROR] entries above and start restore again.", invalid)
 	}
 	return nil
 }
@@ -303,32 +224,35 @@ func promptStartAction(action string) (bool, error) {
 		case "n", "no":
 			return false, nil
 		default:
-			fmt.Println("Please enter Y (yes) or N (no).")
+			fmt.Println("Please enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.")
 		}
 	}
 }
 
-func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath string, password []byte, log *util.Logger) error {
+func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath string, password []byte, log *util.Logger) (int, error) {
+	totalPartsProcessed := 0
 	for _, entry := range selected {
-		if err := restoreEntry(entry, targetDir, restorePath, password, log); err != nil {
+		partCount, err := restoreEntry(entry, targetDir, restorePath, password, log)
+		if err != nil {
 			if log != nil {
 				log.Error("Failed to restore folder %q: %v", entry.String(), err)
 			}
-			return fmt.Errorf("Failed to restore folder %q: %w", entry.String(), err)
+			return 0, fmt.Errorf("Failed to restore folder %q: %w. Remedy: Check part files, password/YubiKey, and destination folder.", entry.String(), err)
 		}
+		totalPartsProcessed += partCount
 		if log != nil {
 			log.Info("Folder %q successfully restored", entry.FolderName)
 		}
 	}
-	return nil
+	return totalPartsProcessed, nil
 }
 
 // restoreEntry decrypts all parts of one backup entry and extracts to destDir.
-func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []byte, log *util.Logger) error {
+func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []byte, log *util.Logger) (int, error) {
 	parts := collectParts(targetDir, entry)
 	if len(parts) == 0 {
 		errMsg := fmt.Sprintf("No part files found for %s", entry.String())
-		return fmt.Errorf("%s", errMsg)
+		return 0, fmt.Errorf("%s. Remedy: Put all related .enc files into the same target_folder.", errMsg)
 	}
 
 	if log != nil {
@@ -349,7 +273,7 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 	outDir := filepath.Join(destDir, entry.FolderName)
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
 		errMsg := fmt.Sprintf("Failed to create target directory: %v", err)
-		return fmt.Errorf("%s", errMsg)
+		return 0, fmt.Errorf("%s. Remedy: Check write permissions and use a valid destination path.", errMsg)
 	}
 
 	if log != nil {
@@ -380,17 +304,52 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 
 	if decErr != nil {
 		if errors.Is(decErr, security.ErrWrongPassword) {
-			return security.ErrWrongPassword
+			return 0, security.ErrWrongPassword
 		}
 		errMsg := fmt.Sprintf("Decryption failed: %v", decErr)
-		return fmt.Errorf("%s", errMsg)
+		return 0, fmt.Errorf("%s. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder as the .enc files.", errMsg)
 	}
 	if extractErr != nil {
 		errMsg := fmt.Sprintf("Extraction failed: %v", extractErr)
-		return fmt.Errorf("%s", errMsg)
+		return 0, fmt.Errorf("%s. Remedy: Check backup completeness and use an empty destination folder.", errMsg)
 	}
 
-	return nil
+	return len(parts), nil
+}
+
+func restoreSelectionWarningCount(selection string, index []util.BackupEntry) int {
+	normalized := strings.ToUpper(strings.TrimSpace(selection))
+	if !isRawBackupID(normalized) {
+		return 0
+	}
+
+	_, _, allDates, found := resolveSelectionForIDNewestDate(normalized, index)
+	if !found {
+		return 0
+	}
+	if len(allDates) > 1 {
+		return 1
+	}
+	return 0
+}
+
+func printRestoreCompletionSummary(selected []util.BackupEntry, totalPartsProcessed int, logPath string, warningCount int) {
+	folderNames := make([]string, 0, len(selected))
+	for _, entry := range selected {
+		folderNames = append(folderNames, entry.FolderName)
+	}
+
+	fmt.Println()
+	fmt.Println("Restore summary")
+	fmt.Println("---------------")
+	fmt.Printf("Processed folders: %d (%s)\n", len(selected), summarizeNames(folderNames))
+	fmt.Printf("Parts processed  : %d\n", totalPartsProcessed)
+	fmt.Printf("Log file         : %s\n", logPath)
+	if warningCount > 0 {
+		fmt.Printf("Warnings         : %d\n", warningCount)
+	} else {
+		fmt.Println("Warnings         : none")
+	}
 }
 
 func logRestoreProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
@@ -435,12 +394,12 @@ func readPasswordWithRetry(
 		if requiresYubiKey {
 			challengeHex, err := readChallengeFile(challengePath)
 			if err != nil {
-				return nil, fmt.Errorf("YubiKey challenge file not found: %w", err)
+				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
 			}
-			fmt.Println("YubiKey detected – please touch YubiKey button...")
+			fmt.Println("YubiKey detected. Please touch the YubiKey button.")
 			password, err = security.CombineWithPasswordForRestore(password, challengeHex)
 			if err != nil {
-				return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
+				return nil, fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and verify slot 2 is configured correctly.", err)
 			}
 			if log != nil {
 				log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
@@ -457,7 +416,7 @@ func readPasswordWithRetry(
 				if remaining > 0 {
 					fmt.Printf("%s %d attempt(s) remaining.\n", passwordFailurePrefix(requiresYubiKey), remaining)
 					if log != nil {
-						log.Warn("Wrong password or invalid second factor – attempt %d/%d", attempt, maxPasswordAttempts)
+						log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 					}
 				}
 				continue
@@ -471,9 +430,9 @@ func readPasswordWithRetry(
 	}
 
 	if requiresYubiKey {
-		return nil, fmt.Errorf("Too many failed authentication attempts – application will now exit.")
+		return nil, fmt.Errorf("Too many failed authentication attempts. Application will now exit. Remedy: Restart and check password plus YubiKey setup (slot 2, touch).")
 	}
-	return nil, fmt.Errorf("Too many wrong password attempts – application will now exit.")
+	return nil, fmt.Errorf("Too many wrong password attempts. Application will now exit. Remedy: Restart and enter the correct backup password.")
 }
 
 // verifyPassword attempts to decrypt the first chunk of a part file to check the password.
@@ -481,7 +440,7 @@ func readPasswordWithRetry(
 func verifyPassword(partPath string, password []byte) error {
 	f, err := os.Open(partPath)
 	if err != nil {
-		return fmt.Errorf("Failed to open file: %w", err)
+		return fmt.Errorf("Failed to open file: %w. Remedy: Check that the file exists and is readable.", err)
 	}
 	defer f.Close()
 
@@ -500,155 +459,6 @@ func verifyPassword(partPath string, password []byte) error {
 		return nil
 	}
 	return err
-}
-
-// scanBackups walks targetDir and builds an index of all backup entries.
-func scanBackups(targetDir string) ([]util.BackupEntry, error) {
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]bool)
-	var result []util.BackupEntry
-
-	for _, de := range entries {
-		if de.IsDir() {
-			continue
-		}
-		entry, _, ok := util.ParsePartFileName(de.Name())
-		if !ok {
-			continue
-		}
-		key := entry.String()
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, entry)
-		}
-	}
-
-	return result, nil
-}
-
-// collectParts returns the sorted part file paths for an entry.
-func collectParts(targetDir string, entry util.BackupEntry) []string {
-	des, err := os.ReadDir(targetDir)
-	if err != nil {
-		return nil
-	}
-
-	type seqPath struct {
-		seq  int
-		path string
-	}
-	var parts []seqPath
-
-	for _, de := range des {
-		e, seq, ok := util.ParsePartFileName(de.Name())
-		if !ok {
-			continue
-		}
-		if e.FolderName != entry.FolderName || e.Date != entry.Date || e.ID != entry.ID {
-			continue
-		}
-		parts = append(parts, seqPath{seq, filepath.Join(targetDir, de.Name())})
-	}
-
-	sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
-
-	paths := make([]string, len(parts))
-	for i, p := range parts {
-		paths[i] = p.path
-	}
-	return paths
-}
-
-// resolveSelection maps the user's input to one or more BackupEntry values.
-func resolveSelection(input string, index []util.BackupEntry) ([]util.BackupEntry, error) {
-	input = strings.TrimSpace(strings.ToUpper(input))
-
-	if isRawBackupID(input) {
-		matched, _, _, found := resolveSelectionForIDNewestDate(input, index)
-		if found {
-			return matched, nil
-		}
-	}
-
-	// Try exact match on full name (case-insensitive).
-	for _, e := range index {
-		if strings.EqualFold(e.String(), input) {
-			return []util.BackupEntry{e}, nil
-		}
-	}
-
-	return nil, fmt.Errorf("Backup %q not found.", input)
-}
-
-func resolveSelectionForIDNewestDate(id string, index []util.BackupEntry) ([]util.BackupEntry, string, []string, bool) {
-	matchedByDate := make(map[string][]util.BackupEntry)
-	for _, entry := range index {
-		if string(entry.ID) != id {
-			continue
-		}
-		matchedByDate[entry.Date] = append(matchedByDate[entry.Date], entry)
-	}
-	if len(matchedByDate) == 0 {
-		return nil, "", nil, false
-	}
-
-	allDates := make([]string, 0, len(matchedByDate))
-	for date := range matchedByDate {
-		allDates = append(allDates, date)
-	}
-	sort.Slice(allDates, func(i, j int) bool {
-		return allDates[i] > allDates[j]
-	})
-
-	newestDate := allDates[0]
-	return matchedByDate[newestDate], newestDate, allDates, true
-}
-
-func isRawBackupID(input string) bool {
-	if len(input) != 6 {
-		return false
-	}
-	for _, r := range input {
-		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
-}
-
-func confirmNewestIDSelection(id, newestDate string, allDates []string) (bool, error) {
-	fmt.Printf("Backup ID %s exists on multiple dates: %s\n", id, strings.Join(allDates, ", "))
-	for {
-		answer, err := security.ReadLine(fmt.Sprintf("Continue with newest date %s only? [Y/n]: ", newestDate))
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		default:
-			fmt.Println("Please enter Y (yes) or N (no).")
-		}
-	}
-}
-
-// sortedEntries returns index sorted by date desc, then folder name.
-func sortedEntries(index []util.BackupEntry) []util.BackupEntry {
-	sorted := make([]util.BackupEntry, len(index))
-	copy(sorted, index)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Date != sorted[j].Date {
-			return sorted[i].Date > sorted[j].Date
-		}
-		return sorted[i].FolderName < sorted[j].FolderName
-	})
-	return sorted
 }
 
 type verifyWriter struct {
@@ -673,30 +483,6 @@ func readChallengeFile(path string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func backupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, error) {
-	_, found, err := findChallengeFileForRun(targetDir, entry.Date, entry.ID)
-	return found, err
-}
-
-func findChallengeFileForRun(targetDir, date string, id util.BackupID) (string, bool, error) {
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return "", false, err
-	}
-
-	suffix := fmt.Sprintf("_%s_%s.challenge", date, string(id))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), suffix) {
-			return filepath.Join(targetDir, entry.Name()), true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
 func backupAuthenticationLabel(requiresYubiKey bool) string {
 	if requiresYubiKey {
 		return "password + YubiKey (detected)"
@@ -709,15 +495,4 @@ func passwordFailurePrefix(requiresYubiKey bool) string {
 		return "Wrong password or invalid YubiKey response."
 	}
 	return "Wrong password."
-}
-
-func completedActionLabel(action string) string {
-	switch action {
-	case "restore":
-		return "restored"
-	case "verify":
-		return "verified"
-	default:
-		return action + "ed"
-	}
 }

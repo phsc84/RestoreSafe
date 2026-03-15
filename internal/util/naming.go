@@ -34,7 +34,7 @@ func NewBackupID() (BackupID, error) {
 	for i := range result {
 		n, err := rand.Int(rand.Reader, alphabetLen)
 		if err != nil {
-			return "", fmt.Errorf("Failed to generate backup ID: %w", err)
+			return "", fmt.Errorf("Failed to generate backup ID: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
 		}
 		result[i] = idAlphabet[n.Int64()]
 	}

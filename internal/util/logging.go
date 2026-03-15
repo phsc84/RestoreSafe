@@ -45,11 +45,11 @@ func NewLogger(logPath string, levelStr string) (*Logger, error) {
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			// Warn but continue; we'll create a new log in temp.
-			fmt.Fprintf(os.Stderr, "Warning: Existing log file could not be read: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Existing log file could not be read: %v. Remedy: Check read permissions for the target log file.\n", err)
 		} else {
 			// Write the existing content to the temp file.
 			if err := os.WriteFile(tempPath, data, 0o600); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: Existing log file could not be copied to temp directory: %v\n", err)
+				fmt.Fprintf(os.Stderr, "Warning: Existing log file could not be copied to the temp directory: %v. Remedy: Check write permissions for TEMP/TMP.\n", err)
 			}
 		}
 	}
@@ -57,7 +57,7 @@ func NewLogger(logPath string, levelStr string) (*Logger, error) {
 	// Open temp log for appending.
 	f, err := os.OpenFile(tempPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("Log file in temp directory could not be created: %w", err)
+		return nil, fmt.Errorf("Log file in temp directory could not be created: %w. Remedy: Check TEMP/TMP path and write permissions.", err)
 	}
 
 	return &Logger{level: lvl, file: f, originalPath: logPath, actualPath: tempPath}, nil
@@ -71,7 +71,7 @@ func (l *Logger) Close() {
 
 	if l.file != nil {
 		if err := l.file.Sync(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Syncing log file before close failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Syncing log file before close failed: %v. Remedy: Retry; if it persists, check file-system health.\n", err)
 		}
 		l.file.Close()
 		l.file = nil
@@ -81,12 +81,12 @@ func (l *Logger) Close() {
 	if l.actualPath != "" && l.originalPath != "" && l.actualPath != l.originalPath {
 		data, err := os.ReadFile(l.actualPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading log file in temp directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
 			return
 		}
 		// Overwrite the original file with the complete temp log content.
 		if err := os.WriteFile(l.originalPath, data, 0o600); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing log file to target directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error writing log file to target directory: %v. Remedy: Check target-folder write permissions.\n", err)
 			fmt.Fprintf(os.Stderr, "Log file is located in temp directory: %s\n", l.actualPath)
 			return
 		}
@@ -130,7 +130,7 @@ func (l *Logger) write(severity, format string, args ...any) {
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Writing to log file failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Writing to log file failed: %v. Remedy: Check write permissions and free disk space.\n", err)
 			return
 		}
 	}

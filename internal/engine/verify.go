@@ -18,27 +18,27 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 
 	index, err := scanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan target folder %q: %w", targetDir, err)
+		return fmt.Errorf("Failed to scan target folder %q: %w. Remedy: Check the target_folder path in config.yaml and ensure the folder is readable.", targetDir, err)
 	}
 	if len(index) == 0 {
-		fmt.Println("No backups found in target folder.")
+		fmt.Println("No backups found in target folder. Remedy: Check whether .enc files are in target_folder and whether the correct folder is selected.")
 		return nil
 	}
 
-	selected, selection, err := promptBackupSelection("verify", index)
+	selected, selection, err := promptBackupSelection("verify", targetDir, index)
 	if err != nil {
 		return err
 	}
 
 	requiresYubiKey, err := backupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
-		return fmt.Errorf("Failed to inspect backup authentication: %w", err)
+		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and existing .challenge files.", err)
 	}
 
 	log := openOperationLogger(cfg, targetDir, selected[0])
 	if log != nil {
 		defer log.Close()
-		log.Info("Verification started – Selection: %q", selection)
+		log.Info("Verification started - Selection: %q", selection)
 	}
 
 	preflight := buildVerifyPreflight(selected, targetDir)
@@ -73,7 +73,7 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	fmt.Println("Verification started...")
+	fmt.Println("Verification started.")
 	if log != nil {
 		log.Info("Verifying %d selected item(s)", len(selected))
 	}
@@ -138,7 +138,7 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 		}
 	}
 	if invalid > 0 {
-		return fmt.Errorf("Verify preflight failed: %d selected item(s) are incomplete or invalid", invalid)
+		return fmt.Errorf("Verify preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verify again.", invalid)
 	}
 	return nil
 }
@@ -149,7 +149,7 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 			if log != nil {
 				log.Error("Failed to verify folder %q: %v", entry.String(), err)
 			}
-			return fmt.Errorf("Failed to verify folder %q: %w", entry.String(), err)
+			return fmt.Errorf("Failed to verify folder %q: %w. Remedy: Check .enc part completeness and password/YubiKey.", entry.String(), err)
 		}
 		if log != nil {
 			log.Info("Folder %q successfully verified", entry.FolderName)
@@ -161,7 +161,7 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
 	parts := collectParts(targetDir, entry)
 	if len(parts) == 0 {
-		return fmt.Errorf("No part files found for %s", entry.String())
+		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_folder.", entry.String())
 	}
 
 	if log != nil {
@@ -200,10 +200,10 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		if errors.Is(decErr, security.ErrWrongPassword) {
 			return security.ErrWrongPassword
 		}
-		return fmt.Errorf("Decryption failed: %w", decErr)
+		return fmt.Errorf("Decryption failed: %w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder.", decErr)
 	}
 	if validateErr != nil {
-		return fmt.Errorf("Archive validation failed: %w", validateErr)
+		return fmt.Errorf("Archive validation failed: %w. Remedy: Check backup completeness and recreate the backup if needed.", validateErr)
 	}
 
 	return nil
@@ -232,13 +232,13 @@ func inspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, e
 
 		info, err := dirEntry.Info()
 		if err != nil {
-			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w", dirEntry.Name(), err)
+			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check file/folder permissions.", dirEntry.Name(), err)
 		}
 		parts = append(parts, partInfo{seq: seq, size: info.Size()})
 	}
 
 	if len(parts) == 0 {
-		return 0, 0, fmt.Errorf("No part files found")
+		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in target_folder.")
 	}
 
 	sort.Slice(parts, func(i, j int) bool {
@@ -250,7 +250,7 @@ func inspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, e
 		totalSize += part.size
 		expectedSeq := i + 1
 		if part.seq != expectedSeq {
-			return len(parts), totalSize, fmt.Errorf("Missing part file %03d", expectedSeq)
+			return len(parts), totalSize, fmt.Errorf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", expectedSeq)
 		}
 	}
 

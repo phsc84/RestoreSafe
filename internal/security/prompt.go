@@ -22,7 +22,7 @@ func ReadPassword(promptText ...string) ([]byte, error) {
 	password, err := term.ReadPassword(fd)
 	fmt.Println() // newline after hidden input
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read password: %w", err)
+		return nil, fmt.Errorf("Failed to read password: %w. Remedy: Ensure stdin is available and retry.", err)
 	}
 	return password, nil
 }
@@ -41,7 +41,7 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 		return nil, err
 	}
 	if len(pw1) == 0 {
-		return nil, fmt.Errorf("Password must not be empty.")
+		return nil, fmt.Errorf("Password must not be empty. Remedy: Enter a password with at least one character.")
 	}
 
 	pw2, err := ReadPassword(confirmPrompt)
@@ -50,7 +50,7 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 	}
 
 	if !bytes.Equal(pw1, pw2) {
-		return nil, fmt.Errorf("Passwords do not match.")
+		return nil, fmt.Errorf("Passwords do not match. Remedy: Enter exactly the same password in the second prompt.")
 	}
 
 	return pw1, nil
@@ -62,7 +62,7 @@ func ReadLine(promptText string) (string, error) {
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil {
-		return "", fmt.Errorf("Failed to read input: %w", err)
+		return "", fmt.Errorf("Failed to read input: %w. Remedy: Ensure stdin is available and retry.", err)
 	}
 	return strings.TrimSpace(line), nil
 }
