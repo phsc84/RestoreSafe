@@ -3,9 +3,11 @@
 //  2. Let the user choose which backup(s) to restore
 //  3. Verify password (up to 3 attempts)
 //  4. Decrypt and extract to the user-specified restore path
-package engine
+package restore
 
 import (
+	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"errors"
@@ -18,14 +20,12 @@ import (
 	"time"
 )
 
-const maxPasswordAttempts = 3
-
 // Run executes the full restore workflow.
 func RunRestore(cfg *util.Config, exeDir string) error {
-	targetDir := resolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 
 	// Enumerate backups.
-	index, err := scanBackups(targetDir)
+	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan target folder %q: %w. Remedy: Check the target_folder path in config.yaml and ensure the folder exists and is readable.", targetDir, err)
 	}
@@ -34,19 +34,19 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	selected, selection, err := promptRestoreSelection(targetDir, index)
+	selected, selection, err := operation.PromptBackupSelection("restore", targetDir, index)
 	if err != nil {
 		return err
 	}
 	warningCount := restoreSelectionWarningCount(selection, index)
 
-	requiresYubiKey, err := backupRunUsesYubiKey(targetDir, selected[0])
+	requiresYubiKey, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and verify .challenge filenames.", err)
 	}
 
 	logPath := util.LogFileName(targetDir, selected[0].Date, selected[0].ID)
-	log := openOperationLogger(cfg, targetDir, selected[0])
+	log := operation.OpenLogger(cfg, targetDir, selected[0])
 	if log == nil {
 		warningCount++
 	}
@@ -92,7 +92,7 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 
 	// Collect password (with retry).
 	rep := selected[0]
-	password, err := readPasswordWithRetry(targetDir, rep, "Enter restore password: ", log)
+	password, err := operation.ReadPasswordWithRetry(targetDir, rep, "Enter restore password: ", log)
 	if err != nil {
 		if log != nil {
 			log.Error("Password input failed: %v", err)
@@ -116,16 +116,6 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 	printRestoreCompletionSummary(selected, totalPartsProcessed, logPath, warningCount)
 	fmt.Println("\nRestore completed successfully.")
 	return nil
-}
-
-func openOperationLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.Logger {
-	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
-	log, err := util.NewLogger(logPath, cfg.LogLevel)
-	if err != nil {
-		fmt.Printf("Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
-		return nil
-	}
-	return log
 }
 
 func promptRestoreDestination(targetDir string) (string, error) {
@@ -161,7 +151,7 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 	for _, entry := range selected {
 		item := restorePreflightItem{
 			Entry:     entry,
-			PartCount: len(collectParts(targetDir, entry)),
+			PartCount: len(catalog.CollectParts(targetDir, entry)),
 			OutputDir: filepath.Join(restorePath, entry.FolderName),
 		}
 		if item.PartCount == 0 {
@@ -181,7 +171,7 @@ func printRestorePreflight(targetDir, restorePath string, items []restorePreflig
 	fmt.Println("-----------------")
 	fmt.Printf("Backup folder  : %s\n", targetDir)
 	fmt.Printf("Restore target : %s\n", restorePath)
-	fmt.Printf("Authentication : %s\n", backupAuthenticationLabel(requiresYubiKey))
+	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey))
 	fmt.Printf("Items selected : %d\n", len(items))
 	fmt.Println("Selection:")
 	for _, item := range items {
@@ -209,24 +199,7 @@ func validateRestorePreflight(items []restorePreflightItem) error {
 }
 
 func promptStartRestore() (bool, error) {
-	return promptStartAction("restore")
-}
-
-func promptStartAction(action string) (bool, error) {
-	for {
-		answer, err := security.ReadLine(fmt.Sprintf("Start %s now? [Y/n]: ", action))
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		default:
-			fmt.Println("Please enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.")
-		}
-	}
+	return operation.PromptStartAction("restore")
 }
 
 func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath string, password []byte, log *util.Logger) (int, error) {
@@ -249,7 +222,7 @@ func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath 
 
 // restoreEntry decrypts all parts of one backup entry and extracts to destDir.
 func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []byte, log *util.Logger) (int, error) {
-	parts := collectParts(targetDir, entry)
+	parts := catalog.CollectParts(targetDir, entry)
 	if len(parts) == 0 {
 		errMsg := fmt.Sprintf("No part files found for %s", entry.String())
 		return 0, fmt.Errorf("%s. Remedy: Put all related .enc files into the same target_folder.", errMsg)
@@ -286,15 +259,15 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 	decErrCh := make(chan error, 1)
 	go func() {
 		err := security.Decrypt(
-			&countingWriter{w: pw, total: &outBytes, calls: &outWriteCalls},
-			&countingReader{r: seqReader, total: &inBytes},
+			&operation.CountingWriter{W: pw, Total: &outBytes, Calls: &outWriteCalls},
+			&operation.CountingReader{R: seqReader, Total: &inBytes},
 			password,
 		)
 		pw.CloseWithError(err) //nolint:errcheck
 		decErrCh <- err
 	}()
 
-	extractErr := ExtractTar(pr, outDir)
+	extractErr := operation.ExtractTar(pr, outDir)
 	if extractErr != nil {
 		pr.CloseWithError(extractErr) //nolint:errcheck
 	}
@@ -319,11 +292,11 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 
 func restoreSelectionWarningCount(selection string, index []util.BackupEntry) int {
 	normalized := strings.ToUpper(strings.TrimSpace(selection))
-	if !isRawBackupID(normalized) {
+	if !catalog.IsRawBackupID(normalized) {
 		return 0
 	}
 
-	_, _, allDates, found := resolveSelectionForIDNewestDate(normalized, index)
+	_, _, allDates, found := catalog.ResolveSelectionForIDNewestDate(normalized, index)
 	if !found {
 		return 0
 	}
@@ -364,135 +337,20 @@ func logRestoreProgress(log *util.Logger, folderName string, inBytes, outBytes, 
 	for {
 		select {
 		case <-done:
-			logStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, true)
+			operation.LogStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, true)
 			return
 		case <-ticker.C:
-			logStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, false)
+			operation.LogStreamProgress(log, folderName, "decrypted", inBytes, outBytes, outWriteCalls, false)
 		}
 	}
 }
 
-// readPasswordWithRetry asks for the password up to maxPasswordAttempts times.
-// It verifies the password by attempting to decrypt the first byte of the first part.
-func readPasswordWithRetry(
-	targetDir string,
-	rep util.BackupEntry,
-	passwordPrompt string,
-	log *util.Logger,
-) ([]byte, error) {
-	challengePath, requiresYubiKey, err := findChallengeFileForRun(targetDir, rep.Date, rep.ID)
-	if err != nil {
-		return nil, err
+func summarizeNames(names []string) string {
+	if len(names) == 0 {
+		return "none"
 	}
-
-	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		password, err := security.ReadPassword(passwordPrompt)
-		if err != nil {
-			return nil, err
-		}
-
-		if requiresYubiKey {
-			challengeHex, err := readChallengeFile(challengePath)
-			if err != nil {
-				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
-			}
-			fmt.Println("YubiKey detected. Please touch the YubiKey button.")
-			password, err = security.CombineWithPasswordForRestore(password, challengeHex)
-			if err != nil {
-				return nil, fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and verify slot 2 is configured correctly.", err)
-			}
-			if log != nil {
-				log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
-			}
-		}
-
-		// Verify password by attempting a trial decrypt.
-		parts := collectParts(targetDir, rep)
-		if len(parts) > 0 {
-			if err := verifyPassword(parts[0], password); err == nil {
-				return password, nil
-			} else if errors.Is(err, security.ErrWrongPassword) {
-				remaining := maxPasswordAttempts - attempt
-				if remaining > 0 {
-					fmt.Printf("%s %d attempt(s) remaining.\n", passwordFailurePrefix(requiresYubiKey), remaining)
-					if log != nil {
-						log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
-					}
-				}
-				continue
-			} else {
-				return nil, err
-			}
-		}
-
-		// If no part file was found, accept the password and let the caller fail later.
-		return password, nil
+	if len(names) <= 3 {
+		return strings.Join(names, ", ")
 	}
-
-	if requiresYubiKey {
-		return nil, fmt.Errorf("Too many failed authentication attempts. Application will now exit. Remedy: Restart and check password plus YubiKey setup (slot 2, touch).")
-	}
-	return nil, fmt.Errorf("Too many wrong password attempts. Application will now exit. Remedy: Restart and enter the correct backup password.")
-}
-
-// verifyPassword attempts to decrypt the first chunk of a part file to check the password.
-// It reads at most one byte of plaintext to confirm authentication succeeded.
-func verifyPassword(partPath string, password []byte) error {
-	f, err := os.Open(partPath)
-	if err != nil {
-		return fmt.Errorf("Failed to open file: %w. Remedy: Check that the file exists and is readable.", err)
-	}
-	defer f.Close()
-
-	// Use a small writer that accepts the first write and then returns a
-	// sentinel error to stop `Decrypt`. This avoids races with pipes and
-	// lets us detect a successful authentication quickly.
-	var errVerifyStop = errors.New("verify-stop")
-
-	err = security.Decrypt(&verifyWriter{errVerifyStop: errVerifyStop}, f, password)
-	if err == nil {
-		// Decrypt finished without error (small file) — password is valid.
-		return nil
-	}
-	if errors.Is(err, errVerifyStop) {
-		// Our sentinel error indicates we stopped after successful auth.
-		return nil
-	}
-	return err
-}
-
-type verifyWriter struct {
-	done          bool
-	errVerifyStop error
-}
-
-func (vw *verifyWriter) Write(p []byte) (int, error) {
-	if vw.done {
-		return 0, vw.errVerifyStop
-	}
-	vw.done = true
-	// Indicate we consumed the data.
-	return len(p), nil
-}
-
-func readChallengeFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
-func backupAuthenticationLabel(requiresYubiKey bool) string {
-	if requiresYubiKey {
-		return "password + YubiKey (detected)"
-	}
-	return "password only"
-}
-
-func passwordFailurePrefix(requiresYubiKey bool) string {
-	if requiresYubiKey {
-		return "Wrong password or invalid YubiKey response."
-	}
-	return "Wrong password."
+	return fmt.Sprintf("%s, %s, %s, +%d more", names[0], names[1], names[2], len(names)-3)
 }

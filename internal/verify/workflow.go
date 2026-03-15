@@ -1,22 +1,21 @@
-package engine
+package verify
 
 import (
+	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"sort"
 	"sync/atomic"
-	"time"
 )
 
 // RunVerify verifies selected backup sets without restoring them to disk.
 func RunVerify(cfg *util.Config, exeDir string) error {
-	targetDir := resolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 
-	index, err := scanBackups(targetDir)
+	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan target folder %q: %w. Remedy: Check the target_folder path in config.yaml and ensure the folder is readable.", targetDir, err)
 	}
@@ -25,17 +24,17 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	selected, selection, err := promptBackupSelection("verify", targetDir, index)
+	selected, selection, err := operation.PromptBackupSelection("verify", targetDir, index)
 	if err != nil {
 		return err
 	}
 
-	requiresYubiKey, err := backupRunUsesYubiKey(targetDir, selected[0])
+	requiresYubiKey, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and existing .challenge files.", err)
 	}
 
-	log := openOperationLogger(cfg, targetDir, selected[0])
+	log := operation.OpenLogger(cfg, targetDir, selected[0])
 	if log != nil {
 		defer log.Close()
 		log.Info("Verification started - Selection: %q", selection)
@@ -50,7 +49,7 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := promptStartAction("verification")
+	confirmed, err := operation.PromptStartAction("verification")
 	if err != nil {
 		if log != nil {
 			log.Error("Failed to read confirmation: %v", err)
@@ -65,7 +64,7 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	password, err := readPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
+	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
 	if err != nil {
 		if log != nil {
 			log.Error("Password input failed: %v", err)
@@ -99,7 +98,7 @@ type verifyPreflightItem struct {
 func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
 	for _, entry := range selected {
-		partCount, totalSizeBytes, err := inspectBackupParts(targetDir, entry)
+		partCount, totalSizeBytes, err := catalog.InspectBackupParts(targetDir, entry)
 		items = append(items, verifyPreflightItem{
 			Entry:          entry,
 			PartCount:      partCount,
@@ -115,7 +114,7 @@ func printVerifyPreflight(targetDir string, items []verifyPreflightItem, require
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
 	fmt.Printf("Backup folder   : %s\n", targetDir)
-	fmt.Printf("Authentication  : %s\n", backupAuthenticationLabel(requiresYubiKey))
+	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey))
 	fmt.Printf("Items selected  : %d\n", len(items))
 	fmt.Println("Selection:")
 	for _, item := range items {
@@ -159,7 +158,7 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 }
 
 func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
-	parts := collectParts(targetDir, entry)
+	parts := catalog.CollectParts(targetDir, entry)
 	if len(parts) == 0 {
 		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_folder.", entry.String())
 	}
@@ -175,22 +174,22 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
 	progressDone := make(chan struct{})
-	go logVerifyProgress(log, entry.FolderName, &inBytes, &outBytes, &outWriteCalls, progressDone)
+	go operation.LogProgressUntilDone(log, entry.FolderName, "verified", &inBytes, &outBytes, &outWriteCalls, progressDone)
 	defer close(progressDone)
 
 	pr, pw := io.Pipe()
 	decErrCh := make(chan error, 1)
 	go func() {
 		err := security.Decrypt(
-			&countingWriter{w: pw, total: &outBytes, calls: &outWriteCalls},
-			&countingReader{r: seqReader, total: &inBytes},
+			&operation.CountingWriter{W: pw, Total: &outBytes, Calls: &outWriteCalls},
+			&operation.CountingReader{R: seqReader, Total: &inBytes},
 			password,
 		)
 		pw.CloseWithError(err) //nolint:errcheck
 		decErrCh <- err
 	}()
 
-	validateErr := ValidateTar(pr)
+	validateErr := operation.ValidateTar(pr)
 	if validateErr != nil {
 		pr.CloseWithError(validateErr) //nolint:errcheck
 	}
@@ -207,72 +206,4 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 	}
 
 	return nil
-}
-
-func inspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, error) {
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	type partInfo struct {
-		seq  int
-		size int64
-	}
-
-	parts := make([]partInfo, 0)
-	for _, dirEntry := range entries {
-		parsedEntry, seq, ok := util.ParsePartFileName(dirEntry.Name())
-		if !ok {
-			continue
-		}
-		if parsedEntry != entry {
-			continue
-		}
-
-		info, err := dirEntry.Info()
-		if err != nil {
-			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check file/folder permissions.", dirEntry.Name(), err)
-		}
-		parts = append(parts, partInfo{seq: seq, size: info.Size()})
-	}
-
-	if len(parts) == 0 {
-		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in target_folder.")
-	}
-
-	sort.Slice(parts, func(i, j int) bool {
-		return parts[i].seq < parts[j].seq
-	})
-
-	var totalSize int64
-	for i, part := range parts {
-		totalSize += part.size
-		expectedSeq := i + 1
-		if part.seq != expectedSeq {
-			return len(parts), totalSize, fmt.Errorf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", expectedSeq)
-		}
-	}
-
-	return len(parts), totalSize, nil
-}
-
-func logVerifyProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
-	if log == nil {
-		<-done
-		return
-	}
-
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-done:
-			logStreamProgress(log, folderName, "verified", inBytes, outBytes, outWriteCalls, true)
-			return
-		case <-ticker.C:
-			logStreamProgress(log, folderName, "verified", inBytes, outBytes, outWriteCalls, false)
-		}
-	}
 }

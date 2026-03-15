@@ -1,4 +1,4 @@
-package engine
+package startup
 
 import (
 	"RestoreSafe/internal/util"
@@ -26,9 +26,9 @@ func TestFormatBytesBinary(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := formatBytesBinary(tc.input)
+			got := util.FormatBytesBinary(tc.input)
 			if got != tc.want {
-				t.Fatalf("formatBytesBinary(%d): got %q, want %q", tc.input, got, tc.want)
+				t.Fatalf("util.FormatBytesBinary(%d): got %q, want %q", tc.input, got, tc.want)
 			}
 		})
 	}

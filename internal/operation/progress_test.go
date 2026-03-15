@@ -1,4 +1,4 @@
-package engine
+package operation
 
 import (
 	"RestoreSafe/internal/util"
@@ -26,7 +26,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 	outBytes.Store(2 * 1024 * 1024)
 	outWriteCalls.Store(2)
 
-	logStreamProgress(logger, "Docs", "verified", &inBytes, &outBytes, &outWriteCalls, true)
+	LogStreamProgress(logger, "Docs", "verified", &inBytes, &outBytes, &outWriteCalls, true)
 	logger.Close()
 
 	data, err := os.ReadFile(logPath)
@@ -46,7 +46,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 	}
 }
 
-func TestLogVerifyProgressHandlesClosedDoneWithNilLogger(t *testing.T) {
+func TestLogProgressUntilDoneHandlesClosedDoneWithNilLogger(t *testing.T) {
 	t.Parallel()
 
 	done := make(chan struct{})
@@ -57,5 +57,5 @@ func TestLogVerifyProgressHandlesClosedDoneWithNilLogger(t *testing.T) {
 	var outWriteCalls atomic.Int64
 
 	// Should return immediately without panic when logger is nil.
-	logVerifyProgress(nil, "Docs", &inBytes, &outBytes, &outWriteCalls, done)
+	LogProgressUntilDone(nil, "Docs", "verified", &inBytes, &outBytes, &outWriteCalls, done)
 }

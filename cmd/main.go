@@ -1,8 +1,11 @@
 package main
 
 import (
-	"RestoreSafe/internal/engine"
+	"RestoreSafe/internal/backup"
+	"RestoreSafe/internal/restore"
+	"RestoreSafe/internal/startup"
 	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/verify"
 	"bufio"
 	"fmt"
 	"os"
@@ -29,7 +32,7 @@ func main() {
 		exitWithError("Error loading configuration", err)
 	}
 
-	engine.RunStartupHealthCheck(cfg, exeDir)
+	startup.RunStartupHealthCheck(cfg, exeDir)
 
 	// Interactive menu mode
 	for {
@@ -38,19 +41,19 @@ func main() {
 
 		switch strings.TrimSpace(choice) {
 		case "1":
-			if err := engine.RunBackup(cfg, exeDir); err != nil {
+			if err := backup.Run(cfg, exeDir); err != nil {
 				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "2":
-			if err := engine.RunRestore(cfg, exeDir); err != nil {
+			if err := restore.Run(cfg, exeDir); err != nil {
 				fmt.Fprintf(os.Stderr, "Restore failed: %v\n", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "3":
-			if err := engine.RunVerify(cfg, exeDir); err != nil {
+			if err := verify.Run(cfg, exeDir); err != nil {
 				fmt.Fprintf(os.Stderr, "Verification failed: %v\n", err)
 				waitForKeyPress()
 			}

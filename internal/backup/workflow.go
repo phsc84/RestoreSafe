@@ -2,9 +2,10 @@
 //  1. Prompt for password (and optionally YubiKey 2FA)
 //  2. For each source folder: stream TAR → split → encrypt → write .enc parts
 //  3. Write a log file per backup run
-package engine
+package backup
 
 import (
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"bufio"
@@ -22,7 +23,7 @@ const splitWriteBufferSize = 32 * 1024 * 1024
 // Run executes the full backup workflow.
 func RunBackup(cfg *util.Config, exeDir string) error {
 	// Resolve target folder (may be relative to exe dir).
-	targetDir := resolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 	if err := os.MkdirAll(targetDir, 0o750); err != nil {
 		return fmt.Errorf("Failed to create target folder: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
@@ -148,10 +149,18 @@ type sourceFolderStatus struct {
 	Err        error
 }
 
+// SourceFolderStatus is the exported form of source-folder preflight status.
+type SourceFolderStatus = sourceFolderStatus
+
+// InspectSourceFolders resolves and validates configured source folders.
+func InspectSourceFolders(sourceFolders []string, exeDir string) []SourceFolderStatus {
+	return inspectSourceFolders(sourceFolders, exeDir)
+}
+
 func inspectSourceFolders(sourceFolders []string, exeDir string) []sourceFolderStatus {
 	result := make([]sourceFolderStatus, 0, len(sourceFolders))
 	for _, src := range sourceFolders {
-		resolved := resolveDir(src, exeDir)
+		resolved := util.ResolveDir(src, exeDir)
 		status := sourceFolderStatus{Configured: src, Resolved: resolved}
 
 		info, err := os.Stat(resolved)
@@ -347,7 +356,7 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	if estimatedBytes > 0 {
-		fmt.Printf("Est. source size: %s\n", formatBytesBinary(uint64(estimatedBytes)))
+		fmt.Printf("Est. source size: %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 	} else {
 		fmt.Println("Est. source size: unknown")
 	}
@@ -355,11 +364,11 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 		fmt.Printf("  [WARN] size estimate: %s\n", warning)
 	}
 
-	freeBytes, freeErr := queryFreeSpaceBytes(targetDir)
+	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	if freeErr != nil {
 		fmt.Printf("Free space      : unknown (%v)\n", freeErr)
 	} else {
-		fmt.Printf("Free space      : %s\n", formatBytesBinary(freeBytes))
+		fmt.Printf("Free space      : %s\n", util.FormatBytesBinary(freeBytes))
 		if estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes {
 			fmt.Println("  [WARN] estimated source size exceeds currently free space on target")
 		}
@@ -580,7 +589,7 @@ func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWri
 	tarErrCh := make(chan error, 1)
 	go func() {
 		log.Debug("Starting TAR creation for: %s", srcDir)
-		err := WriteTar(pw, srcDir, targetDir)
+		err := operation.WriteTar(pw, srcDir, targetDir)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
 	}()
@@ -590,8 +599,8 @@ func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWri
 func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, password []byte, counters *backupCounters) error {
 	log.Debug("Starting encryption...")
 	err := security.Encrypt(
-		&countingWriter{w: bw, total: &counters.outBytes, calls: &counters.outWriteCalls},
-		&countingReader{r: pr, total: &counters.inBytes},
+		&operation.CountingWriter{W: bw, Total: &counters.outBytes, Calls: &counters.outWriteCalls},
+		&operation.CountingReader{R: pr, Total: &counters.inBytes},
 		password,
 	)
 	pr.Close() //nolint:errcheck
@@ -635,36 +644,6 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 	}
 }
 
-type countingWriter struct {
-	w     io.Writer
-	total *atomic.Int64
-	calls *atomic.Int64
-}
-
-type countingReader struct {
-	r     io.Reader
-	total *atomic.Int64
-}
-
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	if n > 0 {
-		c.total.Add(int64(n))
-	}
-	return n, err
-}
-
-func (c *countingWriter) Write(p []byte) (int, error) {
-	if c.calls != nil {
-		c.calls.Add(1)
-	}
-	n, err := c.w.Write(p)
-	if n > 0 {
-		c.total.Add(int64(n))
-	}
-	return n, err
-}
-
 func logBackupProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, ioDiagnostics bool, done <-chan struct{}) {
 	if !ioDiagnostics {
 		<-done // Just wait for completion without logging
@@ -677,10 +656,10 @@ func logBackupProgress(log *util.Logger, folderName string, inBytes, outBytes, o
 	for {
 		select {
 		case <-done:
-			logStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, true)
+			operation.LogStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, true)
 			return
 		case <-ticker.C:
-			logStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, false)
+			operation.LogStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, false)
 		}
 	}
 }

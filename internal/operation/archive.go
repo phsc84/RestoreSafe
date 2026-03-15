@@ -1,5 +1,4 @@
-// Package archive provides streaming TAR creation and extraction.
-package engine
+package operation
 
 import (
 	"archive/tar"
@@ -168,13 +167,6 @@ func writeFile(target string, r io.Reader) error {
 		return fmt.Errorf("Failed to write file content %q: %w. Remedy: Check free disk space and write permissions.", target, err)
 	}
 	return nil
-}
-
-func resolveDir(path, base string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(base, path)
 }
 
 func validateTarPath(name string) error {

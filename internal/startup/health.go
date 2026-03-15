@@ -1,6 +1,8 @@
-package engine
+package startup
 
 import (
+	"RestoreSafe/internal/backup"
+	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"fmt"
@@ -8,8 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"golang.org/x/sys/windows"
 )
 
 type healthSeverity int
@@ -34,7 +34,7 @@ func RunStartupHealthCheck(cfg *util.Config, exeDir string) {
 }
 
 func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
-	targetDir := resolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 	items := make([]healthItem, 0)
 
 	items = append(items, healthItem{
@@ -43,7 +43,7 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 		Detail:   fmt.Sprintf("Loaded %d source folder(s), target=%s, split size=%d MB, retention_keep=%d", len(cfg.SourceFolders), targetDir, cfg.SplitSizeMB, cfg.RetentionKeep),
 	})
 
-	sourceStatuses := inspectSourceFolders(cfg.SourceFolders, exeDir)
+	sourceStatuses := backup.InspectSourceFolders(cfg.SourceFolders, exeDir)
 	for _, src := range sourceStatuses {
 		if src.Err != nil {
 			items = append(items, healthItem{
@@ -119,7 +119,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		Detail:   fmt.Sprintf("%s exists and is writable", targetDir),
 	}}
 
-	freeBytes, err := queryFreeSpaceBytes(targetDir)
+	freeBytes, err := util.QueryFreeSpaceBytes(targetDir)
 	if err != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
@@ -132,7 +132,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	items = append(items, healthItem{
 		Severity: healthOK,
 		Scope:    "Target folder",
-		Detail:   fmt.Sprintf("Free disk space: %s", formatBytesBinary(freeBytes)),
+		Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
 	})
 
 	return items
@@ -184,7 +184,7 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 }
 
 func checkBackupInventoryHealth(targetDir string) []healthItem {
-	index, err := scanBackups(targetDir)
+	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []healthItem{{
@@ -231,7 +231,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 		}}
 	}
 
-	sorted := sortedEntries(index)
+	sorted := catalog.SortedEntries(index)
 	runHasChallenge := make(map[string]bool)
 	entryHasChallenge := make(map[string]bool)
 	expectedChallengeFiles := make(map[string]bool)
@@ -239,7 +239,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	structuralIssues := 0
 
 	for _, entry := range sorted {
-		_, _, err := inspectBackupParts(targetDir, entry)
+		_, _, err := catalog.InspectBackupParts(targetDir, entry)
 		entryLabel := entry.String()
 		if err != nil {
 			structuralIssues++
@@ -362,39 +362,4 @@ func healthSeverityLabel(severity healthSeverity) string {
 	default:
 		return "INFO"
 	}
-}
-
-func formatBytesBinary(bytes uint64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-
-	div, exp := float64(unit), 0
-	value := float64(bytes)
-	for n := value / unit; n >= unit && exp < 5; n /= unit {
-		div *= unit
-		exp++
-	}
-
-	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
-	return fmt.Sprintf("%.2f %s", value/div, units[exp])
-}
-
-func queryFreeSpaceBytes(path string) (uint64, error) {
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return 0, fmt.Errorf("Failed to encode path: %w. Remedy: Check the path format and use a valid Windows path.", err)
-	}
-
-	var freeBytesAvailable uint64
-	var totalNumberOfBytes uint64
-	var totalNumberOfFreeBytes uint64
-
-	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytesAvailable, &totalNumberOfBytes, &totalNumberOfFreeBytes)
-	if err != nil {
-		return 0, fmt.Errorf("Failed to query free space for %q: %w. Remedy: Check drive availability and access rights.", path, err)
-	}
-
-	return freeBytesAvailable, nil
 }

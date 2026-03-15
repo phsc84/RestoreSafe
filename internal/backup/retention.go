@@ -1,6 +1,7 @@
-package engine
+package backup
 
 import (
+	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/util"
 	"fmt"
 	"os"
@@ -33,7 +34,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 		return nil
 	}
 
-	index, err := scanBackups(targetDir)
+	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backups for retention: %w. Remedy: Check target-folder readability and path configuration.", err)
 	}
@@ -99,7 +100,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 }
 
 func newestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
-	parts := collectParts(targetDir, entry)
+	parts := catalog.CollectParts(targetDir, entry)
 	if len(parts) == 0 {
 		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
 	}
@@ -120,7 +121,7 @@ func newestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, err
 
 func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, error) {
 	removed := 0
-	for _, part := range collectParts(targetDir, entry) {
+	for _, part := range catalog.CollectParts(targetDir, entry) {
 		err := os.Remove(part)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -142,7 +143,7 @@ func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, erro
 }
 
 func deleteOrphanLogFiles(targetDir string) (int, error) {
-	index, err := scanBackups(targetDir)
+	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil

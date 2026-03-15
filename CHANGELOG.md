@@ -14,6 +14,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added unit and integration tests for config validation, TAR verification, health/retention helpers, backup/restore selection logic, and backup/restore round-trip behavior.
 
 ### Changed
+- Refactored internal code structure into clearer package boundaries to improve maintainability and testability.
 - Improved backup preflight output: RestoreSafe now shows estimated total source size, free target disk space, and a warning when estimated size likely exceeds currently free target space.
 - Improved restore/verify backup selection and ID handling: backup sets are grouped by `date + ID`, support date filtering, include a quick `newest` shortcut, and when the same backup ID exists on multiple dates RestoreSafe warns and automatically uses the newest date.
 - Changed restore authentication detection so it no longer depends on `config.yaml` alone: YubiKey requirement is inferred from backup-side challenge files when available.

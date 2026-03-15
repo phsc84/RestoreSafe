@@ -1,4 +1,4 @@
-package engine
+package catalog
 
 import (
 	"RestoreSafe/internal/util"
@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
-// scanBackups walks targetDir and builds an index of all backup entries.
-func scanBackups(targetDir string) ([]util.BackupEntry, error) {
+// ScanBackups walks targetDir and builds an index of all backup entries.
+func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
 		return nil, err
@@ -37,8 +38,8 @@ func scanBackups(targetDir string) ([]util.BackupEntry, error) {
 	return result, nil
 }
 
-// collectParts returns the sorted part file paths for an entry.
-func collectParts(targetDir string, entry util.BackupEntry) []string {
+// CollectParts returns the sorted part file paths for an entry.
+func CollectParts(targetDir string, entry util.BackupEntry) []string {
 	des, err := os.ReadDir(targetDir)
 	if err != nil {
 		return nil
@@ -70,8 +71,8 @@ func collectParts(targetDir string, entry util.BackupEntry) []string {
 	return paths
 }
 
-// sortedEntries returns index sorted by date desc, then folder name.
-func sortedEntries(index []util.BackupEntry) []util.BackupEntry {
+// SortedEntries returns entries sorted by date desc, then folder name.
+func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
 	sorted := make([]util.BackupEntry, len(index))
 	copy(sorted, index)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -83,12 +84,14 @@ func sortedEntries(index []util.BackupEntry) []util.BackupEntry {
 	return sorted
 }
 
-func backupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, error) {
-	_, found, err := findChallengeFileForRun(targetDir, entry.Date, entry.ID)
+// BackupRunUsesYubiKey checks whether a backup run has a matching challenge file.
+func BackupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, error) {
+	_, found, err := FindChallengeFileForRun(targetDir, entry.Date, entry.ID)
 	return found, err
 }
 
-func findChallengeFileForRun(targetDir, date string, id util.BackupID) (string, bool, error) {
+// FindChallengeFileForRun returns the .challenge file path for date+ID if present.
+func FindChallengeFileForRun(targetDir, date string, id util.BackupID) (string, bool, error) {
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
 		return "", false, err
@@ -105,4 +108,25 @@ func findChallengeFileForRun(targetDir, date string, id util.BackupID) (string, 
 	}
 
 	return "", false, nil
+}
+
+// NewestPartModTime returns the newest modification time among all part files.
+func NewestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
+	parts := CollectParts(targetDir, entry)
+	if len(parts) == 0 {
+		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
+	}
+
+	var newest time.Time
+	for _, part := range parts {
+		fi, err := os.Stat(part)
+		if err != nil {
+			return newest, err
+		}
+		if fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+
+	return newest, nil
 }
