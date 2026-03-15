@@ -48,6 +48,10 @@ func NewWriter(nameFunc NameFunc, maxBytes int64) *Writer {
 
 // Write implements io.Writer. It splits data across files as needed.
 func (s *Writer) Write(p []byte) (int, error) {
+	if s.maxBytes <= 0 {
+		return 0, fmt.Errorf("Invalid split part size: %d. Remedy: Configure split_size_mb to a value greater than 0.", s.maxBytes)
+	}
+
 	total := 0
 	for len(p) > 0 {
 		if s.current == nil {

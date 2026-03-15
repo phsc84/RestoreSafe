@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -50,6 +52,86 @@ func TestValidateTarRejectsAbsolutePath(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "absolute path") {
 		t.Fatalf("expected absolute path error, got: %v", err)
+	}
+}
+
+func TestValidateTarRejectsEmptyPath(t *testing.T) {
+	t.Parallel()
+
+	archiveBytes := makeTarBytes(t, []tarEntry{
+		{name: "   ", typeflag: tar.TypeReg, mode: 0o640, body: "bad"},
+	})
+
+	err := ValidateTar(bytes.NewReader(archiveBytes))
+	if err == nil {
+		t.Fatal("expected ValidateTar error for empty path, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty TAR entry name") {
+		t.Fatalf("expected empty path error, got: %v", err)
+	}
+}
+
+func TestWriteTarAndExtractTarRoundTripWithExclude(t *testing.T) {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "src")
+	destDir := filepath.Join(dir, "dest")
+	excludedDir := filepath.Join(srcDir, "target")
+
+	if err := os.MkdirAll(filepath.Join(srcDir, "docs"), 0o750); err != nil {
+		t.Fatalf("failed to create docs dir: %v", err)
+	}
+	if err := os.MkdirAll(excludedDir, 0o750); err != nil {
+		t.Fatalf("failed to create excluded dir: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(srcDir, "docs", "keep.txt"), []byte("keep"), 0o600); err != nil {
+		t.Fatalf("failed to write included file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(excludedDir, "skip.txt"), []byte("skip"), 0o600); err != nil {
+		t.Fatalf("failed to write excluded file: %v", err)
+	}
+
+	var archive bytes.Buffer
+	if err := WriteTar(&archive, srcDir, excludedDir); err != nil {
+		t.Fatalf("WriteTar returned error: %v", err)
+	}
+
+	if err := ValidateTar(bytes.NewReader(archive.Bytes())); err != nil {
+		t.Fatalf("ValidateTar returned error for produced archive: %v", err)
+	}
+
+	if err := ExtractTar(bytes.NewReader(archive.Bytes()), destDir); err != nil {
+		t.Fatalf("ExtractTar returned error: %v", err)
+	}
+
+	includedPath := filepath.Join(destDir, "docs", "keep.txt")
+	got, err := os.ReadFile(includedPath)
+	if err != nil {
+		t.Fatalf("failed to read extracted included file: %v", err)
+	}
+	if string(got) != "keep" {
+		t.Fatalf("unexpected included file content: %q", got)
+	}
+
+	excludedPath := filepath.Join(destDir, "target", "skip.txt")
+	if _, err := os.Stat(excludedPath); !os.IsNotExist(err) {
+		t.Fatalf("excluded file should not be extracted, stat err=%v", err)
+	}
+}
+
+func TestExtractTarRejectsPathTraversal(t *testing.T) {
+	t.Parallel()
+
+	archiveBytes := makeTarBytes(t, []tarEntry{
+		{name: "../escape.txt", typeflag: tar.TypeReg, mode: 0o640, body: "bad"},
+	})
+
+	err := ExtractTar(bytes.NewReader(archiveBytes), t.TempDir())
+	if err == nil {
+		t.Fatal("expected ExtractTar error for path traversal, got nil")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

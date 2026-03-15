@@ -2,10 +2,8 @@ package verify
 
 import (
 	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/testutil"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -29,24 +27,9 @@ func TestValidateVerifyPreflight(t *testing.T) {
 }
 
 func TestVerifyEntryWrongPassword(t *testing.T) {
-	workspace := t.TempDir()
-	srcDir := filepath.Join(workspace, "src")
-	targetDir := filepath.Join(workspace, "target")
-	if err := os.MkdirAll(srcDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		t.Fatalf("failed to create target dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("content"), 0o600); err != nil {
-		t.Fatalf("failed to create source file: %v", err)
-	}
+	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
 
-	entry := util.BackupEntry{FolderName: filepath.Base(srcDir), Date: "2026-03-14", ID: util.BackupID("ABC123")}
-
-	util.CreateEncryptedSplitBackupForTest(t, srcDir, targetDir, entry.FolderName, entry.Date, entry.ID, []byte("correct-pass"), 1)
-
-	err := verifyEntry(entry, targetDir, []byte("wrong-pass"), nil)
+	err := verifyEntry(fx.Entry, fx.TargetDir, []byte("wrong-pass"), nil)
 	if err == nil {
 		t.Fatal("expected verifyEntry to fail with wrong password")
 	}
