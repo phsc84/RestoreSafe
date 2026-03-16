@@ -85,9 +85,15 @@ func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
 }
 
 // BackupRunUsesYubiKey checks whether a backup run has a matching challenge file.
-func BackupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, error) {
-	_, found, err := FindChallengeFileForRun(targetDir, entry.Date, entry.ID)
-	return found, err
+// Returns (usesYubiKey, yubiKeyOnly, error).
+// yubiKeyOnly is true when the backup was created without a password (YubiKey-only mode).
+func BackupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, bool, error) {
+	path, found, err := FindChallengeFileForRun(targetDir, entry.Date, entry.ID)
+	if err != nil || !found {
+		return found, false, err
+	}
+	yubiKeyOnly := IsChallengeFileYubiKeyOnly(path)
+	return true, yubiKeyOnly, nil
 }
 
 // FindChallengeFileForRun returns the .challenge file path for date+ID if present.
@@ -108,6 +114,16 @@ func FindChallengeFileForRun(targetDir, date string, id util.BackupID) (string, 
 	}
 
 	return "", false, nil
+}
+
+// IsChallengeFileYubiKeyOnly reports whether the challenge file was written
+// for a YubiKey-only (no-password) backup by checking for the "NOPW:" prefix.
+func IsChallengeFileYubiKeyOnly(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(string(data)), "NOPW:")
 }
 
 // NewestPartModTime returns the newest modification time among all part files.

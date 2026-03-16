@@ -27,7 +27,11 @@ log_level: "info"
 # Enable this only for storage or write-amplification troubleshooting.
 io_diagnostics: false
 
-# Enable YubiKey as a second factor (2FA).
-# true  = YubiKey required (ykchalresp must be installed)
-# false = Password only
-yubikey_enable: false
+# Authentication mode.
+# 1 = Password only (default)
+# 2 = Password AND YubiKey HMAC-SHA1 (2FA, ykchalresp must be installed)
+# 3 = YubiKey only, no password (ykchalresp must be installed)
+#
+# In mode 3, physical possession of the YubiKey is the sole authentication
+# factor. No password is prompted during backup or restore.
+authentication_mode: 1

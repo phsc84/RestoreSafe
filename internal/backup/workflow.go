@@ -21,7 +21,7 @@ import (
 const splitWriteBufferSize = 32 * 1024 * 1024
 
 // Run executes the full backup workflow.
-func RunBackup(cfg *util.Config, exeDir string) error {
+func Run(cfg *util.Config, exeDir string) error {
 	// Resolve target folder (may be relative to exe dir).
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 	if err := os.MkdirAll(targetDir, 0o750); err != nil {
@@ -53,34 +53,55 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := promptStartBackup()
-	if err != nil {
-		log.Error("Failed to read confirmation: %v", err)
-		return err
-	}
-	if !confirmed {
-		log.Info("Backup cancelled by user before start")
-		fmt.Println("Backup cancelled.")
-		return nil
+	if cfg.NonInteractive {
+		log.Info("Non-interactive mode: start confirmation skipped")
+		fmt.Println("Starting backup automatically.")
+	} else {
+		confirmed, err := promptStartBackup()
+		if err != nil {
+			log.Error("Failed to read confirmation: %v", err)
+			return err
+		}
+		if !confirmed {
+			log.Info("Backup cancelled by user before start")
+			fmt.Println("Backup cancelled.")
+			return nil
+		}
 	}
 
 	// Collect password.
-	password, err := security.ReadPasswordConfirmedWithPrompts("Enter backup password: ", "Re-enter backup password: ")
-	if err != nil {
-		log.Error("Password input failed: %v", err)
-		return fmt.Errorf("Password input failed: %w. Remedy: Enter a non-empty password and confirm it exactly.", err)
+	var password []byte
+	if cfg.IsYubiKeyOnly() {
+		fmt.Println("YubiKey-only mode: no password required.")
+		password = []byte{}
+	} else {
+		var err error
+		password, err = security.ReadPasswordConfirmedWithPrompts("Enter backup password: ", "Re-enter backup password: ")
+		if err != nil {
+			log.Error("Password input failed: %v", err)
+			return fmt.Errorf("Password input failed: %w. Remedy: Enter a non-empty password and confirm it exactly.", err)
+		}
 	}
 
-	// Optional YubiKey 2FA.
+	// Optional YubiKey factor (2FA or sole factor in yubikey mode).
 	var challengeHex string
-	if cfg.YubikeyEnable {
-		fmt.Println("YubiKey detected. Please touch the YubiKey button.")
+	if cfg.UseYubiKey() {
+		if cfg.IsYubiKeyOnly() {
+			fmt.Println("Please touch the YubiKey button.")
+		} else {
+			fmt.Println("YubiKey detected. Please touch the YubiKey button.")
+		}
+		var err error
 		password, challengeHex, err = security.CombineWithPassword(password)
 		if err != nil {
 			log.Error("YubiKey authentication failed: %v", err)
 			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykchalresp is available on PATH.", err)
 		}
-		log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
+		if cfg.IsYubiKeyOnly() {
+			log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
+		} else {
+			log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
+		}
 	}
 
 	fmt.Println("Backup started.")
@@ -117,9 +138,13 @@ func RunBackup(cfg *util.Config, exeDir string) error {
 		processedFolders = append(processedFolders, folderName)
 
 		// Write YubiKey challenge file if needed.
-		if cfg.YubikeyEnable && challengeHex != "" {
+		if cfg.UseYubiKey() && challengeHex != "" {
+			challengeContent := challengeHex
+			if cfg.IsYubiKeyOnly() {
+				challengeContent = "NOPW:" + challengeHex
+			}
 			challengePath := util.ChallengeFileName(targetDir, folderName, date, id)
-			if err := os.WriteFile(challengePath, []byte(challengeHex), 0o600); err != nil {
+			if err := os.WriteFile(challengePath, []byte(challengeContent), 0o600); err != nil {
 				log.Error("Failed to write challenge file: %v", err)
 				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target folder; for YubiKey backups, the .challenge file must be in the same folder as the .enc files.", err)
 			}
@@ -351,7 +376,7 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	fmt.Printf("Target folder : %s\n", targetDir)
 	fmt.Printf("Split size    : %d MB\n", cfg.SplitSizeMB)
 	fmt.Printf("Retention keep: %d\n", cfg.RetentionKeep)
-	fmt.Printf("YubiKey 2FA   : %s\n", yesNo(cfg.YubikeyEnable))
+	fmt.Printf("Authentication: %s\n", backupAuthLabel(cfg))
 	fmt.Printf("Log level     : %s\n", strings.ToLower(cfg.LogLevel))
 
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
@@ -441,6 +466,17 @@ func yesNo(v bool) string {
 		return "enabled"
 	}
 	return "disabled"
+}
+
+func backupAuthLabel(cfg *util.Config) string {
+	switch cfg.AuthenticationMode {
+	case util.AuthModeYubiKey:
+		return "YubiKey only (no password)"
+	case util.AuthModePasswordYubiKey:
+		return "password + YubiKey"
+	default:
+		return "password only"
+	}
 }
 
 func runnableSourceCount(sources []sourceFolderStatus) int {

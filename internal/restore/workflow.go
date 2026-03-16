@@ -21,7 +21,7 @@ import (
 )
 
 // Run executes the full restore workflow.
-func RunRestore(cfg *util.Config, exeDir string) error {
+func Run(cfg *util.Config, exeDir string) error {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 
 	// Enumerate backups.
@@ -34,13 +34,13 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	selected, selection, err := operation.PromptBackupSelection("restore", targetDir, index)
+	selected, selection, err := resolveRestoreSelection(cfg, targetDir, index)
 	if err != nil {
 		return err
 	}
 	warningCount := restoreSelectionWarningCount(selection, index)
 
-	requiresYubiKey, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
+	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and verify .challenge filenames.", err)
 	}
@@ -67,7 +67,7 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 	}
 
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
-	printRestorePreflight(targetDir, restorePath, preflight, requiresYubiKey)
+	printRestorePreflight(targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly)
 	if err := validateRestorePreflight(preflight); err != nil {
 		if log != nil {
 			log.Error("%v", err)
@@ -75,19 +75,26 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := promptStartRestore()
-	if err != nil {
+	if cfg.NonInteractive {
 		if log != nil {
-			log.Error("Failed to read confirmation: %v", err)
+			log.Info("Non-interactive mode: start confirmation skipped")
 		}
-		return err
-	}
-	if !confirmed {
-		if log != nil {
-			log.Info("Restore cancelled by user before start")
+		fmt.Println("Starting restore automatically.")
+	} else {
+		confirmed, err := promptStartRestore()
+		if err != nil {
+			if log != nil {
+				log.Error("Failed to read confirmation: %v", err)
+			}
+			return err
 		}
-		fmt.Println("Restore cancelled.")
-		return nil
+		if !confirmed {
+			if log != nil {
+				log.Info("Restore cancelled by user before start")
+			}
+			fmt.Println("Restore cancelled.")
+			return nil
+		}
 	}
 
 	// Collect password (with retry).
@@ -116,6 +123,13 @@ func RunRestore(cfg *util.Config, exeDir string) error {
 	printRestoreCompletionSummary(selected, totalPartsProcessed, logPath, warningCount)
 	fmt.Println("\nRestore completed successfully.")
 	return nil
+}
+
+func resolveRestoreSelection(cfg *util.Config, targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
+	if cfg.NonInteractive {
+		return catalog.ResolveNewestBackupRunSelection(targetDir, index)
+	}
+	return operation.PromptBackupSelection("restore", targetDir, index)
 }
 
 func promptRestoreDestination(targetDir string) (string, error) {
@@ -165,13 +179,13 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 	return items
 }
 
-func printRestorePreflight(targetDir, restorePath string, items []restorePreflightItem, requiresYubiKey bool) {
+func printRestorePreflight(targetDir, restorePath string, items []restorePreflightItem, requiresYubiKey, yubiKeyOnly bool) {
 	fmt.Println()
 	fmt.Println("Restore preflight")
 	fmt.Println("-----------------")
 	fmt.Printf("Backup folder  : %s\n", targetDir)
 	fmt.Printf("Restore target : %s\n", restorePath)
-	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey))
+	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	fmt.Printf("Items selected : %d\n", len(items))
 	fmt.Println("Selection:")
 	for _, item := range items {

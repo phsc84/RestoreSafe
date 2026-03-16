@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Added password-less YubiKey-only mode. Authentication is now configured via a single `authentication_mode` key in `config.yaml` with three numeric options: `1` (default, password only), `2` (password + YubiKey HMAC-SHA1 second factor), and `3` (YubiKey only, no password). The challenge file written by a YubiKey-only backup is marked with a `NOPW:` prefix so that restore and verify detect the mode without relying on `config.yaml`. Backup and restore/verify preflight summaries display the resolved authentication label.
+- Added CLI flags `-backup`, `-restore`, and `-verify` to run operations directly without opening the interactive menu.
+- Added safety guard for unattended backup: non-interactive `-backup` now requires `authentication_mode: 3` and exits with an error otherwise.
+- Added automatic newest-run resolution in non-interactive `-restore` and `-verify` modes (no backup picker).
+- Added CLI flag `-config` to load `config.yaml` from a custom location; if omitted, RestoreSafe still uses `config.yaml` in the application folder.
 - Added automatic startup health check. RestoreSafe now runs a non-interactive diagnostic pass on launch and reports configuration, source/target folder access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
 - Added interactive verify mode for existing backups. Verification checks selected backup sets for missing parts, validates decryption with password and optional YubiKey challenge-response, and confirms that the decrypted stream is a readable TAR archive without restoring files.
 - Added backup and restore completion summaries showing processed folders, total part files created/processed, log file location, and whether warnings occurred.

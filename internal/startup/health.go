@@ -160,7 +160,7 @@ func checkTempDirHealth() []healthItem {
 }
 
 func checkYubiKeyHealth(cfg *util.Config) []healthItem {
-	if !cfg.YubikeyEnable {
+	if !cfg.UseYubiKey() {
 		return []healthItem{{
 			Severity: healthOK,
 			Scope:    "YubiKey",

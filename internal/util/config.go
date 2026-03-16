@@ -8,15 +8,37 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// AuthMode values for AuthenticationMode.
+const (
+	AuthModePassword        = 1 // password only
+	AuthModePasswordYubiKey = 2 // password + YubiKey HMAC-SHA1
+	AuthModeYubiKey         = 3 // YubiKey only, no password
+)
+
 // Config holds all application configuration.
 type Config struct {
-	SourceFolders []string `yaml:"source_folders"`
-	TargetFolder  string   `yaml:"target_folder"`
-	SplitSizeMB   int64    `yaml:"split_size_mb"`
-	RetentionKeep int      `yaml:"retention_keep"`
-	LogLevel      string   `yaml:"log_level"`
-	IODiagnostics bool     `yaml:"io_diagnostics"`
-	YubikeyEnable bool     `yaml:"yubikey_enable"`
+	SourceFolders      []string `yaml:"source_folders"`
+	TargetFolder       string   `yaml:"target_folder"`
+	SplitSizeMB        int64    `yaml:"split_size_mb"`
+	RetentionKeep      int      `yaml:"retention_keep"`
+	LogLevel           string   `yaml:"log_level"`
+	IODiagnostics      bool     `yaml:"io_diagnostics"`
+	AuthenticationMode int      `yaml:"authentication_mode"`
+
+	// NonInteractive is set at runtime (not from config.yaml).
+	// When true, start confirmations are skipped so the application
+	// runs unattended (e.g. invoked via -backup or -restore flag).
+	NonInteractive bool `yaml:"-"`
+}
+
+// UseYubiKey reports whether the configured authentication mode requires a YubiKey.
+func (c *Config) UseYubiKey() bool {
+	return c.AuthenticationMode == AuthModePasswordYubiKey || c.AuthenticationMode == AuthModeYubiKey
+}
+
+// IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).
+func (c *Config) IsYubiKeyOnly() bool {
+	return c.AuthenticationMode == AuthModeYubiKey
 }
 
 // DefaultSplitSizeMB is 4 GB expressed in megabytes.
@@ -51,6 +73,9 @@ func (c *Config) withDefaults() *Config {
 	if c.LogLevel == "" {
 		c.LogLevel = "info"
 	}
+	if c.AuthenticationMode == 0 {
+		c.AuthenticationMode = AuthModePassword
+	}
 	return c
 }
 
@@ -68,6 +93,11 @@ func (c *Config) validate() error {
 	}
 	if c.RetentionKeep < 0 {
 		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0). Remedy: Use 0 (disabled) or a positive number, e.g. 7.", c.RetentionKeep)
+	}
+	switch c.AuthenticationMode {
+	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
+	default:
+		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
 	}
 	return nil
 }

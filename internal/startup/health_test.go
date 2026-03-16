@@ -90,7 +90,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 		SourceFolders: []string{shared, shared},
 		TargetFolder:  target,
 		SplitSizeMB:   64,
-		LogLevel:      "INFO",
+		LogLevel:      "info",
 	}
 
 	items := collectStartupHealthItems(cfg, exeDir)
@@ -141,7 +141,7 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 		SourceFolders: []string{first, second, third, fourth, fifth},
 		TargetFolder:  target,
 		SplitSizeMB:   64,
-		LogLevel:      "INFO",
+		LogLevel:      "info",
 	}
 
 	items := collectStartupHealthItems(cfg, exeDir)

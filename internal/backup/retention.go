@@ -49,7 +49,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 		if !folderSet[entry.FolderName] {
 			continue
 		}
-		newestTime, err := newestPartModTime(targetDir, entry)
+		newestTime, err := catalog.NewestPartModTime(targetDir, entry)
 		if err != nil {
 			log.Warn("Retention cleanup skipped: failed to inspect backup set %s (%v)", entry.String(), err)
 			log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
@@ -97,26 +97,6 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 
 	log.Info("Retention cleanup finished: deleted %d backup set(s), %d backup file(s), %d orphan log file(s)", deletedSets, deletedFiles, deletedLogs)
 	return nil
-}
-
-func newestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
-	parts := catalog.CollectParts(targetDir, entry)
-	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
-	}
-
-	var newest time.Time
-	for _, part := range parts {
-		fi, err := os.Stat(part)
-		if err != nil {
-			return newest, err
-		}
-		if fi.ModTime().After(newest) {
-			newest = fi.ModTime()
-		}
-	}
-
-	return newest, nil
 }
 
 func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, error) {

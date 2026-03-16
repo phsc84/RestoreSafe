@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 )
 
-// RunVerify verifies selected backup sets without restoring them to disk.
-func RunVerify(cfg *util.Config, exeDir string) error {
+// Run verifies selected backup sets without restoring them to disk.
+func Run(cfg *util.Config, exeDir string) error {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 
 	index, err := catalog.ScanBackups(targetDir)
@@ -24,12 +24,12 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	selected, selection, err := operation.PromptBackupSelection("verify", targetDir, index)
+	selected, selection, err := resolveVerifySelection(cfg, targetDir, index)
 	if err != nil {
 		return err
 	}
 
-	requiresYubiKey, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
+	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and existing .challenge files.", err)
 	}
@@ -41,7 +41,7 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 	}
 
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflight(targetDir, preflight, requiresYubiKey)
+	printVerifyPreflight(targetDir, preflight, requiresYubiKey, yubiKeyOnly)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		if log != nil {
 			log.Error("%v", err)
@@ -49,19 +49,26 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := operation.PromptStartAction("verification")
-	if err != nil {
+	if cfg.NonInteractive {
 		if log != nil {
-			log.Error("Failed to read confirmation: %v", err)
+			log.Info("Non-interactive mode: start confirmation skipped")
 		}
-		return err
-	}
-	if !confirmed {
-		if log != nil {
-			log.Info("Verification cancelled by user before start")
+		fmt.Println("Starting verification automatically.")
+	} else {
+		confirmed, err := operation.PromptStartAction("verification")
+		if err != nil {
+			if log != nil {
+				log.Error("Failed to read confirmation: %v", err)
+			}
+			return err
 		}
-		fmt.Println("Verification cancelled.")
-		return nil
+		if !confirmed {
+			if log != nil {
+				log.Info("Verification cancelled by user before start")
+			}
+			fmt.Println("Verification cancelled.")
+			return nil
+		}
 	}
 
 	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
@@ -88,6 +95,13 @@ func RunVerify(cfg *util.Config, exeDir string) error {
 	return nil
 }
 
+func resolveVerifySelection(cfg *util.Config, targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
+	if cfg.NonInteractive {
+		return catalog.ResolveNewestBackupRunSelection(targetDir, index)
+	}
+	return operation.PromptBackupSelection("verify", targetDir, index)
+}
+
 type verifyPreflightItem struct {
 	Entry          util.BackupEntry
 	PartCount      int
@@ -109,12 +123,12 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 	return items
 }
 
-func printVerifyPreflight(targetDir string, items []verifyPreflightItem, requiresYubiKey bool) {
+func printVerifyPreflight(targetDir string, items []verifyPreflightItem, requiresYubiKey, yubiKeyOnly bool) {
 	fmt.Println()
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
 	fmt.Printf("Backup folder   : %s\n", targetDir)
-	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey))
+	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	fmt.Printf("Items selected  : %d\n", len(items))
 	fmt.Println("Selection:")
 	for _, item := range items {

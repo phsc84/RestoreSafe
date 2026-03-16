@@ -39,22 +39,32 @@ func PromptStartAction(action string) (bool, error) {
 	}
 }
 
-func BackupAuthenticationLabel(requiresYubiKey bool) string {
-	if requiresYubiKey {
+func BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly bool) string {
+	switch {
+	case yubiKeyOnly:
+		return "YubiKey only (no password)"
+	case requiresYubiKey:
 		return "password + YubiKey (detected)"
+	default:
+		return "password only"
 	}
-	return "password only"
 }
 
-func PasswordFailurePrefix(requiresYubiKey bool) string {
-	if requiresYubiKey {
+func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {
+	switch {
+	case yubiKeyOnly:
+		return "Wrong YubiKey or corrupted file."
+	case requiresYubiKey:
 		return "Wrong password or invalid YubiKey response."
+	default:
+		return "Wrong password."
 	}
-	return "Wrong password."
 }
 
 // ReadPasswordWithRetry asks for the password up to maxPasswordAttempts times.
 // It verifies the password by attempting to decrypt the first byte of the first part.
+// In YubiKey-only mode (no password factor), the retry loop runs at most once since
+// there is no password that can be corrected between attempts.
 func ReadPasswordWithRetry(
 	targetDir string,
 	rep util.BackupEntry,
@@ -66,10 +76,22 @@ func ReadPasswordWithRetry(
 		return nil, err
 	}
 
+	// Determine whether this is a password-less YubiKey-only backup.
+	yubiKeyOnly := false
+	if requiresYubiKey {
+		yubiKeyOnly = catalog.IsChallengeFileYubiKeyOnly(challengePath)
+	}
+
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		password, err := security.ReadPassword(passwordPrompt)
-		if err != nil {
-			return nil, err
+		var password []byte
+		if yubiKeyOnly {
+			// No password prompt in YubiKey-only mode.
+			password = []byte{}
+		} else {
+			password, err = security.ReadPassword(passwordPrompt)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if requiresYubiKey {
@@ -77,13 +99,21 @@ func ReadPasswordWithRetry(
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
 			}
-			fmt.Println("YubiKey detected. Please touch the YubiKey button.")
+			if yubiKeyOnly {
+				fmt.Println("YubiKey-only mode. Please touch the YubiKey button.")
+			} else {
+				fmt.Println("YubiKey detected. Please touch the YubiKey button.")
+			}
 			password, err = security.CombineWithPasswordForRestore(password, challengeHex)
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and verify slot 2 is configured correctly.", err)
 			}
 			if log != nil {
-				log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
+				if yubiKeyOnly {
+					log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
+				} else {
+					log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
+				}
 			}
 		}
 
@@ -93,9 +123,13 @@ func ReadPasswordWithRetry(
 			if err := verifyPassword(parts[0], password); err == nil {
 				return password, nil
 			} else if errors.Is(err, security.ErrWrongPassword) {
+				// In YubiKey-only mode there is no password to correct, so return immediately.
+				if yubiKeyOnly {
+					return nil, fmt.Errorf("YubiKey authentication failed: wrong key or corrupted file. Application will now exit. Remedy: Insert the correct YubiKey and restart.")
+				}
 				remaining := maxPasswordAttempts - attempt
 				if remaining > 0 {
-					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey), remaining)
+					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly), remaining)
 					if log != nil {
 						log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 					}
@@ -110,6 +144,9 @@ func ReadPasswordWithRetry(
 		return password, nil
 	}
 
+	if yubiKeyOnly {
+		return nil, fmt.Errorf("YubiKey authentication failed. Application will now exit. Remedy: Insert the correct YubiKey and restart.")
+	}
 	if requiresYubiKey {
 		return nil, fmt.Errorf("Too many failed authentication attempts. Application will now exit. Remedy: Restart and check password plus YubiKey setup (slot 2, touch).")
 	}
@@ -154,10 +191,15 @@ func (vw *verifyWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// readChallengeFile reads the challenge hex from a .challenge file.
+// It strips the "NOPW:" prefix used by YubiKey-only backups so the caller
+// always receives a plain hex string suitable for CombineWithPasswordForRestore.
 func readChallengeFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(data)), nil
+	content := strings.TrimSpace(string(data))
+	content = strings.TrimPrefix(content, "NOPW:")
+	return content, nil
 }

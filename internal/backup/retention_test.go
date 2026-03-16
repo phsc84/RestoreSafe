@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
 func TestDeleteBackupEntryFilesRemovesPartsAndChallenge(t *testing.T) {
@@ -64,36 +63,6 @@ func TestDeleteOrphanLogFilesKeepsActiveRunLogs(t *testing.T) {
 	assertExists(t, activeLog)
 	assertNotExists(t, orphanLog)
 	assertExists(t, unrelated)
-}
-
-func TestNewestPartModTimeReturnsLatest(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	part1 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 2)
-
-	createFile(t, part1, "p1")
-	createFile(t, part2, "p2")
-
-	t1 := time.Now().Add(-2 * time.Hour)
-	t2 := time.Now().Add(-30 * time.Minute)
-	if err := os.Chtimes(part1, t1, t1); err != nil {
-		t.Fatalf("failed to set mtime on part1: %v", err)
-	}
-	if err := os.Chtimes(part2, t2, t2); err != nil {
-		t.Fatalf("failed to set mtime on part2: %v", err)
-	}
-
-	latest, err := newestPartModTime(dir, entry)
-	if err != nil {
-		t.Fatalf("newestPartModTime returned error: %v", err)
-	}
-
-	if latest.Unix() != t2.Unix() {
-		t.Fatalf("expected latest mtime %v, got %v", t2, latest)
-	}
 }
 
 func createFile(t *testing.T, path string, content string) {

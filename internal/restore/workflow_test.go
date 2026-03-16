@@ -7,7 +7,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestBuildRestorePreflightReportsErrors(t *testing.T) {
@@ -71,5 +73,45 @@ func TestRestoreEntryWrongPassword(t *testing.T) {
 	}
 	if !errors.Is(err, security.ErrWrongPassword) {
 		t.Fatalf("expected ErrWrongPassword, got: %v", err)
+	}
+}
+
+func TestResolveRestoreSelectionNonInteractiveUsesNewestRun(t *testing.T) {
+	t.Parallel()
+
+	targetDir := t.TempDir()
+	oldEntry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-01", ID: util.BackupID("AAAAAA")}
+	newEntry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-02", ID: util.BackupID("BBBBBB")}
+
+	oldPart := filepath.Join(targetDir, "[Docs]_2026-03-01_AAAAAA-001.enc")
+	newPart := filepath.Join(targetDir, "[Docs]_2026-03-02_BBBBBB-001.enc")
+	if err := os.WriteFile(oldPart, []byte("old"), 0o600); err != nil {
+		t.Fatalf("failed to write old part: %v", err)
+	}
+	if err := os.WriteFile(newPart, []byte("new"), 0o600); err != nil {
+		t.Fatalf("failed to write new part: %v", err)
+	}
+
+	now := time.Now()
+	if err := os.Chtimes(oldPart, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatalf("failed to set old part timestamps: %v", err)
+	}
+	if err := os.Chtimes(newPart, now, now); err != nil {
+		t.Fatalf("failed to set new part timestamps: %v", err)
+	}
+
+	cfg := &util.Config{NonInteractive: true}
+	selected, selection, err := resolveRestoreSelection(cfg, targetDir, []util.BackupEntry{oldEntry, newEntry})
+	if err != nil {
+		t.Fatalf("resolveRestoreSelection returned error: %v", err)
+	}
+	if len(selected) != 1 {
+		t.Fatalf("expected exactly 1 selected entry, got %d", len(selected))
+	}
+	if selected[0] != newEntry {
+		t.Fatalf("expected newest entry %v, got %v", newEntry, selected[0])
+	}
+	if !strings.Contains(strings.ToLower(selection), "newest") {
+		t.Fatalf("expected selection label to mention newest, got %q", selection)
 	}
 }

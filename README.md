@@ -1,6 +1,6 @@
 # RestoreSafe
 
-RestoreSafe is a standalone Windows 64-bit backup tool that securely encrypts and splits folder archives, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
+RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folders into encrypted, split archive files, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that securely encrypts an
 
 - Portable: no installation needed
 - Standalone: no dependencies -> no .NET runtime, no Java runtime, no other system dependencies
-- Lean code: no overloaded GUI frameworks, concentrate on core functionality
+- Lean code: no overloaded GUI frameworks, concentrates on core functionality
 - Streaming processing: no temporary backup files, very low CPU & RAM requirements
 
 ### Security architecture
@@ -28,6 +28,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that securely encrypts an
 - Encryption: AES-256-GCM (authenticated encryption)
 - Key derivation: Argon2id (64 MB memory, 3 iterations)
 - Optional 2FA: YubiKey (HMAC-SHA1, slot 2)
+- Optional YubiKey-only mode: no password required, physical possession of the YubiKey is the sole authentication factor
 - Both file content and metadata (file/folder names) are encrypted
 
 ## Requirements
@@ -42,7 +43,7 @@ Windows 64-bit
 
 1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and store it in any directory on your computer.
 2. [Download](https://github.com/phsc84/RestoreSafe/releases) `config-SAMPLE.yaml`, rename it to `config.yaml` and put it into the same directory as RestoreSafe.exe.
-3. Edit `config.yaml` (at least parameters `source folders` and `target folder` have to be set, all other options may remain default).
+3. Edit `config.yaml` (at least parameters `source_folders` and `target_folder` have to be set, all other options may remain default).
 
 Recommended: set `retention_keep` in `config.yaml` to keep only the newest N backup sets per source folder.
 Older backup part/challenge files are deleted automatically, and logs are removed only when no backup parts remain for the same backup run (date + ID).
@@ -57,19 +58,19 @@ Older backup part/challenge files are deleted automatically, and logs are remove
 >
 > This won’t be needed when updating to a new minor version (v1.0.x -> v1.1.x) or a new bugfix version (v1.0.1 -> v1.0.2).
 
-At startup, RestoreSafe automatically runs a non-interactive health check. It validates configured source folders, target folder and temp directory access, optional YubiKey CLI availability, and the structural integrity of existing backup parts and challenge files.
+At startup, RestoreSafe automatically runs a health check. It validates configured source folders, target folder and temp directory access, optional YubiKey CLI availability, and the structural integrity of existing backup parts and challenge files.
 
 ### Create a backup
 
 Double-click `RestoreSafe.exe` and follow the prompts.
 
-Before backup starts, RestoreSafe shows a preflight summary including estimated total source size, free target disk space, and source reachability checks.
+Before backup starts, RestoreSafe shows a preflight summary including estimated total source size, free target disk space, and checks that all source folders are accessible.
 
 ### Restore a backup
 
 Double-click `RestoreSafe.exe` and follow the prompts.
 
-The backup picker groups backups by backup set (`date + ID`) and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
+The backup picker groups backups by backup set - a group of files created in one backup run, identified by `date + ID` - and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
 
 If a backup ID exists on multiple dates, ID-based selection warns and automatically uses the newest date.
 
@@ -77,11 +78,71 @@ If a backup ID exists on multiple dates, ID-based selection warns and automatica
 
 Double-click `RestoreSafe.exe`, choose `Verify backup`, and follow the prompts.
 
-Verify mode checks that all selected backup parts are present, decryptable with the provided password (and YubiKey if required), and readable as a complete TAR archive without restoring any files to disk.
+Verify mode checks that all selected backup parts are present, decryptable with the provided password (and YubiKey if required), and readable as a complete archive without restoring any files to disk.
 
 The same backup picker groups backups by backup set (`date + ID`) and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
 
 If a backup ID exists on multiple dates, ID-based selection warns and automatically uses the newest date.
+
+### Scheduled / unattended operation (CLI flags)
+
+RestoreSafe can be run from a batch file or Windows Task Scheduler using command-line flags:
+
+| Flag | Description |
+|---|---|
+| `-backup` | Run unattended backup and exit (requires `authentication_mode: 3`). |
+| `-restore` | Run unattended restore for the newest backup run and exit. |
+| `-verify` | Run unattended verify for the newest backup run and exit. |
+| `-config="<absolute-path>"` | Load config from a custom absolute path. |
+| `-config="<absolute-path>" -backup` | Custom config path combined with unattended backup. |
+
+**Unattended mode behavior**
+
+- The "Start now?" confirmation is skipped automatically.
+- Exits with code `0` on success or `1` on failure, making it suitable for batch files and scheduled tasks.
+- In `-restore` and `-verify` modes, the newest backup run is selected automatically - no backup picker is shown.
+- In `-backup` mode, `authentication_mode` must be `3`; otherwise RestoreSafe exits with an error to prevent unattended password prompts.
+
+**`-config` flag**
+
+- Optional - if omitted, RestoreSafe loads `config.yaml` from the application folder.
+- Only the equals form with an absolute path is supported: `-config=<absolute-path>` or `--config=<absolute-path>`.
+- Without a mode flag (`-backup`, `-restore`, `-verify`), RestoreSafe starts in normal interactive menu mode.
+- Combined with a mode flag, operation runs unattended.
+
+> **Tip for fully unattended backup**
+>
+> Set `authentication_mode: 3` (YubiKey only) so no password is prompted. Insert the YubiKey before the scheduled task runs, and RestoreSafe will complete the backup without any user interaction.
+
+Example batch file for scheduled backup:
+
+```bat
+@echo off
+cd /d "%~dp0"
+RestoreSafe.exe -backup
+if %errorlevel% neq 0 (
+  echo Backup failed with exit code %errorlevel% >> backup-error.log
+)
+```
+
+Example batch file using a custom config location (`-config=`), interactive mode:
+
+```bat
+@echo off
+cd /d "%~dp0"
+RestoreSafe.exe -config="D:/RestoreSafe/config.yaml"
+```
+
+Example batch file using a custom config location (`-config=`), unattended mode:
+
+```bat
+@echo off
+cd /d "%~dp0"
+RestoreSafe.exe -config="D:/RestoreSafe/config.yaml" -backup
+if %errorlevel% neq 0 (
+  echo Backup failed with exit code %errorlevel% >> backup-error.log
+)
+```
 
 ## Naming scheme of created files
 
@@ -177,5 +238,18 @@ Sample:
 
 1. Install YubiKey Manager: [YubiKey Manager Downloads](https://www.yubico.com/support/download/yubikey-manager/)
 2. Open Applications > OTP > Long Touch (Slot 2) > Configure (required for HMAC-SHA1 challenge-response).
-3. Set `yubikey_enable: true` in `config.yaml`.
+3. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
 4. Insert and touch the YubiKey when prompted during backup or restore.
+
+### YubiKey mode comparison
+
+| Setting | Password prompt | YubiKey required | Best for |
+|---|---|---|---|
+| `authentication_mode: 1` | Yes | No | Standard password-only backup |
+| `authentication_mode: 2` | Yes | Yes | Password + YubiKey two-factor |
+| `authentication_mode: 3` | No | Yes | Password-less, key-in-hand authentication |
+
+> **Important**
+>
+> In mode `3`, physical possession of the YubiKey is the sole authentication factor.
+> Keep your YubiKey safe - anyone with the key and the `.challenge` file can restore the backup.

@@ -12,20 +12,28 @@ import (
 )
 
 func TestBackupAuthenticationLabel(t *testing.T) {
-	if got := BackupAuthenticationLabel(true); got != "password + YubiKey (detected)" {
+	t.Parallel()
+	if got := BackupAuthenticationLabel(true, false); got != "password + YubiKey (detected)" {
 		t.Fatalf("unexpected label for YubiKey: %q", got)
 	}
-	if got := BackupAuthenticationLabel(false); got != "password only" {
+	if got := BackupAuthenticationLabel(false, false); got != "password only" {
 		t.Fatalf("unexpected label without YubiKey: %q", got)
+	}
+	if got := BackupAuthenticationLabel(true, true); got != "YubiKey only (no password)" {
+		t.Fatalf("unexpected label for YubiKey-only: %q", got)
 	}
 }
 
 func TestPasswordFailurePrefix(t *testing.T) {
-	if got := PasswordFailurePrefix(true); got != "Wrong password or invalid YubiKey response." {
+	t.Parallel()
+	if got := PasswordFailurePrefix(true, false); got != "Wrong password or invalid YubiKey response." {
 		t.Fatalf("unexpected prefix for YubiKey: %q", got)
 	}
-	if got := PasswordFailurePrefix(false); got != "Wrong password." {
+	if got := PasswordFailurePrefix(false, false); got != "Wrong password." {
 		t.Fatalf("unexpected prefix without YubiKey: %q", got)
+	}
+	if got := PasswordFailurePrefix(true, true); got != "Wrong YubiKey or corrupted file." {
+		t.Fatalf("unexpected prefix for YubiKey-only: %q", got)
 	}
 }
 
@@ -73,6 +81,7 @@ func TestVerifyPassword(t *testing.T) {
 }
 
 func TestVerifyPasswordMissingFile(t *testing.T) {
+	t.Parallel()
 	err := verifyPassword(filepath.Join(t.TempDir(), "missing.enc"), []byte("pw"))
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
