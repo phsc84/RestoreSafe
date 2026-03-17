@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"RestoreSafe/internal/operation"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,27 @@ func TestInspectSourceFoldersReportsExpectedStatuses(t *testing.T) {
 	}
 	if statuses[2].Err == nil {
 		t.Fatal("expected missing path to return error")
+	}
+}
+
+func TestCountSourcesOnSameVolumeAsTarget(t *testing.T) {
+	t.Parallel()
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	sources := []sourceFolderStatus{
+		{Resolved: filepath.Join(filepath.Dir(targetDir), "source-a")},
+		{Resolved: filepath.Join(filepath.Dir(targetDir), "source-b")},
+		{Resolved: filepath.Join(filepath.VolumeName(targetDir)+string(filepath.Separator), "other-root"), Err: nil},
+		{Resolved: filepath.Join(filepath.Dir(targetDir), "skipped"), Skip: true},
+		{Resolved: filepath.Join(filepath.Dir(targetDir), "broken"), Err: os.ErrNotExist},
+	}
+
+	got := countSourcesOnSameVolumeAsTarget(targetDir, sources)
+	if got < 2 {
+		t.Fatalf("expected at least 2 same-volume active sources, got %d", got)
+	}
+	if got > 3 {
+		t.Fatalf("expected skipped/error sources to be ignored, got %d", got)
 	}
 }
 
@@ -348,5 +370,57 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 	}
 	if len(warnings) != 1 {
 		t.Fatalf("expected one warning, got %#v", warnings)
+	}
+}
+
+func TestPlanBackupLocalStaging(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		source           string
+		target           string
+		tempDir          string
+		expectEnabled    bool
+		expectSameVolume bool
+	}{
+		{
+			name:             "same-volume source and target with local temp should enable staging",
+			source:           `M:\Documents`,
+			target:           `M:\Backups`,
+			tempDir:          `C:\Temp`,
+			expectEnabled:    true,
+			expectSameVolume: true,
+		},
+		{
+			name:             "same-volume but temp on same volume should disable staging",
+			source:           `M:\Documents`,
+			target:           `M:\Backups`,
+			tempDir:          `M:\Temp`,
+			expectEnabled:    false,
+			expectSameVolume: true,
+		},
+		{
+			name:             "different volumes should disable staging",
+			source:           `M:\Documents`,
+			target:           `C:\Backups`,
+			tempDir:          `C:\Temp`,
+			expectEnabled:    false,
+			expectSameVolume: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			plan := operation.PlanLocalStaging(tt.source, tt.target, tt.tempDir)
+			if plan.Enabled != tt.expectEnabled {
+				t.Errorf("Expected Enabled=%v, got %v", tt.expectEnabled, plan.Enabled)
+			}
+			if plan.SameVolume != tt.expectSameVolume {
+				t.Errorf("Expected SameVolume=%v, got %v", tt.expectSameVolume, plan.SameVolume)
+			}
+		})
 	}
 }

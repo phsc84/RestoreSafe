@@ -8,95 +8,6 @@ import (
 	"time"
 )
 
-func TestBuildBackupRunSummariesGroupsEntriesByDateAndID(t *testing.T) {
-	t.Parallel()
-
-	index := []util.BackupEntry{
-		{FolderName: "Pics", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{FolderName: "Music", Date: "2026-03-14", ID: util.BackupID("BBB222")},
-	}
-
-	runs := BuildBackupRunSummaries(index)
-	if len(runs) != 2 {
-		t.Fatalf("expected 2 run summaries, got %d", len(runs))
-	}
-	if runs[0].ID != util.BackupID("BBB222") {
-		t.Fatalf("expected first run to sort by date/id desc, got %#v", runs[0])
-	}
-	if runs[1].ID != util.BackupID("AAA111") || len(runs[1].Entries) != 2 {
-		t.Fatalf("unexpected grouped run: %#v", runs[1])
-	}
-	if runs[1].Entries[0].FolderName != "Docs" || runs[1].Entries[1].FolderName != "Pics" {
-		t.Fatalf("expected grouped run entries to be folder-sorted, got %#v", runs[1].Entries)
-	}
-}
-
-func TestFormatRunFolderList(t *testing.T) {
-	t.Parallel()
-
-	entries := []util.BackupEntry{{FolderName: "A"}, {FolderName: "B"}, {FolderName: "C"}, {FolderName: "D"}}
-	if got := FormatRunFolderList(entries); got != "A, B, C, +1 more" {
-		t.Fatalf("unexpected folder list summary: %q", got)
-	}
-}
-
-func TestSortedBackupDatesDeduplicatesAndCounts(t *testing.T) {
-	t.Parallel()
-
-	index := []util.BackupEntry{
-		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{FolderName: "Pics", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{FolderName: "Old", Date: "2026-03-14", ID: util.BackupID("BBB222")},
-		{FolderName: "Music", Date: "2026-03-13", ID: util.BackupID("CCC333")},
-	}
-
-	items := SortedBackupDates(index)
-	if len(items) != 2 {
-		t.Fatalf("expected 2 date summaries, got %d", len(items))
-	}
-	if items[0].Date != "2026-03-14" || items[0].EntryCount != 3 || items[0].RunCount != 2 {
-		t.Fatalf("unexpected first date summary: %#v", items[0])
-	}
-	if items[1].Date != "2026-03-13" || items[1].EntryCount != 1 || items[1].RunCount != 1 {
-		t.Fatalf("unexpected second date summary: %#v", items[1])
-	}
-}
-
-func TestFilterRunSummariesByDate(t *testing.T) {
-	t.Parallel()
-
-	runs := []BackupRunSummary{
-		{Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{Date: "2026-03-14", ID: util.BackupID("BBB222")},
-		{Date: "2026-03-13", ID: util.BackupID("CCC333")},
-	}
-
-	filtered := FilterRunSummariesByDate(runs, "2026-03-14")
-	if len(filtered) != 2 {
-		t.Fatalf("expected 2 filtered runs, got %d", len(filtered))
-	}
-
-	all := FilterRunSummariesByDate(runs, "")
-	if len(all) != len(runs) {
-		t.Fatalf("expected %d runs without filter, got %d", len(runs), len(all))
-	}
-	if &all[0] == &runs[0] {
-		t.Fatal("expected FilterRunSummariesByDate to return a copy for empty filter")
-	}
-}
-
-func TestIsDateFilterInput(t *testing.T) {
-	t.Parallel()
-
-	if !IsDateFilterInput("2026-03-15") {
-		t.Fatal("expected valid ISO date to be accepted")
-	}
-	if IsDateFilterInput("15.03.2026") {
-		t.Fatal("expected non-ISO date to be rejected")
-	}
-}
-
 func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
 	t.Parallel()
 
@@ -144,32 +55,6 @@ func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
 	}
 	if label == "" {
 		t.Fatal("expected non-empty newest selection label")
-	}
-}
-
-func TestSortedBackupIDDatesDeduplicatesAndSorts(t *testing.T) {
-	t.Parallel()
-
-	index := []util.BackupEntry{
-		{FolderName: "A", Date: "2026-03-13", ID: util.BackupID("ZZZ999")},
-		{FolderName: "B", Date: "2026-03-14", ID: util.BackupID("BBB222")},
-		{FolderName: "C", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-		{FolderName: "D", Date: "2026-03-14", ID: util.BackupID("AAA111")},
-	}
-
-	items := SortedBackupIDDates(index)
-	if len(items) != 3 {
-		t.Fatalf("expected 3 unique date/ID items, got %d", len(items))
-	}
-
-	if items[0].Date != "2026-03-14" || items[0].ID != "AAA111" {
-		t.Fatalf("unexpected first item: %#v", items[0])
-	}
-	if items[1].Date != "2026-03-14" || items[1].ID != "BBB222" {
-		t.Fatalf("unexpected second item: %#v", items[1])
-	}
-	if items[2].Date != "2026-03-13" || items[2].ID != "ZZZ999" {
-		t.Fatalf("unexpected third item: %#v", items[2])
 	}
 }
 

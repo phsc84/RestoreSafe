@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
@@ -79,5 +80,18 @@ func TestResolveVerifySelectionNonInteractiveUsesNewestRun(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(selection), "newest") {
 		t.Fatalf("expected selection label to mention newest, got %q", selection)
+	}
+}
+
+func TestPlanVerifyLocalStaging(t *testing.T) {
+	t.Parallel()
+	// Just test that the staging behavior is consistent with restore/backup behavior
+	// The actual path detection is tested in util/path_test.go
+	plan := operation.PlanLocalStaging(`M:\Backups`, `M:\Restore`, `C:\Temp`)
+	if !plan.Enabled {
+		t.Error("Expected staging to be enabled for same-volume sources with local temp")
+	}
+	if !plan.SameVolume {
+		t.Error("Expected same-volume flag to be set")
 	}
 }

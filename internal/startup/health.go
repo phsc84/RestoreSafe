@@ -68,6 +68,14 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 		})
 	}
 
+	if sharedCount := countSourcesOnSameVolumeAsTarget(targetDir, sourceStatuses); sharedCount > 0 {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    "Backup layout",
+			Detail:   fmt.Sprintf("%d source folder(s) share the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share or use local staging.", sharedCount, util.VolumeDisplay(targetDir)),
+		})
+	}
+
 	items = append(items, checkTargetFolderHealth(targetDir)...)
 	items = append(items, checkTempDirHealth()...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
@@ -317,14 +325,27 @@ func orphanChallengeFiles(actual, expected map[string]bool) []string {
 	return orphans
 }
 
+func countSourcesOnSameVolumeAsTarget(targetDir string, sources []backup.SourceFolderStatus) int {
+	count := 0
+	for _, src := range sources {
+		if src.Err != nil || src.Skip {
+			continue
+		}
+		if util.SameVolume(src.Resolved, targetDir) {
+			count++
+		}
+	}
+	return count
+}
+
 func runKey(entry util.BackupEntry) string {
 	return entry.Date + "|" + string(entry.ID)
 }
 
 func printStartupHealthCheck(items []healthItem) {
-	fmt.Println()
+	fmt.Println("----------------------")
 	fmt.Println("Startup health check")
-	fmt.Println("--------------------")
+	fmt.Println("----------------------")
 
 	okCount := 0
 	warnCount := 0

@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"time"
 )
 
 const splitWriteBufferSize = 32 * 1024 * 1024
@@ -47,11 +46,22 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	log.Info("RestoreSafe backup started - ID: %s, date: %s", string(id), date)
 
-	printBackupPreflight(cfg, targetDir, sources)
 	if err := validateSourceFolders(sources); err != nil {
 		log.Error("Preflight validation failed: %v", err)
 		return err
 	}
+
+	// Plan local staging to mitigate same-volume read+write contention.
+	firstValidSource := ""
+	for _, src := range sources {
+		if src.Err == nil && !src.Skip {
+			firstValidSource = src.Resolved
+			break
+		}
+	}
+	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
+
+	printBackupPreflight(cfg, targetDir, sources, stagingPlan)
 
 	if cfg.NonInteractive {
 		log.Info("Non-interactive mode: start confirmation skipped")
@@ -110,6 +120,24 @@ func Run(cfg *util.Config, exeDir string) error {
 	totalPartsCreated := 0
 	processedFolders := make([]string, 0)
 
+	// Determine actual working directory (staging or target).
+	workingDir := targetDir
+	cleanup := func() {}
+	if stagingPlan.Enabled {
+		stagingDir, err := os.MkdirTemp(stagingPlan.ResolvedTempDir, "restoresafe-backup-stage-*")
+		if err != nil {
+			log.Error("Failed to create local staging directory: %v", err)
+			return fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
+		}
+		log.Info("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(stagingDir), filepath.ToSlash(targetDir))
+		workingDir = stagingDir
+		cleanup = func() {
+			if err := os.RemoveAll(stagingDir); err != nil {
+				log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagingDir), err)
+			}
+		}
+	}
+
 	// Back up each source folder.
 	for _, source := range sources {
 		if source.Warning != "" {
@@ -143,9 +171,10 @@ func Run(cfg *util.Config, exeDir string) error {
 			if cfg.IsYubiKeyOnly() {
 				challengeContent = "NOPW:" + challengeHex
 			}
-			challengePath := util.ChallengeFileName(targetDir, folderName, date, id)
+			challengePath := util.ChallengeFileName(workingDir, folderName, date, id)
 			if err := os.WriteFile(challengePath, []byte(challengeContent), 0o600); err != nil {
 				log.Error("Failed to write challenge file: %v", err)
+				cleanup()
 				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target folder; for YubiKey backups, the .challenge file must be in the same folder as the .enc files.", err)
 			}
 			log.Debug("Challenge file written: %s", challengePath)
@@ -158,6 +187,18 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Warn("Retention cleanup failed: %v", err)
 		warningCount++
 	}
+
+	// Copy results from staging to target if needed.
+	if stagingPlan.Enabled {
+		log.Info("Copying staged backup files from %s to %s", filepath.ToSlash(workingDir), filepath.ToSlash(targetDir))
+		if err := copyBackupResults(workingDir, targetDir, log); err != nil {
+			log.Error("Failed to copy staged results to target: %v", err)
+			cleanup()
+			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target folder write permissions and free disk space.", err)
+		}
+		log.Info("Staged backup files copied to target")
+	}
+	cleanup()
 
 	log.Info("Backup completed successfully")
 	printBackupCompletionSummary(processedFolders, totalPartsCreated, logPath, warningCount)
@@ -369,7 +410,7 @@ func sanitizeAliasPart(part string) string {
 	return b.String()
 }
 
-func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFolderStatus) {
+func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFolderStatus, stagingPlan operation.LocalStagingPlan) {
 	fmt.Println()
 	fmt.Println("Backup preflight")
 	fmt.Println("----------------")
@@ -397,6 +438,12 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 		if estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes {
 			fmt.Println("  [WARN] estimated source size exceeds currently free space on target")
 		}
+	}
+
+	if stagingPlan.Enabled {
+		fmt.Printf("Local staging   : enabled via %s because source and target folders share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+	} else if stagingPlan.SameVolume {
+		fmt.Printf("  [WARN] Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}
 
 	fmt.Println("Source folders:")
@@ -429,6 +476,19 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 		}
 	}
 	fmt.Println()
+}
+
+func countSourcesOnSameVolumeAsTarget(targetDir string, sources []sourceFolderStatus) int {
+	count := 0
+	for _, src := range sources {
+		if src.Err != nil || src.Skip {
+			continue
+		}
+		if util.SameVolume(src.Resolved, targetDir) {
+			count++
+		}
+	}
+	return count
 }
 
 func validateSourceFolders(sources []sourceFolderStatus) error {
@@ -559,8 +619,15 @@ func backupFolder(
 	counters := &backupCounters{}
 
 	progressDone := make(chan struct{})
-	go logBackupProgress(log, folderName, &counters.inBytes, &counters.outBytes, &counters.outWriteCalls, cfg.IODiagnostics, progressDone)
-	defer close(progressDone)
+	progressStopped := make(chan struct{})
+	go func() {
+		logBackupProgress(log, folderName, &counters.inBytes, &counters.outBytes, &counters.outWriteCalls, cfg.IODiagnostics, progressDone)
+		close(progressStopped)
+	}()
+	defer func() {
+		close(progressDone)
+		<-progressStopped
+	}()
 
 	tarErrCh := startTarProducer(log, srcDir, targetDir, pw)
 	encErr := runEncryptStage(log, bw, pr, password, counters)
@@ -686,16 +753,38 @@ func logBackupProgress(log *util.Logger, folderName string, inBytes, outBytes, o
 		return
 	}
 
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
+	operation.LogProgressUntilDone(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, done)
+}
 
-	for {
-		select {
-		case <-done:
-			operation.LogStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, true)
-			return
-		case <-ticker.C:
-			operation.LogStreamProgress(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, false)
+// copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.
+func copyBackupResults(stagingDir, targetDir string, log *util.Logger) error {
+	entries, err := os.ReadDir(stagingDir)
+	if err != nil {
+		return fmt.Errorf("Failed to list staging directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		srcPath := filepath.Join(stagingDir, entry.Name())
+		dstPath := filepath.Join(targetDir, entry.Name())
+
+		// Only copy .enc and .challenge files
+		ext := filepath.Ext(entry.Name())
+		if ext != ".enc" && ext != ".challenge" {
+			continue
+		}
+
+		if err := operation.CopyFile(srcPath, dstPath); err != nil {
+			return fmt.Errorf("Failed to copy %s to target: %w", entry.Name(), err)
+		}
+
+		if log != nil {
+			log.Debug("Copied staged file to target: %s", entry.Name())
 		}
 	}
+
+	return nil
 }

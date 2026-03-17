@@ -107,6 +107,45 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	}
 }
 
+func TestCollectStartupHealthItemsWarnsOnSameVolumeLayout(t *testing.T) {
+	t.Parallel()
+
+	exeDir := t.TempDir()
+	first := filepath.Join(exeDir, "source-a")
+	second := filepath.Join(exeDir, "source-b")
+	target := filepath.Join(exeDir, "target")
+
+	if err := os.MkdirAll(first, 0o750); err != nil {
+		t.Fatalf("failed to create first source: %v", err)
+	}
+	if err := os.MkdirAll(second, 0o750); err != nil {
+		t.Fatalf("failed to create second source: %v", err)
+	}
+	if err := os.MkdirAll(target, 0o750); err != nil {
+		t.Fatalf("failed to create target: %v", err)
+	}
+
+	cfg := &util.Config{
+		SourceFolders: []string{first, second},
+		TargetFolder:  target,
+		SplitSizeMB:   64,
+		LogLevel:      "info",
+	}
+
+	items := collectStartupHealthItems(cfg, exeDir)
+	hasLayoutWarn := false
+	for _, item := range items {
+		if item.Scope == "Backup layout" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "same drive/share") {
+			hasLayoutWarn = true
+			break
+		}
+	}
+
+	if !hasLayoutWarn {
+		t.Fatalf("expected backup layout warning for same-volume source/target, got items: %#v", items)
+	}
+}
+
 func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t *testing.T) {
 	t.Parallel()
 

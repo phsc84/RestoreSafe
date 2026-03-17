@@ -94,6 +94,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	printStartupBanner(Version)
 	startup.RunStartupHealthCheck(cfg, exeDir)
 
 	// Non-interactive CLI mode: skip start confirmations and exit with a proper code.
@@ -123,6 +124,7 @@ func main() {
 	for {
 		printMenu()
 		choice := getUserInput("Select an option (1-4): ")
+		fmt.Println()
 
 		switch strings.TrimSpace(choice) {
 		case "1":
@@ -153,11 +155,18 @@ func main() {
 	}
 }
 
-func printMenu() {
+func printStartupBanner(version string) {
 	fmt.Println("========================================")
-	fmt.Printf("RestoreSafe v%s\n", Version)
+	fmt.Printf("RestoreSafe v%s\n", version)
 	fmt.Println("Secure backup application")
 	fmt.Println("========================================")
+	fmt.Println()
+}
+
+func printMenu() {
+	fmt.Println("----------------------")
+	fmt.Println("Menu")
+	fmt.Println("----------------------")
 	fmt.Println()
 	fmt.Println("1. Create backup")
 	fmt.Println("2. Restore backup")

@@ -7,6 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Added automatic local staging for restore when the backup folder and restore target share the same drive/share and TEMP/TMP is on a different local drive. RestoreSafe now copies the selected `.enc` parts to local temp storage first to reduce same-share read/write contention.
 - Added password-less YubiKey-only mode. Authentication is now configured via a single `authentication_mode` key in `config.yaml` with three numeric options: `1` (default, password only), `2` (password + YubiKey HMAC-SHA1 second factor), and `3` (YubiKey only, no password). The challenge file written by a YubiKey-only backup is marked with a `NOPW:` prefix so that restore and verify detect the mode without relying on `config.yaml`. Backup and restore/verify preflight summaries display the resolved authentication label.
 - Added CLI flags `-backup`, `-restore`, and `-verify` to run operations directly without opening the interactive menu.
 - Added safety guard for unattended backup: non-interactive `-backup` now requires `authentication_mode: 3` and exits with an error otherwise.

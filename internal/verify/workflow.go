@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 )
 
@@ -26,6 +28,10 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	selected, selection, err := resolveVerifySelection(cfg, targetDir, index)
 	if err != nil {
+		if errors.Is(err, operation.ErrSelectionCancelled) {
+			fmt.Println("Verification cancelled.")
+			return nil
+		}
 		return err
 	}
 
@@ -40,8 +46,9 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Info("Verification started - Selection: %q", selection)
 	}
 
+	stagingPlan := operation.PlanLocalStaging(targetDir, targetDir, os.TempDir())
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflight(targetDir, preflight, requiresYubiKey, yubiKeyOnly)
+	printVerifyPreflight(targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		if log != nil {
 			log.Error("%v", err)
@@ -83,15 +90,36 @@ func Run(cfg *util.Config, exeDir string) error {
 	if log != nil {
 		log.Info("Verifying %d selected item(s)", len(selected))
 	}
+	verifyDir := targetDir
+	var cleanup = func() {}
 
-	if err := verifySelectedEntries(selected, targetDir, password, log); err != nil {
+	if stagingPlan.Enabled {
+		stagedDir, err := operation.StageLocalDirectory(targetDir, targetDir, stagingPlan.ResolvedTempDir, log)
+		if err != nil {
+			if log != nil {
+				log.Error("Local staging failed: %v", err)
+			}
+			return fmt.Errorf("Local staging failed: %w", err)
+		}
+		verifyDir = stagedDir
+		cleanup = func() {
+			if err := os.RemoveAll(stagedDir); err != nil && log != nil {
+				log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagedDir), err)
+			}
+		}
+	}
+
+	if err := verifySelectedEntries(selected, verifyDir, password, log); err != nil {
+		cleanup()
 		return err
 	}
+	cleanup()
 
 	if log != nil {
 		log.Info("Verification completed successfully.")
+	} else {
+		fmt.Println("\nVerification completed successfully.")
 	}
-	fmt.Println("\nVerification completed successfully.")
 	return nil
 }
 
@@ -123,13 +151,17 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 	return items
 }
 
-func printVerifyPreflight(targetDir string, items []verifyPreflightItem, requiresYubiKey, yubiKeyOnly bool) {
+func printVerifyPreflight(targetDir string, items []verifyPreflightItem, requiresYubiKey, yubiKeyOnly bool, stagingPlan operation.LocalStagingPlan) {
 	fmt.Println()
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
-	fmt.Printf("Backup folder   : %s\n", targetDir)
+	displayBackupFolder := filepath.ToSlash(targetDir)
+	fmt.Printf("Backup folder   : %s\n", displayBackupFolder)
 	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	fmt.Printf("Items selected  : %d\n", len(items))
+	if stagingPlan.Enabled {
+		fmt.Printf("Local staging   : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+	}
 	fmt.Println("Selection:")
 	for _, item := range items {
 		sizeMB := float64(item.TotalSizeBytes) / (1024 * 1024)
@@ -162,7 +194,7 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 			if log != nil {
 				log.Error("Failed to verify folder %q: %v", entry.String(), err)
 			}
-			return fmt.Errorf("Failed to verify folder %q: %w. Remedy: Check .enc part completeness and password/YubiKey.", entry.String(), err)
+			return fmt.Errorf("Failed to verify folder %q: %w", entry.String(), err)
 		}
 		if log != nil {
 			log.Info("Folder %q successfully verified", entry.FolderName)
@@ -188,8 +220,15 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
 	progressDone := make(chan struct{})
-	go operation.LogProgressUntilDone(log, entry.FolderName, "verified", &inBytes, &outBytes, &outWriteCalls, progressDone)
-	defer close(progressDone)
+	progressStopped := make(chan struct{})
+	go func() {
+		operation.LogProgressUntilDone(log, entry.FolderName, "verified", &inBytes, &outBytes, &outWriteCalls, progressDone)
+		close(progressStopped)
+	}()
+	defer func() {
+		close(progressDone)
+		<-progressStopped
+	}()
 
 	pr, pw := io.Pipe()
 	decErrCh := make(chan error, 1)
@@ -211,12 +250,12 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 
 	if decErr != nil {
 		if errors.Is(decErr, security.ErrWrongPassword) {
-			return security.ErrWrongPassword
+			return fmt.Errorf("%w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder.", security.ErrWrongPassword)
 		}
-		return fmt.Errorf("Decryption failed: %w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder.", decErr)
+		return fmt.Errorf("Decryption failed: %w", decErr)
 	}
 	if validateErr != nil {
-		return fmt.Errorf("Archive validation failed: %w. Remedy: Check backup completeness and recreate the backup if needed.", validateErr)
+		return fmt.Errorf("Archive validation failed: %w", validateErr)
 	}
 
 	return nil

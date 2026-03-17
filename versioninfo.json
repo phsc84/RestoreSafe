@@ -1,14 +1,14 @@
 {
     "FixedFileInfo":  {
                           "FileVersion":  {
-                                              "Major":  1,
-                                              "Minor":  2,
+                                              "Major":  2,
+                                              "Minor":  0,
                                               "Patch":  0,
                                               "Build":  0
                                           },
                           "ProductVersion":  {
-                                                 "Major":  1,
-                                                 "Minor":  2,
+                                                 "Major":  2,
+                                                 "Minor":  0,
                                                  "Patch":  0,
                                                  "Build":  0
                                              }
@@ -16,12 +16,12 @@
     "StringFileInfo":  {
                            "CompanyName":  "phsc84",
                            "FileDescription":  "RestoreSafe - Secure Backup",
-                           "FileVersion":  "1.2.0.0",
+                           "FileVersion":  "2.0.0.0",
                            "InternalName":  "RestoreSafe",
                            "LegalCopyright":  "Copyright (c) 2026 phsc84 and contributors",
                            "OriginalFilename":  "RestoreSafe.exe",
                            "ProductName":  "RestoreSafe",
-                           "ProductVersion":  "1.2.0"
+                           "ProductVersion":  "2.0.0"
                        },
     "VarFileInfo":  {
                         "Translation":  {

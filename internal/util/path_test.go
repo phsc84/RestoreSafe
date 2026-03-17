@@ -42,3 +42,31 @@ func TestFormatBytesBinary(t *testing.T) {
 		}
 	}
 }
+
+func TestSameVolume(t *testing.T) {
+	t.Parallel()
+
+	if !SameVolume(`M:\Backups`, `M:\Restore`) {
+		t.Fatal("expected same mapped drive letter to be treated as same volume")
+	}
+	if SameVolume(`M:\Backups`, `N:\Restore`) {
+		t.Fatal("expected different drive letters to be treated as different volumes")
+	}
+	if !SameVolume(`\\server\share\Backups`, `\\server\share\Restore`) {
+		t.Fatal("expected same UNC share to be treated as same volume")
+	}
+	if SameVolume(`\\server\share-a\Backups`, `\\server\share-b\Restore`) {
+		t.Fatal("expected different UNC shares to be treated as different volumes")
+	}
+}
+
+func TestVolumeDisplay(t *testing.T) {
+	t.Parallel()
+
+	if got := VolumeDisplay(`M:\Backups\Folder`); got != "M:" {
+		t.Fatalf("expected drive display M:, got %q", got)
+	}
+	if got := VolumeDisplay(`\\server\share\Folder`); got != "//server/share" {
+		t.Fatalf("expected UNC display //server/share, got %q", got)
+	}
+}

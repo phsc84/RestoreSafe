@@ -1,6 +1,8 @@
 package restore
 
 import (
+	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
@@ -113,5 +115,64 @@ func TestResolveRestoreSelectionNonInteractiveUsesNewestRun(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(selection), "newest") {
 		t.Fatalf("expected selection label to mention newest, got %q", selection)
+	}
+}
+
+func TestPlanRestoreLocalStaging(t *testing.T) {
+	t.Parallel()
+
+	plan := operation.PlanLocalStaging(`M:\Backups`, `M:\Restore`, `C:\Temp`)
+	if !plan.Enabled {
+		t.Fatal("expected local staging to be enabled for same-volume restore with local temp")
+	}
+	if !plan.SameVolume {
+		t.Fatal("expected same-volume flag to be set")
+	}
+
+	plan = operation.PlanLocalStaging(`M:\Backups`, `M:\Restore`, `M:\Temp`)
+	if plan.Enabled {
+		t.Fatal("expected local staging to stay disabled when temp shares the same volume")
+	}
+	if !plan.TempSharesVolume {
+		t.Fatal("expected temp-shares-volume flag to be set")
+	}
+
+	plan = operation.PlanLocalStaging(`M:\Backups`, `C:\Restore`, `C:\Temp`)
+	if plan.Enabled {
+		t.Fatal("expected local staging to stay disabled for cross-volume restore")
+	}
+	if plan.SameVolume {
+		t.Fatal("expected same-volume flag to be false for cross-volume restore")
+	}
+}
+
+func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
+	password := []byte("integration-test-password")
+	fx := testutil.NewRestoreFixture(t, password)
+
+	stagedDir, err := stageBackupEntryLocally(fx.TargetDir, fx.Entry, t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("stageBackupEntryLocally returned error: %v", err)
+	}
+	defer os.RemoveAll(stagedDir)
+
+	originalParts := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	stagedParts := catalog.CollectParts(stagedDir, fx.Entry)
+	if len(stagedParts) != len(originalParts) {
+		t.Fatalf("expected %d staged parts, got %d", len(originalParts), len(stagedParts))
+	}
+
+	for i := range originalParts {
+		originalData, err := os.ReadFile(originalParts[i])
+		if err != nil {
+			t.Fatalf("failed to read original part %q: %v", originalParts[i], err)
+		}
+		stagedData, err := os.ReadFile(stagedParts[i])
+		if err != nil {
+			t.Fatalf("failed to read staged part %q: %v", stagedParts[i], err)
+		}
+		if string(originalData) != string(stagedData) {
+			t.Fatalf("staged part %d does not match original", i)
+		}
 	}
 }

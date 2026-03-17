@@ -175,6 +175,13 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 			}
 			continue
 		}
+		if n == 0 && err == nil {
+			currentPath := ""
+			if r.idx > 0 && r.idx-1 < len(r.paths) {
+				currentPath = r.paths[r.idx-1]
+			}
+			return 0, fmt.Errorf("No progress while reading part file %q. Remedy: Check drive/network availability and retry.", currentPath)
+		}
 		return n, err
 	}
 }
