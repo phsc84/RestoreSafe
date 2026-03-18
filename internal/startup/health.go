@@ -59,21 +59,21 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 				Scope:    "Source folder",
 				Detail:   fmt.Sprintf("%s -> %s", src.Resolved, src.Warning),
 			})
-			continue
+		} else {
+			items = append(items, healthItem{
+				Severity: healthOK,
+				Scope:    "Source folder",
+				Detail:   src.Resolved,
+			})
 		}
-		items = append(items, healthItem{
-			Severity: healthOK,
-			Scope:    "Source folder",
-			Detail:   src.Resolved,
-		})
-	}
 
-	if sharedCount := countSourcesOnSameVolumeAsTarget(targetDir, sourceStatuses); sharedCount > 0 {
-		items = append(items, healthItem{
-			Severity: healthWarn,
-			Scope:    "Backup layout",
-			Detail:   fmt.Sprintf("%d source folder(s) share the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share or use local staging.", sharedCount, util.VolumeDisplay(targetDir)),
-		})
+		if !src.Skip && util.SameVolume(src.Resolved, targetDir) {
+			items = append(items, healthItem{
+				Severity: healthWarn,
+				Scope:    "Source folder warning",
+				Detail:   fmt.Sprintf("Source folder %s shares the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share or use local staging.", src.Resolved, util.VolumeDisplay(targetDir)),
+			})
+		}
 	}
 
 	items = append(items, checkTargetFolderHealth(targetDir)...)
@@ -323,19 +323,6 @@ func orphanChallengeFiles(actual, expected map[string]bool) []string {
 	}
 	sort.Strings(orphans)
 	return orphans
-}
-
-func countSourcesOnSameVolumeAsTarget(targetDir string, sources []backup.SourceFolderStatus) int {
-	count := 0
-	for _, src := range sources {
-		if src.Err != nil || src.Skip {
-			continue
-		}
-		if util.SameVolume(src.Resolved, targetDir) {
-			count++
-		}
-	}
-	return count
 }
 
 func runKey(entry util.BackupEntry) string {

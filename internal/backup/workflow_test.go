@@ -2,10 +2,14 @@ package backup
 
 import (
 	"RestoreSafe/internal/operation"
+	"RestoreSafe/internal/util"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestInspectSourceFoldersReportsExpectedStatuses(t *testing.T) {
@@ -423,4 +427,125 @@ func TestPlanBackupLocalStaging(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
+	tempRoot := t.TempDir()
+	sourceDir := filepath.Join(tempRoot, "source")
+	targetDir := filepath.Join(tempRoot, "target")
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(sourceDir, "sample.txt"), []byte("hello"), 0o600); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	logPath := filepath.Join(targetDir, fmt.Sprintf("order-%d.log", time.Now().UnixNano()))
+	logger, err := util.NewLogger(logPath, "debug")
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
+	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), cfg, logger)
+	logger.Close()
+	if backupErr != nil {
+		t.Fatalf("backupFolder failed: %v", backupErr)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	logContent := string(data)
+
+	tarLine := "Starting TAR creation for: " + sourceDir
+	encryptLine := "Starting encryption..."
+	tarIndex := strings.Index(logContent, tarLine)
+	encryptIndex := strings.Index(logContent, encryptLine)
+	if tarIndex < 0 {
+		t.Fatalf("expected TAR creation debug line in log, got: %q", logContent)
+	}
+	if encryptIndex < 0 {
+		t.Fatalf("expected encryption debug line in log, got: %q", logContent)
+	}
+	if tarIndex > encryptIndex {
+		t.Fatalf("expected TAR creation log before encryption log, got log: %q", logContent)
+	}
+}
+
+func TestPrintBackupPreflightPlacesSameVolumeWarningAfterSourceFolder(t *testing.T) {
+	t.Parallel()
+
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
+	sources := []sourceFolderStatus{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
+
+	output := captureStdout(t, func() {
+		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
+	})
+
+	sourceLine := "[OK]    " + sourceDir
+	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
+	sourceIndex := strings.Index(output, sourceLine)
+	warnIndex := strings.Index(output, warnLinePrefix)
+	if sourceIndex < 0 {
+		t.Fatalf("expected source line in output, got: %q", output)
+	}
+	if warnIndex < 0 {
+		t.Fatalf("expected same-volume warning line in output, got: %q", output)
+	}
+	if warnIndex < sourceIndex {
+		t.Fatalf("expected warning after source folder line, got output: %q", output)
+	}
+
+	headerIndex := strings.Index(output, "Source folders:")
+	if headerIndex < 0 {
+		t.Fatalf("expected Source folders header, got: %q", output)
+	}
+	if strings.Contains(output[:headerIndex], warnLinePrefix) {
+		t.Fatalf("did not expect same-volume warning before source folder list, got output: %q", output)
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	originalStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdout pipe: %v", err)
+	}
+	os.Stdout = w
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close stdout writer: %v", err)
+	}
+	os.Stdout = originalStdout
+
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured output: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("failed to close stdout reader: %v", err)
+	}
+
+	return string(data)
 }

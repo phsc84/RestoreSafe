@@ -15,12 +15,12 @@ type BackupRunSummary struct {
 	NewestTime time.Time
 }
 
-func NewestBackupRunSummary(targetDir string, index []util.BackupEntry) (BackupRunSummary, error) {
+func BackupRunSummaries(targetDir string, index []util.BackupEntry) ([]BackupRunSummary, error) {
 	runsByKey := make(map[string]BackupRunSummary)
 	for _, entry := range index {
 		newestTime, err := NewestPartModTime(targetDir, entry)
 		if err != nil {
-			return BackupRunSummary{}, fmt.Errorf("Failed to inspect newest backup set: %w. Remedy: Check whether all part files are readable.", err)
+			return nil, fmt.Errorf("Failed to inspect backup sets: %w. Remedy: Check whether all part files are readable.", err)
 		}
 
 		key := entry.Date + "|" + string(entry.ID)
@@ -35,7 +35,7 @@ func NewestBackupRunSummary(targetDir string, index []util.BackupEntry) (BackupR
 	}
 
 	if len(runsByKey) == 0 {
-		return BackupRunSummary{}, fmt.Errorf("No backups found. Remedy: Check whether .enc files are present in target_folder.")
+		return nil, fmt.Errorf("No backups found. Remedy: Check whether .enc files are present in target_folder.")
 	}
 
 	runs := make([]BackupRunSummary, 0, len(runsByKey))
@@ -56,6 +56,14 @@ func NewestBackupRunSummary(targetDir string, index []util.BackupEntry) (BackupR
 		return string(runs[i].ID) > string(runs[j].ID)
 	})
 
+	return runs, nil
+}
+
+func NewestBackupRunSummary(targetDir string, index []util.BackupEntry) (BackupRunSummary, error) {
+	runs, err := BackupRunSummaries(targetDir, index)
+	if err != nil {
+		return BackupRunSummary{}, fmt.Errorf("Failed to inspect newest backup set: %w", err)
+	}
 	return runs[0], nil
 }
 

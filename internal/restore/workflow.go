@@ -63,9 +63,6 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	restorePath, err := promptRestoreDestination(targetDir)
 	if err != nil {
-		if log != nil {
-			log.Error("Failed to read restore destination: %v", err)
-		}
 		return err
 	}
 
@@ -73,9 +70,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
 	printRestorePreflight(targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan)
 	if err := validateRestorePreflight(preflight); err != nil {
-		if log != nil {
-			log.Error("%v", err)
-		}
 		return err
 	}
 
@@ -87,9 +81,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	} else {
 		confirmed, err := promptStartRestore()
 		if err != nil {
-			if log != nil {
-				log.Error("Failed to read confirmation: %v", err)
-			}
 			return err
 		}
 		if !confirmed {
@@ -109,9 +100,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	rep := selected[0]
 	password, err := operation.ReadPasswordWithRetry(targetDir, rep, "Enter restore password: ", log)
 	if err != nil {
-		if log != nil {
-			log.Error("Password input failed: %v", err)
-		}
 		return err
 	}
 
@@ -141,6 +129,7 @@ func resolveRestoreSelection(cfg *util.Config, targetDir string, index []util.Ba
 }
 
 func promptRestoreDestination(targetDir string) (string, error) {
+	fmt.Println()
 	fmt.Println("Enter restore destination:")
 	fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory")
 	fmt.Println("  - Enter a dot (.) → restore in the target folder itself")
@@ -240,9 +229,6 @@ func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath 
 		if stagingPlan.Enabled {
 			stagedDir, err := stageBackupEntryLocally(targetDir, entry, stagingPlan.ResolvedTempDir, log)
 			if err != nil {
-				if log != nil {
-					log.Error("Local staging failed for %q: %v", entry.String(), err)
-				}
 				return 0, fmt.Errorf("Local staging failed for %q: %w", entry.String(), err)
 			}
 			readDir = stagedDir
@@ -256,9 +242,6 @@ func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath 
 		partCount, err := restoreEntry(entry, readDir, restorePath, password, log)
 		cleanup()
 		if err != nil {
-			if log != nil {
-				log.Error("Failed to restore folder %q: %v", entry.String(), err)
-			}
 			return 0, fmt.Errorf("Failed to restore folder %q: %w", entry.String(), err)
 		}
 		totalPartsProcessed += partCount

@@ -2,7 +2,8 @@ package util
 
 import "fmt"
 
-// FormatBytesBinary formats bytes using binary units (KiB, MiB, GiB, ...).
+// FormatBytesBinary formats bytes using 1024-based steps with user-friendly
+// labels (KB, MB, GB, ...).
 func FormatBytesBinary(bytes uint64) string {
 	const unit = 1024
 	if bytes < unit {
@@ -16,7 +17,7 @@ func FormatBytesBinary(bytes uint64) string {
 		div *= unit
 	}
 
-	labels := []string{"KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+	labels := []string{"KB", "MB", "GB", "TB", "PB", "EB"}
 	if exp >= len(labels) {
 		exp = len(labels) - 1
 	}

@@ -47,7 +47,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	log.Info("RestoreSafe backup started - ID: %s, date: %s", string(id), date)
 
 	if err := validateSourceFolders(sources); err != nil {
-		log.Error("Preflight validation failed: %v", err)
 		return err
 	}
 
@@ -69,7 +68,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	} else {
 		confirmed, err := promptStartBackup()
 		if err != nil {
-			log.Error("Failed to read confirmation: %v", err)
 			return err
 		}
 		if !confirmed {
@@ -88,8 +86,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		var err error
 		password, err = security.ReadPasswordConfirmedWithPrompts("Enter backup password: ", "Re-enter backup password: ")
 		if err != nil {
-			log.Error("Password input failed: %v", err)
-			return fmt.Errorf("Password input failed: %w. Remedy: Enter a non-empty password and confirm it exactly.", err)
+			return err
 		}
 	}
 
@@ -104,7 +101,6 @@ func Run(cfg *util.Config, exeDir string) error {
 		var err error
 		password, challengeHex, err = security.CombineWithPassword(password)
 		if err != nil {
-			log.Error("YubiKey authentication failed: %v", err)
 			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykchalresp is available on PATH.", err)
 		}
 		if cfg.IsYubiKeyOnly() {
@@ -126,7 +122,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	if stagingPlan.Enabled {
 		stagingDir, err := os.MkdirTemp(stagingPlan.ResolvedTempDir, "restoresafe-backup-stage-*")
 		if err != nil {
-			log.Error("Failed to create local staging directory: %v", err)
 			return fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
 		}
 		log.Info("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(stagingDir), filepath.ToSlash(targetDir))
@@ -159,7 +154,6 @@ func Run(cfg *util.Config, exeDir string) error {
 
 		partCount, err := backupFolder(srcAbs, folderName, targetDir, date, id, password, cfg, log)
 		if err != nil {
-			log.Error("Backup of %q failed: %v", srcAbs, err)
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
 		totalPartsCreated += partCount
@@ -173,7 +167,6 @@ func Run(cfg *util.Config, exeDir string) error {
 			}
 			challengePath := util.ChallengeFileName(workingDir, folderName, date, id)
 			if err := os.WriteFile(challengePath, []byte(challengeContent), 0o600); err != nil {
-				log.Error("Failed to write challenge file: %v", err)
 				cleanup()
 				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target folder; for YubiKey backups, the .challenge file must be in the same folder as the .enc files.", err)
 			}
@@ -192,7 +185,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	if stagingPlan.Enabled {
 		log.Info("Copying staged backup files from %s to %s", filepath.ToSlash(workingDir), filepath.ToSlash(targetDir))
 		if err := copyBackupResults(workingDir, targetDir, log); err != nil {
-			log.Error("Failed to copy staged results to target: %v", err)
 			cleanup()
 			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target folder write permissions and free disk space.", err)
 		}
@@ -202,7 +194,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	log.Info("Backup completed successfully")
 	printBackupCompletionSummary(processedFolders, totalPartsCreated, logPath, warningCount)
-	fmt.Printf("\nBackup completed. Log: %s\n", logPath)
+	fmt.Println("\nBackup completed.")
 	return nil
 }
 
@@ -414,11 +406,11 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	fmt.Println()
 	fmt.Println("Backup preflight")
 	fmt.Println("----------------")
-	fmt.Printf("Target folder : %s\n", targetDir)
-	fmt.Printf("Split size    : %d MB\n", cfg.SplitSizeMB)
-	fmt.Printf("Retention keep: %d\n", cfg.RetentionKeep)
-	fmt.Printf("Authentication: %s\n", backupAuthLabel(cfg))
-	fmt.Printf("Log level     : %s\n", strings.ToLower(cfg.LogLevel))
+	fmt.Printf("Target folder   : %s\n", targetDir)
+	fmt.Printf("Split size      : %d MB\n", cfg.SplitSizeMB)
+	fmt.Printf("Retention keep  : %d\n", cfg.RetentionKeep)
+	fmt.Printf("Authentication  : %s\n", backupAuthLabel(cfg))
+	fmt.Printf("Log level       : %s\n", strings.ToLower(cfg.LogLevel))
 
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	if estimatedBytes > 0 {
@@ -442,8 +434,6 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging   : enabled via %s because source and target folders share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
-	} else if stagingPlan.SameVolume {
-		fmt.Printf("  [WARN] Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}
 
 	fmt.Println("Source folders:")
@@ -468,11 +458,15 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 				fmt.Printf("          -> backup name: %s\n", backupName)
 			}
 			fmt.Printf("          -> %s\n", src.Warning)
-			continue
+		} else {
+			fmt.Printf("  [OK]    %s\n", src.Resolved)
+			if backupName != baseName {
+				fmt.Printf("          -> backup name: %s\n", backupName)
+			}
 		}
-		fmt.Printf("  [OK]    %s\n", src.Resolved)
-		if backupName != baseName {
-			fmt.Printf("          -> backup name: %s\n", backupName)
+
+		if !stagingPlan.Enabled && stagingPlan.SameVolume && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
+			fmt.Printf("  [WARN]  Source folder warning: Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}
 	fmt.Println()
@@ -652,7 +646,7 @@ func printBackupCompletionSummary(processedFolders []string, totalPartsCreated i
 	fmt.Println()
 	fmt.Println("Backup summary")
 	fmt.Println("--------------")
-	fmt.Printf("Processed folders: %d (%s)\n", len(processedFolders), summarizeNames(processedFolders))
+	fmt.Printf("Processed folders: %d\n", len(processedFolders))
 	fmt.Printf("Parts created    : %d\n", totalPartsCreated)
 	fmt.Printf("Log file         : %s\n", logPath)
 	if warningCount > 0 {
@@ -660,16 +654,6 @@ func printBackupCompletionSummary(processedFolders []string, totalPartsCreated i
 	} else {
 		fmt.Println("Warnings         : none")
 	}
-}
-
-func summarizeNames(names []string) string {
-	if len(names) == 0 {
-		return "none"
-	}
-	if len(names) <= 3 {
-		return strings.Join(names, ", ")
-	}
-	return fmt.Sprintf("%s, %s, %s, +%d more", names[0], names[1], names[2], len(names)-3)
 }
 
 type backupCounters struct {
@@ -690,8 +674,8 @@ func newSplitOutput(targetDir, folderName, date string, id util.BackupID, splitS
 
 func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWriter) <-chan error {
 	tarErrCh := make(chan error, 1)
+	log.Debug("Starting TAR creation for: %s", srcDir)
 	go func() {
-		log.Debug("Starting TAR creation for: %s", srcDir)
 		err := operation.WriteTar(pw, srcDir, targetDir)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err

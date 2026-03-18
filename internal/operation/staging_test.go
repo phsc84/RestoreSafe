@@ -133,6 +133,9 @@ func TestStageLocalDirectoryStructure(t *testing.T) {
 	tempDir := t.TempDir()
 	sourceDir := filepath.Join(tempDir, "source")
 	stagingBase := filepath.Join(tempDir, "staging")
+	if err := os.MkdirAll(stagingBase, 0o750); err != nil {
+		t.Fatalf("Failed to create staging base directory: %v", err)
+	}
 
 	// Create source structure
 	if err := os.MkdirAll(filepath.Join(sourceDir, "subdir"), 0o750); err != nil {
@@ -162,7 +165,7 @@ func TestStageLocalDirectoryStructure(t *testing.T) {
 
 	// Verify structure
 	for path, expectedContent := range files {
-		stagedPath := filepath.Join(stagedDir, "source", path)
+		stagedPath := filepath.Join(stagedDir, path)
 		if _, err := os.Stat(stagedPath); err != nil {
 			t.Errorf("Staged file not found: %s", path)
 			continue

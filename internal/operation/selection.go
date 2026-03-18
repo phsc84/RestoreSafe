@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrSelectionCancelled indicates that the user intentionally cancelled selection.
@@ -15,7 +16,9 @@ var ErrSelectionCancelled = errors.New("selection cancelled")
 // PromptBackupSelection asks the user to choose one or more backup entries.
 func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
 	for {
-		printBackupSelectionPrompt(action, index)
+		if err := printBackupSelectionPrompt(action, targetDir, index); err != nil {
+			return nil, "", err
+		}
 
 		selection, err := security.ReadLine("Selection: ")
 		if err != nil {
@@ -66,11 +69,17 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 	}
 }
 
-func printBackupSelectionPrompt(action string, index []util.BackupEntry) {
+func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEntry) error {
 	fmt.Println("Available backups:")
-	entries := catalog.SortedEntries(index)
-	for _, entry := range entries {
-		fmt.Printf("  - %s\n", entry.String())
+	runs, err := catalog.BackupRunSummaries(targetDir, index)
+	if err != nil {
+		return err
+	}
+	for _, run := range runs {
+		fmt.Printf("  - Backup ID: %s / Timestamp: %s\n", run.ID, formatBackupRunTimestamp(run.NewestTime))
+		for _, entry := range run.Entries {
+			fmt.Printf("    - %s\n", entry.String())
+		}
 	}
 	fmt.Println()
 
@@ -81,4 +90,9 @@ func printBackupSelectionPrompt(action string, index []util.BackupEntry) {
 	fmt.Printf("  - Enter specific backup (e.g. MyFolder_2024-01-15_ABC123) -> only this folder will be %s\n", completedAction)
 	fmt.Printf("  - Enter q -> cancel\n")
 	fmt.Println()
+	return nil
+}
+
+func formatBackupRunTimestamp(ts time.Time) string {
+	return ts.Local().Format("2006-01-02 15:04:05")
 }

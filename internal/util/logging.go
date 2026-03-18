@@ -92,7 +92,6 @@ func (l *Logger) Close() {
 		}
 		// Cleanup temp file.
 		_ = os.Remove(l.actualPath)
-		fmt.Fprintf(os.Stderr, "Log file successfully copied to: %s\n", l.originalPath)
 	}
 }
 

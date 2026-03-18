@@ -119,6 +119,49 @@ func TestWriteTarAndExtractTarRoundTripWithExclude(t *testing.T) {
 	}
 }
 
+// Regression: when the source folder is a sub-directory of the exclude dir
+// (e.g. source=Downloads/Auto, target=Downloads), the exclude dir must not
+// be applied — it can never appear inside the walk and would otherwise cause
+// the root of the walk to be skipped, producing an empty archive.
+func TestWriteTarDoesNotExcludeWhenExcludeDirIsParentOfSrc(t *testing.T) {
+	t.Parallel()
+
+	// build: parent/src/file.txt
+	parent := t.TempDir()
+	srcDir := filepath.Join(parent, "src")
+	if err := os.MkdirAll(srcDir, 0o750); err != nil {
+		t.Fatalf("failed to create srcDir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("data"), 0o600); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+
+	// Pass the parent as the exclude dir (simulates target=parent, source=parent/src).
+	var archive bytes.Buffer
+	if err := WriteTar(&archive, srcDir, parent); err != nil {
+		t.Fatalf("WriteTar returned error: %v", err)
+	}
+
+	// The archive must not be empty — file.txt must be present.
+	tr := tar.NewReader(&archive)
+	found := false
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("reading archive: %v", err)
+		}
+		if hdr.Name == "file.txt" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected file.txt in archive but archive was empty or file was missing")
+	}
+}
+
 func TestExtractTarRejectsPathTraversal(t *testing.T) {
 	t.Parallel()
 

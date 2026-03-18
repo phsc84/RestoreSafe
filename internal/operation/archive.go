@@ -20,13 +20,22 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 	srcDir = filepath.Clean(srcDir)
 
-	// Prepare cleaned exclude dirs
+	// Prepare cleaned exclude dirs, keeping only those that are inside srcDir.
+	// An exclude dir outside srcDir (e.g. a parent) can never appear in the
+	// walk and must not be added — otherwise it would erroneously match srcDir
+	// itself and skip the entire archive.
 	exs := make([]string, 0, len(excludeDirs))
 	for _, e := range excludeDirs {
 		if e == "" {
 			continue
 		}
-		exs = append(exs, filepath.Clean(e))
+		ce := filepath.Clean(e)
+		rel, relErr := filepath.Rel(srcDir, ce)
+		if relErr != nil || strings.HasPrefix(rel, "..") {
+			// ce is not inside srcDir; nothing in the walk can match it.
+			continue
+		}
+		exs = append(exs, ce)
 	}
 
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {

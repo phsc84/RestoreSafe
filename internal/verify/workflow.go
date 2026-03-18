@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 )
 
@@ -50,9 +51,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	preflight := buildVerifyPreflight(selected, targetDir)
 	printVerifyPreflight(targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan)
 	if err := validateVerifyPreflight(preflight); err != nil {
-		if log != nil {
-			log.Error("%v", err)
-		}
 		return err
 	}
 
@@ -64,9 +62,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	} else {
 		confirmed, err := operation.PromptStartAction("verification")
 		if err != nil {
-			if log != nil {
-				log.Error("Failed to read confirmation: %v", err)
-			}
 			return err
 		}
 		if !confirmed {
@@ -80,9 +75,6 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
 	if err != nil {
-		if log != nil {
-			log.Error("Password input failed: %v", err)
-		}
 		return err
 	}
 
@@ -94,13 +86,12 @@ func Run(cfg *util.Config, exeDir string) error {
 	var cleanup = func() {}
 
 	if stagingPlan.Enabled {
-		stagedDir, err := operation.StageLocalDirectory(targetDir, targetDir, stagingPlan.ResolvedTempDir, log)
+		fmt.Println("Staging selected backups locally. This can take a moment on network storage.")
+		stagedDir, err := stageSelectedVerifyParts(selected, targetDir, stagingPlan.ResolvedTempDir, log)
 		if err != nil {
-			if log != nil {
-				log.Error("Local staging failed: %v", err)
-			}
 			return fmt.Errorf("Local staging failed: %w", err)
 		}
+		fmt.Println("Local staging completed.")
 		verifyDir = stagedDir
 		cleanup = func() {
 			if err := os.RemoveAll(stagedDir); err != nil && log != nil {
@@ -188,12 +179,49 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	return nil
 }
 
+func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir string, log *util.Logger) (string, error) {
+	stagingDir, err := os.MkdirTemp(tempDir, "verify-stage-*")
+	if err != nil {
+		return "", fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
+	}
+
+	copied := 0
+	seen := make(map[string]struct{})
+	for _, entry := range selected {
+		parts := catalog.CollectParts(sourceDir, entry)
+		if len(parts) == 0 {
+			os.RemoveAll(stagingDir)
+			return "", fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same folder.", entry.String())
+		}
+
+		for _, partPath := range parts {
+			if _, exists := seen[partPath]; exists {
+				continue
+			}
+			seen[partPath] = struct{}{}
+
+			destinationPath := filepath.Join(stagingDir, filepath.Base(partPath))
+			if err := operation.CopyFile(partPath, destinationPath); err != nil {
+				os.RemoveAll(stagingDir)
+				if strings.Contains(err.Error(), "Remedy:") {
+					return "", err
+				}
+				return "", fmt.Errorf("Failed to stage selected part %q: %w. Remedy: Check network availability, TEMP/TMP free space, and write permissions.", filepath.Base(partPath), err)
+			}
+			copied++
+		}
+	}
+
+	if log != nil {
+		log.Info("Local staging enabled: staged %d selected part file(s) to %s", copied, filepath.ToSlash(stagingDir))
+	}
+
+	return stagingDir, nil
+}
+
 func verifySelectedEntries(selected []util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
 	for _, entry := range selected {
 		if err := verifyEntry(entry, targetDir, password, log); err != nil {
-			if log != nil {
-				log.Error("Failed to verify folder %q: %v", entry.String(), err)
-			}
 			return fmt.Errorf("Failed to verify folder %q: %w", entry.String(), err)
 		}
 		if log != nil {
