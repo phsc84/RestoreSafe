@@ -1,8 +1,11 @@
 package operation
 
 import (
+	"RestoreSafe/internal/testutil"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -157,9 +160,9 @@ func TestStageLocalDirectoryStructure(t *testing.T) {
 	}
 
 	// Stage directory
-	stagedDir, err := StageLocalDirectory(sourceDir, sourceDir, stagingBase, nil)
+	stagedDir, err := testutil.StageLocalDirectory(sourceDir, stagingBase)
 	if err != nil {
-		t.Fatalf("StageLocalDirectory failed: %v", err)
+		t.Fatalf("testutil.StageLocalDirectory failed: %v", err)
 	}
 	defer os.RemoveAll(stagedDir)
 
@@ -180,5 +183,70 @@ func TestStageLocalDirectoryStructure(t *testing.T) {
 		if string(content) != expectedContent {
 			t.Errorf("File %s has wrong content: expected %q, got %q", path, expectedContent, content)
 		}
+	}
+}
+
+func TestCreateStagingDirCreatesDirectory(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	stagingDir, err := CreateStagingDir(base, "stage-*")
+	if err != nil {
+		t.Fatalf("CreateStagingDir failed: %v", err)
+	}
+
+	info, statErr := os.Stat(stagingDir)
+	if statErr != nil {
+		t.Fatalf("expected staging directory to exist: %v", statErr)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected staging path to be a directory, got file: %s", stagingDir)
+	}
+
+	CleanupStagingDir(stagingDir, nil)
+}
+
+func TestCreateStagingDirReturnsRemedyErrorOnFailure(t *testing.T) {
+	t.Parallel()
+
+	nonexistentParent := filepath.Join(t.TempDir(), "missing-parent")
+	_, err := CreateStagingDir(nonexistentParent, "stage-*")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Remedy:") {
+		t.Fatalf("expected remedy hint in error, got: %v", err)
+	}
+}
+
+func TestCleanupStagingDirRemovesDirectory(t *testing.T) {
+	t.Parallel()
+
+	stagingDir, err := os.MkdirTemp(t.TempDir(), "cleanup-*")
+	if err != nil {
+		t.Fatalf("failed to create staging dir: %v", err)
+	}
+
+	CleanupStagingDir(stagingDir, nil)
+
+	_, statErr := os.Stat(stagingDir)
+	if !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected staging dir removed, got stat error: %v", statErr)
+	}
+}
+
+func TestCleanupStagingDirDuringRemovesDirectory(t *testing.T) {
+	t.Parallel()
+
+	stagingDir, err := os.MkdirTemp(t.TempDir(), "cleanup-during-*")
+	if err != nil {
+		t.Fatalf("failed to create staging dir: %v", err)
+	}
+
+	CleanupStagingDirDuring(stagingDir, "error recovery", nil)
+
+	_, statErr := os.Stat(stagingDir)
+	if !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected staging dir removed, got stat error: %v", statErr)
 	}
 }

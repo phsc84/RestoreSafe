@@ -76,7 +76,7 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 		return err
 	}
 	for _, run := range runs {
-		fmt.Printf("  - Backup ID: %s / Timestamp: %s\n", run.ID, formatBackupRunTimestamp(run.NewestTime))
+		fmt.Printf("  - Backup ID: %s / Timestamp (local): %s\n", run.ID, formatBackupRunTimestamp(run.NewestTime))
 		for _, entry := range run.Entries {
 			fmt.Printf("    - %s\n", entry.String())
 		}
@@ -94,5 +94,5 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 }
 
 func formatBackupRunTimestamp(ts time.Time) string {
-	return ts.Local().Format("2006-01-02 15:04:05")
+	return ts.Local().Format("2006-01-02 15:04:05 MST")
 }

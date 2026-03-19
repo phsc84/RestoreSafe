@@ -235,10 +235,20 @@ Sample:
 
 ## YubiKey setup
 
-1. Install YubiKey Manager: [YubiKey Manager Downloads](https://www.yubico.com/support/download/yubikey-manager/)
-2. Open Applications > OTP > Long Touch (Slot 2) > Configure (required for HMAC-SHA1 challenge-response).
-3. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
-4. Insert and touch the YubiKey when prompted during backup or restore.
+1. Install YubiKey Manager: [YubiKey Manager Downloads](https://www.yubico.com/support/download/yubikey-manager/) (includes the `ykman` CLI tool)
+  - Compatibility note: RestoreSafe supports only YubiKey v5 hardware.
+2. Open the YubiKey Manager GUI > Applications > OTP > Configure slot 2 with HMAC-SHA1 challenge-response.
+3. Verify the YubiKey Manager CLI tool (`ykman`) is available:
+  - RestoreSafe auto-detects `ykman` on PATH and also in the default Windows install directory: `C:\Program Files\Yubico\YubiKey Manager\ykman.exe`.
+  - Optional PATH check in **PowerShell (Windows)**:
+
+```powershell
+where.exe ykman
+```
+
+  If `where.exe` shows no result, RestoreSafe can still work as long as `ykman.exe` exists in the default install directory above.
+4. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
+5. Insert and touch the YubiKey when prompted during backup or restore.
 
 ### YubiKey mode comparison
 

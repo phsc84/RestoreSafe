@@ -1,8 +1,8 @@
 package startup
 
 import (
+	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,7 +93,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 		LogLevel:      "info",
 	}
 
-	items := collectStartupHealthItems(cfg, exeDir)
+	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasDuplicateWarn := false
 	for _, item := range items {
 		if item.Scope == "Source folder" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
@@ -132,7 +132,7 @@ func TestCollectStartupHealthItemsSuppressesSameVolumeWarningOnLocalDrive(t *tes
 		LogLevel:      "info",
 	}
 
-	items := collectStartupHealthItems(cfg, exeDir)
+	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasLayoutWarn := false
 	for _, item := range items {
 		if item.Scope == "Source folder warning" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "same drive/share") {
@@ -197,7 +197,7 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 		LogLevel:      "info",
 	}
 
-	items := collectStartupHealthItems(cfg, exeDir)
+	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasCollisionError := false
 	hasSourceFolderError := false
 	for _, item := range items {
@@ -224,7 +224,7 @@ func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
 		{Severity: healthError, Scope: "Source", Detail: "error"},
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		printStartupHealthCheck(items)
 	})
 
@@ -234,32 +234,4 @@ func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
 	if !strings.Contains(output, "Review the reported errors") {
 		t.Fatalf("expected advice line for errors, got output: %q", output)
 	}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
-	}
-	os.Stdout = w
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stdout writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatalf("failed to close stdout reader: %v", err)
-	}
-
-	return string(data)
 }

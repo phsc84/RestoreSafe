@@ -66,7 +66,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Info("Unattended mode: start confirmation skipped")
 		fmt.Println("Starting backup automatically.")
 	} else {
-		confirmed, err := promptStartBackup()
+		confirmed, err := operation.PromptStartAction("backup")
 		if err != nil {
 			return err
 		}
@@ -93,6 +93,10 @@ func Run(cfg *util.Config, exeDir string) error {
 	// Optional YubiKey factor (2FA or sole factor in yubikey mode).
 	var challengeHex string
 	if cfg.UseYubiKey() {
+		// Check that ykman is available before prompting the user.
+		if err := security.CheckYubiKeyAvailability(); err != nil {
+			return fmt.Errorf("YubiKey is enabled but not available: %w. Remedy: Install YubiKey Manager (https://www.yubico.com/support/download/yubikey-manager/).", err)
+		}
 		if cfg.IsYubiKeyOnly() {
 			fmt.Println("Please touch the YubiKey button.")
 		} else {
@@ -101,7 +105,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		var err error
 		password, challengeHex, err = security.CombineWithPassword(password)
 		if err != nil {
-			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykchalresp is available on PATH.", err)
+			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykman from YubiKey Manager is installed.", err)
 		}
 		if cfg.IsYubiKeyOnly() {
 			log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
@@ -120,16 +124,14 @@ func Run(cfg *util.Config, exeDir string) error {
 	workingDir := targetDir
 	cleanup := func() {}
 	if stagingPlan.Enabled {
-		stagingDir, err := os.MkdirTemp(stagingPlan.ResolvedTempDir, "restoresafe-backup-stage-*")
+		stagingDir, err := operation.CreateStagingDir(stagingPlan.ResolvedTempDir, "restoresafe-backup-stage-*")
 		if err != nil {
-			return fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
+			return err
 		}
 		log.Info("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(stagingDir), filepath.ToSlash(targetDir))
 		workingDir = stagingDir
 		cleanup = func() {
-			if err := os.RemoveAll(stagingDir); err != nil {
-				log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagingDir), err)
-			}
+			operation.CleanupStagingDir(stagingDir, log)
 		}
 	}
 
@@ -152,7 +154,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Info("Processing source folder: %s", srcAbs)
 		log.Debug("Folder name in archive: %s", folderName)
 
-		partCount, err := backupFolder(srcAbs, folderName, targetDir, date, id, password, cfg, log)
+		partCount, err := backupFolder(srcAbs, folderName, workingDir, date, id, password, cfg, log)
 		if err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
@@ -473,19 +475,6 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	fmt.Println()
 }
 
-func countSourcesOnSameVolumeAsTarget(targetDir string, sources []sourceFolderStatus) int {
-	count := 0
-	for _, src := range sources {
-		if src.Err != nil || src.Skip {
-			continue
-		}
-		if util.SameVolume(src.Resolved, targetDir) {
-			count++
-		}
-	}
-	return count
-}
-
 func validateSourceFolders(sources []sourceFolderStatus) error {
 	invalid := 0
 	for _, src := range sources {
@@ -497,30 +486,6 @@ func validateSourceFolders(sources []sourceFolderStatus) error {
 		return fmt.Errorf("Backup preflight failed: %d source folder(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.", invalid)
 	}
 	return nil
-}
-
-func promptStartBackup() (bool, error) {
-	for {
-		answer, err := security.ReadLine("Start backup now? [Y/n]: ")
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		default:
-			fmt.Println("Please enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.")
-		}
-	}
-}
-
-func yesNo(v bool) string {
-	if v {
-		return "enabled"
-	}
-	return "disabled"
 }
 
 func backupAuthLabel(cfg *util.Config) string {
@@ -616,7 +581,11 @@ func backupFolder(
 	progressDone := make(chan struct{})
 	progressStopped := make(chan struct{})
 	go func() {
-		logBackupProgress(log, folderName, &counters.inBytes, &counters.outBytes, &counters.outWriteCalls, cfg.IODiagnostics, progressDone)
+		if cfg.IODiagnostics {
+			operation.LogProgressUntilDone(log, folderName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls, progressDone)
+		} else {
+			<-progressDone
+		}
 		close(progressStopped)
 	}()
 	defer func() {
@@ -677,7 +646,7 @@ func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWri
 	tarErrCh := make(chan error, 1)
 	log.Debug("Starting TAR creation for: %s", srcDir)
 	go func() {
-		err := operation.WriteTar(pw, srcDir, targetDir)
+		err := util.WriteTar(pw, srcDir, targetDir)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
 	}()
@@ -730,15 +699,6 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		}
 		log.Debug("  Part %03d: %s (%.2f MB)", i+1, filepath.Base(p), float64(size)/(1024*1024))
 	}
-}
-
-func logBackupProgress(log *util.Logger, folderName string, inBytes, outBytes, outWriteCalls *atomic.Int64, ioDiagnostics bool, done <-chan struct{}) {
-	if !ioDiagnostics {
-		<-done // Just wait for completion without logging
-		return
-	}
-
-	operation.LogProgressUntilDone(log, folderName, "encrypted", inBytes, outBytes, outWriteCalls, done)
 }
 
 // copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.

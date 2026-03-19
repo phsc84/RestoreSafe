@@ -1,4 +1,4 @@
-package operation
+package util
 
 import (
 	"archive/tar"
@@ -12,18 +12,13 @@ import (
 
 // WriteTar walks srcDir and writes all files as a TAR stream to w.
 // File paths inside the archive are relative to srcDir.
-// Any provided exclude directories are skipped (useful to avoid including
-// the target backup folder when it resides within the source tree).
+// Any provided exclude directories are skipped.
 func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 	tw := tar.NewWriter(w)
 	defer tw.Close()
 
 	srcDir = filepath.Clean(srcDir)
 
-	// Prepare cleaned exclude dirs, keeping only those that are inside srcDir.
-	// An exclude dir outside srcDir (e.g. a parent) can never appear in the
-	// walk and must not be added — otherwise it would erroneously match srcDir
-	// itself and skip the entire archive.
 	exs := make([]string, 0, len(excludeDirs))
 	for _, e := range excludeDirs {
 		if e == "" {
@@ -32,7 +27,6 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 		ce := filepath.Clean(e)
 		rel, relErr := filepath.Rel(srcDir, ce)
 		if relErr != nil || strings.HasPrefix(rel, "..") {
-			// ce is not inside srcDir; nothing in the walk can match it.
 			continue
 		}
 		exs = append(exs, ce)
@@ -43,7 +37,6 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 			return fmt.Errorf("Failed to scan source folder at %q: %w. Remedy: Check source-folder readability and permissions.", path, err)
 		}
 
-		// Skip any path that is inside one of the exclude directories.
 		for _, ex := range exs {
 			rel, relErr := filepath.Rel(ex, path)
 			if relErr == nil && rel != "" && !strings.HasPrefix(rel, "..") {
@@ -54,12 +47,10 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 			}
 		}
 
-		// Compute relative path inside the archive.
 		rel, err := filepath.Rel(srcDir, path)
 		if err != nil {
 			return fmt.Errorf("Failed to compute relative path: %w. Remedy: Verify source path accessibility and path validity.", err)
 		}
-		// Use forward slashes inside the archive (portable).
 		rel = filepath.ToSlash(rel)
 
 		hdr, err := tar.FileInfoHeader(info, "")
@@ -112,10 +103,7 @@ func ExtractTar(r io.Reader, destDir string) error {
 		}
 
 		target := filepath.Join(destDir, filepath.FromSlash(hdr.Name))
-
-		// Security: prevent path traversal attacks.
-		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator),
-			filepath.Clean(destDir)+string(os.PathSeparator)) {
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), filepath.Clean(destDir)+string(os.PathSeparator)) {
 			return fmt.Errorf("Invalid path in archive (path traversal): %q. Remedy: Do not use this backup; use only unmodified, trusted backup files.", hdr.Name)
 		}
 
@@ -128,7 +116,7 @@ func ExtractTar(r io.Reader, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 				return fmt.Errorf("Failed to create parent folder: %w. Remedy: Check write permissions in the restore destination.", err)
 			}
-			if err := writeFile(target, tr); err != nil {
+			if err := writeArchiveFile(target, tr); err != nil {
 				return err
 			}
 		}
@@ -137,8 +125,7 @@ func ExtractTar(r io.Reader, destDir string) error {
 	return nil
 }
 
-// ValidateTar reads a TAR stream and verifies that all headers and regular
-// file payloads can be consumed without extracting anything to disk.
+// ValidateTar verifies that all TAR headers and regular-file payloads can be consumed.
 func ValidateTar(r io.Reader) error {
 	tr := tar.NewReader(r)
 
@@ -165,7 +152,7 @@ func ValidateTar(r io.Reader) error {
 	return nil
 }
 
-func writeFile(target string, r io.Reader) error {
+func writeArchiveFile(target string, r io.Reader) error {
 	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
 		return fmt.Errorf("Failed to create archive file %q: %w. Remedy: Check write permissions in the restore destination.", target, err)

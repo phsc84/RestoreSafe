@@ -42,10 +42,8 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	log := operation.OpenLogger(cfg, targetDir, selected[0])
-	if log != nil {
-		defer log.Close()
-		log.Info("Verification started - Selection: %q", selection)
-	}
+	defer log.Close()
+	log.Info("Verification started - Selection: %q", selection)
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, targetDir, os.TempDir())
 	preflight := buildVerifyPreflight(selected, targetDir)
@@ -55,9 +53,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	if cfg.NonInteractive {
-		if log != nil {
-			log.Info("Unattended mode: start confirmation skipped")
-		}
+		log.Info("Unattended mode: start confirmation skipped")
 		fmt.Println("Starting verification automatically.")
 	} else {
 		confirmed, err := operation.PromptStartAction("verification")
@@ -65,9 +61,7 @@ func Run(cfg *util.Config, exeDir string) error {
 			return err
 		}
 		if !confirmed {
-			if log != nil {
-				log.Info("Verification cancelled by user before start")
-			}
+			log.Info("Verification cancelled by user before start")
 			fmt.Println("Verification cancelled.")
 			return nil
 		}
@@ -79,9 +73,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	fmt.Println("Verification started.")
-	if log != nil {
-		log.Info("Verifying %d selected item(s)", len(selected))
-	}
+	log.Info("Verifying %d selected item(s)", len(selected))
 	verifyDir := targetDir
 	var cleanup = func() {}
 
@@ -94,9 +86,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		fmt.Println("Local staging completed.")
 		verifyDir = stagedDir
 		cleanup = func() {
-			if err := os.RemoveAll(stagedDir); err != nil && log != nil {
-				log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagedDir), err)
-			}
+			operation.CleanupStagingDir(stagedDir, log)
 		}
 	}
 
@@ -106,11 +96,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	cleanup()
 
-	if log != nil {
-		log.Info("Verification completed successfully.")
-	} else {
-		fmt.Println("\nVerification completed successfully.")
-	}
+	log.Info("Verification completed successfully.")
 	return nil
 }
 
@@ -167,22 +153,17 @@ func printVerifyPreflight(targetDir string, items []verifyPreflightItem, require
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {
-	invalid := 0
-	for _, item := range items {
-		if item.Err != nil {
-			invalid++
-		}
-	}
-	if invalid > 0 {
-		return fmt.Errorf("Verify preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verify again.", invalid)
-	}
-	return nil
+	return operation.ValidatePreflightItems(
+		items,
+		func(item verifyPreflightItem) bool { return item.Err != nil },
+		"Verify preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verify again.",
+	)
 }
 
 func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir string, log *util.Logger) (string, error) {
-	stagingDir, err := os.MkdirTemp(tempDir, "verify-stage-*")
+	stagingDir, err := operation.CreateStagingDir(tempDir, "verify-stage-*")
 	if err != nil {
-		return "", fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
+		return "", err
 	}
 
 	copied := 0
@@ -190,7 +171,7 @@ func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir st
 	for _, entry := range selected {
 		parts := catalog.CollectParts(sourceDir, entry)
 		if len(parts) == 0 {
-			os.RemoveAll(stagingDir)
+			operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
 			return "", fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same folder.", entry.String())
 		}
 
@@ -202,7 +183,7 @@ func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir st
 
 			destinationPath := filepath.Join(stagingDir, filepath.Base(partPath))
 			if err := operation.CopyFile(partPath, destinationPath); err != nil {
-				os.RemoveAll(stagingDir)
+				operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
 				if strings.Contains(err.Error(), "Remedy:") {
 					return "", err
 				}
@@ -212,9 +193,7 @@ func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir st
 		}
 	}
 
-	if log != nil {
-		log.Info("Local staging enabled: staged %d selected part file(s) to %s", copied, filepath.ToSlash(stagingDir))
-	}
+	log.Info("Local staging enabled: staged %d selected part file(s) to %s", copied, filepath.ToSlash(stagingDir))
 
 	return stagingDir, nil
 }
@@ -224,9 +203,7 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 		if err := verifyEntry(entry, targetDir, password, log); err != nil {
 			return fmt.Errorf("Failed to verify folder %q: %w", entry.String(), err)
 		}
-		if log != nil {
-			log.Info("Folder %q successfully verified", entry.FolderName)
-		}
+		log.Info("Folder %q successfully verified", entry.FolderName)
 	}
 	return nil
 }
@@ -237,9 +214,7 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_folder.", entry.String())
 	}
 
-	if log != nil {
-		log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
-	}
+	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
 
 	seqReader := util.NewSequentialReader(parts)
 	defer seqReader.Close()
@@ -270,7 +245,7 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		decErrCh <- err
 	}()
 
-	validateErr := operation.ValidateTar(pr)
+	validateErr := util.ValidateTar(pr)
 	if validateErr != nil {
 		pr.CloseWithError(validateErr) //nolint:errcheck
 	}

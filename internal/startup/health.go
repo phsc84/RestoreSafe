@@ -33,10 +33,6 @@ func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) {
 	printStartupHealthCheck(items)
 }
 
-func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
-	return collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
-}
-
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
 	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
@@ -134,13 +130,21 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	}
 	probePath := probe.Name()
 	probe.Close()
-	_ = os.Remove(probePath)
+
+	cleanupErr := os.Remove(probePath)
 
 	items := []healthItem{{
 		Severity: healthOK,
 		Scope:    "Target folder",
 		Detail:   fmt.Sprintf("%s exists and is writable", targetDir),
 	}}
+	if cleanupErr != nil {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    "Target folder",
+			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions in target_folder.", cleanupErr),
+		})
+	}
 
 	freeBytes, err := util.QueryFreeSpaceBytes(targetDir)
 	if err != nil {
@@ -173,13 +177,22 @@ func checkTempDirHealth() []healthItem {
 	}
 	probePath := probe.Name()
 	probe.Close()
-	_ = os.Remove(probePath)
 
-	return []healthItem{{
+	items := []healthItem{{
 		Severity: healthOK,
 		Scope:    "Temp directory",
 		Detail:   fmt.Sprintf("%s is writable", tempDir),
 	}}
+
+	if err := os.Remove(probePath); err != nil {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    "Temp directory",
+			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions for TEMP/TMP.", err),
+		})
+	}
+
+	return items
 }
 
 func checkYubiKeyHealth(cfg *util.Config) []healthItem {
@@ -195,14 +208,14 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "YubiKey",
-			Detail:   err.Error(),
+			Detail:   fmt.Sprintf("%v. Remedy: Install YubiKey Manager (v5), then restart RestoreSafe. If still failing, add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
 		}}
 	}
 
 	return []healthItem{{
 		Severity: healthOK,
 		Scope:    "YubiKey",
-		Detail:   "ykchalresp found on PATH",
+		Detail:   "ykman found (PATH or standard install directory, YubiKey v5 supported)",
 	}}
 }
 

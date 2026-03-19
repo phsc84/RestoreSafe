@@ -1,9 +1,9 @@
 package operation
 
 import (
+	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,14 +88,14 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 		t.Fatalf("failed to set ABC123 part time: %v", err)
 	}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		if err := printBackupSelectionPrompt("restore", targetDir, index); err != nil {
 			t.Fatalf("printBackupSelectionPrompt returned error: %v", err)
 		}
 	})
 
-	firstGroup := "  - Backup ID: ABC123 / Timestamp: 2026-03-18 21:12:22"
-	secondGroup := "  - Backup ID: ABC125 / Timestamp: 2026-03-18 20:35:03"
+	firstGroup := "  - Backup ID: ABC123 / Timestamp (local): " + formatBackupRunTimestamp(abc123Latest)
+	secondGroup := "  - Backup ID: ABC125 / Timestamp (local): " + formatBackupRunTimestamp(abc125Latest)
 	if !strings.Contains(output, firstGroup) {
 		t.Fatalf("expected first group header in output, got: %q", output)
 	}
@@ -111,31 +111,4 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 	if !strings.Contains(output, "    - SourceFolder1_2026-03-18_ABC125") || !strings.Contains(output, "    - SourceFolder2_2026-03-18_ABC125") {
 		t.Fatalf("expected grouped nested entries for ABC125, got: %q", output)
 	}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
-	}
-	os.Stdout = w
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stdout writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("failed to read stdout: %v", err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatalf("failed to close stdout reader: %v", err)
-	}
-	return string(out)
 }

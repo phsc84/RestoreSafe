@@ -17,7 +17,7 @@ func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
 		fmt.Printf("Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
-		return nil
+		return util.NewConsoleLogger(cfg.LogLevel)
 	}
 	return log
 }
@@ -99,6 +99,10 @@ func ReadPasswordWithRetry(
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
 			}
+			// Check that ykman is available before prompting the user.
+			if err := security.CheckYubiKeyAvailability(); err != nil {
+				return nil, fmt.Errorf("YubiKey is enabled but not available: %w. Remedy: Install YubiKey Manager (https://www.yubico.com/support/download/yubikey-manager/).", err)
+			}
 			if yubiKeyOnly {
 				fmt.Println("YubiKey-only mode. Please touch the YubiKey button.")
 			} else {
@@ -108,12 +112,10 @@ func ReadPasswordWithRetry(
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and verify slot 2 is configured correctly.", err)
 			}
-			if log != nil {
-				if yubiKeyOnly {
-					log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
-				} else {
-					log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
-				}
+			if yubiKeyOnly {
+				log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
+			} else {
+				log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
 			}
 		}
 
@@ -130,9 +132,7 @@ func ReadPasswordWithRetry(
 				remaining := maxPasswordAttempts - attempt
 				if remaining > 0 {
 					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly), remaining)
-					if log != nil {
-						log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
-					}
+					log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 				}
 				continue
 			} else {

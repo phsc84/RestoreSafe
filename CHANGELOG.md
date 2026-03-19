@@ -6,6 +6,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-03-19
+
 ### Added
 - Added automatic local staging for restore when the backup folder and restore target share the same drive/share and TEMP/TMP is on a different local drive. RestoreSafe now copies the selected `.enc` parts to local temp storage first to reduce same-share read/write contention.
 - Added password-less YubiKey-only mode. Authentication is now configured via a single `authentication_mode` key in `config.yaml` with three numeric options: `1` (default, password only), `2` (password + YubiKey HMAC-SHA1 second factor), and `3` (YubiKey only, no password). The challenge file written by a YubiKey-only backup is marked with a `NOPW:` prefix so that restore and verify detect the mode without relying on `config.yaml`. Backup and restore/verify preflight summaries display the resolved authentication label.
@@ -21,14 +23,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - Refactored internal code structure into clearer package boundaries to improve maintainability and testability.
+- YubiKey CLI detection now resolves `ykman` automatically from PATH and the standard Windows install location (`C:\Program Files\Yubico\YubiKey Manager\`), removing the need to manually add it to PATH after installing YubiKey Manager.
 - Improved backup preflight output: RestoreSafe now shows estimated total source size, free target disk space, and a warning when estimated size likely exceeds currently free target space.
 - Improved restore/verify backup selection and ID handling: backup sets are grouped by `date + ID`, support date filtering, include a quick `newest` shortcut, and when the same backup ID exists on multiple dates RestoreSafe warns and automatically uses the newest date.
 - Changed restore authentication detection so it no longer depends on `config.yaml` alone: YubiKey requirement is inferred from backup-side challenge files when available.
 - Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe appends a full path-derived alias (including drive hint) to backup naming. Every non-alphanumeric character in that alias is encoded as UTF-8 hex (`~XX~`, for example `-` -> `~2D~`, `_` -> `~5F~`, space -> `~20~`), and true identical source-path duplicates are warned and skipped.
 - Improved user-facing messaging across config, backup, restore, verify, health check, YubiKey, and low-level crypto/split/logging/retention/archive paths: messages use clearer punctuation and include concrete remediation steps (for example forward-slash path hints, missing part/challenge guidance, and permission checks).
+- Startup health check now reports a warning when the write-probe temporary file cannot be cleaned up in the target folder or TEMP directory.
+- Logger now falls back to console-only output when the log file cannot be opened, rather than silently dropping all log calls.
+- Shared staging lifecycle helpers and a generic preflight validation helper extracted to the `operation` package and used consistently across backup, restore, and verify workflows.
 
 ### Fixed
 - Unified TAR path validation rules between verify and restore flows and removed unused restore dead code.
+- Fixed backup staging path: encrypted parts and challenge files are now correctly written to the local staging directory (not the final target) when local staging is enabled.
 
 ## [1.2.0] - 2026-03-14
 

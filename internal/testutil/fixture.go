@@ -2,7 +2,6 @@
 package testutil
 
 import (
-	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"bufio"
@@ -19,9 +18,6 @@ const (
 )
 
 // BackupFixture holds workspace paths and metadata for an integration-style backup test.
-// It creates a workspace with standard source files and a completed encrypted split backup.
-// The backup always contains nested/small.txt (17 bytes) and large.bin (2 MB+) so that at
-// least two parts are produced at the default 1 MB split size.
 type BackupFixture struct {
 	SrcDir    string
 	TargetDir string
@@ -86,7 +82,7 @@ func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, bac
 	pr, pw := io.Pipe()
 	tarErrCh := make(chan error, 1)
 	go func() {
-		err := operation.WriteTar(pw, srcDir, targetDir)
+		err := util.WriteTar(pw, srcDir, targetDir)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
 	}()

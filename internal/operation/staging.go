@@ -59,6 +59,35 @@ func PlanLocalStaging(sourceDir, destDir, tempDir string) LocalStagingPlan {
 	}
 }
 
+// CreateStagingDir creates a temporary staging directory below tempDir.
+func CreateStagingDir(tempDir, pattern string) (string, error) {
+	stagingDir, err := os.MkdirTemp(tempDir, pattern)
+	if err != nil {
+		return "", fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
+	}
+	return stagingDir, nil
+}
+
+// CleanupStagingDir removes a staging directory and logs cleanup failures.
+func CleanupStagingDir(stagingDir string, log *util.Logger) {
+	if stagingDir == "" {
+		return
+	}
+	if err := os.RemoveAll(stagingDir); err != nil && log != nil {
+		log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagingDir), err)
+	}
+}
+
+// CleanupStagingDirDuring removes a staging directory during error recovery.
+func CleanupStagingDirDuring(stagingDir, phase string, log *util.Logger) {
+	if stagingDir == "" {
+		return
+	}
+	if err := os.RemoveAll(stagingDir); err != nil && log != nil {
+		log.Warn("Failed to remove staging directory %s during %s: %v", filepath.ToSlash(stagingDir), phase, err)
+	}
+}
+
 // CopyFile copies a single file from source to destination with sync for data safety.
 func CopyFile(sourcePath, destinationPath string) error {
 	sourceFile, err := os.Open(sourcePath)
@@ -80,58 +109,4 @@ func CopyFile(sourcePath, destinationPath string) error {
 		return fmt.Errorf("Failed to sync %q to disk: %w. Remedy: Check TEMP/TMP disk space and write permissions.", destinationPath, err)
 	}
 	return nil
-}
-
-// StageLocalDirectory recursively copies a directory to a temporary staging location.
-// Returns the path to the staged directory (under tempDir).
-func StageLocalDirectory(sourceDir, destDir, tempDir string, log *util.Logger) (string, error) {
-	stagingDir, err := os.MkdirTemp(tempDir, "stage-*")
-	if err != nil {
-		return "", fmt.Errorf("Failed to create local staging directory: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", err)
-	}
-
-	stagedPath := filepath.Join(stagingDir, filepath.Base(sourceDir))
-	if err := os.MkdirAll(stagedPath, 0o750); err != nil {
-		os.RemoveAll(stagingDir)
-		return "", fmt.Errorf("Failed to create staging subdirectory %q: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", stagedPath, err)
-	}
-
-	// Walk source directory and copy all files.
-	entries, err := os.ReadDir(sourceDir)
-	if err != nil {
-		os.RemoveAll(stagingDir)
-		return "", fmt.Errorf("Failed to list source directory %q: %w. Remedy: Check read permissions on the backup folder.", sourceDir, err)
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(sourceDir, entry.Name())
-		destPath := filepath.Join(stagedPath, entry.Name())
-
-		if entry.IsDir() {
-			if err := filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-				relPath, _ := filepath.Rel(srcPath, path)
-				dPath := filepath.Join(destPath, relPath)
-				if info.IsDir() {
-					return os.MkdirAll(dPath, 0o750)
-				}
-				return CopyFile(path, dPath)
-			}); err != nil {
-				os.RemoveAll(stagingDir)
-				return "", fmt.Errorf("Failed to copy staging directory: %w. Remedy: Check TEMP/TMP disk space and write permissions.", err)
-			}
-		} else {
-			if err := CopyFile(srcPath, destPath); err != nil {
-				os.RemoveAll(stagingDir)
-				return "", fmt.Errorf("Failed to copy staging file: %w", err)
-			}
-		}
-	}
-
-	if log != nil {
-		log.Info("Local staging enabled: backup folder staged to %s", filepath.ToSlash(stagedPath))
-	}
-	return stagedPath, nil
 }

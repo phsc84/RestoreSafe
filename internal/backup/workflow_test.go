@@ -2,9 +2,9 @@ package backup
 
 import (
 	"RestoreSafe/internal/operation"
+	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,27 +39,6 @@ func TestInspectSourceFoldersReportsExpectedStatuses(t *testing.T) {
 	}
 	if statuses[2].Err == nil {
 		t.Fatal("expected missing path to return error")
-	}
-}
-
-func TestCountSourcesOnSameVolumeAsTarget(t *testing.T) {
-	t.Parallel()
-
-	targetDir := filepath.Join(t.TempDir(), "target")
-	sources := []sourceFolderStatus{
-		{Resolved: filepath.Join(filepath.Dir(targetDir), "source-a")},
-		{Resolved: filepath.Join(filepath.Dir(targetDir), "source-b")},
-		{Resolved: filepath.Join(filepath.VolumeName(targetDir)+string(filepath.Separator), "other-root"), Err: nil},
-		{Resolved: filepath.Join(filepath.Dir(targetDir), "skipped"), Skip: true},
-		{Resolved: filepath.Join(filepath.Dir(targetDir), "broken"), Err: os.ErrNotExist},
-	}
-
-	got := countSourcesOnSameVolumeAsTarget(targetDir, sources)
-	if got < 2 {
-		t.Fatalf("expected at least 2 same-volume active sources, got %d", got)
-	}
-	if got > 3 {
-		t.Fatalf("expected skipped/error sources to be ignored, got %d", got)
 	}
 }
 
@@ -313,17 +292,6 @@ func TestValidateSourceFolders(t *testing.T) {
 	}
 }
 
-func TestYesNo(t *testing.T) {
-	t.Parallel()
-
-	if got := yesNo(true); got != "enabled" {
-		t.Fatalf("expected enabled, got %q", got)
-	}
-	if got := yesNo(false); got != "disabled" {
-		t.Fatalf("expected disabled, got %q", got)
-	}
-}
-
 func TestEstimateSelectedSourceBytes(t *testing.T) {
 	t.Parallel()
 
@@ -495,7 +463,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	sources := []sourceFolderStatus{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
 	})
 
@@ -513,7 +481,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	sources := []sourceFolderStatus{{Resolved: `\\server\share\source`}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
-	output := captureStdout(t, func() {
+	output := testutil.CaptureStdout(t, func() {
 		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
 	})
 
@@ -521,32 +489,4 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
-	}
-	os.Stdout = w
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stdout writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatalf("failed to close stdout reader: %v", err)
-	}
-
-	return string(data)
 }

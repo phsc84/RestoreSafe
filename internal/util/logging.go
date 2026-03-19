@@ -16,13 +16,21 @@ const (
 	LevelDebug Level = 1
 )
 
-// Logger writes structured log entries to a file and optionally to stdout.
+// Logger writes structured log entries to stdout and optionally to a file.
 type Logger struct {
 	level        Level
 	file         *os.File
 	originalPath string // The path the user wanted (may be on network drive)
 	actualPath   string // The path we actually write to (may be temp fallback)
+	consoleOnly  bool
 	mu           sync.Mutex
+}
+
+func parseLogLevel(levelStr string) Level {
+	if levelStr == "debug" {
+		return LevelDebug
+	}
+	return LevelInfo
 }
 
 // NewLogger creates a Logger writing to logPath. stdoutToo controls console mirroring.
@@ -30,10 +38,7 @@ type Logger struct {
 // If a log for this backup ID already exists, copy it to temp first (for appending).
 // On Close(), copy the complete temp log back to the original path.
 func NewLogger(logPath string, levelStr string) (*Logger, error) {
-	lvl := LevelInfo
-	if levelStr == "debug" {
-		lvl = LevelDebug
-	}
+	lvl := parseLogLevel(levelStr)
 
 	// Determine temp path for actual writes.
 	base := filepath.Base(logPath)
@@ -63,9 +68,26 @@ func NewLogger(logPath string, levelStr string) (*Logger, error) {
 	return &Logger{level: lvl, file: f, originalPath: logPath, actualPath: tempPath}, nil
 }
 
+// NewConsoleLogger creates a logger that mirrors to stdout only.
+func NewConsoleLogger(levelStr string) *Logger {
+	return &Logger{level: parseLogLevel(levelStr), consoleOnly: true}
+}
+
+// IsConsoleOnly reports whether the logger writes only to stdout.
+func (l *Logger) IsConsoleOnly() bool {
+	if l == nil {
+		return false
+	}
+	return l.consoleOnly
+}
+
 // Close flushes and closes the underlying log file, then copies it from temp
 // back to the original path on the network drive.
 func (l *Logger) Close() {
+	if l == nil {
+		return
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -102,6 +124,9 @@ func (l *Logger) Info(format string, args ...any) {
 
 // Debug logs a debug message (only written at LevelDebug).
 func (l *Logger) Debug(format string, args ...any) {
+	if l == nil {
+		return
+	}
 	if l.level >= LevelDebug {
 		l.write("DEBUG", format, args...)
 	}
@@ -112,12 +137,11 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write("WARN ", format, args...)
 }
 
-// Error logs an error message.
-func (l *Logger) Error(format string, args ...any) {
-	l.write("ERROR", format, args...)
-}
-
 func (l *Logger) write(severity, format string, args ...any) {
+	if l == nil {
+		return
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

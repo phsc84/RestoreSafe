@@ -1,4 +1,5 @@
 .gitconfig
+*.log
 config.yaml
 config_*.yaml
 dev_setup.txt

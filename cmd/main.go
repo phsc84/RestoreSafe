@@ -7,7 +7,9 @@ import (
 	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,17 +105,17 @@ func main() {
 		switch {
 		case cliBackup:
 			if err := backup.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
+				reportOperationError("Backup", err)
 				os.Exit(1)
 			}
 		case cliRestore:
 			if err := restore.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Restore failed: %v\n", err)
+				reportOperationError("Restore", err)
 				os.Exit(1)
 			}
 		case cliVerify:
 			if err := verify.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Verification failed: %v\n", err)
+				reportOperationError("Verification", err)
 				os.Exit(1)
 			}
 		}
@@ -129,19 +131,19 @@ func main() {
 		switch strings.TrimSpace(choice) {
 		case "1":
 			if err := backup.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Backup failed: %v\n", err)
+				reportOperationError("Backup", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "2":
 			if err := restore.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Restore failed: %v\n", err)
+				reportOperationError("Restore", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "3":
 			if err := verify.Run(cfg, exeDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Verification failed: %v\n", err)
+				reportOperationError("Verification", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
@@ -153,6 +155,10 @@ func main() {
 			fmt.Println()
 		}
 	}
+}
+
+func reportOperationError(action string, err error) {
+	fmt.Fprintf(os.Stderr, "%s failed: %v\n", action, err)
 }
 
 func printStartupBanner(version string) {
@@ -179,7 +185,7 @@ func getUserInput(prompt string) string {
 	fmt.Print(prompt)
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
-	if err != nil && err.Error() != "EOF" {
+	if err != nil && !errors.Is(err, io.EOF) {
 		fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
 	}
 	return input
@@ -196,7 +202,7 @@ func waitForKeyPress() {
 	fmt.Println("Press any key to exit...")
 	buf := make([]byte, 1)
 	_, err := os.Stdin.Read(buf)
-	if err != nil && err.Error() != "EOF" {
+	if err != nil && !errors.Is(err, io.EOF) {
 		fmt.Fprintf(os.Stderr, "Error reading key press: %v\n", err)
 	}
 }

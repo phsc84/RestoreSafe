@@ -27,12 +27,6 @@ func ReadPassword(promptText ...string) ([]byte, error) {
 	return password, nil
 }
 
-// ReadPasswordConfirmed asks the user to enter and confirm a password.
-// Returns an error if the two entries do not match.
-func ReadPasswordConfirmed() ([]byte, error) {
-	return ReadPasswordConfirmedWithPrompts("Enter password: ", "Please re-enter password: ")
-}
-
 // ReadPasswordConfirmedWithPrompts asks the user to enter and confirm a
 // password using custom prompt texts.
 func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte, error) {
