@@ -95,7 +95,7 @@ func main() {
 	}
 
 	printStartupBanner(Version)
-	startup.RunStartupHealthCheck(cfg, exeDir)
+	startup.RunStartupHealthCheck(cfg, exeDir, configPath)
 
 	// Non-interactive CLI mode: skip start confirmations and exit with a proper code.
 	if cliCount == 1 {

@@ -1,7 +1,9 @@
 .gitconfig
 config.yaml
+config_*.yaml
 dev_setup.txt
 RestoreSafe.exe
+RestoreSafe_*.bat
 cmd/resource.syso
 
 assets/**

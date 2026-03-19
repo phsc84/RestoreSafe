@@ -63,7 +63,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	printBackupPreflight(cfg, targetDir, sources, stagingPlan)
 
 	if cfg.NonInteractive {
-		log.Info("Non-interactive mode: start confirmation skipped")
+		log.Info("Unattended mode: start confirmation skipped")
 		fmt.Println("Starting backup automatically.")
 	} else {
 		confirmed, err := promptStartBackup()
@@ -435,6 +435,7 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging   : enabled via %s because source and target folders share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	}
+	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
 
 	fmt.Println("Source folders:")
 	for _, src := range sources {
@@ -465,7 +466,7 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []sourceFo
 			}
 		}
 
-		if !stagingPlan.Enabled && stagingPlan.SameVolume && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
+		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
 			fmt.Printf("  [WARN]  Source folder warning: Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}

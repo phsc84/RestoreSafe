@@ -478,7 +478,7 @@ func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightPlacesSameVolumeWarningAfterSourceFolder(t *testing.T) {
+func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
 	t.Parallel()
 
 	tempRoot := t.TempDir()
@@ -499,26 +499,27 @@ func TestPrintBackupPreflightPlacesSameVolumeWarningAfterSourceFolder(t *testing
 		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
 	})
 
-	sourceLine := "[OK]    " + sourceDir
 	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
-	sourceIndex := strings.Index(output, sourceLine)
-	warnIndex := strings.Index(output, warnLinePrefix)
-	if sourceIndex < 0 {
-		t.Fatalf("expected source line in output, got: %q", output)
+	if strings.Contains(output, warnLinePrefix) {
+		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
 	}
-	if warnIndex < 0 {
-		t.Fatalf("expected same-volume warning line in output, got: %q", output)
-	}
-	if warnIndex < sourceIndex {
-		t.Fatalf("expected warning after source folder line, got output: %q", output)
-	}
+}
 
-	headerIndex := strings.Index(output, "Source folders:")
-	if headerIndex < 0 {
-		t.Fatalf("expected Source folders header, got: %q", output)
-	}
-	if strings.Contains(output[:headerIndex], warnLinePrefix) {
-		t.Fatalf("did not expect same-volume warning before source folder list, got output: %q", output)
+func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
+	t.Parallel()
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
+	targetDir := `\\server\share\target`
+	sources := []sourceFolderStatus{{Resolved: `\\server\share\source`}}
+	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
+
+	output := captureStdout(t, func() {
+		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
+	})
+
+	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
+	if !strings.Contains(output, warnLinePrefix) {
+		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
 }
 

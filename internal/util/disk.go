@@ -4,6 +4,8 @@ package util
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
@@ -25,4 +27,29 @@ func QueryFreeSpaceBytes(path string) (uint64, error) {
 	}
 
 	return freeBytesAvailable, nil
+}
+
+// IsNetworkVolume reports whether path is located on a network-backed volume.
+// It recognizes UNC shares and mapped network drives.
+func IsNetworkVolume(path string) bool {
+	volume := filepath.VolumeName(filepath.Clean(path))
+	if volume == "" {
+		return false
+	}
+
+	if strings.HasPrefix(volume, `\\`) || strings.HasPrefix(volume, "//") {
+		return true
+	}
+
+	root := volume
+	if strings.HasSuffix(root, ":") {
+		root += `\`
+	}
+
+	rootPtr, err := windows.UTF16PtrFromString(root)
+	if err != nil {
+		return false
+	}
+
+	return windows.GetDriveType(rootPtr) == windows.DRIVE_REMOTE
 }

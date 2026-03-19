@@ -95,7 +95,8 @@ RestoreSafe can be run from a batch file or Windows Task Scheduler using command
 - The "Start now?" confirmation is skipped automatically.
 - Exits with code `0` on success or `1` on failure, making it suitable for batch files and scheduled tasks.
 - In `-backup` mode, `authentication_mode` must be `3` (YubiKey only). Insert the YubiKey before the scheduled task runs.
-- In `-restore` and `-verify` modes, the newest backup run is selected automatically - no backup picker is shown.
+- In `-restore` and `-verify` modes, the newest backup run is selected automatically and the start confirmation is skipped.
+- `-restore` and `-verify` may still require authentication input for the selected backup set (password and/or YubiKey touch). Selection is unattended, but fully unattended end-to-end execution depends on the selected backup set.
 
 **Custom config file path**
 
@@ -105,7 +106,8 @@ RestoreSafe can be run from a batch file or Windows Task Scheduler using command
 | `-config="<absolute-path>" -backup` | Custom config path combined with unattended backup. |
 
 - By default RestoreSafe loads `config.yaml` from the application folder.
-- Combined with an unattended mode flag (`-backup`, `-restore`, `-verify`), operation runs unattended. Otherwise RestoreSafe starts in normal interactive menu mode.
+- Combined with `-backup`, operation runs unattended (requires `authentication_mode: 3`).
+- Combined with `-restore` or `-verify`, operation auto-selects the newest backup set and skips the start confirmation, but authentication prompts may still appear depending on the selected backup set.
 
 **Example batch files**
 

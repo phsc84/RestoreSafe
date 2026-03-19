@@ -107,7 +107,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	}
 }
 
-func TestCollectStartupHealthItemsWarnsOnSameVolumeLayout(t *testing.T) {
+func TestCollectStartupHealthItemsSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -141,61 +141,23 @@ func TestCollectStartupHealthItemsWarnsOnSameVolumeLayout(t *testing.T) {
 		}
 	}
 
-	if !hasLayoutWarn {
-		t.Fatalf("expected source folder warning for same-volume source/target, got items: %#v", items)
+	if hasLayoutWarn {
+		t.Fatalf("did not expect source folder warning for local same-volume source/target, got items: %#v", items)
 	}
 }
 
-func TestCollectStartupHealthItemsPlacesLayoutWarningAfterEachSource(t *testing.T) {
+func TestShouldWarnSameVolumeSourceTarget(t *testing.T) {
 	t.Parallel()
 
-	exeDir := t.TempDir()
-	first := filepath.Join(exeDir, "source-a")
-	second := filepath.Join(exeDir, "source-b")
-	target := filepath.Join(exeDir, "target")
-
-	if err := os.MkdirAll(first, 0o750); err != nil {
-		t.Fatalf("failed to create first source: %v", err)
+	if shouldWarnSameVolumeSourceTarget(`C:\source`, `C:\target`, false) {
+		t.Fatal("did not expect warning for same local drive")
 	}
-	if err := os.MkdirAll(second, 0o750); err != nil {
-		t.Fatalf("failed to create second source: %v", err)
+	if !shouldWarnSameVolumeSourceTarget(`\\server\share\source`, `\\server\share\target`, false) {
+		t.Fatal("expected warning for same network share")
 	}
-	if err := os.MkdirAll(target, 0o750); err != nil {
-		t.Fatalf("failed to create target: %v", err)
+	if shouldWarnSameVolumeSourceTarget(`\\server\share\source`, `\\server\share\target`, true) {
+		t.Fatal("did not expect warning for skipped source")
 	}
-
-	cfg := &util.Config{
-		SourceFolders: []string{first, second},
-		TargetFolder:  target,
-		SplitSizeMB:   64,
-		LogLevel:      "info",
-	}
-
-	items := collectStartupHealthItems(cfg, exeDir)
-
-	checkSourceFollowedByLayoutWarn := func(sourcePath string) {
-		found := false
-		for i := 0; i < len(items)-1; i++ {
-			if items[i].Scope != "Source folder" || items[i].Detail != sourcePath {
-				continue
-			}
-			next := items[i+1]
-			if next.Scope != "Source folder warning" || next.Severity != healthWarn {
-				t.Fatalf("expected Source folder warning directly after source item %q, got next item: %#v", sourcePath, next)
-			}
-			if !strings.Contains(next.Detail, sourcePath) {
-				t.Fatalf("expected layout warning detail to include source path %q, got: %q", sourcePath, next.Detail)
-			}
-			found = true
-			break
-		}
-		if !found {
-			t.Fatalf("did not find source item for %q in health output: %#v", sourcePath, items)
-		}
-	}
-
-	checkSourceFollowedByLayoutWarn(first)
-	checkSourceFollowedByLayoutWarn(second)
 }
 
 func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t *testing.T) {

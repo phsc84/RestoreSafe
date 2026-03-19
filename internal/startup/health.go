@@ -28,19 +28,24 @@ type healthItem struct {
 
 // RunStartupHealthCheck performs a non-interactive diagnostic pass when the
 // application starts. It never aborts startup; it only reports findings.
-func RunStartupHealthCheck(cfg *util.Config, exeDir string) {
-	items := collectStartupHealthItems(cfg, exeDir)
+func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) {
+	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath)
 	printStartupHealthCheck(items)
 }
 
 func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
+	return collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
+}
+
+func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
+	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
 	items := make([]healthItem, 0)
 
 	items = append(items, healthItem{
 		Severity: healthOK,
 		Scope:    "Config",
-		Detail:   fmt.Sprintf("Loaded %d source folder(s), target=%s, split size=%d MB, retention_keep=%d", len(cfg.SourceFolders), targetDir, cfg.SplitSizeMB, cfg.RetentionKeep),
+		Detail:   configPathDisplay,
 	})
 
 	sourceStatuses := backup.InspectSourceFolders(cfg.SourceFolders, exeDir)
@@ -67,11 +72,11 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 			})
 		}
 
-		if !src.Skip && util.SameVolume(src.Resolved, targetDir) {
+		if shouldWarnSameVolumeSourceTarget(src.Resolved, targetDir, src.Skip) {
 			items = append(items, healthItem{
 				Severity: healthWarn,
 				Scope:    "Source folder warning",
-				Detail:   fmt.Sprintf("Source folder %s shares the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share or use local staging.", src.Resolved, util.VolumeDisplay(targetDir)),
+				Detail:   fmt.Sprintf("Source folder %s shares the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share. If not possible, RestoreSafe will automatically use local staging.", src.Resolved, util.VolumeDisplay(targetDir)),
 			})
 		}
 	}
@@ -82,6 +87,16 @@ func collectStartupHealthItems(cfg *util.Config, exeDir string) []healthItem {
 	items = append(items, checkBackupInventoryHealth(targetDir)...)
 
 	return items
+}
+
+func shouldWarnSameVolumeSourceTarget(sourceDir, targetDir string, skip bool) bool {
+	if skip {
+		return false
+	}
+	if !util.SameVolume(sourceDir, targetDir) {
+		return false
+	}
+	return util.IsNetworkVolume(targetDir)
 }
 
 func checkTargetFolderHealth(targetDir string) []healthItem {

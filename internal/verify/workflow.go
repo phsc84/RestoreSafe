@@ -56,7 +56,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	if cfg.NonInteractive {
 		if log != nil {
-			log.Info("Non-interactive mode: start confirmation skipped")
+			log.Info("Unattended mode: start confirmation skipped")
 		}
 		fmt.Println("Starting verification automatically.")
 	} else {
