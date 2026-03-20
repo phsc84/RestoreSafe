@@ -176,7 +176,7 @@ func TestConfigUseYubiKeyAndIsYubiKeyOnly(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		mode        int
+		mode        AuthMode
 		useYubiKey  bool
 		yubiKeyOnly bool
 	}{

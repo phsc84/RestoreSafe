@@ -64,7 +64,10 @@ func TestCollectPartsReturnsSortedPaths(t *testing.T) {
 		}
 	}
 
-	parts := CollectParts(dir, entry)
+	parts, err := CollectParts(dir, entry)
+	if err != nil {
+		t.Fatalf("CollectParts returned error: %v", err)
+	}
 	if len(parts) != 3 {
 		t.Fatalf("expected 3 parts, got %d", len(parts))
 	}

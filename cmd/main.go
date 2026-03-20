@@ -29,25 +29,12 @@ func main() {
 		exitWithError("Error setting working directory", err)
 	}
 
-	// CLI flags — used when running from a batch file or task scheduler.
-	//   RestoreSafe.exe -config=<abs-path>  load config from custom location
-	//   RestoreSafe.exe -backup             run backup non-interactively and exit
-	//   RestoreSafe.exe -restore            run restore for newest run and exit
-	//   RestoreSafe.exe -verify             run verify for newest run and exit
+	// CLI flag for custom config path
 	configPath := filepath.Join(exeDir, "config.yaml")
-	cliBackup := false
-	cliRestore := false
-	cliVerify := false
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
-		case arg == "-backup" || arg == "--backup":
-			cliBackup = true
-		case arg == "-restore" || arg == "--restore":
-			cliRestore = true
-		case arg == "-verify" || arg == "--verify":
-			cliVerify = true
 		case arg == "-config" || arg == "--config":
 			fmt.Fprintln(os.Stderr, "Error: use -config=<absolute-path-to-config.yaml> (equals form only).")
 			os.Exit(1)
@@ -67,60 +54,13 @@ func main() {
 		}
 	}
 
-	cliCount := 0
-	if cliBackup {
-		cliCount++
-	}
-	if cliRestore {
-		cliCount++
-	}
-	if cliVerify {
-		cliCount++
-	}
-	if cliCount > 1 {
-		fmt.Fprintln(os.Stderr, "Error: only one of -backup, -restore, -verify may be specified at a time.")
-		os.Exit(1)
-	}
-
 	cfg, err := util.Load(configPath)
 	if err != nil {
-		if cliCount == 1 {
-			fmt.Fprintf(os.Stderr, "Error loading configuration from %s: %v\n", configPath, err)
-			os.Exit(1)
-		}
 		exitWithError(fmt.Sprintf("Error loading configuration from %s", configPath), err)
-	}
-
-	if cliBackup && cfg.AuthenticationMode != util.AuthModeYubiKey {
-		fmt.Fprintln(os.Stderr, "Error: -backup requires authentication_mode: 3 (YubiKey only). Remedy: Set authentication_mode to 3 in config.yaml or run interactive backup without -backup.")
-		os.Exit(1)
 	}
 
 	printStartupBanner(Version)
 	startup.RunStartupHealthCheck(cfg, exeDir, configPath)
-
-	// Non-interactive CLI mode: skip start confirmations and exit with a proper code.
-	if cliCount == 1 {
-		cfg.NonInteractive = true
-		switch {
-		case cliBackup:
-			if err := backup.Run(cfg, exeDir); err != nil {
-				reportOperationError("Backup", err)
-				os.Exit(1)
-			}
-		case cliRestore:
-			if err := restore.Run(cfg, exeDir); err != nil {
-				reportOperationError("Restore", err)
-				os.Exit(1)
-			}
-		case cliVerify:
-			if err := verify.Run(cfg, exeDir); err != nil {
-				reportOperationError("Verification", err)
-				os.Exit(1)
-			}
-		}
-		return
-	}
 
 	// Interactive menu mode.
 	for {

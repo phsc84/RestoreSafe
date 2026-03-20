@@ -1,8 +1,8 @@
 package startup
 
 import (
-	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"fmt"
@@ -44,7 +44,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		Detail:   configPathDisplay,
 	})
 
-	sourceStatuses := backup.InspectSourceFolders(cfg.SourceFolders, exeDir)
+	sourceStatuses := operation.InspectSourceFoldersForValidation(cfg.SourceFolders, exeDir)
 	for _, src := range sourceStatuses {
 		if src.Err != nil {
 			items = append(items, healthItem{

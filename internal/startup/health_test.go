@@ -9,31 +9,6 @@ import (
 	"testing"
 )
 
-func TestFormatBytesBinary(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name  string
-		input uint64
-		want  string
-	}{
-		{name: "bytes", input: 500, want: "500 B"},
-		{name: "kb", input: 1536, want: "1.50 KB"},
-		{name: "gb", input: 3 * 1024 * 1024 * 1024, want: "3.00 GB"},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := util.FormatBytesBinary(tc.input)
-			if got != tc.want {
-				t.Fatalf("util.FormatBytesBinary(%d): got %q, want %q", tc.input, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestHealthSeverityLabel(t *testing.T) {
 	t.Parallel()
 

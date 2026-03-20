@@ -39,10 +39,10 @@ func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
 }
 
 // CollectParts returns the sorted part file paths for an entry.
-func CollectParts(targetDir string, entry util.BackupEntry) []string {
+func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 	des, err := os.ReadDir(targetDir)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("Failed to read backup folder %q: %w. Remedy: Check that target_folder exists and is readable.", targetDir, err)
 	}
 
 	type seqPath struct {
@@ -68,7 +68,7 @@ func CollectParts(targetDir string, entry util.BackupEntry) []string {
 	for i, p := range parts {
 		paths[i] = p.path
 	}
-	return paths
+	return paths, nil
 }
 
 // SortedEntries returns entries sorted by date desc, then folder name.
@@ -128,7 +128,10 @@ func IsChallengeFileYubiKeyOnly(path string) bool {
 
 // NewestPartModTime returns the newest modification time among all part files.
 func NewestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
-	parts := CollectParts(targetDir, entry)
+	parts, err := CollectParts(targetDir, entry)
+	if err != nil {
+		return time.Time{}, err
+	}
 	if len(parts) == 0 {
 		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
 	}

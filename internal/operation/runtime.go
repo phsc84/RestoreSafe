@@ -16,7 +16,7 @@ func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.
 	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
-		fmt.Printf("Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
 		return util.NewConsoleLogger(cfg.LogLevel)
 	}
 	return log
@@ -120,7 +120,10 @@ func ReadPasswordWithRetry(
 		}
 
 		// Verify password by attempting a trial decrypt.
-		parts := catalog.CollectParts(targetDir, rep)
+		parts, err := catalog.CollectParts(targetDir, rep)
+		if err != nil {
+			return nil, err
+		}
 		if len(parts) > 0 {
 			if err := verifyPassword(parts[0], password); err == nil {
 				return password, nil

@@ -8,12 +8,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// AuthMode values for AuthenticationMode.
+// AuthMode represents the authentication mode for backup operations.
+type AuthMode int
+
+// AuthMode values.
 const (
-	AuthModePassword        = 1 // password only
-	AuthModePasswordYubiKey = 2 // password + YubiKey HMAC-SHA1
-	AuthModeYubiKey         = 3 // YubiKey only, no password
+	AuthModePassword        AuthMode = 1 // password only
+	AuthModePasswordYubiKey AuthMode = 2 // password + YubiKey HMAC-SHA1
+	AuthModeYubiKey         AuthMode = 3 // YubiKey only, no password
 )
+
+// Label returns a human-readable description of the authentication mode.
+func (a AuthMode) Label() string {
+	switch a {
+	case AuthModeYubiKey:
+		return "YubiKey only (no password)"
+	case AuthModePasswordYubiKey:
+		return "password + YubiKey"
+	default:
+		return "password only"
+	}
+}
 
 // Config holds all application configuration.
 type Config struct {
@@ -23,12 +38,7 @@ type Config struct {
 	RetentionKeep      int      `yaml:"retention_keep"`
 	LogLevel           string   `yaml:"log_level"`
 	IODiagnostics      bool     `yaml:"io_diagnostics"`
-	AuthenticationMode int      `yaml:"authentication_mode"`
-
-	// NonInteractive is set at runtime (not from config.yaml).
-	// When true, start confirmations are skipped so the application
-	// runs unattended (e.g. invoked via -backup or -restore flag).
-	NonInteractive bool `yaml:"-"`
+	AuthenticationMode AuthMode `yaml:"authentication_mode"`
 }
 
 // UseYubiKey reports whether the configured authentication mode requires a YubiKey.

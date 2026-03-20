@@ -167,17 +167,3 @@ func TestResolveSelectionByIDUsesNewestDateOnly(t *testing.T) {
 		}
 	}
 }
-
-func TestCompletedActionLabel(t *testing.T) {
-	t.Parallel()
-
-	if got := CompletedActionLabel("restore"); got != "restored" {
-		t.Fatalf("expected restored, got %q", got)
-	}
-	if got := CompletedActionLabel("verify"); got != "verified" {
-		t.Fatalf("expected verified, got %q", got)
-	}
-	if got := CompletedActionLabel("clean"); got != "cleaned" {
-		t.Fatalf("expected cleaned fallback, got %q", got)
-	}
-}

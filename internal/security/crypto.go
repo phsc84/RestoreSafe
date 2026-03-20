@@ -42,6 +42,13 @@ import (
 
 const (
 	// magic identifies a RestoreSafe encrypted file.
+	// Bytes 0–4 are the ASCII marker "RSBKP".
+	// Byte 5 is a null separator.
+	// Byte 6 is the format version (currently 1).
+	//   Increment the version on any breaking change to the header
+	//   or chunk layout so that older readers can reject files they
+	//   cannot safely parse.
+	// Byte 7 is reserved (must be 0x00).
 	magic = "RSBKP\x00\x01\x00"
 	// saltLen is the byte length of the Argon2id salt.
 	saltLen = 32
@@ -219,10 +226,13 @@ func readHeader(r io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("Failed to read salt: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 
-	// Read (and ignore) stored chunk size — we use the embedded value.
+	// Read and validate stored chunk size for format compatibility.
 	var storedChunkSize uint32
 	if err := binary.Read(r, binary.BigEndian, &storedChunkSize); err != nil {
 		return nil, fmt.Errorf("Failed to read stored chunk size: %w. Remedy: Check that the backup file is complete and readable.", err)
+	}
+	if storedChunkSize != uint32(chunkSize) {
+		return nil, fmt.Errorf("Unsupported chunk size in backup header: %d. Remedy: Use a backup created by this RestoreSafe version.", storedChunkSize)
 	}
 
 	return salt, nil

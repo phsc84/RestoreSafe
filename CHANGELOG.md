@@ -6,6 +6,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+- Removed unattended operation CLI flags (`-backup`, `-restore`, `-verify`). These flags provided limited value without truly supporting unattended execution: `-backup` required YubiKey physical touch, and `-restore`/`-verify` required authentication input. The `-config` flag for custom config paths remains available for interactive mode.
+
 ## [2.0.0] - 2026-03-19
 
 ### Added

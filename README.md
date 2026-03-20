@@ -11,7 +11,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
   - [Create a backup](#create-a-backup)
   - [Restore a backup](#restore-a-backup)
   - [Verify a backup](#verify-a-backup)
-  - [Command-line flags for scheduled / unattended operation](#command-line-flags-for-scheduled--unattended-operation)
+  - [Custom config file path](#custom-config-file-path)
 - [Naming scheme of created files](#naming-scheme-of-created-files)
 - [YubiKey setup](#yubikey-setup)
 
@@ -80,66 +80,15 @@ Verify mode checks that all selected backup parts are present, decryptable with 
 The same backup picker groups backups by backup set (`date + ID`) and supports date filtering via `YYYY-MM-DD` plus a quick `newest` shortcut for the most recent backup set.
 If a backup ID exists on multiple dates, ID-based selection warns and automatically uses the newest date.
 
-### Command-line flags for scheduled / unattended operation
+### Custom config file path
 
-RestoreSafe can be run from a batch file or Windows Task Scheduler using command-line flags.
-
-**Unattended mode**
-
-| Flag | Description |
-|---|---|
-| `-backup` | Run unattended backup and exit (requires `authentication_mode: 3`). |
-| `-restore` | Run unattended restore for the newest backup run and exit. |
-| `-verify` | Run unattended verify for the newest backup run and exit. |
-
-- The "Start now?" confirmation is skipped automatically.
-- Exits with code `0` on success or `1` on failure, making it suitable for batch files and scheduled tasks.
-- In `-backup` mode, `authentication_mode` must be `3` (YubiKey only). Insert the YubiKey before the scheduled task runs.
-- In `-restore` and `-verify` modes, the newest backup run is selected automatically and the start confirmation is skipped.
-- `-restore` and `-verify` may still require authentication input for the selected backup set (password and/or YubiKey touch). Selection is unattended, but fully unattended end-to-end execution depends on the selected backup set.
-
-**Custom config file path**
-
-| Flag | Description |
-|---|---|
-| `-config="<absolute-path>"` | Load config from a custom absolute path. |
-| `-config="<absolute-path>" -backup` | Custom config path combined with unattended backup. |
-
-- By default RestoreSafe loads `config.yaml` from the application folder.
-- Combined with `-backup`, operation runs unattended (requires `authentication_mode: 3`).
-- Combined with `-restore` or `-verify`, operation auto-selects the newest backup set and skips the start confirmation, but authentication prompts may still appear depending on the selected backup set.
-
-**Example batch files**
-
-Example batch file for scheduled / unattended backup:
+RestoreSafe can load `config.yaml` from a custom location using the `-config` flag:
 
 ```bat
-@echo off
-cd /d "%~dp0"
-RestoreSafe.exe -backup
-if %errorlevel% neq 0 (
-  echo Backup failed with exit code %errorlevel% >> backup-error.log
-)
+RestoreSafe.exe -config="D:\path\to\config.yaml"
 ```
 
-Example batch file using a custom config location (`-config=`), interactive mode:
-
-```bat
-@echo off
-cd /d "%~dp0"
-RestoreSafe.exe -config="D:/RestoreSafe/config.yaml"
-```
-
-Example batch file using a custom config location (`-config=`), unattended mode:
-
-```bat
-@echo off
-cd /d "%~dp0"
-RestoreSafe.exe -config="D:/RestoreSafe/config.yaml" -backup
-if %errorlevel% neq 0 (
-  echo Backup failed with exit code %errorlevel% >> backup-error.log
-)
-```
+By default, RestoreSafe loads `config.yaml` from the same directory as the executable. Use this flag to load configuration from any absolute path.
 
 ## Naming scheme of created files
 

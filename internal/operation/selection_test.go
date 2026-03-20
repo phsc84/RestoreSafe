@@ -112,3 +112,17 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 		t.Fatalf("expected grouped nested entries for ABC125, got: %q", output)
 	}
 }
+
+func TestCompletedActionLabel(t *testing.T) {
+	t.Parallel()
+
+	if got := completedActionLabel("restore"); got != "restored" {
+		t.Fatalf("expected restored, got %q", got)
+	}
+	if got := completedActionLabel("verify"); got != "verified" {
+		t.Fatalf("expected verified, got %q", got)
+	}
+	if got := completedActionLabel("clean"); got != "cleaned" {
+		t.Fatalf("expected cleaned fallback, got %q", got)
+	}
+}

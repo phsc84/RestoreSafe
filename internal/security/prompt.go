@@ -11,12 +11,9 @@ import (
 	"golang.org/x/term"
 )
 
-// ReadPassword prints prompt to stdout and reads a password without echo.
-func ReadPassword(promptText ...string) ([]byte, error) {
-	if len(promptText) == 0 {
-		promptText = append(promptText, "Enter password: ")
-	}
-	fmt.Print(promptText[0])
+// ReadPassword prints the prompt text to stdout and reads a password without echo.
+func ReadPassword(prompt string) ([]byte, error) {
+	fmt.Print(prompt)
 
 	fd := int(os.Stdin.Fd())
 	password, err := term.ReadPassword(fd)

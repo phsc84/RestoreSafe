@@ -13,7 +13,7 @@ import (
 
 var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
-func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceFolderStatus, log *util.Logger) error {
+func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupSourcePlan, log *util.Logger) error {
 	if retentionKeep <= 0 {
 		log.Info("Retention cleanup disabled (retention_keep=%d)", retentionKeep)
 		return nil
@@ -101,7 +101,11 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []sourceF
 
 func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, error) {
 	removed := 0
-	for _, part := range catalog.CollectParts(targetDir, entry) {
+	parts, err := catalog.CollectParts(targetDir, entry)
+	if err != nil {
+		return removed, err
+	}
+	for _, part := range parts {
 		err := os.Remove(part)
 		if err != nil {
 			if os.IsNotExist(err) {

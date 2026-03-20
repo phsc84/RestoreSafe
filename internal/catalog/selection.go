@@ -59,19 +59,15 @@ func BackupRunSummaries(targetDir string, index []util.BackupEntry) ([]BackupRun
 	return runs, nil
 }
 
-func NewestBackupRunSummary(targetDir string, index []util.BackupEntry) (BackupRunSummary, error) {
+func ResolveNewestBackupRunSelection(targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
 	runs, err := BackupRunSummaries(targetDir, index)
 	if err != nil {
-		return BackupRunSummary{}, fmt.Errorf("Failed to inspect newest backup set: %w", err)
+		return nil, "", fmt.Errorf("Failed to inspect newest backup set: %w", err)
 	}
-	return runs[0], nil
-}
-
-func ResolveNewestBackupRunSelection(targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	run, err := NewestBackupRunSummary(targetDir, index)
-	if err != nil {
-		return nil, "", err
+	if len(runs) == 0 {
+		return nil, "", fmt.Errorf("No backup sets found. Remedy: Ensure backup folder contains valid backup parts.")
 	}
+	run := runs[0]
 	return run.Entries, fmt.Sprintf("newest set %s/%s", run.Date, run.ID), nil
 }
 
@@ -129,15 +125,4 @@ func IsRawBackupID(input string) bool {
 		}
 	}
 	return true
-}
-
-func CompletedActionLabel(action string) string {
-	switch action {
-	case "restore":
-		return "restored"
-	case "verify":
-		return "verified"
-	default:
-		return action + "ed"
-	}
 }

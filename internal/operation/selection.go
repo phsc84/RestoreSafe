@@ -83,7 +83,7 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 	}
 	fmt.Println()
 
-	completedAction := catalog.CompletedActionLabel(action)
+	completedAction := completedActionLabel(action)
 	fmt.Printf("Select backup(s) to %s:\n", action)
 	fmt.Printf("  - Enter newest -> newest backup set (all folders of the most recent run)\n")
 	fmt.Printf("  - Enter backup ID only (e.g. ABC123) -> all folders with this ID will be %s\n", completedAction)
@@ -91,6 +91,17 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 	fmt.Printf("  - Enter q -> cancel\n")
 	fmt.Println()
 	return nil
+}
+
+func completedActionLabel(action string) string {
+	switch action {
+	case "restore":
+		return "restored"
+	case "verify":
+		return "verified"
+	default:
+		return action + "ed"
+	}
 }
 
 func formatBackupRunTimestamp(ts time.Time) string {

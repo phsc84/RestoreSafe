@@ -3,40 +3,21 @@ package operation
 import (
 	"RestoreSafe/internal/util"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
 
 // LocalStagingPlan describes whether and how to use local staging to avoid same-volume contention.
 type LocalStagingPlan struct {
-	Enabled           bool
-	SameVolume        bool
-	TempDir           string
-	ResolvedTempDir   string
-	TempSharesVolume  bool
-	ResolvedSourceDir string
-	ResolvedDestDir   string
-	ResolvedVolume    string
+	Enabled          bool
+	SameVolume       bool
+	ResolvedTempDir  string
+	TempSharesVolume bool
 }
 
 // PlanLocalStaging determines if local staging should be used based on source, destination, and TEMP volumes.
 // It stages to local TEMP when source and dest are on the same volume AND TEMP is on a different volume.
 func PlanLocalStaging(sourceDir, destDir, tempDir string) LocalStagingPlan {
-	resolvedSourceDir := sourceDir
-	if !filepath.IsAbs(resolvedSourceDir) {
-		if absPath, err := filepath.Abs(resolvedSourceDir); err == nil {
-			resolvedSourceDir = absPath
-		}
-	}
-
-	resolvedDestDir := destDir
-	if !filepath.IsAbs(resolvedDestDir) {
-		if absPath, err := filepath.Abs(resolvedDestDir); err == nil {
-			resolvedDestDir = absPath
-		}
-	}
-
 	resolvedTempDir := tempDir
 	if resolvedTempDir != "" && !filepath.IsAbs(resolvedTempDir) {
 		if absPath, err := filepath.Abs(resolvedTempDir); err == nil {
@@ -48,14 +29,10 @@ func PlanLocalStaging(sourceDir, destDir, tempDir string) LocalStagingPlan {
 	tempSharesVolume := resolvedTempDir != "" && util.SameVolume(sourceDir, resolvedTempDir)
 
 	return LocalStagingPlan{
-		Enabled:           sameVolume && resolvedTempDir != "" && !tempSharesVolume,
-		SameVolume:        sameVolume,
-		TempDir:           tempDir,
-		ResolvedTempDir:   resolvedTempDir,
-		TempSharesVolume:  tempSharesVolume,
-		ResolvedSourceDir: resolvedSourceDir,
-		ResolvedDestDir:   resolvedDestDir,
-		ResolvedVolume:    util.VolumeDisplay(sourceDir),
+		Enabled:          sameVolume && resolvedTempDir != "" && !tempSharesVolume,
+		SameVolume:       sameVolume,
+		ResolvedTempDir:  resolvedTempDir,
+		TempSharesVolume: tempSharesVolume,
 	}
 }
 
@@ -88,25 +65,53 @@ func CleanupStagingDirDuring(stagingDir, phase string, log *util.Logger) {
 	}
 }
 
-// CopyFile copies a single file from source to destination with sync for data safety.
-func CopyFile(sourcePath, destinationPath string) error {
-	sourceFile, err := os.Open(sourcePath)
-	if err != nil {
-		return fmt.Errorf("Failed to open source file %q: %w. Remedy: Check drive/network availability and read permissions.", sourcePath, err)
-	}
-	defer sourceFile.Close()
+// StagingScope manages the lifecycle of an optional staging directory.
+// All methods degrade gracefully when staging is not active or the receiver is nil.
+type StagingScope struct {
+	// Dir is the staging directory path; empty when staging is not active.
+	Dir string
+	log *util.Logger
+}
 
-	destinationFile, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+// NewStagingScope creates a staging directory when plan.Enabled is true.
+// Returns an inactive StagingScope (Dir="") when staging is disabled.
+func NewStagingScope(plan LocalStagingPlan, pattern string, log *util.Logger) (*StagingScope, error) {
+	if !plan.Enabled {
+		return &StagingScope{log: log}, nil
+	}
+	dir, err := CreateStagingDir(plan.ResolvedTempDir, pattern)
 	if err != nil {
-		return fmt.Errorf("Failed to create local staging file %q: %w. Remedy: Check TEMP/TMP write permissions and free disk space.", destinationPath, err)
+		return nil, err
 	}
-	defer destinationFile.Close()
+	return &StagingScope{Dir: dir, log: log}, nil
+}
 
-	if _, err := io.Copy(destinationFile, sourceFile); err != nil {
-		return fmt.Errorf("Failed to copy %q to local staging: %w. Remedy: Check drive/network availability, TEMP/TMP free space, and write permissions.", sourcePath, err)
+// ActiveStagingScope wraps an already-created staging directory in a StagingScope.
+func ActiveStagingScope(dir string, log *util.Logger) *StagingScope {
+	return &StagingScope{Dir: dir, log: log}
+}
+
+// ActiveDir returns Dir if staging is active, otherwise fallback. Safe to call on a nil receiver.
+func (s *StagingScope) ActiveDir(fallback string) string {
+	if s == nil || s.Dir == "" {
+		return fallback
 	}
-	if err := destinationFile.Sync(); err != nil {
-		return fmt.Errorf("Failed to sync %q to disk: %w. Remedy: Check TEMP/TMP disk space and write permissions.", destinationPath, err)
+	return s.Dir
+}
+
+// Cleanup removes the staging directory. Safe to call on a nil receiver or when staging is inactive.
+func (s *StagingScope) Cleanup() {
+	if s == nil {
+		return
 	}
-	return nil
+	CleanupStagingDir(s.Dir, s.log)
+}
+
+// CleanupDuring removes the staging directory during error recovery, tagging the phase in the log.
+// Safe to call on a nil receiver.
+func (s *StagingScope) CleanupDuring(phase string) {
+	if s == nil {
+		return
+	}
+	CleanupStagingDirDuring(s.Dir, phase, s.log)
 }

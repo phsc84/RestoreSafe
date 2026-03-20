@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 )
 
+// SplitWriteBufferSize is the buffered writer size used before split output writes.
+const SplitWriteBufferSize = 32 * 1024 * 1024
+
 // NameFunc is called to produce the file path for each part.
 // seq is the 1-based sequence number.
 type NameFunc func(seq int) string

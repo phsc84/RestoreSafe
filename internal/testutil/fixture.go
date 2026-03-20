@@ -13,8 +13,7 @@ import (
 )
 
 const (
-	splitWriteBufferSize = 32 * 1024 * 1024
-	defaultSplitSizeMB   = 1
+	defaultSplitSizeMB = 1
 )
 
 // BackupFixture holds workspace paths and metadata for an integration-style backup test.
@@ -69,7 +68,6 @@ func NewRestoreFixture(t testing.TB, password []byte) *RestoreFixture {
 
 	return &RestoreFixture{BackupFixture: bf, RestoreRoot: restoreRoot}
 }
-
 func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, backupDate string, backupID util.BackupID, password []byte, splitSizeMB int64) int {
 	t.Helper()
 
@@ -77,7 +75,7 @@ func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, bac
 		return util.PartFileName(targetDir, folderName, backupDate, backupID, seq)
 	}
 	sw := util.NewWriter(nameFunc, splitSizeMB*1024*1024)
-	bw := bufio.NewWriterSize(sw, splitWriteBufferSize)
+	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
 
 	pr, pw := io.Pipe()
 	tarErrCh := make(chan error, 1)

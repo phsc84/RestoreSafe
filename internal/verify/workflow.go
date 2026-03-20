@@ -3,15 +3,12 @@ package verify
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 )
 
 // Run verifies selected backup sets without restoring them to disk.
@@ -27,7 +24,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	selected, selection, err := resolveVerifySelection(cfg, targetDir, index)
+	selected, selection, err := resolveVerifySelection(targetDir, index)
 	if err != nil {
 		if errors.Is(err, operation.ErrSelectionCancelled) {
 			fmt.Println("Verification cancelled.")
@@ -52,19 +49,14 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	if cfg.NonInteractive {
-		log.Info("Unattended mode: start confirmation skipped")
-		fmt.Println("Starting verification automatically.")
-	} else {
-		confirmed, err := operation.PromptStartAction("verification")
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			log.Info("Verification cancelled by user before start")
-			fmt.Println("Verification cancelled.")
-			return nil
-		}
+	confirmed, err := operation.PromptStartAction("verification")
+	if err != nil {
+		return err
+	}
+	if !confirmed {
+		log.Info("Verification cancelled by user before start")
+		fmt.Println("Verification cancelled.")
+		return nil
 	}
 
 	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
@@ -74,9 +66,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	fmt.Println("Verification started.")
 	log.Info("Verifying %d selected item(s)", len(selected))
-	verifyDir := targetDir
-	var cleanup = func() {}
-
+	var scope *operation.StagingScope
 	if stagingPlan.Enabled {
 		fmt.Println("Staging selected backups locally. This can take a moment on network storage.")
 		stagedDir, err := stageSelectedVerifyParts(selected, targetDir, stagingPlan.ResolvedTempDir, log)
@@ -84,26 +74,20 @@ func Run(cfg *util.Config, exeDir string) error {
 			return fmt.Errorf("Local staging failed: %w", err)
 		}
 		fmt.Println("Local staging completed.")
-		verifyDir = stagedDir
-		cleanup = func() {
-			operation.CleanupStagingDir(stagedDir, log)
-		}
+		scope = operation.ActiveStagingScope(stagedDir, log)
 	}
+	defer scope.Cleanup()
 
+	verifyDir := scope.ActiveDir(targetDir)
 	if err := verifySelectedEntries(selected, verifyDir, password, log); err != nil {
-		cleanup()
 		return err
 	}
-	cleanup()
 
 	log.Info("Verification completed successfully.")
 	return nil
 }
 
-func resolveVerifySelection(cfg *util.Config, targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	if cfg.NonInteractive {
-		return catalog.ResolveNewestBackupRunSelection(targetDir, index)
-	}
+func resolveVerifySelection(targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
 	return operation.PromptBackupSelection("verify", targetDir, index)
 }
 
@@ -140,15 +124,15 @@ func printVerifyPreflight(targetDir string, items []verifyPreflightItem, require
 		fmt.Printf("Local staging   : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	}
 	fmt.Println("Selection:")
-	for _, item := range items {
+	entries := make([]operation.PreflightEntry, len(items))
+	for i, item := range items {
 		sizeMB := float64(item.TotalSizeBytes) / (1024 * 1024)
-		if item.Err != nil {
-			fmt.Printf("  [ERROR] %s (parts: %d, size: %.2f MB)\n", item.Entry.String(), item.PartCount, sizeMB)
-			fmt.Printf("          -> %v\n", item.Err)
-			continue
+		entries[i] = operation.PreflightEntry{
+			Label: fmt.Sprintf("%s (parts: %d, size: %.2f MB)", item.Entry.String(), item.PartCount, sizeMB),
+			Err:   item.Err,
 		}
-		fmt.Printf("  [OK]    %s (parts: %d, size: %.2f MB)\n", item.Entry.String(), item.PartCount, sizeMB)
 	}
+	operation.PrintPreflightSelection(entries)
 	fmt.Println()
 }
 
@@ -169,7 +153,11 @@ func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir st
 	copied := 0
 	seen := make(map[string]struct{})
 	for _, entry := range selected {
-		parts := catalog.CollectParts(sourceDir, entry)
+		parts, err := catalog.CollectParts(sourceDir, entry)
+		if err != nil {
+			operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
+			return "", err
+		}
 		if len(parts) == 0 {
 			operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
 			return "", fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same folder.", entry.String())
@@ -182,7 +170,7 @@ func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir st
 			seen[partPath] = struct{}{}
 
 			destinationPath := filepath.Join(stagingDir, filepath.Base(partPath))
-			if err := operation.CopyFile(partPath, destinationPath); err != nil {
+			if err := util.CopyFile(partPath, destinationPath); err != nil {
 				operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
 				if strings.Contains(err.Error(), "Remedy:") {
 					return "", err
@@ -209,56 +197,27 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 }
 
 func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
-	parts := catalog.CollectParts(targetDir, entry)
+	parts, err := catalog.CollectParts(targetDir, entry)
+	if err != nil {
+		return err
+	}
 	if len(parts) == 0 {
 		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_folder.", entry.String())
 	}
 
 	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
 
-	seqReader := util.NewSequentialReader(parts)
-	defer seqReader.Close()
-
-	var inBytes atomic.Int64
-	var outBytes atomic.Int64
-	var outWriteCalls atomic.Int64
-	progressDone := make(chan struct{})
-	progressStopped := make(chan struct{})
-	go func() {
-		operation.LogProgressUntilDone(log, entry.FolderName, "verified", &inBytes, &outBytes, &outWriteCalls, progressDone)
-		close(progressStopped)
-	}()
-	defer func() {
-		close(progressDone)
-		<-progressStopped
-	}()
-
-	pr, pw := io.Pipe()
-	decErrCh := make(chan error, 1)
-	go func() {
-		err := security.Decrypt(
-			&operation.CountingWriter{W: pw, Total: &outBytes, Calls: &outWriteCalls},
-			&operation.CountingReader{R: seqReader, Total: &inBytes},
-			password,
-		)
-		pw.CloseWithError(err) //nolint:errcheck
-		decErrCh <- err
-	}()
-
-	validateErr := util.ValidateTar(pr)
-	if validateErr != nil {
-		pr.CloseWithError(validateErr) //nolint:errcheck
-	}
-	decErr := <-decErrCh
-
-	if decErr != nil {
-		if errors.Is(decErr, security.ErrWrongPassword) {
-			return fmt.Errorf("%w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder.", security.ErrWrongPassword)
-		}
-		return fmt.Errorf("Decryption failed: %w", decErr)
-	}
-	if validateErr != nil {
-		return fmt.Errorf("Archive validation failed: %w", validateErr)
+	err = operation.RunDecryptPipeline(
+		parts,
+		password,
+		log,
+		entry.FolderName,
+		"verified",
+		"Archive validation",
+		util.ValidateTar,
+	)
+	if err != nil {
+		return err
 	}
 
 	return nil

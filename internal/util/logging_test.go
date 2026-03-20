@@ -1,15 +1,15 @@
-package util
+package util_test
 
 import (
-	"io"
-	"os"
+	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/util"
 	"strings"
 	"testing"
 )
 
 func TestNewConsoleLogger(t *testing.T) {
-	output := captureStdout(t, func() {
-		log := NewConsoleLogger("debug")
+	output := testutil.CaptureStdout(t, func() {
+		log := util.NewConsoleLogger("debug")
 		if !log.IsConsoleOnly() {
 			t.Fatal("expected console-only logger")
 		}
@@ -31,7 +31,7 @@ func TestNewConsoleLogger(t *testing.T) {
 }
 
 func TestNilLoggerMethodsAreSafe(t *testing.T) {
-	var log *Logger
+	var log *util.Logger
 	log.Close()
 	log.Info("ignored")
 	log.Debug("ignored")
@@ -40,32 +40,4 @@ func TestNilLoggerMethodsAreSafe(t *testing.T) {
 	if log.IsConsoleOnly() {
 		t.Fatal("nil logger should not report console-only")
 	}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	originalStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdout pipe: %v", err)
-	}
-	os.Stdout = w
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stdout writer: %v", err)
-	}
-	os.Stdout = originalStdout
-
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("failed to read captured output: %v", err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatalf("failed to close stdout reader: %v", err)
-	}
-
-	return string(data)
 }
