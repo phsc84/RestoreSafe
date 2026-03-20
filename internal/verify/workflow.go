@@ -3,6 +3,7 @@ package verify
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/operation"
+	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
@@ -44,7 +45,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, targetDir, os.TempDir())
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflight(targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan)
+	printVerifyPreflightWithYubiKeyCheck(targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -112,13 +113,28 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 	return items
 }
 
-func printVerifyPreflight(targetDir string, items []verifyPreflightItem, requiresYubiKey, yubiKeyOnly bool, stagingPlan operation.LocalStagingPlan) {
+func printVerifyPreflightWithYubiKeyCheck(
+	targetDir string,
+	items []verifyPreflightItem,
+	requiresYubiKey, yubiKeyOnly bool,
+	stagingPlan operation.LocalStagingPlan,
+	checkYubiKeyConnected func() error,
+) {
 	fmt.Println()
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
 	displayBackupFolder := filepath.ToSlash(targetDir)
 	fmt.Printf("Backup folder   : %s\n", displayBackupFolder)
 	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	if requiresYubiKey {
+		status := "[OK]"
+		msg := "YubiKey connected. Keep it connected now before starting verification."
+		if err := checkYubiKeyConnected(); err != nil {
+			status = "[WARN]"
+			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting verification."
+		}
+		fmt.Printf("  %s %s\n", status, msg)
+	}
 	fmt.Printf("Items selected  : %d\n", len(items))
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging   : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
@@ -133,7 +149,6 @@ func printVerifyPreflight(targetDir string, items []verifyPreflightItem, require
 		}
 	}
 	operation.PrintPreflightSelection(entries)
-	fmt.Println()
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {

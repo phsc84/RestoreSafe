@@ -3,6 +3,7 @@ package operation
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ import (
 
 func TestBackupAuthenticationLabel(t *testing.T) {
 	t.Parallel()
-	if got := BackupAuthenticationLabel(true, false); got != "password + YubiKey (detected)" {
+	if got := BackupAuthenticationLabel(true, false); got != "password + YubiKey" {
 		t.Fatalf("unexpected label for YubiKey: %q", got)
 	}
 	if got := BackupAuthenticationLabel(false, false); got != "password only" {
@@ -88,5 +89,102 @@ func TestVerifyPasswordMissingFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Failed to open file") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestPromptStartActionPrintsSingleBlankLineBeforeAndAfterPrompt(t *testing.T) {
+	prevReadLine := readLineFn
+	prevStdout := os.Stdout
+	t.Cleanup(func() {
+		readLineFn = prevReadLine
+		os.Stdout = prevStdout
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdout pipe: %v", err)
+	}
+	os.Stdout = w
+
+	readLineFn = func(prompt string) (string, error) {
+		if prompt != "Start verification now? [Y/n]: " {
+			t.Fatalf("unexpected prompt: %q", prompt)
+		}
+		return "y", nil
+	}
+
+	confirmed, err := PromptStartAction("verification")
+	if err != nil {
+		t.Fatalf("PromptStartAction returned error: %v", err)
+	}
+	if !confirmed {
+		t.Fatal("expected confirmation true")
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close write end: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stdout: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("failed to close read end: %v", err)
+	}
+
+	if got := string(out); got != "\n\n" {
+		t.Fatalf("expected exactly one empty line before and after prompt, got %q", got)
+	}
+}
+
+func TestPromptStartActionPrintsSingleBlankLineOnRetry(t *testing.T) {
+	prevReadLine := readLineFn
+	prevStdout := os.Stdout
+	t.Cleanup(func() {
+		readLineFn = prevReadLine
+		os.Stdout = prevStdout
+	})
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdout pipe: %v", err)
+	}
+	os.Stdout = w
+
+	call := 0
+	readLineFn = func(prompt string) (string, error) {
+		if prompt != "Start verification now? [Y/n]: " {
+			t.Fatalf("unexpected prompt: %q", prompt)
+		}
+		if call == 0 {
+			call++
+			return "maybe", nil
+		}
+		return "n", nil
+	}
+
+	confirmed, err := PromptStartAction("verification")
+	if err != nil {
+		t.Fatalf("PromptStartAction returned error: %v", err)
+	}
+	if confirmed {
+		t.Fatal("expected confirmation false")
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close write end: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stdout: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("failed to close read end: %v", err)
+	}
+
+	got := string(out)
+	expected := "\n\nPlease enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.\n\n\n"
+	if got != expected {
+		t.Fatalf("unexpected stdout.\nexpected: %q\n     got: %q", expected, got)
 	}
 }

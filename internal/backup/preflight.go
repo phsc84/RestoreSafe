@@ -8,7 +8,13 @@ import (
 	"strings"
 )
 
-func printBackupPreflight(cfg *util.Config, targetDir string, sources []backupSourcePlan, stagingPlan operation.LocalStagingPlan) {
+func printBackupPreflightWithYubiKeyCheck(
+	cfg *util.Config,
+	targetDir string,
+	sources []backupSourcePlan,
+	stagingPlan operation.LocalStagingPlan,
+	checkYubiKeyConnected func() error,
+) {
 	fmt.Println()
 	fmt.Println("Backup preflight")
 	fmt.Println("----------------")
@@ -16,6 +22,15 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []backupSo
 	fmt.Printf("Split size      : %d MB\n", cfg.SplitSizeMB)
 	fmt.Printf("Retention keep  : %d\n", cfg.RetentionKeep)
 	fmt.Printf("Authentication  : %s\n", cfg.AuthenticationMode.Label())
+	if cfg.UseYubiKey() {
+		status := "[OK]"
+		msg := "YubiKey connected. Keep it connected now before starting backup."
+		if err := checkYubiKeyConnected(); err != nil {
+			status = "[WARN]"
+			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
+		}
+		fmt.Printf("  %s %s\n", status, msg)
+	}
 	fmt.Printf("Log level       : %s\n", strings.ToLower(cfg.LogLevel))
 
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
@@ -76,7 +91,6 @@ func printBackupPreflight(cfg *util.Config, targetDir string, sources []backupSo
 			fmt.Printf("  [WARN]  Source folder warning: Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}
-	fmt.Println()
 }
 
 func validateSourceFolders(sources []backupSourcePlan) error {

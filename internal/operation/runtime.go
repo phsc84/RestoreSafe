@@ -12,6 +12,8 @@ import (
 
 const maxPasswordAttempts = 3
 
+var readLineFn = security.ReadLine
+
 func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.Logger {
 	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
@@ -24,7 +26,9 @@ func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.
 
 func PromptStartAction(action string) (bool, error) {
 	for {
-		answer, err := security.ReadLine(fmt.Sprintf("Start %s now? [Y/n]: ", action))
+		fmt.Println()
+		answer, err := readLineFn(fmt.Sprintf("Start %s now? [Y/n]: ", action))
+		fmt.Println()
 		if err != nil {
 			return false, err
 		}
@@ -44,7 +48,7 @@ func BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly bool) string {
 	case yubiKeyOnly:
 		return "YubiKey only (no password)"
 	case requiresYubiKey:
-		return "password + YubiKey (detected)"
+		return "password + YubiKey"
 	default:
 		return "password only"
 	}
@@ -99,18 +103,14 @@ func ReadPasswordWithRetry(
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
 			}
-			// Check that ykman is available before prompting the user.
-			if err := security.CheckYubiKeyAvailability(); err != nil {
-				return nil, fmt.Errorf("YubiKey is enabled but not available: %w. Remedy: Install YubiKey Manager (https://www.yubico.com/support/download/yubikey-manager/).", err)
+			// Verify ykman is installed and a device is physically connected.
+			if err := security.CheckYubiKeyConnected(); err != nil {
+				return nil, fmt.Errorf("YubiKey is required but no YubiKey was detected. Remedy: Connect the YubiKey and retry.")
 			}
-			if yubiKeyOnly {
-				fmt.Println("YubiKey-only mode. Please touch the YubiKey button.")
-			} else {
-				fmt.Println("YubiKey detected. Please touch the YubiKey button.")
-			}
+			fmt.Println("YubiKey connected. Please touch the YubiKey button.")
 			password, err = security.CombineWithPasswordForRestore(password, challengeHex)
 			if err != nil {
-				return nil, fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and verify slot 2 is configured correctly.", err)
+				return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
 			}
 			if yubiKeyOnly {
 				log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)

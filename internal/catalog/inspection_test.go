@@ -69,3 +69,10 @@ func TestInspectBackupPartsReturnsErrorForNoParts(t *testing.T) {
 		t.Fatalf("unexpected error message: %v", err)
 	}
 }
+
+func assertNotExists(t *testing.T, path string) {
+	t.Helper()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected file to be removed: %s", path)
+	}
+}

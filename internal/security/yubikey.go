@@ -29,6 +29,12 @@ var ErrYubikeyNotFound = errors.New(
 	"ykman not found - please install YubiKey Manager: " +
 		"(https://www.yubico.com/support/download/yubikey-manager/)")
 
+var resolveYkmanExecutableFn = resolveYkmanExecutable
+
+var ykmanListOutput = func(ykmanPath string) ([]byte, error) {
+	return exec.Command(ykmanPath, "list").Output()
+}
+
 func resolveYkmanExecutable() (string, error) {
 	return resolveYkmanExecutableWith(exec.LookPath, os.Stat, os.Getenv, runtime.GOOS)
 }
@@ -134,6 +140,23 @@ func CheckYubiKeyAvailability() error {
 	_, err := resolveYkmanExecutable()
 	if err != nil {
 		return ErrYubikeyNotFound
+	}
+	return nil
+}
+
+// ErrYubiKeyNotConnected is returned when ykman is available but no device is plugged in.
+var ErrYubiKeyNotConnected = errors.New("no YubiKey detected")
+
+// CheckYubiKeyConnected verifies that ykman is installed AND a YubiKey device
+// is currently connected. Call this before prompting the user to touch the key.
+func CheckYubiKeyConnected() error {
+	ykmanPath, err := resolveYkmanExecutableFn()
+	if err != nil {
+		return ErrYubikeyNotFound
+	}
+	out, err := ykmanListOutput(ykmanPath)
+	if err != nil || strings.TrimSpace(string(out)) == "" {
+		return ErrYubiKeyNotConnected
 	}
 	return nil
 }

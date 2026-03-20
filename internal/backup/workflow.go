@@ -55,7 +55,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
 
-	printBackupPreflight(cfg, targetDir, sources, stagingPlan)
+	printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
 
 	confirmed, err := operation.PromptStartAction("backup")
 	if err != nil {
@@ -83,19 +83,15 @@ func Run(cfg *util.Config, exeDir string) error {
 	// Optional YubiKey factor (2FA or sole factor in yubikey mode).
 	var challengeHex string
 	if cfg.UseYubiKey() {
-		// Check that ykman is available before prompting the user.
-		if err := security.CheckYubiKeyAvailability(); err != nil {
-			return fmt.Errorf("YubiKey is enabled but not available: %w. Remedy: Install YubiKey Manager (https://www.yubico.com/support/download/yubikey-manager/).", err)
+		// Verify ykman is installed and a device is physically connected.
+		if err := security.CheckYubiKeyConnected(); err != nil {
+			return fmt.Errorf("YubiKey is required but no YubiKey was detected. Remedy: Connect the YubiKey and retry.")
 		}
-		if cfg.IsYubiKeyOnly() {
-			fmt.Println("Please touch the YubiKey button.")
-		} else {
-			fmt.Println("YubiKey detected. Please touch the YubiKey button.")
-		}
+		fmt.Println("YubiKey connected. Please touch the YubiKey button.")
 		var err error
 		password, challengeHex, err = security.CombineWithPassword(password)
 		if err != nil {
-			return fmt.Errorf("YubiKey authentication failed: %w. Remedy: Connect the YubiKey, touch it, and ensure ykman from YubiKey Manager is installed.", err)
+			return fmt.Errorf("YubiKey authentication failed: %w", err)
 		}
 		if cfg.IsYubiKeyOnly() {
 			log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)

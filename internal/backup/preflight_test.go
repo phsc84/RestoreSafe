@@ -12,8 +12,6 @@ import (
 )
 
 func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
-	t.Parallel()
-
 	plans := []backupSourcePlan{
 		{Resolved: "A"},
 		{Resolved: "B", Skip: true},
@@ -28,8 +26,6 @@ func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 }
 
 func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
-	t.Parallel()
-
 	err := validateSourceFolders([]backupSourcePlan{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
 	if err == nil {
 		t.Fatal("expected preflight validation error, got nil")
@@ -41,8 +37,6 @@ func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
 }
 
 func TestEstimateSelectedSourceBytes(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	srcA := filepath.Join(root, "A")
 	srcB := filepath.Join(root, "B")
@@ -76,8 +70,6 @@ func TestEstimateSelectedSourceBytes(t *testing.T) {
 }
 
 func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	filePath := filepath.Join(root, "not-a-dir-file")
 	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
@@ -94,8 +86,6 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 }
 
 func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
-	t.Parallel()
-
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -111,7 +101,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
 	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
@@ -121,19 +111,89 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 }
 
 func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
-	t.Parallel()
-
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
 	targetDir := `\\server\share\target`
 	sources := []backupSourcePlan{{Resolved: `\\server\share\source`}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflight(cfg, targetDir, sources, stagingPlan)
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
 	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
+	}
+}
+
+func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: util.AuthModePasswordYubiKey, LogLevel: "debug"}
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	})
+
+	authLine := "Authentication  : password + YubiKey"
+	okLine := "  [OK] YubiKey connected. Keep it connected now before starting backup."
+	logLine := "Log level       : debug"
+	authIdx := strings.Index(output, authLine)
+	okIdx := strings.Index(output, okLine)
+	logIdx := strings.Index(output, logLine)
+	if authIdx < 0 || okIdx < 0 || logIdx < 0 {
+		t.Fatalf("expected authentication/OK/log lines in output, got: %q", output)
+	}
+	if !(authIdx < okIdx && okIdx < logIdx) {
+		t.Fatalf("expected OK line directly after authentication section, got: %q", output)
+	}
+	if strings.Contains(output, "[WARN]") {
+		t.Fatalf("did not expect WARN when YubiKey is detected, got: %q", output)
+	}
+}
+
+func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: util.AuthModePasswordYubiKey, LogLevel: "debug"}
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
+	})
+
+	authLine := "Authentication  : password + YubiKey"
+	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
+	logLine := "Log level       : debug"
+	authIdx := strings.Index(output, authLine)
+	warnIdx := strings.Index(output, warnLine)
+	logIdx := strings.Index(output, logLine)
+	if authIdx < 0 || warnIdx < 0 || logIdx < 0 {
+		t.Fatalf("expected authentication/WARN/log lines in output, got: %q", output)
+	}
+	if !(authIdx < warnIdx && warnIdx < logIdx) {
+		t.Fatalf("expected WARN line directly after authentication section, got: %q", output)
+	}
+	if strings.Contains(output, "[OK] YubiKey connected") {
+		t.Fatalf("did not expect OK when YubiKey is not detected, got: %q", output)
 	}
 }

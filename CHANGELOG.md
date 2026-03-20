@@ -6,6 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-03-20
+
+### Changed
+- Refactored internal package structure and naming for clearer responsibilities, including extracted shared utilities and workflow helpers.
+- Removed duplicate decrypt-stream logic by consolidating restore/verify decryption into a shared pipeline.
+- Reorganized tests to align better with source files and expanded dedicated coverage for newly extracted workflow components.
+
+### Fixed
+- Corrected startup exit prompt wording to match actual input behavior: message now says "Press Enter to exit." instead of "Press any key to exit...".
+- Fixed YubiKey connectivity detection to use a version-compatible `ykman list` probe, preventing false "no YubiKey detected" failures on some YubiKey Manager CLI versions.
+- Improved backup, restore and verify preflight for YubiKey modes: directly under `Authentication`, preflight now shows `[OK]` when a YubiKey is detected and shows `[WARN]` with remedy guidance when no YubiKey is detected.
+- Fixed YubiKey prompt accuracy and failure diagnostics: backup/restore/verify now verify that a YubiKey device is actually connected before prompting for touch, avoiding false "YubiKey detected" messages and reducing misleading double-remedy error text.
+- Fixed restore preflight to suppress same-volume warning on local drives (only warn for network/NAS storage), matching backup preflight behavior.
+- Cleaned up small code-quality issues in error construction, auth-mode constants, and split-size naming for improved readability and maintainability.
+
 ### Removed
 - Removed unattended operation CLI flags (`-backup`, `-restore`, `-verify`). These flags provided limited value without truly supporting unattended execution: `-backup` required YubiKey physical touch, and `-restore`/`-verify` required authentication input. The `-config` flag for custom config paths remains available for interactive mode.
 

@@ -139,7 +139,7 @@ func exitWithError(message string, err error) {
 
 func waitForKeyPress() {
 	fmt.Println()
-	fmt.Println("Press any key to exit...")
+	fmt.Println("Press Enter to exit.")
 	buf := make([]byte, 1)
 	_, err := os.Stdin.Read(buf)
 	if err != nil && !errors.Is(err, io.EOF) {

@@ -63,7 +63,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
-	printRestorePreflight(targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan)
+	printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -159,7 +159,13 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 	return items
 }
 
-func printRestorePreflight(targetDir, restorePath string, items []restorePreflightItem, requiresYubiKey, yubiKeyOnly bool, stagingPlan operation.LocalStagingPlan) {
+func printRestorePreflightWithYubiKeyCheck(
+	targetDir, restorePath string,
+	items []restorePreflightItem,
+	requiresYubiKey, yubiKeyOnly bool,
+	stagingPlan operation.LocalStagingPlan,
+	checkYubiKeyConnected func() error,
+) {
 	displayBackupFolder := filepath.ToSlash(targetDir)
 	displayRestoreTarget := filepath.ToSlash(restorePath)
 
@@ -169,10 +175,19 @@ func printRestorePreflight(targetDir, restorePath string, items []restorePreflig
 	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
 	fmt.Printf("Restore target : %s\n", displayRestoreTarget)
 	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	if requiresYubiKey {
+		status := "[OK]"
+		msg := "YubiKey connected. Keep it connected now before starting restore."
+		if err := checkYubiKeyConnected(); err != nil {
+			status = "[WARN]"
+			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
+		}
+		fmt.Printf("  %s %s\n", status, msg)
+	}
 	fmt.Printf("Items selected : %d\n", len(items))
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging  : enabled via %s because backup folder and restore target share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
-	} else if stagingPlan.SameVolume {
+	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
 		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}
 	fmt.Println("Selection:")
@@ -184,7 +199,6 @@ func printRestorePreflight(targetDir, restorePath string, items []restorePreflig
 		}
 	}
 	operation.PrintPreflightSelection(entries)
-	fmt.Println()
 }
 
 func validateRestorePreflight(items []restorePreflightItem) error {

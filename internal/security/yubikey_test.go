@@ -101,3 +101,90 @@ func TestYkmanWindowsCandidatesWithBuildsExpectedPaths(t *testing.T) {
 		t.Fatalf("expected first candidate %q, got %q", expectedFirst, candidates[0])
 	}
 }
+
+func TestCheckYubiKeyConnectedSuccess(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevList := ykmanListOutput
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanListOutput = prevList
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "C:/custom/ykman.exe", nil
+	}
+	ykmanListOutput = func(path string) ([]byte, error) {
+		if path != "C:/custom/ykman.exe" {
+			t.Fatalf("unexpected path: %q", path)
+		}
+		return []byte("YubiKey 5 NFC\n"), nil
+	}
+
+	if err := CheckYubiKeyConnected(); err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+}
+
+func TestCheckYubiKeyConnectedEmptyListOutput(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevList := ykmanListOutput
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanListOutput = prevList
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "C:/custom/ykman.exe", nil
+	}
+	ykmanListOutput = func(_ string) ([]byte, error) {
+		return []byte("   \n"), nil
+	}
+
+	err := CheckYubiKeyConnected()
+	if !errors.Is(err, ErrYubiKeyNotConnected) {
+		t.Fatalf("expected ErrYubiKeyNotConnected, got: %v", err)
+	}
+}
+
+func TestCheckYubiKeyConnectedListError(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevList := ykmanListOutput
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanListOutput = prevList
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "C:/custom/ykman.exe", nil
+	}
+	ykmanListOutput = func(_ string) ([]byte, error) {
+		return nil, errors.New("list failed")
+	}
+
+	err := CheckYubiKeyConnected()
+	if !errors.Is(err, ErrYubiKeyNotConnected) {
+		t.Fatalf("expected ErrYubiKeyNotConnected, got: %v", err)
+	}
+}
+
+func TestCheckYubiKeyConnectedMissingYkman(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevList := ykmanListOutput
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanListOutput = prevList
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "", errors.New("not found")
+	}
+	ykmanListOutput = func(_ string) ([]byte, error) {
+		t.Fatal("ykmanListOutput should not be called when ykman is unavailable")
+		return nil, nil
+	}
+
+	err := CheckYubiKeyConnected()
+	if !errors.Is(err, ErrYubikeyNotFound) {
+		t.Fatalf("expected ErrYubikeyNotFound, got: %v", err)
+	}
+}
