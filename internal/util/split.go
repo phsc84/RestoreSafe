@@ -20,12 +20,13 @@ type NameFunc func(seq int) string
 // Each file is at most maxBytes bytes. When a file is full, it is closed and
 // the next file is opened transparently.
 type Writer struct {
-	nameFunc NameFunc
-	maxBytes int64
-	seq      int
-	written  int64
-	current  *os.File
-	paths    []string
+	nameFunc     NameFunc
+	maxBytes     int64
+	seq          int
+	written      int64
+	current      *os.File
+	paths        []string
+	onPartOpened func(seq int, path string)
 
 	fileWriteCalls int64
 	fileWriteBytes int64
@@ -47,6 +48,14 @@ func NewWriter(nameFunc NameFunc, maxBytes int64) *Writer {
 		nameFunc: nameFunc,
 		maxBytes: maxBytes,
 	}
+}
+
+// SetPartOpenedHook registers a callback invoked when a new part file is opened.
+func (s *Writer) SetPartOpenedHook(hook func(seq int, path string)) {
+	if s == nil {
+		return
+	}
+	s.onPartOpened = hook
 }
 
 // Write implements io.Writer. It splits data across files as needed.
@@ -126,6 +135,9 @@ func (s *Writer) openNext() error {
 	s.written = 0
 	s.paths = append(s.paths, path)
 	s.partsOpened++
+	if s.onPartOpened != nil {
+		s.onPartOpened(s.seq, path)
+	}
 	return nil
 }
 

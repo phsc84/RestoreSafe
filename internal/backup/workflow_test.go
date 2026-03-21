@@ -99,4 +99,13 @@ func TestBackupFolderLogsPartNamesAtInfoLevel(t *testing.T) {
 	if !strings.Contains(logContent, "Part 001:") {
 		t.Fatalf("expected per-part filename line in log, got: %q", logContent)
 	}
+
+	partIdx := strings.Index(logContent, "Part 001:")
+	createdIdx := strings.Index(logContent, "Created: 1 part file(s)")
+	if partIdx < 0 || createdIdx < 0 {
+		t.Fatalf("expected part and created lines in log, got: %q", logContent)
+	}
+	if createdIdx < partIdx {
+		t.Fatalf("expected created summary after part lines, got: %q", logContent)
+	}
 }

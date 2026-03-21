@@ -62,7 +62,6 @@ func closeSplitOutput(bw *bufio.Writer, sw *util.Writer) error {
 
 func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, counters *backupCounters, log *util.Logger) {
 	parts := sw.Paths()
-	log.Info("  Created: %d part file(s)", len(parts))
 	if ioDiagnostics {
 		stats := sw.Stats()
 		avgEncryptWriteKB := 0.0
@@ -78,8 +77,6 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		log.Debug("I/O diagnostics [%s]: file writes=%d, avg file write=%.2f KB, parts opened=%d, parts closed=%d", folderName, stats.FileWriteCalls, avgFileWriteKB, stats.PartsOpened, stats.PartsClosed)
 	}
 	for i, p := range parts {
-		log.Info("  Part %03d: %s", i+1, filepath.Base(p))
-
 		if !ioDiagnostics {
 			continue
 		}
@@ -95,6 +92,7 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		}
 		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
+	log.Info("  Created: %d part file(s)", len(parts))
 }
 
 // copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.

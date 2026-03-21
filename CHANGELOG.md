@@ -6,6 +6,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-03-21
+
 ### Changed
 - Improved backup preflight formatting for readability: key/value fields now use aligned labels.
 - Updated backup preflight wording to distinguish target and local disk checks: `Free space` was renamed to `Free space target`.

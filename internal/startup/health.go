@@ -72,7 +72,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 			items = append(items, healthItem{
 				Severity: healthWarn,
 				Scope:    "Source folder warning",
-				Detail:   fmt.Sprintf("Source folder %s shares the same drive/share as target_folder (%s). This can cause long stalls, especially on network/NAS storage. Remedy: Prefer a different target drive/share. If not possible, RestoreSafe will automatically use local staging.", src.Resolved, util.VolumeDisplay(targetDir)),
+				Detail:   fmt.Sprintf("Same drive/share as target_folder (%s). RestoreSafe will use local staging.", util.VolumeDisplay(targetDir)),
 			})
 		}
 	}

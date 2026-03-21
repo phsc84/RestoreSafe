@@ -188,6 +188,9 @@ func backupFolder(
 	log *util.Logger,
 ) (int, error) {
 	sw, bw := newSplitOutput(targetDir, folderName, date, id, cfg.SplitSizeMB)
+	sw.SetPartOpenedHook(func(seq int, path string) {
+		log.Info("  Part %03d: %s", seq, filepath.Base(path))
+	})
 	pr, pw := io.Pipe()
 	counters := &backupCounters{}
 
