@@ -159,11 +159,6 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Info("Source folder %q successfully backed up", folderName)
 	}
 
-	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {
-		log.Warn("Retention cleanup failed: %v", err)
-		warningCount++
-	}
-
 	// Copy results from staging to target if needed.
 	if staging.Dir != "" {
 		log.Info("Copying staged backup files from %s to %s", filepath.ToSlash(workingDir), filepath.ToSlash(targetDir))
@@ -171,6 +166,11 @@ func Run(cfg *util.Config, exeDir string) error {
 			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target folder write permissions and free disk space.", err)
 		}
 		log.Info("Staged backup files copied to target")
+	}
+
+	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {
+		log.Warn("Retention cleanup failed: %v", err)
+		warningCount++
 	}
 
 	log.Info("Backup completed successfully")

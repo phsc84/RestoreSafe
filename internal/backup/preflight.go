@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+const preflightFieldLabelWidth = 17
+
+func printPreflightField(label, value string) {
+	fmt.Printf("%-*s: %s\n", preflightFieldLabelWidth, label, value)
+}
+
 func printBackupPreflightWithYubiKeyCheck(
 	cfg *util.Config,
 	targetDir string,
@@ -18,10 +24,10 @@ func printBackupPreflightWithYubiKeyCheck(
 	fmt.Println()
 	fmt.Println("Backup preflight")
 	fmt.Println("----------------")
-	fmt.Printf("Target folder   : %s\n", targetDir)
-	fmt.Printf("Split size      : %d MB\n", cfg.SplitSizeMB)
-	fmt.Printf("Retention keep  : %d\n", cfg.RetentionKeep)
-	fmt.Printf("Authentication  : %s\n", cfg.AuthenticationMode.Label())
+	printPreflightField("Target folder", targetDir)
+	printPreflightField("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	printPreflightField("Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	printPreflightField("Authentication", cfg.AuthenticationMode.Label())
 	if cfg.UseYubiKey() {
 		status := "[OK]"
 		msg := "YubiKey connected. Keep it connected now before starting backup."
@@ -31,13 +37,13 @@ func printBackupPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	fmt.Printf("Log level       : %s\n", strings.ToLower(cfg.LogLevel))
+	printPreflightField("Log level", strings.ToLower(cfg.LogLevel))
 
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	if estimatedBytes > 0 {
-		fmt.Printf("Est. source size: %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
+		printPreflightField("Est. source size", util.FormatBytesBinary(uint64(estimatedBytes)))
 	} else {
-		fmt.Println("Est. source size: unknown")
+		printPreflightField("Est. source size", "unknown")
 	}
 	for _, warning := range estimateWarnings {
 		fmt.Printf("  [WARN] size estimate: %s\n", warning)
@@ -45,16 +51,23 @@ func printBackupPreflightWithYubiKeyCheck(
 
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	if freeErr != nil {
-		fmt.Printf("Free space      : unknown (%v)\n", freeErr)
+		printPreflightField("Free space target", fmt.Sprintf("unknown (%v)", freeErr))
 	} else {
-		fmt.Printf("Free space      : %s\n", util.FormatBytesBinary(freeBytes))
+		printPreflightField("Free space target", util.FormatBytesBinary(freeBytes))
 		if estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes {
 			fmt.Println("  [WARN] estimated source size exceeds currently free space on target")
 		}
 	}
 
 	if stagingPlan.Enabled {
-		fmt.Printf("Local staging   : enabled via %s because source and target folders share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+		printPreflightField("Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+
+		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		if localFreeErr != nil {
+			printPreflightField("Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
+		} else {
+			printPreflightField("Free space local", util.FormatBytesBinary(localFreeBytes))
+		}
 	}
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
 

@@ -78,6 +78,12 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		log.Debug("I/O diagnostics [%s]: file writes=%d, avg file write=%.2f KB, parts opened=%d, parts closed=%d", folderName, stats.FileWriteCalls, avgFileWriteKB, stats.PartsOpened, stats.PartsClosed)
 	}
 	for i, p := range parts {
+		log.Info("  Part %03d: %s", i+1, filepath.Base(p))
+
+		if !ioDiagnostics {
+			continue
+		}
+
 		fi, err := os.Stat(p)
 		if err != nil {
 			log.Warn("Failed to inspect part file %s: %v", filepath.Base(p), err)
@@ -87,7 +93,7 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		if fi != nil {
 			size = fi.Size()
 		}
-		log.Debug("  Part %03d: %s (%.2f MB)", i+1, filepath.Base(p), float64(size)/(1024*1024))
+		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
 }
 
@@ -97,6 +103,18 @@ func copyBackupResults(stagingDir, targetDir string, log *util.Logger) error {
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
 	}
+
+	totalPartsByEntry := make(map[string]int)
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".enc" {
+			continue
+		}
+		if backupEntry, _, ok := util.ParsePartFileName(entry.Name()); ok {
+			totalPartsByEntry[backupEntry.String()]++
+		}
+	}
+
+	copiedPartsByEntry := make(map[string]int)
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -117,7 +135,18 @@ func copyBackupResults(stagingDir, targetDir string, log *util.Logger) error {
 		}
 
 		if log != nil {
-			log.Debug("Copied staged file to target: %s", entry.Name())
+			if ext == ".enc" {
+				log.Info("  Copied: %s", entry.Name())
+				if backupEntry, _, ok := util.ParsePartFileName(entry.Name()); ok {
+					entryKey := backupEntry.String()
+					copiedPartsByEntry[entryKey]++
+					if copiedPartsByEntry[entryKey] == totalPartsByEntry[entryKey] {
+						log.Info("  Source folder %q copy finished", backupEntry.FolderName)
+					}
+				}
+			} else {
+				log.Debug("Copied challenge file to target: %s", entry.Name())
+			}
 		}
 	}
 

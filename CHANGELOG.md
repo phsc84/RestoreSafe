@@ -6,6 +6,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- Improved backup preflight formatting for readability: key/value fields now use aligned labels.
+- Updated backup preflight wording to distinguish target and local disk checks: `Free space` was renamed to `Free space target`.
+- Backup preflight now includes `Free space local` when local staging is enabled, showing free space on the staging drive.
+- Improved backup progress visibility during archive creation: after the existing `Created: N part file(s)` summary, each created part filename is now logged at info level.
+- Improved staging finalization visibility: while copying from local staging to the backup target, each copied `.enc` part file is now logged at info level.
+- Added a short per-folder copy completion log line during staging finalization once all part files for a source folder are copied.
+
+### Fixed
+- Fixed retention timing in backup workflow when local staging is enabled: retention cleanup now runs after staged files are copied to the target directory, so `retention_keep` is applied to the actual final target state (avoids effectively keeping one extra backup set).
+
 ## [2.1.0] - 2026-03-20
 
 ### Changed

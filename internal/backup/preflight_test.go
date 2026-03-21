@@ -145,9 +145,9 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	authLine := "Authentication  : password + YubiKey"
+	authLine := "Authentication   : password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting backup."
-	logLine := "Log level       : debug"
+	logLine := "Log level        : debug"
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
 	logIdx := strings.Index(output, logLine)
@@ -181,9 +181,9 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication  : password + YubiKey"
+	authLine := "Authentication   : password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
-	logLine := "Log level       : debug"
+	logLine := "Log level        : debug"
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
 	logIdx := strings.Index(output, logLine)
@@ -195,5 +195,64 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 	if strings.Contains(output, "[OK] YubiKey connected") {
 		t.Fatalf("did not expect OK when YubiKey is not detected, got: %q", output)
+	}
+}
+
+func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T) {
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	localStagingDir := filepath.Join(tempRoot, "local-staging")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(localStagingDir, 0o750); err != nil {
+		t.Fatalf("failed to create local staging dir: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	})
+
+	localStagingLine := "Local staging    : enabled via "
+	localFreeSpaceLine := "Free space local :"
+	localStagingIdx := strings.Index(output, localStagingLine)
+	localFreeSpaceIdx := strings.Index(output, localFreeSpaceLine)
+	if localStagingIdx < 0 || localFreeSpaceIdx < 0 {
+		t.Fatalf("expected local staging and local free-space lines in output, got: %q", output)
+	}
+	if localFreeSpaceIdx <= localStagingIdx {
+		t.Fatalf("expected local free-space line to appear after local staging line, got: %q", output)
+	}
+}
+
+func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T) {
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{Enabled: false}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	})
+
+	if strings.Contains(output, "Free space local :") {
+		t.Fatalf("did not expect local free-space line when local staging is disabled, got: %q", output)
 	}
 }
