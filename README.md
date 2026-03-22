@@ -66,7 +66,9 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
    | `authentication_mode: 2` | Yes | Yes | Password + YubiKey two-factor |
    | `authentication_mode: 3` | No | Yes | Password-less, key-in-hand authentication |
 
-   In `authentication_mode: 3` physical possession of the YubiKey is the sole authentication factor. Keep your YubiKey safe - anyone with the YubiKey and the `.challenge` file can restore the backup.
+   The automatically generated `.challenge` file(s) in `authentication_mode: 2` and `authentication_mode: 3` must be stored together with the corresponding `.enc` file(s). The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
+   
+   In `authentication_mode: 3` physical possession of the YubiKey is the sole authentication factor. Keep your YubiKey safe - anyone with the YubiKey and the `.challenge` file can restore the backup. 
 
 ### Updating
 
@@ -85,87 +87,9 @@ Double-click RestoreSafe.exe, choose **Backup** from the menu, confirm the prefl
 Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination folder, then enter your password (and touch the YubiKey if enabled).
 
 ### Verify a backup
-Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive — without writing any files to disk.
+Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive - without writing any files to disk.
 
 ## Naming scheme of created files
-
-### Backup files
-
-Each backup file name follows this pattern:
-
-`[FolderName]_YYYY-MM-DD_ID-001.enc`
-
-What this means in plain words:
-
-- `FolderName`: the source folder name
-- `YYYY-MM-DD`: the backup date
-- `ID`: a short code for one backup run
-- `001`, `002`, ...: part number when a backup is split into multiple files
-
-Basic examples:
-
-```text
-[Documents]_2026-01-15_ABC123-001.enc
-[Pictures]_2026-01-15_ABC123-001.enc
-```
-
-Examples for common cases:
-
-1. If one folder is larger than `split_size_mb`, it is split into multiple parts:
-
-   ```text
-   [Documents]_2026-01-15_ABC123-001.enc
-   [Documents]_2026-01-15_ABC123-002.enc
-   [Documents]_2026-01-15_ABC123-003.enc
-   ```
-
-2. If YubiKey mode is enabled, a matching `.challenge` file is created per folder:
-
-   ```text
-   [Documents]_2026-01-15_ABC123.challenge
-   [Pictures]_2026-01-15_ABC123.challenge
-   ```
-   The automatically generated `.challenge` file(s) must be stored together with the corresponding `.enc` file(s). The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
-
-3. If several configured source folders have the same folder name (for example all end with `Documents`), RestoreSafe keeps the folder name and adds an extra alias derived from the remaining path and the drive letter. Only this added alias part is adjusted. The source folder name itself stays unchanged.
-   In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8 hex bytes in the form `~XX~`:
-
-   Examples **without** special characters in that added alias part:
-
-   ```text
-   C:\RootA\Documents -> [Documents__RootA-C]_2026-01-15_ABC123-001.enc
-   D:\RootB\Documents -> [Documents__RootB-D]_2026-01-15_ABC123-001.enc
-   ```
-
-   Examples **with** special characters in that added alias part:
-
-   ```text
-   C:\Root A\Documents -> [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
-   C:\Root-A\Documents -> [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
-   C:\Root_A\Documents -> [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
-   C:\Root.A\Documents -> [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
-   C:\Root~A\Documents -> [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
-   ```
-
-   Result: aliases remain deterministic and distinct across special characters.
-
-4. If the exact same source folder appears twice in `config.yaml`, RestoreSafe warns and skips the duplicate entry:
-
-   ```text
-   [WARN] C:\Work\Documents -> identical duplicate of C:\Work\Documents; this entry will be skipped
-   ```
-
-   Result: only one backup file set is written for that path.
-
-### Log files
-
-Naming structure: `YYYY-MM-DD_ID.log`
-
-Sample:
-
-```text
-2026-01-15_ABC123.log
-```
 
 ### Quick reference
 
@@ -175,6 +99,66 @@ Sample:
 | YYYY-MM-DD | Backup date |
 | ID | Short backup run code (6 characters, A-Z and 0-9) |
 | 001 / 002 / ... | File part number when the backup is split |
+
+### Backup files
+
+`[FolderName]_YYYY-MM-DD_ID-001.enc`
+
+Samples:
+
+```text
+[Documents]_2026-01-15_ABC123-001.enc
+[Documents]_2026-01-15_ABC123-002.enc
+[Documents]_2026-01-15_ABC123-003.enc
+[Pictures]_2026-01-15_ABC123-001.enc
+```
+
+### `.challenge` files
+
+only created if YubiKey is enabled -> `authentication_mode: 2` and `authentication_mode: 3`
+
+`[FolderName]_YYYY-MM-DD_ID.challenge`
+
+Samples:
+
+```text
+[Documents]_2026-01-15_ABC123.challenge
+[Pictures]_2026-01-15_ABC123.challenge
+```
+
+### Log files
+
+`YYYY-MM-DD_ID.log`
+
+Sample:
+
+```text
+2026-01-15_ABC123.log
+```
+
+### Special cases
+
+If several configured source folders have the same folder name (for example all end with `Documents`), RestoreSafe keeps the folder name and adds an extra alias derived from the remaining path and the drive letter. Only this added alias part is adjusted. The source folder name itself stays unchanged.
+In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8 hex bytes in the form `~XX~`:
+
+Examples **without** special characters in that added alias part:
+
+```text
+C:\RootA\Documents -> [Documents__RootA-C]_2026-01-15_ABC123-001.enc
+D:\RootB\Documents -> [Documents__RootB-D]_2026-01-15_ABC123-001.enc
+```
+
+Examples **with** special characters in that added alias part:
+
+```text
+C:\Root A\Documents -> [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
+C:\Root-A\Documents -> [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
+C:\Root_A\Documents -> [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
+C:\Root.A\Documents -> [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
+C:\Root~A\Documents -> [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
+```
+
+**Result:** Backup file names remain deterministic and distinct across special characters.
 
 ## YubiKey setup
 
