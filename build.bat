@@ -40,6 +40,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Copy RestoreSafe.exe to test directory...
+if not exist test\ (
+    mkdir test
+)
+
+copy /Y RestoreSafe.exe test\RestoreSafe.exe >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy RestoreSafe.exe to test directory
+    exit /b 1
+)
+
 echo.
 echo [OK] RestoreSafe.exe successfully created.
 echo.

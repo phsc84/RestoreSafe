@@ -1,12 +1,10 @@
 .gitconfig
 *.log
-config.yaml
-config_*.yaml
 dev_setup.txt
 RestoreSafe.exe
-RestoreSafe_*.bat
 cmd/resource.syso
 
 assets/**
-!assets/
 !assets/RestoreSafe.ico
+
+/test/
