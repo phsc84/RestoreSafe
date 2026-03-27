@@ -98,7 +98,19 @@ func main() {
 }
 
 func reportOperationError(action string, err error) {
+	if action == "Backup" && strings.HasPrefix(err.Error(), "Backup preflight failed:") {
+		fmt.Fprintln(os.Stderr, "Backup failed.")
+		fmt.Fprintln(os.Stderr)
+		return
+	}
+	if action == "Restore" && strings.HasPrefix(err.Error(), "Restore preflight failed:") {
+		fmt.Fprintln(os.Stderr, "Restore failed.")
+		fmt.Fprintln(os.Stderr)
+		return
+	}
+
 	fmt.Fprintf(os.Stderr, "%s failed: %v\n", action, err)
+	fmt.Fprintln(os.Stderr)
 }
 
 func printStartupBanner(version string) {

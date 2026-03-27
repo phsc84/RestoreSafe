@@ -35,9 +35,9 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 		printVerifyPreflightWithYubiKeyCheck(targetDir, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
-	authLine := "Authentication  : password + YubiKey"
+	authLine := "Authentication : password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting verification."
-	itemsLine := "Items selected  : 1"
+	itemsLine := "Items selected : 1"
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
 	itemsIdx := strings.Index(output, itemsLine)
@@ -60,9 +60,9 @@ func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 		printVerifyPreflightWithYubiKeyCheck(targetDir, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication  : password + YubiKey"
+	authLine := "Authentication : password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting verification."
-	itemsLine := "Items selected  : 1"
+	itemsLine := "Items selected : 1"
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
 	itemsIdx := strings.Index(output, itemsLine)

@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Run executes the full backup workflow.
@@ -56,6 +57,14 @@ func Run(cfg *util.Config, exeDir string) error {
 	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
 
 	printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
+	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
+		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
+			fmt.Println()
+			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+			fmt.Println()
+		}
+		return err
+	}
 
 	confirmed, err := operation.PromptStartAction("backup")
 	if err != nil {

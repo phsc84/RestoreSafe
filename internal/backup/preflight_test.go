@@ -104,7 +104,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
+	warnLinePrefix := "-> Source and target folders are on the same drive/share"
 	if strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
 	}
@@ -120,7 +120,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	warnLinePrefix := "[WARN]  Source folder warning: Source and target folders are on the same drive/share"
+	warnLinePrefix := "-> Source and target folders are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
@@ -254,5 +254,92 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 
 	if strings.Contains(output, "Free space local :") {
 		t.Fatalf("did not expect local free-space line when local staging is disabled, got: %q", output)
+	}
+}
+
+func TestIsTargetSpaceInsufficient(t *testing.T) {
+	t.Parallel()
+
+	if !isTargetSpaceInsufficient(200, 100) {
+		t.Fatal("expected insufficient-space predicate to be true")
+	}
+	if isTargetSpaceInsufficient(100, 100) {
+		t.Fatal("did not expect insufficient-space predicate when estimate equals free bytes")
+	}
+	if isTargetSpaceInsufficient(0, 100) {
+		t.Fatal("did not expect insufficient-space predicate for unknown/zero estimate")
+	}
+}
+
+func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "one.bin"), []byte("12345"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	missingTarget := filepath.Join(root, "missing-target")
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+
+	if err := validateTargetSpaceForBackup(missingTarget, sources); err != nil {
+		t.Fatalf("expected no error when free space cannot be determined, got: %v", err)
+	}
+}
+
+func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSourceSection(t *testing.T) {
+	t.Parallel()
+
+	tempRoot := t.TempDir()
+	targetDir := filepath.Join(tempRoot, "target")
+	sourceDir := filepath.Join(tempRoot, "source")
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(sourceDir, "one.bin"), []byte("12345"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	stagingPlan := operation.LocalStagingPlan{Enabled: false}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	})
+
+	sourceIdx := strings.Index(output, "Source folder(s):")
+	targetIdx := strings.Index(output, "Target folder:")
+	if sourceIdx < 0 || targetIdx < 0 {
+		t.Fatalf("expected Source folder(s) and Target folder sections, got: %q", output)
+	}
+	if sourceIdx > targetIdx {
+		t.Fatalf("expected Source folder(s) section before Target folder section, got: %q", output)
+	}
+	if !strings.Contains(output, "[OK] Needed disk space (total):") {
+		t.Fatalf("expected needed disk space line in Source folder(s) section, got: %q", output)
+	}
+	if strings.Contains(output, "Est. source size :") {
+		t.Fatalf("did not expect standalone est-source-size field line, got: %q", output)
+	}
+	if !strings.Contains(output, "  [OK] "+sourceDir) {
+		t.Fatalf("expected single-space [OK] source line, got: %q", output)
+	}
+
+	sourceEntryIdx := strings.Index(output, "  [OK] "+sourceDir)
+	neededIdx := strings.Index(output, "  [OK] Needed disk space (total):")
+	if sourceEntryIdx < 0 || neededIdx < 0 {
+		t.Fatalf("expected source entry and needed disk space lines, got: %q", output)
+	}
+	if neededIdx <= sourceEntryIdx {
+		t.Fatalf("expected needed disk space line after source entries, got: %q", output)
 	}
 }

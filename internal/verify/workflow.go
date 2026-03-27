@@ -124,8 +124,8 @@ func printVerifyPreflightWithYubiKeyCheck(
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
 	displayBackupFolder := filepath.ToSlash(targetDir)
-	fmt.Printf("Backup folder   : %s\n", displayBackupFolder)
-	fmt.Printf("Authentication  : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
+	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
 		status := "[OK]"
 		msg := "YubiKey connected. Keep it connected now before starting verification."
@@ -135,9 +135,9 @@ func printVerifyPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	fmt.Printf("Items selected  : %d\n", len(items))
+	fmt.Printf("Items selected : %d\n", len(items))
 	if stagingPlan.Enabled {
-		fmt.Printf("Local staging   : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+		fmt.Printf("Local staging  : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	}
 	fmt.Println("Selection:")
 	entries := make([]operation.PreflightEntry, len(items))

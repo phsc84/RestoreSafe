@@ -24,54 +24,11 @@ func printBackupPreflightWithYubiKeyCheck(
 	fmt.Println()
 	fmt.Println("Backup preflight")
 	fmt.Println("----------------")
-	printPreflightField("Target folder", targetDir)
-	printPreflightField("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
-	printPreflightField("Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
-	printPreflightField("Authentication", cfg.AuthenticationMode.Label())
-	if cfg.UseYubiKey() {
-		status := "[OK]"
-		msg := "YubiKey connected. Keep it connected now before starting backup."
-		if err := checkYubiKeyConnected(); err != nil {
-			status = "[WARN]"
-			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
-		}
-		fmt.Printf("  %s %s\n", status, msg)
-	}
-	printPreflightField("Log level", strings.ToLower(cfg.LogLevel))
-
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
-	if estimatedBytes > 0 {
-		printPreflightField("Est. source size", util.FormatBytesBinary(uint64(estimatedBytes)))
-	} else {
-		printPreflightField("Est. source size", "unknown")
-	}
-	for _, warning := range estimateWarnings {
-		fmt.Printf("  [WARN] size estimate: %s\n", warning)
-	}
-
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
-	if freeErr != nil {
-		printPreflightField("Free space target", fmt.Sprintf("unknown (%v)", freeErr))
-	} else {
-		printPreflightField("Free space target", util.FormatBytesBinary(freeBytes))
-		if estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes {
-			fmt.Println("  [WARN] estimated source size exceeds currently free space on target")
-		}
-	}
-
-	if stagingPlan.Enabled {
-		printPreflightField("Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-
-		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-		if localFreeErr != nil {
-			printPreflightField("Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
-		} else {
-			printPreflightField("Free space local", util.FormatBytesBinary(localFreeBytes))
-		}
-	}
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
 
-	fmt.Println("Source folders:")
+	fmt.Println("Source folder(s):")
 	for _, src := range sources {
 		baseName := util.FolderBaseName(src.Resolved)
 		backupName := src.BackupName
@@ -88,20 +45,60 @@ func printBackupPreflightWithYubiKeyCheck(
 			continue
 		}
 		if src.Warning != "" {
-			fmt.Printf("  [WARN]  %s\n", src.Resolved)
+			fmt.Printf("  [WARN] %s\n", src.Resolved)
 			if backupName != baseName {
 				fmt.Printf("          -> backup name: %s\n", backupName)
 			}
 			fmt.Printf("          -> %s\n", src.Warning)
 		} else {
-			fmt.Printf("  [OK]    %s\n", src.Resolved)
+			fmt.Printf("  [OK] %s\n", src.Resolved)
 			if backupName != baseName {
 				fmt.Printf("          -> backup name: %s\n", backupName)
 			}
 		}
 
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
-			fmt.Printf("  [WARN]  Source folder warning: Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+			fmt.Printf("          -> Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+		}
+	}
+	for _, warning := range estimateWarnings {
+		fmt.Printf("  [WARN] size estimate: %s\n", warning)
+	}
+	if estimatedBytes < 0 {
+		estimatedBytes = 0
+	}
+	fmt.Printf("  [OK] Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
+
+	fmt.Println("Target folder:")
+	fmt.Printf("  [OK] %s\n", targetDir)
+	if freeErr != nil {
+		fmt.Printf("  [WARN] Free disk space: unknown (%v)\n", freeErr)
+	} else {
+		fmt.Printf("  [OK] Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
+	}
+
+	printPreflightField("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	printPreflightField("Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	printPreflightField("Authentication", cfg.AuthenticationMode.Label())
+	if cfg.UseYubiKey() {
+		status := "[OK]"
+		msg := "YubiKey connected. Keep it connected now before starting backup."
+		if err := checkYubiKeyConnected(); err != nil {
+			status = "[WARN]"
+			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
+		}
+		fmt.Printf("  %s %s\n", status, msg)
+	}
+	printPreflightField("Log level", strings.ToLower(cfg.LogLevel))
+
+	if stagingPlan.Enabled {
+		printPreflightField("Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+
+		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		if localFreeErr != nil {
+			printPreflightField("Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
+		} else {
+			printPreflightField("Free space local", util.FormatBytesBinary(localFreeBytes))
 		}
 	}
 }
@@ -112,6 +109,31 @@ func validateSourceFolders(sources []backupSourcePlan) error {
 		func(src backupSourcePlan) bool { return src.Err != nil },
 		"Backup preflight failed: %d source folder(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
 	)
+}
+
+func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) error {
+	estimatedBytes, _ := estimateSelectedSourceBytes(sources)
+	if estimatedBytes <= 0 {
+		return nil
+	}
+
+	freeBytes, err := util.QueryFreeSpaceBytes(targetDir)
+	if err != nil {
+		return nil
+	}
+
+	if !isTargetSpaceInsufficient(estimatedBytes, freeBytes) {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"Backup preflight failed: %s",
+		util.FormatInsufficientBackupSpaceMessage(uint64(estimatedBytes), freeBytes),
+	)
+}
+
+func isTargetSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
+	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }
 
 func runnableSourceCount(sources []backupSourcePlan) int {

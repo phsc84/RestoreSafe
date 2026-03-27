@@ -24,3 +24,23 @@ func FormatBytesBinary(bytes uint64) string {
 
 	return fmt.Sprintf("%.2f %s", float64(bytes)/div, labels[exp])
 }
+
+// FormatInsufficientBackupSpaceMessage returns a consistent message for
+// estimated backup size exceeding currently free target space.
+func FormatInsufficientBackupSpaceMessage(neededBytes, availableBytes uint64) string {
+	return fmt.Sprintf(
+		"Insufficient free space for backup: needed %s, available %s. Remedy: Free disk space or choose a different target folder.",
+		FormatBytesBinary(neededBytes),
+		FormatBytesBinary(availableBytes),
+	)
+}
+
+// FormatInsufficientRestoreSpaceMessage returns a consistent message for
+// selected restore data exceeding currently free destination space.
+func FormatInsufficientRestoreSpaceMessage(neededBytes, availableBytes uint64) string {
+	return fmt.Sprintf(
+		"Insufficient free space for restore: needed %s, available %s. Remedy: Free disk space or choose a different restore destination.",
+		FormatBytesBinary(neededBytes),
+		FormatBytesBinary(availableBytes),
+	)
+}

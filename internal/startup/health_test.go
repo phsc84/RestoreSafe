@@ -110,7 +110,7 @@ func TestCollectStartupHealthItemsSuppressesSameVolumeWarningOnLocalDrive(t *tes
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasLayoutWarn := false
 	for _, item := range items {
-		if item.Scope == "Source folder warning" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "same drive/share") {
+		if item.Scope == "Source folder" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "same drive/share") {
 			hasLayoutWarn = true
 			break
 		}
@@ -208,5 +208,119 @@ func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
 	}
 	if !strings.Contains(output, "Review the reported errors") {
 		t.Fatalf("expected advice line for errors, got output: %q", output)
+	}
+}
+
+func TestCollectStartupHealthItemsIncludesSourceNeededDiskSpaceLine(t *testing.T) {
+	t.Parallel()
+
+	exeDir := t.TempDir()
+	sourceA := filepath.Join(exeDir, "source-a")
+	sourceB := filepath.Join(exeDir, "source-b")
+	target := filepath.Join(exeDir, "target")
+
+	if err := os.MkdirAll(sourceA, 0o750); err != nil {
+		t.Fatalf("failed to create sourceA: %v", err)
+	}
+	if err := os.MkdirAll(sourceB, 0o750); err != nil {
+		t.Fatalf("failed to create sourceB: %v", err)
+	}
+	if err := os.MkdirAll(target, 0o750); err != nil {
+		t.Fatalf("failed to create target: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(sourceA, "a.bin"), []byte("1234"), 0o640); err != nil {
+		t.Fatalf("failed to write sourceA file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceB, "b.bin"), []byte("123456"), 0o640); err != nil {
+		t.Fatalf("failed to write sourceB file: %v", err)
+	}
+
+	cfg := &util.Config{
+		SourceFolders: []string{sourceA, sourceB},
+		TargetFolder:  target,
+		SplitSizeMB:   64,
+		LogLevel:      "info",
+	}
+
+	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
+	found := false
+	for _, item := range items {
+		if item.Scope == "Source folder" && strings.Contains(item.Detail, "Needed disk space (total):") {
+			found = true
+			if !strings.Contains(item.Detail, "10 B") {
+				t.Fatalf("expected estimated source size in needed disk space detail, got: %q", item.Detail)
+			}
+			break
+		}
+	}
+
+	if !found {
+		t.Fatalf("expected needed disk space line in source folder scope, got items: %#v", items)
+	}
+}
+
+func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
+	t.Parallel()
+
+	items := []healthItem{
+		{Severity: healthOK, Scope: "Source folder", Detail: "C:/A"},
+		{Severity: healthWarn, Scope: "Source folder", Detail: "Needed disk space (total): 1.0 KiB"},
+		{Severity: healthOK, Scope: "Target folder", Detail: "Free disk space: 2.0 GiB"},
+	}
+
+	output := testutil.CaptureStdout(t, func() {
+		printStartupHealthCheck(items)
+	})
+
+	if strings.Count(output, "Source folder(s):") != 1 {
+		t.Fatalf("expected Source folder(s) title once, got output: %q", output)
+	}
+	if strings.Contains(output, "[OK] Source folder(s):") {
+		t.Fatalf("did not expect old inline scope format, got output: %q", output)
+	}
+	if !strings.Contains(output, "  [OK] C:/A") {
+		t.Fatalf("expected grouped detail line for Source folder, got output: %q", output)
+	}
+	if !strings.Contains(output, "Target folder:") {
+		t.Fatalf("expected Target folder title, got output: %q", output)
+	}
+}
+
+func TestIsTargetSpaceInsufficient(t *testing.T) {
+	t.Parallel()
+
+	if !isTargetSpaceInsufficient(1024, 512) {
+		t.Fatal("expected insufficient-space predicate to be true")
+	}
+	if isTargetSpaceInsufficient(512, 512) {
+		t.Fatal("did not expect insufficient-space predicate when estimate equals free bytes")
+	}
+	if isTargetSpaceInsufficient(0, 512) {
+		t.Fatal("did not expect insufficient-space predicate for zero estimate")
+	}
+}
+
+func TestPrintStartupHealthCheckDefersDiskSpaceWarningBeforeSummary(t *testing.T) {
+	t.Parallel()
+
+	items := []healthItem{
+		{Severity: healthOK, Scope: "Config", Detail: "C:/cfg.yaml"},
+		{Severity: healthWarn, Scope: "Target folder", Detail: "Insufficient free space for backup: needed 7.81 TB, available 334.24 GB. Remedy: Free disk space or choose a different target folder."},
+		{Severity: healthOK, Scope: "Target folder", Detail: "C:/target exists and is writable"},
+	}
+
+	output := testutil.CaptureStdout(t, func() {
+		printStartupHealthCheck(items)
+	})
+
+	if !strings.Contains(output, "\n[WARN] Insufficient free space for backup:") {
+		t.Fatalf("expected standalone deferred warning line, got output: %q", output)
+	}
+	if !strings.Contains(output, "\n[WARN] Insufficient free space for backup:") || !strings.Contains(output, "\n\nSummary:") {
+		t.Fatalf("expected blank lines around deferred warning before summary, got output: %q", output)
+	}
+	if strings.Contains(output, "Target folder:\n  [WARN] Insufficient free space for backup:") {
+		t.Fatalf("did not expect insufficient-space warning inside Target folder section, got output: %q", output)
 	}
 }

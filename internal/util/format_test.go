@@ -23,3 +23,23 @@ func TestFormatBytesBinary(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatInsufficientBackupSpaceMessage(t *testing.T) {
+	t.Parallel()
+
+	got := FormatInsufficientBackupSpaceMessage(2*1024*1024, 512*1024)
+	want := "Insufficient free space for backup: needed 2.00 MB, available 512.00 KB. Remedy: Free disk space or choose a different target folder."
+	if got != want {
+		t.Fatalf("unexpected message: got %q want %q", got, want)
+	}
+}
+
+func TestFormatInsufficientRestoreSpaceMessage(t *testing.T) {
+	t.Parallel()
+
+	got := FormatInsufficientRestoreSpaceMessage(2*1024*1024, 512*1024)
+	want := "Insufficient free space for restore: needed 2.00 MB, available 512.00 KB. Remedy: Free disk space or choose a different restore destination."
+	if got != want {
+		t.Fatalf("unexpected message: got %q want %q", got, want)
+	}
+}

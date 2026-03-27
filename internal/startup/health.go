@@ -71,8 +71,35 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if shouldWarnSameVolumeSourceTarget(src.Resolved, targetDir, src.Skip) {
 			items = append(items, healthItem{
 				Severity: healthWarn,
-				Scope:    "Source folder warning",
+				Scope:    "Source folder",
 				Detail:   fmt.Sprintf("Same drive/share as target_folder (%s). RestoreSafe will use local staging.", util.VolumeDisplay(targetDir)),
+			})
+		}
+	}
+
+	sourceNeededBytes, sourceEstimateWarnings := estimateSourceDiskNeed(sourceStatuses)
+	sourceNeededDetail := fmt.Sprintf("Needed disk space (total): %s", util.FormatBytesBinary(uint64(sourceNeededBytes)))
+	if len(sourceEstimateWarnings) == 0 {
+		items = append(items, healthItem{
+			Severity: healthOK,
+			Scope:    "Source folder",
+			Detail:   sourceNeededDetail,
+		})
+	} else {
+		sourceNeededDetail = fmt.Sprintf("%s (partial estimate; %d source folder(s) could not be measured)", sourceNeededDetail, len(sourceEstimateWarnings))
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    "Source folder",
+			Detail:   sourceNeededDetail,
+		})
+	}
+
+	if sourceNeededBytes > 0 {
+		if freeBytes, err := util.QueryFreeSpaceBytes(targetDir); err == nil && isTargetSpaceInsufficient(sourceNeededBytes, freeBytes) {
+			items = append(items, healthItem{
+				Severity: healthWarn,
+				Scope:    "Target folder",
+				Detail:   util.FormatInsufficientBackupSpaceMessage(uint64(sourceNeededBytes), freeBytes),
 			})
 		}
 	}
@@ -357,6 +384,26 @@ func runKey(entry util.BackupEntry) string {
 	return entry.Date + "|" + string(entry.ID)
 }
 
+func estimateSourceDiskNeed(sourceStatuses []operation.SourceValidationStatus) (int64, []string) {
+	var total int64
+	warnings := make([]string, 0)
+
+	for _, src := range sourceStatuses {
+		if src.Err != nil || src.Skip {
+			continue
+		}
+
+		size, err := util.DirectorySizeBytes(src.Resolved)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s (%v)", src.Resolved, err))
+			continue
+		}
+		total += size
+	}
+
+	return total, warnings
+}
+
 func printStartupHealthCheck(items []healthItem) {
 	fmt.Println("----------------------")
 	fmt.Println("Startup health check")
@@ -367,8 +414,6 @@ func printStartupHealthCheck(items []healthItem) {
 	errorCount := 0
 
 	for _, item := range items {
-		label := healthSeverityLabel(item.Severity)
-		fmt.Printf("[%s] %s: %s\n", label, item.Scope, item.Detail)
 		switch item.Severity {
 		case healthOK:
 			okCount++
@@ -379,12 +424,53 @@ func printStartupHealthCheck(items []healthItem) {
 		}
 	}
 
-	fmt.Println()
+	orderedScopes := make([]string, 0)
+	itemsByScope := make(map[string][]healthItem)
+	deferredWarnings := make([]healthItem, 0)
+	for _, item := range items {
+		if isDeferredStartupWarning(item) {
+			deferredWarnings = append(deferredWarnings, item)
+			continue
+		}
+		if _, exists := itemsByScope[item.Scope]; !exists {
+			orderedScopes = append(orderedScopes, item.Scope)
+		}
+		itemsByScope[item.Scope] = append(itemsByScope[item.Scope], item)
+	}
+
+	for _, scope := range orderedScopes {
+		fmt.Printf("%s:\n", displayHealthScope(scope))
+		for _, item := range itemsByScope[scope] {
+			label := healthSeverityLabel(item.Severity)
+			fmt.Printf("  [%s] %s\n", label, item.Detail)
+		}
+	}
+
+	if len(deferredWarnings) > 0 {
+		fmt.Println()
+		for _, item := range deferredWarnings {
+			fmt.Printf("[%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
+		}
+		fmt.Println()
+	} else {
+		fmt.Println()
+	}
 	fmt.Printf("Summary: %d OK, %d warning(s), %d error(s)\n", okCount, warnCount, errorCount)
 	if errorCount > 0 {
 		fmt.Println("Review the reported errors before running backup, restore, or verify.")
 	}
 	fmt.Println()
+}
+
+func isDeferredStartupWarning(item healthItem) bool {
+	return item.Severity == healthWarn && strings.HasPrefix(item.Detail, "Insufficient free space for backup:")
+}
+
+func displayHealthScope(scope string) string {
+	if scope == "Source folder" {
+		return "Source folder(s)"
+	}
+	return scope
 }
 
 func healthSeverityLabel(severity healthSeverity) string {
@@ -398,4 +484,8 @@ func healthSeverityLabel(severity healthSeverity) string {
 	default:
 		return "INFO"
 	}
+}
+
+func isTargetSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
+	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }

@@ -67,6 +67,9 @@ func Run(cfg *util.Config, exeDir string) error {
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
+	if err := validateRestoreTargetSpace(restorePath, preflight); err != nil {
+		return err
+	}
 
 	confirmed, err := operation.PromptStartAction("restore")
 	if err != nil {
@@ -130,20 +133,22 @@ func promptRestoreDestination(targetDir string) (string, error) {
 }
 
 type restorePreflightItem struct {
-	Entry     util.BackupEntry
-	PartCount int
-	OutputDir string
-	Err       error
+	Entry          util.BackupEntry
+	PartCount      int
+	TotalSizeBytes int64
+	OutputDir      string
+	Err            error
 }
 
 func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath string) []restorePreflightItem {
 	items := make([]restorePreflightItem, 0, len(selected))
 	for _, entry := range selected {
-		parts, err := catalog.CollectParts(targetDir, entry)
+		partCount, totalSizeBytes, err := catalog.InspectBackupParts(targetDir, entry)
 		item := restorePreflightItem{
-			Entry:     entry,
-			PartCount: len(parts),
-			OutputDir: filepath.Join(restorePath, entry.FolderName),
+			Entry:          entry,
+			PartCount:      partCount,
+			TotalSizeBytes: totalSizeBytes,
+			OutputDir:      filepath.Join(restorePath, entry.FolderName),
 		}
 		if err != nil {
 			item.Err = err
@@ -185,6 +190,24 @@ func printRestorePreflightWithYubiKeyCheck(
 		fmt.Printf("  %s %s\n", status, msg)
 	}
 	fmt.Printf("Items selected : %d\n", len(items))
+	estimatedRestoreBytes := estimateRestoreBytes(items)
+	fmt.Printf("Restore size   : ")
+	if estimatedRestoreBytes > 0 {
+		fmt.Printf("%s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
+	} else {
+		fmt.Println("unknown")
+	}
+
+	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
+	if restoreFreeErr != nil {
+		fmt.Printf("Free space     : unknown (%v)\n", restoreFreeErr)
+	} else {
+		fmt.Printf("Free space     : %s\n", util.FormatBytesBinary(restoreFreeBytes))
+		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+		}
+	}
+
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging  : enabled via %s because backup folder and restore target share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
@@ -207,6 +230,60 @@ func validateRestorePreflight(items []restorePreflightItem) error {
 		func(item restorePreflightItem) bool { return item.Err != nil },
 		"Restore preflight failed: %d selected item(s) are invalid. Remedy: Fix the [ERROR] entries above and start restore again.",
 	)
+}
+
+func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem) error {
+	estimatedRestoreBytes := estimateRestoreBytes(items)
+	if estimatedRestoreBytes <= 0 {
+		return nil
+	}
+
+	restoreFreeBytes, err := queryRestoreTargetFreeBytes(restorePath)
+	if err != nil {
+		return nil
+	}
+
+	if !isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+		return nil
+	}
+
+	return fmt.Errorf("Restore preflight failed: %s", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+}
+
+func estimateRestoreBytes(items []restorePreflightItem) int64 {
+	var total int64
+	for _, item := range items {
+		if item.Err != nil {
+			continue
+		}
+		total += item.TotalSizeBytes
+	}
+	return total
+}
+
+func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
+	probe := filepath.Clean(restorePath)
+	for {
+		info, err := os.Stat(probe)
+		if err == nil {
+			if info.IsDir() {
+				return util.QueryFreeSpaceBytes(probe)
+			}
+			probe = filepath.Dir(probe)
+		} else {
+			parent := filepath.Dir(probe)
+			if parent == probe {
+				break
+			}
+			probe = parent
+		}
+	}
+
+	return util.QueryFreeSpaceBytes(restorePath)
+}
+
+func isRestoreSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
+	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }
 
 func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath string, password []byte, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
