@@ -125,6 +125,18 @@ func printVerifyPreflightWithYubiKeyCheck(
 	fmt.Println("----------------")
 	displayBackupFolder := filepath.ToSlash(targetDir)
 	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
+
+	fmt.Println("Backup selection:")
+	entries := make([]operation.PreflightEntry, len(items))
+	for i, item := range items {
+		sizeMB := float64(item.TotalSizeBytes) / (1024 * 1024)
+		entries[i] = operation.PreflightEntry{
+			Label: fmt.Sprintf("%s (parts: %d, size: %.2f MB)", item.Entry.String(), item.PartCount, sizeMB),
+			Err:   item.Err,
+		}
+	}
+	operation.PrintPreflightSelection(entries)
+
 	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
 		status := "[OK]"
@@ -139,16 +151,6 @@ func printVerifyPreflightWithYubiKeyCheck(
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging  : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	}
-	fmt.Println("Selection:")
-	entries := make([]operation.PreflightEntry, len(items))
-	for i, item := range items {
-		sizeMB := float64(item.TotalSizeBytes) / (1024 * 1024)
-		entries[i] = operation.PreflightEntry{
-			Label: fmt.Sprintf("%s (parts: %d, size: %.2f MB)", item.Entry.String(), item.PartCount, sizeMB),
-			Err:   item.Err,
-		}
-	}
-	operation.PrintPreflightSelection(entries)
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {

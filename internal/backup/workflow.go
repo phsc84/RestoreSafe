@@ -129,7 +129,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	// Back up each source folder.
 	for _, source := range sources {
 		if source.Warning != "" {
-			log.Warn("Source folder warning: %s -> %s", source.Resolved, source.Warning)
+			log.Warn("Source folder warning: %s → %s", source.Resolved, source.Warning)
 			warningCount++
 		}
 		if source.Skip {

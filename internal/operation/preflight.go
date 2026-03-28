@@ -28,7 +28,7 @@ func PrintPreflightSelection(entries []PreflightEntry) {
 	for _, e := range entries {
 		if e.Err != nil {
 			fmt.Printf("  [ERROR] %s\n", e.Label)
-			fmt.Printf("          -> %v\n", e.Err)
+			fmt.Printf("          → %v\n", e.Err)
 			continue
 		}
 		fmt.Printf("  [OK]    %s\n", e.Label)

@@ -178,6 +178,17 @@ func printRestorePreflightWithYubiKeyCheck(
 	fmt.Println("Restore preflight")
 	fmt.Println("-----------------")
 	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
+
+	fmt.Println("Backup selection:")
+	entries := make([]operation.PreflightEntry, len(items))
+	for i, item := range items {
+		entries[i] = operation.PreflightEntry{
+			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
+			Err:   item.Err,
+		}
+	}
+	operation.PrintPreflightSelection(entries)
+
 	fmt.Printf("Restore target : %s\n", displayRestoreTarget)
 	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
@@ -213,15 +224,6 @@ func printRestorePreflightWithYubiKeyCheck(
 	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
 		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}
-	fmt.Println("Selection:")
-	entries := make([]operation.PreflightEntry, len(items))
-	for i, item := range items {
-		entries[i] = operation.PreflightEntry{
-			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
-			Err:   item.Err,
-		}
-	}
-	operation.PrintPreflightSelection(entries)
 }
 
 func validateRestorePreflight(items []restorePreflightItem) error {

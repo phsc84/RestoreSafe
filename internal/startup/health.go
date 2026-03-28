@@ -50,7 +50,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 			items = append(items, healthItem{
 				Severity: healthError,
 				Scope:    "Source folder",
-				Detail:   fmt.Sprintf("%s -> %v", src.Resolved, src.Err),
+				Detail:   fmt.Sprintf("%s → %v", src.Resolved, src.Err),
 			})
 			continue
 		}
@@ -58,7 +58,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 			items = append(items, healthItem{
 				Severity: healthWarn,
 				Scope:    "Source folder",
-				Detail:   fmt.Sprintf("%s -> %s", src.Resolved, src.Warning),
+				Detail:   fmt.Sprintf("%s → %s", src.Resolved, src.Warning),
 			})
 		} else {
 			items = append(items, healthItem{
@@ -135,7 +135,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    "Target folder",
-			Detail:   fmt.Sprintf("%s -> %v. Remedy: Check target_folder in config.yaml and ensure read access.", targetDir, err),
+			Detail:   fmt.Sprintf("%s → %v. Remedy: Check target_folder in config.yaml and ensure read access.", targetDir, err),
 		}}
 	}
 
@@ -309,7 +309,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			items = append(items, healthItem{
 				Severity: healthError,
 				Scope:    "Backup set",
-				Detail:   fmt.Sprintf("%s -> %v", entryLabel, err),
+				Detail:   fmt.Sprintf("%s → %v", entryLabel, err),
 			})
 		}
 

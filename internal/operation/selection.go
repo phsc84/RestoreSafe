@@ -35,9 +35,9 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 		var selected []util.BackupEntry
 
 		switch strings.ToLower(selection) {
-		case "q", "quit", "cancel":
+		case "q":
 			return nil, "", fmt.Errorf("%w. Remedy: Start %s again and enter a valid selection.", ErrSelectionCancelled, action)
-		case "newest", "latest", "new":
+		case ".":
 			selected, label, err := catalog.ResolveNewestBackupRunSelection(targetDir, index)
 			if err != nil {
 				return nil, "", err
@@ -85,10 +85,10 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 
 	completedAction := completedActionLabel(action)
 	fmt.Printf("Select backup(s) to %s:\n", action)
-	fmt.Printf("  - Enter newest -> newest backup set (all folders of the most recent run)\n")
-	fmt.Printf("  - Enter backup ID only (e.g. ABC123) -> all folders with this ID will be %s\n", completedAction)
-	fmt.Printf("  - Enter specific backup (e.g. MyFolder_2024-01-15_ABC123) -> only this folder will be %s\n", completedAction)
-	fmt.Printf("  - Enter q -> cancel\n")
+	fmt.Printf("  - Enter a dot (.) → newest backup set (all folders of the most recent run)\n")
+	fmt.Printf("  - Enter backup ID only (e.g. ABC123) → all folders with this ID will be %s\n", completedAction)
+	fmt.Printf("  - Enter specific backup (e.g. MyFolder_2024-01-15_ABC123) → only this folder will be %s\n", completedAction)
+	fmt.Printf("  - Enter q → cancel\n")
 	fmt.Println()
 	return nil
 }

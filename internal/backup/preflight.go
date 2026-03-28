@@ -39,26 +39,26 @@ func printBackupPreflightWithYubiKeyCheck(
 		if src.Err != nil {
 			fmt.Printf("  [ERROR] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          -> backup name: %s\n", backupName)
+				fmt.Printf("          → backup name: %s\n", backupName)
 			}
-			fmt.Printf("          -> %v\n", src.Err)
+			fmt.Printf("          → %v\n", src.Err)
 			continue
 		}
 		if src.Warning != "" {
 			fmt.Printf("  [WARN] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          -> backup name: %s\n", backupName)
+				fmt.Printf("          → backup name: %s\n", backupName)
 			}
-			fmt.Printf("          -> %s\n", src.Warning)
+			fmt.Printf("          → %s\n", src.Warning)
 		} else {
 			fmt.Printf("  [OK] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          -> backup name: %s\n", backupName)
+				fmt.Printf("          → backup name: %s\n", backupName)
 			}
 		}
 
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
-			fmt.Printf("          -> Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+			fmt.Printf("          → Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}
 	for _, warning := range estimateWarnings {

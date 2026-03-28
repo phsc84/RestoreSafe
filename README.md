@@ -74,9 +74,9 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 
 [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and replace the existing version on your computer.
 
-If updating to a new major version (v1.x.x -> v2.x.x), please also download `config-SAMPLE.yaml`, rename it to `config.yaml` and set the parameters according to your previous `config.yaml`.
+If updating to a new major version (v1.x.x → v2.x.x), please also download `config-SAMPLE.yaml`, rename it to `config.yaml` and set the parameters according to your previous `config.yaml`.
 
-This is not needed when updating to a new minor version (v1.0.x -> v1.1.x) or a new bugfix version (v1.0.1 -> v1.0.2).
+This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a new bugfix version (v1.0.1 → v1.0.2).
 
 ## Usage
 
@@ -115,7 +115,7 @@ Samples:
 
 ### `.challenge` files
 
-only created if YubiKey is enabled -> `authentication_mode: 2` and `authentication_mode: 3`
+only created if YubiKey is enabled → `authentication_mode: 2` and `authentication_mode: 3`
 
 `[FolderName]_YYYY-MM-DD_ID.challenge`
 
@@ -144,18 +144,18 @@ In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8
 Examples **without** special characters in that added alias part:
 
 ```text
-C:\RootA\Documents -> [Documents__RootA-C]_2026-01-15_ABC123-001.enc
-D:\RootB\Documents -> [Documents__RootB-D]_2026-01-15_ABC123-001.enc
+C:\RootA\Documents → [Documents__RootA-C]_2026-01-15_ABC123-001.enc
+D:\RootB\Documents → [Documents__RootB-D]_2026-01-15_ABC123-001.enc
 ```
 
 Examples **with** special characters in that added alias part:
 
 ```text
-C:\Root A\Documents -> [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
-C:\Root-A\Documents -> [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
-C:\Root_A\Documents -> [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
-C:\Root.A\Documents -> [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
-C:\Root~A\Documents -> [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
+C:\Root A\Documents → [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
+C:\Root-A\Documents → [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
+C:\Root_A\Documents → [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
+C:\Root.A\Documents → [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
+C:\Root~A\Documents → [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
 ```
 
 **Result:** Backup file names remain deterministic and distinct across special characters.

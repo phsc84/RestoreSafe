@@ -104,7 +104,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	warnLinePrefix := "-> Source and target folders are on the same drive/share"
+	warnLinePrefix := "→ Source and target folders are on the same drive/share"
 	if strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
 	}
@@ -120,7 +120,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	warnLinePrefix := "-> Source and target folders are on the same drive/share"
+	warnLinePrefix := "→ Source and target folders are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
