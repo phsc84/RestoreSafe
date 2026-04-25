@@ -18,6 +18,7 @@ const (
 	healthOK healthSeverity = iota
 	healthWarn
 	healthError
+	healthInfo
 )
 
 const (
@@ -92,7 +93,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	sourceNeededDetail := fmt.Sprintf("Needed disk space (total): %s", util.FormatBytesBinary(uint64(sourceNeededBytes)))
 	if len(sourceEstimateWarnings) == 0 {
 		items = append(items, healthItem{
-			Severity: healthOK,
+			Severity: healthInfo,
 			Scope:    healthScopeSourceFolder,
 			Detail:   sourceNeededDetail,
 		})
@@ -195,7 +196,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	}
 
 	items = append(items, healthItem{
-		Severity: healthOK,
+		Severity: healthInfo,
 		Scope:    healthScopeTargetFolder,
 		Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
 	})
@@ -205,12 +206,13 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 
 func checkTempDirHealth() []healthItem {
 	tempDir := os.TempDir()
+	tempDirDisplay := filepath.ToSlash(tempDir)
 	probe, err := os.CreateTemp(tempDir, ".restoresafe-health-*.tmp")
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeTempDirectory,
-			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Point TEMP/TMP to a writable folder or adjust permissions.", tempDir, err),
+			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Point TEMP/TMP to a writable folder or adjust permissions.", tempDirDisplay, err),
 		}}
 	}
 	probePath := probe.Name()
@@ -219,7 +221,7 @@ func checkTempDirHealth() []healthItem {
 	items := []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeTempDirectory,
-		Detail:   fmt.Sprintf("%s is writable", tempDir),
+		Detail:   fmt.Sprintf("%s is writable", tempDirDisplay),
 	}}
 
 	if err := os.Remove(probePath); err != nil {
@@ -227,6 +229,14 @@ func checkTempDirHealth() []healthItem {
 			Severity: healthWarn,
 			Scope:    healthScopeTempDirectory,
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions for TEMP/TMP.", err),
+		})
+	}
+
+	if freeBytes, err := util.QueryFreeSpaceBytes(tempDir); err == nil {
+		items = append(items, healthItem{
+			Severity: healthInfo,
+			Scope:    healthScopeTempDirectory,
+			Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
 		})
 	}
 
@@ -452,8 +462,12 @@ func printStartupHealthCheck(items []healthItem) {
 	for _, scope := range orderedScopes {
 		fmt.Printf("%s:\n", scope)
 		for _, item := range itemsByScope[scope] {
-			label := healthSeverityLabel(item.Severity)
-			fmt.Printf("  [%s] %s\n", label, item.Detail)
+			if item.Severity == healthInfo {
+				fmt.Printf("  %s\n", item.Detail)
+			} else {
+				label := healthSeverityLabel(item.Severity)
+				fmt.Printf("  [%s] %s\n", label, item.Detail)
+			}
 		}
 	}
 

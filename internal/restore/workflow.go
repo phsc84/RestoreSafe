@@ -65,7 +65,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
-	printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
+	printRestorePreflightWithYubiKeyCheck(cfg, targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -167,6 +167,7 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 }
 
 func printRestorePreflightWithYubiKeyCheck(
+	cfg *util.Config,
 	targetDir, restorePath string,
 	items []restorePreflightItem,
 	requiresYubiKey, yubiKeyOnly bool,
@@ -186,6 +187,13 @@ func printRestorePreflightWithYubiKeyCheck(
 	}
 	operation.PrintPreflightSelection(entries)
 
+	estimatedRestoreBytes := estimateRestoreBytes(items)
+	if estimatedRestoreBytes > 0 {
+		fmt.Printf("  Needed disk space: %s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
+	} else {
+		fmt.Printf("  Needed disk space: unknown\n")
+	}
+
 	fmt.Println("Folder(s) to be restored:")
 	for _, item := range items {
 		displayOutputDir := displayRestoreOutputDir(item.OutputDir)
@@ -195,6 +203,22 @@ func printRestorePreflightWithYubiKeyCheck(
 			continue
 		}
 		fmt.Printf("  [OK] %s\n", displayOutputDir)
+	}
+
+	if stagingPlan.Enabled {
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder and restore target share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
+		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+	}
+
+	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
+	if restoreFreeErr != nil {
+		fmt.Printf("  Free disk space: unknown (%v)\n", restoreFreeErr)
+	} else {
+		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(restoreFreeBytes))
+		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+		}
 	}
 
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
@@ -207,28 +231,8 @@ func printRestorePreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	estimatedRestoreBytes := estimateRestoreBytes(items)
-	if estimatedRestoreBytes > 0 {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Needed disk space", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
-	} else {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Needed disk space", "unknown")
-	}
 
-	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
-	if restoreFreeErr != nil {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Free disk space", fmt.Sprintf("unknown (%v)", restoreFreeErr))
-	} else {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Free disk space", util.FormatBytesBinary(restoreFreeBytes))
-		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
-		}
-	}
-
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder and restore target share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
-		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
-	}
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 }
 
 func displayRestoreOutputDir(outputDir string) string {

@@ -324,7 +324,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	if sourceIdx > targetIdx {
 		t.Fatalf("expected Source folder(s) section before Target folder section, got: %q", output)
 	}
-	if !strings.Contains(output, "[OK] Needed disk space (total):") {
+	if !strings.Contains(output, "Needed disk space (total):") {
 		t.Fatalf("expected needed disk space line in Source folder(s) section, got: %q", output)
 	}
 	if strings.Contains(output, "Est. source size :") {
@@ -335,7 +335,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	}
 
 	sourceEntryIdx := strings.Index(output, "  [OK] "+sourceDir)
-	neededIdx := strings.Index(output, "  [OK] Needed disk space (total):")
+	neededIdx := strings.Index(output, "  Needed disk space (total):")
 	if sourceEntryIdx < 0 || neededIdx < 0 {
 		t.Fatalf("expected source entry and needed disk space lines, got: %q", output)
 	}

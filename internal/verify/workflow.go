@@ -47,7 +47,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, targetDir, os.TempDir())
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflightWithYubiKeyCheck(targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
+	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -114,6 +114,7 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 }
 
 func printVerifyPreflightWithYubiKeyCheck(
+	cfg *util.Config,
 	targetDir string,
 	items []verifyPreflightItem,
 	requiresYubiKey, yubiKeyOnly bool,
@@ -133,6 +134,9 @@ func printVerifyPreflightWithYubiKeyCheck(
 		}
 	}
 	operation.PrintPreflightSelection(entries)
+	if stagingPlan.Enabled {
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder is on network storage (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+	}
 
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
@@ -144,9 +148,8 @@ func printVerifyPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder is on network storage (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-	}
+
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {

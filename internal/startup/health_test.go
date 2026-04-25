@@ -71,7 +71,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasDuplicateWarn := false
 	for _, item := range items {
-		if item.Scope == "Source folder" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
+		if item.Scope == "Source folder(s)" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
 			hasDuplicateWarn = true
 			break
 		}
@@ -246,7 +246,7 @@ func TestCollectStartupHealthItemsIncludesSourceNeededDiskSpaceLine(t *testing.T
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	found := false
 	for _, item := range items {
-		if item.Scope == "Source folder" && strings.Contains(item.Detail, "Needed disk space (total):") {
+		if item.Scope == "Source folder(s)" && strings.Contains(item.Detail, "Needed disk space (total):") {
 			found = true
 			if !strings.Contains(item.Detail, "10 B") {
 				t.Fatalf("expected estimated source size in needed disk space detail, got: %q", item.Detail)
@@ -264,9 +264,9 @@ func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
 	t.Parallel()
 
 	items := []healthItem{
-		{Severity: healthOK, Scope: "Source folder", Detail: "C:/A"},
-		{Severity: healthWarn, Scope: "Source folder", Detail: "Needed disk space (total): 1.0 KiB"},
-		{Severity: healthOK, Scope: "Target folder", Detail: "Free disk space: 2.0 GiB"},
+		{Severity: healthOK, Scope: "Source folder(s)", Detail: "C:/A"},
+		{Severity: healthWarn, Scope: "Source folder(s)", Detail: "Needed disk space (total): 1.0 KiB"},
+		{Severity: healthInfo, Scope: "Target folder", Detail: "Free disk space: 2.0 GiB"},
 	}
 
 	output := testutil.CaptureStdout(t, func() {

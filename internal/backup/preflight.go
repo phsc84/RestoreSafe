@@ -63,14 +63,25 @@ func printBackupPreflightWithYubiKeyCheck(
 	if estimatedBytes < 0 {
 		estimatedBytes = 0
 	}
-	fmt.Printf("  [OK] Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
+	fmt.Printf("  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 
 	fmt.Println("Target folder:")
 	fmt.Printf("  [OK] %s\n", targetDir)
 	if freeErr != nil {
-		fmt.Printf("  [WARN] Free disk space: unknown (%v)\n", freeErr)
+		fmt.Printf("  Free disk space: unknown (%v)\n", freeErr)
 	} else {
-		fmt.Printf("  [OK] Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
+		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
+	}
+
+	if stagingPlan.Enabled {
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+
+		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		if localFreeErr != nil {
+			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
+		} else {
+			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", util.FormatBytesBinary(localFreeBytes))
+		}
 	}
 
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
@@ -85,18 +96,8 @@ func printBackupPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
+
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
-
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-
-		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-		if localFreeErr != nil {
-			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
-		} else {
-			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", util.FormatBytesBinary(localFreeBytes))
-		}
-	}
 }
 
 func validateSourceFolders(sources []backupSourcePlan) error {

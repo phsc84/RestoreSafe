@@ -60,7 +60,7 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 	}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
 	if strings.Contains(output, "Restore target :") {
@@ -89,20 +89,20 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
 	authLine := "Authentication    : password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting restore."
-	neededLine := "Needed disk space : "
+	neededLine := "  Needed disk space:"
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
 	neededIdx := strings.Index(output, neededLine)
 	if authIdx < 0 || okIdx < 0 || neededIdx < 0 {
 		t.Fatalf("expected authentication/OK/needed-disk-space lines in output, got: %q", output)
 	}
-	if !(authIdx < okIdx && okIdx < neededIdx) {
-		t.Fatalf("expected OK line between authentication and needed-disk-space lines, got: %q", output)
+	if !(neededIdx < authIdx && authIdx < okIdx) {
+		t.Fatalf("expected needed-disk-space line before authentication, and OK line after authentication, got: %q", output)
 	}
 	if strings.Contains(output, "[WARN] YubiKey authentication is enabled") {
 		t.Fatalf("did not expect YubiKey WARN when key is detected, got: %q", output)
@@ -115,19 +115,19 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
 	})
 
 	authLine := "Authentication    : password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
-	neededLine := "Needed disk space : "
+	neededLine := "  Needed disk space:"
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
 	neededIdx := strings.Index(output, neededLine)
 	if authIdx < 0 || warnIdx < 0 || neededIdx < 0 {
 		t.Fatalf("expected authentication/WARN/needed-disk-space lines in output, got: %q", output)
 	}
-	if !(authIdx < warnIdx && warnIdx < neededIdx) {
+	if !(neededIdx < authIdx && authIdx < warnIdx) {
 		t.Fatalf("expected WARN line between authentication and needed-disk-space lines, got: %q", output)
 	}
 	if strings.Contains(output, "[OK] YubiKey connected") {
@@ -174,7 +174,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
 	if !strings.Contains(output, "[ERROR] Insufficient free space for restore:") {
