@@ -20,6 +20,17 @@ const (
 	healthError
 )
 
+const (
+	healthScopeConfig          = "Config"
+	healthScopeSourceFolder    = "Source folder(s)"
+	healthScopeTargetFolder    = "Target folder"
+	healthScopeTempDirectory   = "Temp directory"
+	healthScopeYubiKey         = "YubiKey"
+	healthScopeBackupInventory = "Backup inventory"
+	healthScopeBackupSet       = "Backup set"
+	healthScopeChallengeFile   = "Challenge file"
+)
+
 type healthItem struct {
 	Severity healthSeverity
 	Scope    string
@@ -40,7 +51,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 
 	items = append(items, healthItem{
 		Severity: healthOK,
-		Scope:    "Config",
+		Scope:    healthScopeConfig,
 		Detail:   configPathDisplay,
 	})
 
@@ -49,7 +60,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if src.Err != nil {
 			items = append(items, healthItem{
 				Severity: healthError,
-				Scope:    "Source folder",
+				Scope:    healthScopeSourceFolder,
 				Detail:   fmt.Sprintf("%s → %v", src.Resolved, src.Err),
 			})
 			continue
@@ -57,13 +68,13 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if src.Warning != "" {
 			items = append(items, healthItem{
 				Severity: healthWarn,
-				Scope:    "Source folder",
+				Scope:    healthScopeSourceFolder,
 				Detail:   fmt.Sprintf("%s → %s", src.Resolved, src.Warning),
 			})
 		} else {
 			items = append(items, healthItem{
 				Severity: healthOK,
-				Scope:    "Source folder",
+				Scope:    healthScopeSourceFolder,
 				Detail:   src.Resolved,
 			})
 		}
@@ -71,7 +82,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if shouldWarnSameVolumeSourceTarget(src.Resolved, targetDir, src.Skip) {
 			items = append(items, healthItem{
 				Severity: healthWarn,
-				Scope:    "Source folder",
+				Scope:    healthScopeSourceFolder,
 				Detail:   fmt.Sprintf("Same drive/share as target_folder (%s). RestoreSafe will use local staging.", util.VolumeDisplay(targetDir)),
 			})
 		}
@@ -82,14 +93,14 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	if len(sourceEstimateWarnings) == 0 {
 		items = append(items, healthItem{
 			Severity: healthOK,
-			Scope:    "Source folder",
+			Scope:    healthScopeSourceFolder,
 			Detail:   sourceNeededDetail,
 		})
 	} else {
 		sourceNeededDetail = fmt.Sprintf("%s (partial estimate; %d source folder(s) could not be measured)", sourceNeededDetail, len(sourceEstimateWarnings))
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    "Source folder",
+			Scope:    healthScopeSourceFolder,
 			Detail:   sourceNeededDetail,
 		})
 	}
@@ -98,7 +109,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if freeBytes, err := util.QueryFreeSpaceBytes(targetDir); err == nil && isTargetSpaceInsufficient(sourceNeededBytes, freeBytes) {
 			items = append(items, healthItem{
 				Severity: healthWarn,
-				Scope:    "Target folder",
+				Scope:    healthScopeTargetFolder,
 				Detail:   util.FormatInsufficientBackupSpaceMessage(uint64(sourceNeededBytes), freeBytes),
 			})
 		}
@@ -128,13 +139,13 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		if os.IsNotExist(err) {
 			return []healthItem{{
 				Severity: healthWarn,
-				Scope:    "Target folder",
+				Scope:    healthScopeTargetFolder,
 				Detail:   fmt.Sprintf("%s does not exist yet and will be created during backup", targetDir),
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Target folder",
+			Scope:    healthScopeTargetFolder,
 			Detail:   fmt.Sprintf("%s → %v. Remedy: Check target_folder in config.yaml and ensure read access.", targetDir, err),
 		}}
 	}
@@ -142,7 +153,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	if !info.IsDir() {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Target folder",
+			Scope:    healthScopeTargetFolder,
 			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a folder path, not a file path.", targetDir),
 		}}
 	}
@@ -151,7 +162,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Target folder",
+			Scope:    healthScopeTargetFolder,
 			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Adjust write permissions or choose a different target_folder.", targetDir, err),
 		}}
 	}
@@ -162,13 +173,13 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 
 	items := []healthItem{{
 		Severity: healthOK,
-		Scope:    "Target folder",
+		Scope:    healthScopeTargetFolder,
 		Detail:   fmt.Sprintf("%s exists and is writable", targetDir),
 	}}
 	if cleanupErr != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    "Target folder",
+			Scope:    healthScopeTargetFolder,
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions in target_folder.", cleanupErr),
 		})
 	}
@@ -177,7 +188,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	if err != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    "Target folder",
+			Scope:    healthScopeTargetFolder,
 			Detail:   fmt.Sprintf("Free disk space could not be determined: %v. Remedy: Check drive availability and Windows permissions.", err),
 		})
 		return items
@@ -185,7 +196,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 
 	items = append(items, healthItem{
 		Severity: healthOK,
-		Scope:    "Target folder",
+		Scope:    healthScopeTargetFolder,
 		Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
 	})
 
@@ -198,7 +209,7 @@ func checkTempDirHealth() []healthItem {
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Temp directory",
+			Scope:    healthScopeTempDirectory,
 			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Point TEMP/TMP to a writable folder or adjust permissions.", tempDir, err),
 		}}
 	}
@@ -207,14 +218,14 @@ func checkTempDirHealth() []healthItem {
 
 	items := []healthItem{{
 		Severity: healthOK,
-		Scope:    "Temp directory",
+		Scope:    healthScopeTempDirectory,
 		Detail:   fmt.Sprintf("%s is writable", tempDir),
 	}}
 
 	if err := os.Remove(probePath); err != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    "Temp directory",
+			Scope:    healthScopeTempDirectory,
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions for TEMP/TMP.", err),
 		})
 	}
@@ -226,7 +237,7 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 	if !cfg.UseYubiKey() {
 		return []healthItem{{
 			Severity: healthOK,
-			Scope:    "YubiKey",
+			Scope:    healthScopeYubiKey,
 			Detail:   "Disabled in config.yaml",
 		}}
 	}
@@ -234,14 +245,14 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 	if err := security.CheckYubiKeyAvailability(); err != nil {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "YubiKey",
+			Scope:    healthScopeYubiKey,
 			Detail:   fmt.Sprintf("%v. Remedy: Install YubiKey Manager (v5), then restart RestoreSafe. If still failing, add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
 		}}
 	}
 
 	return []healthItem{{
 		Severity: healthOK,
-		Scope:    "YubiKey",
+		Scope:    healthScopeYubiKey,
 		Detail:   "ykman found (PATH or standard install directory, YubiKey v5 supported)",
 	}}
 }
@@ -252,13 +263,13 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		if os.IsNotExist(err) {
 			return []healthItem{{
 				Severity: healthWarn,
-				Scope:    "Backup inventory",
+				Scope:    healthScopeBackupInventory,
 				Detail:   "Target folder does not exist yet, no backups to inspect",
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Backup inventory",
+			Scope:    healthScopeBackupInventory,
 			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in target_folder.", err),
 		}}
 	}
@@ -266,14 +277,14 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 	if len(index) == 0 {
 		return []healthItem{{
 			Severity: healthWarn,
-			Scope:    "Backup inventory",
+			Scope:    healthScopeBackupInventory,
 			Detail:   "No backup sets found. Remedy: Check target_folder or create a new backup run.",
 		}}
 	}
 
 	items := []healthItem{{
 		Severity: healthOK,
-		Scope:    "Backup inventory",
+		Scope:    healthScopeBackupInventory,
 		Detail:   fmt.Sprintf("Found %d backup set(s)", len(index)),
 	}}
 
@@ -289,7 +300,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    "Backup inventory",
+			Scope:    healthScopeBackupInventory,
 			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in target_folder.", err),
 		}}
 	}
@@ -308,7 +319,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
-				Scope:    "Backup set",
+				Scope:    healthScopeBackupSet,
 				Detail:   fmt.Sprintf("%s → %v", entryLabel, err),
 			})
 		}
@@ -325,7 +336,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
-				Scope:    "Challenge file",
+				Scope:    healthScopeChallengeFile,
 				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run. Remedy: Put the matching .challenge file in the same folder as the .enc files.", entry.String()),
 			})
 		}
@@ -334,7 +345,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	for _, orphan := range orphanChallengeFiles(challengeFiles, expectedChallengeFiles) {
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    "Challenge file",
+			Scope:    healthScopeChallengeFile,
 			Detail:   fmt.Sprintf("%s has no matching backup parts. Remedy: Remove the file or restore the related backup parts.", orphan),
 		})
 	}
@@ -342,7 +353,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	if structuralIssues == 0 {
 		items = append(items, healthItem{
 			Severity: healthOK,
-			Scope:    "Backup inventory",
+			Scope:    healthScopeBackupInventory,
 			Detail:   "All detected backup sets are structurally complete",
 		})
 	}
@@ -439,7 +450,7 @@ func printStartupHealthCheck(items []healthItem) {
 	}
 
 	for _, scope := range orderedScopes {
-		fmt.Printf("%s:\n", displayHealthScope(scope))
+		fmt.Printf("%s:\n", scope)
 		for _, item := range itemsByScope[scope] {
 			label := healthSeverityLabel(item.Severity)
 			fmt.Printf("  [%s] %s\n", label, item.Detail)
@@ -464,13 +475,6 @@ func printStartupHealthCheck(items []healthItem) {
 
 func isDeferredStartupWarning(item healthItem) bool {
 	return item.Severity == healthWarn && strings.HasPrefix(item.Detail, "Insufficient free space for backup:")
-}
-
-func displayHealthScope(scope string) string {
-	if scope == "Source folder" {
-		return "Source folder(s)"
-	}
-	return scope
 }
 
 func healthSeverityLabel(severity healthSeverity) string {

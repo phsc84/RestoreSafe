@@ -126,7 +126,6 @@ func printMenu() {
 	fmt.Println("----------------------")
 	fmt.Println("Menu")
 	fmt.Println("----------------------")
-	fmt.Println()
 	fmt.Println("1. Create backup")
 	fmt.Println("2. Restore backup")
 	fmt.Println("3. Verify backup")
