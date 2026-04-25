@@ -58,6 +58,8 @@ const (
 	nonceLen = 12
 	// chunkSize is the plaintext chunk size for streaming.
 	chunkSize = 8 * 1024 * 1024 // 8 MB
+	// maxEncryptedChunkSize is the largest valid GCM-sealed chunk payload.
+	maxEncryptedChunkSize = chunkSize + 16
 )
 
 // Argon2id parameters (OWASP recommended minimum for high-security use).
@@ -163,6 +165,9 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 				break
 			}
 			return fmt.Errorf("Failed to read chunk length: %w. Remedy: Check backup-part completeness and file readability.", err)
+		}
+		if length > maxEncryptedChunkSize {
+			return fmt.Errorf("Invalid encrypted chunk length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", length)
 		}
 
 		encrypted := make([]byte, length)

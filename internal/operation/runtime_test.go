@@ -183,7 +183,7 @@ func TestPromptStartActionPrintsSingleBlankLineOnRetry(t *testing.T) {
 	}
 
 	got := string(out)
-	expected := "\n\nPlease enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.\n\n\n"
+	expected := "\n\nPlease enter y (yes) or n (no).\n\n\n"
 	if got != expected {
 		t.Fatalf("unexpected stdout.\nexpected: %q\n     got: %q", expected, got)
 	}

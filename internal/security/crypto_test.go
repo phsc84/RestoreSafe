@@ -102,6 +102,26 @@ func TestDecryptRejectsTruncatedChunk(t *testing.T) {
 	}
 }
 
+func TestDecryptRejectsOversizedChunkLength(t *testing.T) {
+	password := []byte("pw")
+	var encrypted bytes.Buffer
+	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello")), password); err != nil {
+		t.Fatalf("Encrypt returned error: %v", err)
+	}
+
+	data := encrypted.Bytes()
+	headerLen := len(magic) + 4 + saltLen + 4
+	binary.BigEndian.PutUint32(data[headerLen:headerLen+4], uint32(maxEncryptedChunkSize+1))
+
+	err := Decrypt(io.Discard, bytes.NewReader(data), password)
+	if err == nil {
+		t.Fatal("expected oversized chunk length error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Invalid encrypted chunk length") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCombineWithPasswordForRestoreRejectsInvalidChallengeHex(t *testing.T) {
 	_, err := CombineWithPasswordForRestore([]byte("pw"), "this-is-not-hex")
 	if err == nil {
