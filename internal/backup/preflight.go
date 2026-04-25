@@ -10,10 +10,6 @@ import (
 
 const preflightFieldLabelWidth = 17
 
-func printPreflightField(label, value string) {
-	fmt.Printf("%-*s: %s\n", preflightFieldLabelWidth, label, value)
-}
-
 func printBackupPreflightWithYubiKeyCheck(
 	cfg *util.Config,
 	targetDir string,
@@ -77,9 +73,9 @@ func printBackupPreflightWithYubiKeyCheck(
 		fmt.Printf("  [OK] Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
 	}
 
-	printPreflightField("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
-	printPreflightField("Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
-	printPreflightField("Authentication", cfg.AuthenticationMode.Label())
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
 	if cfg.UseYubiKey() {
 		status := "[OK]"
 		msg := "YubiKey connected. Keep it connected now before starting backup."
@@ -89,16 +85,16 @@ func printBackupPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	printPreflightField("Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {
-		printPreflightField("Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
 
 		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 		if localFreeErr != nil {
-			printPreflightField("Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
+			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
 		} else {
-			printPreflightField("Free space local", util.FormatBytesBinary(localFreeBytes))
+			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", util.FormatBytesBinary(localFreeBytes))
 		}
 	}
 }

@@ -18,6 +18,8 @@ import (
 	"strings"
 )
 
+const preflightFieldLabelWidth = 18
+
 // Run executes the full restore workflow.
 func Run(cfg *util.Config, exeDir string) error {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
@@ -195,7 +197,7 @@ func printRestorePreflightWithYubiKeyCheck(
 		fmt.Printf("  [OK] %s\n", displayOutputDir)
 	}
 
-	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
 		status := "[OK]"
 		msg := "YubiKey connected. Keep it connected now before starting restore."
@@ -206,25 +208,24 @@ func printRestorePreflightWithYubiKeyCheck(
 		fmt.Printf("  %s %s\n", status, msg)
 	}
 	estimatedRestoreBytes := estimateRestoreBytes(items)
-	fmt.Printf("Needed disk space : ")
 	if estimatedRestoreBytes > 0 {
-		fmt.Printf("%s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Needed disk space", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
 	} else {
-		fmt.Println("unknown")
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Needed disk space", "unknown")
 	}
 
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 	if restoreFreeErr != nil {
-		fmt.Printf("Free disk space : unknown (%v)\n", restoreFreeErr)
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Free disk space", fmt.Sprintf("unknown (%v)", restoreFreeErr))
 	} else {
-		fmt.Printf("Free disk space : %s\n", util.FormatBytesBinary(restoreFreeBytes))
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Free disk space", util.FormatBytesBinary(restoreFreeBytes))
 		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
 			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
 	if stagingPlan.Enabled {
-		fmt.Printf("Local staging  : enabled via %s because backup folder and restore target share the same drive/share (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder and restore target share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
 	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
 		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}

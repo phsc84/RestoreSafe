@@ -92,7 +92,7 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
-	authLine := "Authentication : password + YubiKey"
+	authLine := "Authentication    : password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting restore."
 	neededLine := "Needed disk space : "
 	authIdx := strings.Index(output, authLine)
@@ -118,7 +118,7 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication : password + YubiKey"
+	authLine := "Authentication    : password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
 	neededLine := "Needed disk space : "
 	authIdx := strings.Index(output, authLine)

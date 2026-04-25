@@ -12,6 +12,8 @@ import (
 	"strings"
 )
 
+const preflightFieldLabelWidth = 15
+
 // Run verifies selected backup sets without restoring them to disk.
 func Run(cfg *util.Config, exeDir string) error {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
@@ -132,7 +134,7 @@ func printVerifyPreflightWithYubiKeyCheck(
 	}
 	operation.PrintPreflightSelection(entries)
 
-	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
 		status := "[OK]"
 		msg := "YubiKey connected. Keep it connected now before starting verification."
@@ -143,7 +145,7 @@ func printVerifyPreflightWithYubiKeyCheck(
 		fmt.Printf("  %s %s\n", status, msg)
 	}
 	if stagingPlan.Enabled {
-		fmt.Printf("Local staging  : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
+		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder is on network storage (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
 	}
 }
 

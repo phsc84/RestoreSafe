@@ -34,3 +34,8 @@ func PrintPreflightSelection(entries []PreflightEntry) {
 		fmt.Printf("  [OK]    %s\n", e.Label)
 	}
 }
+
+// PrintPreflightField prints an aligned key/value field for preflight summaries.
+func PrintPreflightField(labelWidth int, label, value string) {
+	fmt.Printf("%-*s: %s\n", labelWidth, label, value)
+}
