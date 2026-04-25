@@ -3,6 +3,8 @@ package util_test
 import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,8 +38,33 @@ func TestNilLoggerMethodsAreSafe(t *testing.T) {
 	log.Info("ignored")
 	log.Debug("ignored")
 	log.Warn("ignored")
+	log.WarnLogOnly("ignored")
 
 	if log.IsConsoleOnly() {
 		t.Fatal("nil logger should not report console-only")
+	}
+}
+
+func TestWarnLogOnlyWritesFileWithoutStdout(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "restore.log")
+	log, err := util.NewLogger(logPath, "info")
+	if err != nil {
+		t.Fatalf("NewLogger returned error: %v", err)
+	}
+
+	output := testutil.CaptureStdout(t, func() {
+		log.WarnLogOnly("hidden warning %d", 1)
+	})
+	log.Close()
+
+	if output != "" {
+		t.Fatalf("expected no stdout for log-only warning, got %q", output)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	if !strings.Contains(string(data), "WARN  - hidden warning 1") {
+		t.Fatalf("expected warning in log file, got %q", string(data))
 	}
 }

@@ -93,21 +93,19 @@ func resolveVerifySelection(targetDir string, index []util.BackupEntry) ([]util.
 }
 
 type verifyPreflightItem struct {
-	Entry          util.BackupEntry
-	PartCount      int
-	TotalSizeBytes int64
-	Err            error
+	Entry     util.BackupEntry
+	PartCount int
+	Err       error
 }
 
 func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
 	for _, entry := range selected {
-		partCount, totalSizeBytes, err := catalog.InspectBackupParts(targetDir, entry)
+		partCount, _, err := catalog.InspectBackupParts(targetDir, entry)
 		items = append(items, verifyPreflightItem{
-			Entry:          entry,
-			PartCount:      partCount,
-			TotalSizeBytes: totalSizeBytes,
-			Err:            err,
+			Entry:     entry,
+			PartCount: partCount,
+			Err:       err,
 		})
 	}
 	return items
@@ -123,15 +121,12 @@ func printVerifyPreflightWithYubiKeyCheck(
 	fmt.Println()
 	fmt.Println("Verify preflight")
 	fmt.Println("----------------")
-	displayBackupFolder := filepath.ToSlash(targetDir)
-	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
 
 	fmt.Println("Backup selection:")
 	entries := make([]operation.PreflightEntry, len(items))
 	for i, item := range items {
-		sizeMB := float64(item.TotalSizeBytes) / (1024 * 1024)
 		entries[i] = operation.PreflightEntry{
-			Label: fmt.Sprintf("%s (parts: %d, size: %.2f MB)", item.Entry.String(), item.PartCount, sizeMB),
+			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
 			Err:   item.Err,
 		}
 	}
@@ -147,7 +142,6 @@ func printVerifyPreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	fmt.Printf("Items selected : %d\n", len(items))
 	if stagingPlan.Enabled {
 		fmt.Printf("Local staging  : enabled via %s because backup folder is on network storage (%s)\n", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir))
 	}

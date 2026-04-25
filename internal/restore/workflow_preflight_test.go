@@ -47,6 +47,42 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 }
 
+func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.T) {
+	targetDir := t.TempDir()
+	restorePath := t.TempDir()
+	outputDir := filepath.Join(restorePath, "Docs")
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}
+	items := []restorePreflightItem{{
+		Entry:     entry,
+		PartCount: 4,
+		OutputDir: outputDir,
+		Err:       errors.New("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."),
+	}}
+
+	output := testutil.CaptureStdout(t, func() {
+		printRestorePreflightWithYubiKeyCheck(targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+	})
+
+	if strings.Contains(output, "Restore target :") {
+		t.Fatalf("did not expect Restore target field, got: %q", output)
+	}
+	selectionLine := "  [OK]    " + entry.String() + " (parts: 4)"
+	folderLine := "  [ERROR] " + filepath.ToSlash(outputDir)
+	errorText := "Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."
+	if !strings.Contains(output, selectionLine) {
+		t.Fatalf("expected backup selection to remain an OK archive entry, got: %q", output)
+	}
+	if !strings.Contains(output, "Folder(s) to be restored:\n"+folderLine) {
+		t.Fatalf("expected restore folder section with absolute destination path, got: %q", output)
+	}
+	if !strings.Contains(output, errorText) {
+		t.Fatalf("expected restore folder error text, got: %q", output)
+	}
+	if strings.Index(output, errorText) <= strings.Index(output, folderLine) {
+		t.Fatalf("expected restore folder error below folder line, got: %q", output)
+	}
+}
+
 func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
@@ -58,15 +94,15 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 
 	authLine := "Authentication : password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting restore."
-	itemsLine := "Items selected : 1"
+	neededLine := "Needed disk space : "
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
-	itemsIdx := strings.Index(output, itemsLine)
-	if authIdx < 0 || okIdx < 0 || itemsIdx < 0 {
-		t.Fatalf("expected authentication/OK/items lines in output, got: %q", output)
+	neededIdx := strings.Index(output, neededLine)
+	if authIdx < 0 || okIdx < 0 || neededIdx < 0 {
+		t.Fatalf("expected authentication/OK/needed-disk-space lines in output, got: %q", output)
 	}
-	if !(authIdx < okIdx && okIdx < itemsIdx) {
-		t.Fatalf("expected OK line between authentication and items lines, got: %q", output)
+	if !(authIdx < okIdx && okIdx < neededIdx) {
+		t.Fatalf("expected OK line between authentication and needed-disk-space lines, got: %q", output)
 	}
 	if strings.Contains(output, "[WARN] YubiKey authentication is enabled") {
 		t.Fatalf("did not expect YubiKey WARN when key is detected, got: %q", output)
@@ -84,15 +120,15 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 
 	authLine := "Authentication : password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
-	itemsLine := "Items selected : 1"
+	neededLine := "Needed disk space : "
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
-	itemsIdx := strings.Index(output, itemsLine)
-	if authIdx < 0 || warnIdx < 0 || itemsIdx < 0 {
-		t.Fatalf("expected authentication/WARN/items lines in output, got: %q", output)
+	neededIdx := strings.Index(output, neededLine)
+	if authIdx < 0 || warnIdx < 0 || neededIdx < 0 {
+		t.Fatalf("expected authentication/WARN/needed-disk-space lines in output, got: %q", output)
 	}
-	if !(authIdx < warnIdx && warnIdx < itemsIdx) {
-		t.Fatalf("expected WARN line between authentication and items lines, got: %q", output)
+	if !(authIdx < warnIdx && warnIdx < neededIdx) {
+		t.Fatalf("expected WARN line between authentication and needed-disk-space lines, got: %q", output)
 	}
 	if strings.Contains(output, "[OK] YubiKey connected") {
 		t.Fatalf("did not expect YubiKey OK when key is not detected, got: %q", output)

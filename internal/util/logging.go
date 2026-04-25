@@ -138,7 +138,20 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write("WARN ", format, args...)
 }
 
+// WarnLogOnly logs a warning without mirroring it to stdout.
+func (l *Logger) WarnLogOnly(format string, args ...any) {
+	l.writeLogOnly("WARN ", format, args...)
+}
+
 func (l *Logger) write(severity, format string, args ...any) {
+	l.writeLine(severity, true, format, args...)
+}
+
+func (l *Logger) writeLogOnly(severity, format string, args ...any) {
+	l.writeLine(severity, false, format, args...)
+}
+
+func (l *Logger) writeLine(severity string, stdout bool, format string, args ...any) {
 	if l == nil {
 		return
 	}
@@ -149,8 +162,10 @@ func (l *Logger) write(severity, format string, args ...any) {
 	ts := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf(format, args...)
 	line := fmt.Sprintf("[%s] %s - %s\n", ts, severity, msg)
-	// Write to stdout first so interactive users see messages immediately.
-	fmt.Fprint(os.Stdout, line)
+	if stdout {
+		// Write to stdout first so interactive users see messages immediately.
+		fmt.Fprint(os.Stdout, line)
+	}
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil {

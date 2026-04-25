@@ -135,7 +135,7 @@ func ReadPasswordWithRetry(
 				remaining := maxPasswordAttempts - attempt
 				if remaining > 0 {
 					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly), remaining)
-					log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
+					log.WarnLogOnly("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 				}
 				continue
 			} else {

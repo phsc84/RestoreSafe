@@ -113,8 +113,8 @@ func resolveRestoreSelection(targetDir string, index []util.BackupEntry) ([]util
 func promptRestoreDestination(targetDir string) (string, error) {
 	fmt.Println()
 	fmt.Println("Enter restore destination:")
-	fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory")
 	fmt.Println("  - Enter a dot (.) → restore in the target folder itself")
+	fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory")
 	fmt.Println()
 
 	restorePath, err := security.ReadLine("Restore destination: ")
@@ -171,25 +171,30 @@ func printRestorePreflightWithYubiKeyCheck(
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
 ) {
-	displayBackupFolder := filepath.ToSlash(targetDir)
-	displayRestoreTarget := filepath.ToSlash(restorePath)
-
 	fmt.Println()
 	fmt.Println("Restore preflight")
 	fmt.Println("-----------------")
-	fmt.Printf("Backup folder  : %s\n", displayBackupFolder)
 
 	fmt.Println("Backup selection:")
 	entries := make([]operation.PreflightEntry, len(items))
 	for i, item := range items {
 		entries[i] = operation.PreflightEntry{
 			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
-			Err:   item.Err,
 		}
 	}
 	operation.PrintPreflightSelection(entries)
 
-	fmt.Printf("Restore target : %s\n", displayRestoreTarget)
+	fmt.Println("Folder(s) to be restored:")
+	for _, item := range items {
+		displayOutputDir := displayRestoreOutputDir(item.OutputDir)
+		if item.Err != nil {
+			fmt.Printf("  [ERROR] %s\n", displayOutputDir)
+			fmt.Printf("          → %v\n", item.Err)
+			continue
+		}
+		fmt.Printf("  [OK] %s\n", displayOutputDir)
+	}
+
 	fmt.Printf("Authentication : %s\n", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	if requiresYubiKey {
 		status := "[OK]"
@@ -200,9 +205,8 @@ func printRestorePreflightWithYubiKeyCheck(
 		}
 		fmt.Printf("  %s %s\n", status, msg)
 	}
-	fmt.Printf("Items selected : %d\n", len(items))
 	estimatedRestoreBytes := estimateRestoreBytes(items)
-	fmt.Printf("Restore size   : ")
+	fmt.Printf("Needed disk space : ")
 	if estimatedRestoreBytes > 0 {
 		fmt.Printf("%s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
 	} else {
@@ -211,9 +215,9 @@ func printRestorePreflightWithYubiKeyCheck(
 
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 	if restoreFreeErr != nil {
-		fmt.Printf("Free space     : unknown (%v)\n", restoreFreeErr)
+		fmt.Printf("Free disk space : unknown (%v)\n", restoreFreeErr)
 	} else {
-		fmt.Printf("Free space     : %s\n", util.FormatBytesBinary(restoreFreeBytes))
+		fmt.Printf("Free disk space : %s\n", util.FormatBytesBinary(restoreFreeBytes))
 		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
 			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
@@ -224,6 +228,14 @@ func printRestorePreflightWithYubiKeyCheck(
 	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
 		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 	}
+}
+
+func displayRestoreOutputDir(outputDir string) string {
+	absoluteOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		absoluteOutputDir = filepath.Clean(outputDir)
+	}
+	return filepath.ToSlash(absoluteOutputDir)
 }
 
 func validateRestorePreflight(items []restorePreflightItem) error {
