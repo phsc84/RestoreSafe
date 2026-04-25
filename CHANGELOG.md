@@ -6,6 +6,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-04-25
+
+### Added
+- Startup health checks now use grouped sections and include source, target, and temp disk-space details.
+- Restore preflight now estimates needed disk space and validates target free space before starting.
+- Added shared aligned preflight-field formatting and log-only warning support.
+
+### Changed
+- Reworked backup, restore, and verify preflight layouts for clearer grouping and fewer irrelevant fields.
+- Changed newest-backup selection to use a dot (`.`) and made restore destination prompt ordering match that shortcut.
+- Simplified interactive error messages and standardized failure spacing.
+- Updated README naming/YubiKey guidance, build output handling, Go 1.26.2, and `golang.org/x/*` dependencies.
+
+### Fixed
+- Backup now stops before confirmation/password entry when estimated source size exceeds target free space.
+- Password retry warnings are now log-only and no longer shown to the user.
+- Fixed startup health counts for informational disk-space lines.
+
+### Security
+- Hardened decryption against tampered backup parts with oversized encrypted chunk lengths by rejecting invalid chunk sizes before allocation.
+
 ## [2.1.1] - 2026-03-21
 
 ### Changed
