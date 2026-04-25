@@ -61,7 +61,6 @@ func Run(cfg *util.Config, exeDir string) error {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
 			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
-			fmt.Println()
 		}
 		return err
 	}

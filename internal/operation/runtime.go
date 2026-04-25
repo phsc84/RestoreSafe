@@ -38,7 +38,7 @@ func PromptStartAction(action string) (bool, error) {
 		case "n", "no":
 			return false, nil
 		default:
-			fmt.Println("Please enter Y (yes) or N (no). Remedy: Press Enter for yes or type n to cancel.")
+			fmt.Println("Please enter y (yes) or n (no).")
 		}
 	}
 }
@@ -130,7 +130,7 @@ func ReadPasswordWithRetry(
 			} else if errors.Is(err, security.ErrWrongPassword) {
 				// In YubiKey-only mode there is no password to correct, so return immediately.
 				if yubiKeyOnly {
-					return nil, fmt.Errorf("YubiKey authentication failed: wrong key or corrupted file. Application will now exit. Remedy: Insert the correct YubiKey and restart.")
+					return nil, fmt.Errorf("YubiKey authentication failed: wrong key or corrupted file.")
 				}
 				remaining := maxPasswordAttempts - attempt
 				if remaining > 0 {
@@ -148,12 +148,12 @@ func ReadPasswordWithRetry(
 	}
 
 	if yubiKeyOnly {
-		return nil, fmt.Errorf("YubiKey authentication failed. Application will now exit. Remedy: Insert the correct YubiKey and restart.")
+		return nil, fmt.Errorf("YubiKey authentication failed.")
 	}
 	if requiresYubiKey {
-		return nil, fmt.Errorf("Too many failed authentication attempts. Application will now exit. Remedy: Restart and check password plus YubiKey setup (slot 2, touch).")
+		return nil, fmt.Errorf("Too many failed authentication attempts.")
 	}
-	return nil, fmt.Errorf("Too many wrong password attempts. Application will now exit. Remedy: Restart and enter the correct backup password.")
+	return nil, fmt.Errorf("Too many wrong password attempts.")
 }
 
 func verifyPassword(partPath string, password []byte) error {

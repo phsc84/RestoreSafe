@@ -88,7 +88,7 @@ func ResolveSelection(input string, index []util.BackupEntry) ([]util.BackupEntr
 		}
 	}
 
-	return nil, fmt.Errorf("Backup %q not found. Remedy: Use an ID from the list, 'newest', or a full backup name.", input)
+	return nil, fmt.Errorf("Backup %q not found. Remedy: Use a valid option.", input)
 }
 
 func ResolveSelectionForIDNewestDate(id string, index []util.BackupEntry) ([]util.BackupEntry, string, []string, bool) {

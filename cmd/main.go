@@ -98,6 +98,7 @@ func main() {
 }
 
 func reportOperationError(action string, err error) {
+	fmt.Fprintln(os.Stderr)
 	if action == "Backup" && strings.HasPrefix(err.Error(), "Backup preflight failed:") {
 		fmt.Fprintln(os.Stderr, "Backup failed.")
 		fmt.Fprintln(os.Stderr)
