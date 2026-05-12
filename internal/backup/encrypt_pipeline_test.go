@@ -17,9 +17,9 @@ func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 	targetDir := t.TempDir()
 
 	files := map[string]string{
-		"alpha-001.enc":               "enc-part",
-		"alpha_2026_AAA111.challenge": "challenge",
-		"notes.txt":                   "ignore",
+		"[alpha]_2026-03-21_AB12CD-001.enc": "enc-part",
+		"alpha_2026_AAA111.challenge":        "challenge",
+		"notes.txt":                          "ignore",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(stagingDir, name), []byte(content), 0o600); err != nil {
@@ -27,11 +27,11 @@ func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 		}
 	}
 
-	if err := copyBackupResults(stagingDir, targetDir, nil); err != nil {
+	if err := copyBackupResults(stagingDir, targetDir, nil, nil, nil); err != nil {
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(targetDir, "alpha-001.enc")); err != nil {
+	if _, err := os.Stat(filepath.Join(targetDir, "[alpha]_2026-03-21_AB12CD-001.enc")); err != nil {
 		t.Fatalf("expected .enc file to be copied: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(targetDir, "alpha_2026_AAA111.challenge")); err != nil {
@@ -45,20 +45,20 @@ func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 func TestCopyBackupResultsFailsWhenStagingDirMissing(t *testing.T) {
 	t.Parallel()
 
-	err := copyBackupResults(filepath.Join(t.TempDir(), "missing"), t.TempDir(), nil)
+	err := copyBackupResults(filepath.Join(t.TempDir(), "missing"), t.TempDir(), nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing staging directory, got nil")
 	}
 }
 
-func TestCopyBackupResultsLogsCopiedParts(t *testing.T) {
+func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 	stagingDir := t.TempDir()
 	targetDir := t.TempDir()
 
 	files := map[string]string{
-		"alpha-001.enc":               "enc-part-1",
-		"alpha-002.enc":               "enc-part-2",
-		"alpha_2026_AAA111.challenge": "challenge",
+		"[alpha]_2026-03-21_AB12CD-001.enc": "enc-part-1",
+		"[alpha]_2026-03-21_AB12CD-002.enc": "enc-part-2",
+		"alpha_2026_AAA111.challenge":        "challenge",
 	}
 	for name, content := range files {
 		if err := os.WriteFile(filepath.Join(stagingDir, name), []byte(content), 0o600); err != nil {
@@ -72,7 +72,7 @@ func TestCopyBackupResultsLogsCopiedParts(t *testing.T) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
-	if err := copyBackupResults(stagingDir, targetDir, logger); err != nil {
+	if err := copyBackupResults(stagingDir, targetDir, nil, nil, logger); err != nil {
 		logger.Close()
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
@@ -84,18 +84,31 @@ func TestCopyBackupResultsLogsCopiedParts(t *testing.T) {
 	}
 	logContent := string(data)
 
-	if !strings.Contains(logContent, "Copied: alpha-001.enc") {
-		t.Fatalf("expected copied-part progress for alpha-001.enc, got: %q", logContent)
+	if !strings.Contains(logContent, "Copy: [alpha]_2026-03-21_AB12CD-001.enc") {
+		t.Fatalf("expected pre-copy log for part 1, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, "Copied: alpha-002.enc") {
-		t.Fatalf("expected copied-part progress for alpha-002.enc, got: %q", logContent)
+	if !strings.Contains(logContent, "Copy: [alpha]_2026-03-21_AB12CD-002.enc") {
+		t.Fatalf("expected pre-copy log for part 2, got: %q", logContent)
 	}
-	if strings.Contains(logContent, "Copied: alpha_2026_AAA111.challenge") {
-		t.Fatalf("did not expect challenge file to be logged at info copy-progress level, got: %q", logContent)
+	if !strings.Contains(logContent, `Copied: 2 part file(s) - "alpha" successfully copied`) {
+		t.Fatalf("expected copied summary for alpha, got: %q", logContent)
+	}
+	if strings.Contains(logContent, "alpha_2026_AAA111.challenge") {
+		t.Fatalf("did not expect challenge file to appear in info log, got: %q", logContent)
+	}
+
+	// "Copy:" lines must appear before the "Copied:" summary.
+	copyIdx := strings.Index(logContent, "Copy: [alpha]_2026-03-21_AB12CD-001.enc")
+	summaryIdx := strings.Index(logContent, "Copied: 2 part file(s)")
+	if copyIdx < 0 || summaryIdx < 0 {
+		t.Fatalf("expected both Copy and Copied lines, got: %q", logContent)
+	}
+	if summaryIdx < copyIdx {
+		t.Fatalf("expected Copied summary after Copy lines, got: %q", logContent)
 	}
 }
 
-func TestCopyBackupResultsLogsSourceFolderCopyFinished(t *testing.T) {
+func TestCopyBackupResultsLogsPerFolderHeaderAndSummary(t *testing.T) {
 	stagingDir := t.TempDir()
 	targetDir := t.TempDir()
 
@@ -116,7 +129,11 @@ func TestCopyBackupResultsLogsSourceFolderCopyFinished(t *testing.T) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
-	if err := copyBackupResults(stagingDir, targetDir, logger); err != nil {
+	folderSourcePaths := map[string]string{
+		"00_Gemeinsam": "/data/00_Gemeinsam",
+		"10_Daten":     "/data/10_Daten",
+	}
+	if err := copyBackupResults(stagingDir, targetDir, nil, folderSourcePaths, logger); err != nil {
 		logger.Close()
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
@@ -128,17 +145,24 @@ func TestCopyBackupResultsLogsSourceFolderCopyFinished(t *testing.T) {
 	}
 	logContent := string(data)
 
-	if !strings.Contains(logContent, `Source folder "00_Gemeinsam" copy finished`) {
+	if !strings.Contains(logContent, "Copying backup files of source folder: /data/00_Gemeinsam") {
+		t.Fatalf("expected folder header for 00_Gemeinsam, got: %q", logContent)
+	}
+	if !strings.Contains(logContent, "Copying backup files of source folder: /data/10_Daten") {
+		t.Fatalf("expected folder header for 10_Daten, got: %q", logContent)
+	}
+	if !strings.Contains(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`) {
 		t.Fatalf("expected completion message for 00_Gemeinsam, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, `Source folder "10_Daten" copy finished`) {
+	if !strings.Contains(logContent, `Copied: 1 part file(s) - "10_Daten" successfully copied`) {
 		t.Fatalf("expected completion message for 10_Daten, got: %q", logContent)
 	}
 
-	part2Idx := strings.Index(logContent, "Copied: [00_Gemeinsam]_2026-03-21_AB12CD-002.enc")
-	finishedIdx := strings.Index(logContent, `Source folder "00_Gemeinsam" copy finished`)
+	// "Copied:" summary must appear after the last "Copy:" of its folder.
+	part2Idx := strings.Index(logContent, "Copy: [00_Gemeinsam]_2026-03-21_AB12CD-002.enc")
+	finishedIdx := strings.Index(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`)
 	if part2Idx < 0 || finishedIdx < 0 {
-		t.Fatalf("expected part and completion lines in log, got: %q", logContent)
+		t.Fatalf("expected part 2 copy line and completion line in log, got: %q", logContent)
 	}
 	if finishedIdx < part2Idx {
 		t.Fatalf("expected completion message after last copied part, got: %q", logContent)

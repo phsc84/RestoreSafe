@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync/atomic"
 )
 
@@ -92,61 +93,126 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		}
 		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
-	log.Info("  Created: %d part file(s)", len(parts))
+	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), folderName)
 }
 
 // copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.
-func copyBackupResults(stagingDir, targetDir string, log *util.Logger) error {
+// folderOrder specifies the folder names in processing order; if nil, folders are sorted alphabetically.
+// folderSourcePaths maps folder name to original source path for display in log output.
+func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folderSourcePaths map[string]string, log *util.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
 	}
 
-	totalPartsByEntry := make(map[string]int)
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".enc" {
-			continue
-		}
-		if backupEntry, _, ok := util.ParsePartFileName(entry.Name()); ok {
-			totalPartsByEntry[backupEntry.String()]++
-		}
-	}
-
-	copiedPartsByEntry := make(map[string]int)
+	type fileInfo struct{ name, src, dst string }
+	filesByFolder := make(map[string][]fileInfo)
+	var challengeFiles []fileInfo
 
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-
-		srcPath := filepath.Join(stagingDir, entry.Name())
-		dstPath := filepath.Join(targetDir, entry.Name())
-
-		// Only copy .enc and .challenge files
-		ext := filepath.Ext(entry.Name())
-		if ext != ".enc" && ext != ".challenge" {
-			continue
-		}
-
-		if err := util.CopyFile(srcPath, dstPath); err != nil {
-			return fmt.Errorf("Failed to copy %s to target: %w", entry.Name(), err)
-		}
-
-		if log != nil {
-			if ext == ".enc" {
-				log.Info("  Copied: %s", entry.Name())
-				if backupEntry, _, ok := util.ParsePartFileName(entry.Name()); ok {
-					entryKey := backupEntry.String()
-					copiedPartsByEntry[entryKey]++
-					if copiedPartsByEntry[entryKey] == totalPartsByEntry[entryKey] {
-						log.Info("  Source folder %q copy finished", backupEntry.FolderName)
-					}
-				}
-			} else {
-				log.Debug("Copied challenge file to target: %s", entry.Name())
+		name := entry.Name()
+		srcPath := filepath.Join(stagingDir, name)
+		dstPath := filepath.Join(targetDir, name)
+		switch filepath.Ext(name) {
+		case ".enc":
+			if backupEntry, _, ok := util.ParsePartFileName(name); ok {
+				fn := backupEntry.FolderName
+				filesByFolder[fn] = append(filesByFolder[fn], fileInfo{name, srcPath, dstPath})
 			}
+		case ".challenge":
+			challengeFiles = append(challengeFiles, fileInfo{name, srcPath, dstPath})
 		}
 	}
 
+	order := folderOrder
+	if len(order) == 0 {
+		for fn := range filesByFolder {
+			order = append(order, fn)
+		}
+		sort.Strings(order)
+	}
+
+	for _, folderName := range order {
+		files := filesByFolder[folderName]
+		if len(files) == 0 {
+			continue
+		}
+
+		if log != nil {
+			srcPath := folderSourcePaths[folderName]
+			if srcPath == "" {
+				srcPath = folderName
+			}
+			log.Info("Copying backup files of source folder: %s", filepath.ToSlash(srcPath))
+		}
+
+		var inBytes, outBytes, outWriteCalls atomic.Int64
+		progressDone := make(chan struct{})
+		progressStopped := make(chan struct{})
+		go func() {
+			operation.LogProgressUntilDone(log, folderName, "copied", &inBytes, &outBytes, &outWriteCalls, progressDone)
+			close(progressStopped)
+		}()
+
+		var copyErr error
+		for _, f := range files {
+			if log != nil {
+				log.Info("  Copy: %s", f.name)
+			}
+			if err := copyFileWithCounters(f.src, f.dst, &inBytes, &outBytes, &outWriteCalls); err != nil {
+				copyErr = err
+				break
+			}
+		}
+		close(progressDone)
+		<-progressStopped
+
+		if copyErr != nil {
+			return copyErr
+		}
+
+		if log != nil {
+			log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), folderName)
+		}
+	}
+
+	for _, f := range challengeFiles {
+		if err := util.CopyFile(f.src, f.dst); err != nil {
+			return fmt.Errorf("Failed to copy %s to target: %w", f.name, err)
+		}
+		if log != nil {
+			log.Debug("Copied challenge file to target: %s", f.name)
+		}
+	}
+
+	return nil
+}
+
+// copyFileWithCounters copies src to dst while updating atomic counters for stall detection.
+func copyFileWithCounters(src, dst string, inBytes, outBytes, outWriteCalls *atomic.Int64) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("Failed to open source file %q: %w. Remedy: Check drive/network availability and read permissions.", src, err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("Failed to create destination file %q: %w. Remedy: Check write permissions and free disk space.", dst, err)
+	}
+	defer dstFile.Close()
+
+	cr := &operation.CountingReader{R: srcFile, Total: inBytes}
+	cw := &operation.CountingWriter{W: dstFile, Total: outBytes, Calls: outWriteCalls}
+
+	if _, err := io.Copy(cw, cr); err != nil {
+		return fmt.Errorf("Failed to copy %q: %w. Remedy: Check drive/network availability, free space, and write permissions.", src, err)
+	}
+	if err := dstFile.Sync(); err != nil {
+		return fmt.Errorf("Failed to sync %q to disk: %w. Remedy: Check disk space and write permissions.", dst, err)
+	}
 	return nil
 }

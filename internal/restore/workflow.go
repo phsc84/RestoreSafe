@@ -60,6 +60,10 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	restorePath, err := promptRestoreDestination(targetDir)
 	if err != nil {
+		if errors.Is(err, operation.ErrSelectionCancelled) {
+			fmt.Println("Restore cancelled.")
+			return nil
+		}
 		return err
 	}
 
@@ -113,25 +117,31 @@ func resolveRestoreSelection(targetDir string, index []util.BackupEntry) ([]util
 }
 
 func promptRestoreDestination(targetDir string) (string, error) {
-	fmt.Println()
-	fmt.Println("Enter restore destination:")
-	fmt.Println("  - Enter a dot (.) → restore in the target folder itself")
-	fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory")
-	fmt.Println()
+	for {
+		fmt.Println()
+		fmt.Println("Enter restore destination:")
+		fmt.Println("  - Enter a dot (.) → restore in the backup folder itself")
+		fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this folder")
+		fmt.Println("  - Enter q → cancel")
+		fmt.Println()
 
-	restorePath, err := security.ReadLine("Restore destination: ")
-	if err != nil {
-		return "", err
-	}
-	restorePath = strings.TrimSpace(restorePath)
+		restorePath, err := security.ReadLine("Restore destination: ")
+		if err != nil {
+			return "", err
+		}
+		fmt.Println()
+		restorePath = strings.TrimSpace(restorePath)
 
-	if restorePath == "." {
-		restorePath = targetDir
+		switch restorePath {
+		case "":
+			continue
+		case "q":
+			return "", operation.ErrSelectionCancelled
+		case ".":
+			return targetDir, nil
+		}
+		return restorePath, nil
 	}
-	if restorePath == "" {
-		return "", fmt.Errorf("Restore destination must not be empty. Remedy: Provide a destination folder (e.g. C:/Restore) or '.' for target_folder.")
-	}
-	return restorePath, nil
 }
 
 type restorePreflightItem struct {

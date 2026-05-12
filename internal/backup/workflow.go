@@ -64,6 +64,13 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 		return err
 	}
+	if err := validateStagingSpaceForBackup(stagingPlan, sources); err != nil {
+		if strings.Contains(err.Error(), "Insufficient free space in temp directory") {
+			fmt.Println()
+			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+		}
+		return err
+	}
 
 	confirmed, err := operation.PromptStartAction("backup")
 	if err != nil {
@@ -113,6 +120,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	warningCount := 0
 	totalPartsCreated := 0
 	processedFolders := make([]string, 0)
+	folderSourcePaths := make(map[string]string)
 
 	// Determine actual working directory (staging or target).
 	staging, err := operation.NewStagingScope(stagingPlan, "restoresafe-backup-stage-*", log)
@@ -150,6 +158,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 		totalPartsCreated += partCount
 		processedFolders = append(processedFolders, folderName)
+		folderSourcePaths[folderName] = srcAbs
 
 		// Write YubiKey challenge file if needed.
 		if cfg.UseYubiKey() && challengeHex != "" {
@@ -163,17 +172,13 @@ func Run(cfg *util.Config, exeDir string) error {
 			}
 			log.Debug("Challenge file written: %s", challengePath)
 		}
-
-		log.Info("Source folder %q successfully backed up", folderName)
 	}
 
 	// Copy results from staging to target if needed.
 	if staging.Dir != "" {
-		log.Info("Copying staged backup files from %s to %s", filepath.ToSlash(workingDir), filepath.ToSlash(targetDir))
-		if err := copyBackupResults(workingDir, targetDir, log); err != nil {
+		if err := copyBackupResults(workingDir, targetDir, processedFolders, folderSourcePaths, log); err != nil {
 			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target folder write permissions and free disk space.", err)
 		}
-		log.Info("Staged backup files copied to target")
 	}
 
 	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {

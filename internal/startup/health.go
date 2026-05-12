@@ -22,14 +22,15 @@ const (
 )
 
 const (
-	healthScopeConfig          = "Config"
-	healthScopeSourceFolder    = "Source folder(s)"
-	healthScopeTargetFolder    = "Target folder"
-	healthScopeTempDirectory   = "Temp directory"
-	healthScopeYubiKey         = "YubiKey"
-	healthScopeBackupInventory = "Backup inventory"
-	healthScopeBackupSet       = "Backup set"
-	healthScopeChallengeFile   = "Challenge file"
+	healthScopeConfig           = "Config"
+	healthScopeSourceFolder     = "Source folder(s)"
+	healthScopeTargetFolder     = "Backup folder"
+	healthScopeTempDirectory    = "Temp directory"
+	healthScopeLocalStagingNote = "\x00local-staging-note"
+	healthScopeYubiKey          = "YubiKey"
+	healthScopeBackupInventory  = "Backup inventory"
+	healthScopeBackupSet        = "Backup set"
+	healthScopeChallengeFile    = "Challenge file"
 )
 
 type healthItem struct {
@@ -50,11 +51,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
 	items := make([]healthItem, 0)
 
-	items = append(items, healthItem{
-		Severity: healthOK,
-		Scope:    healthScopeConfig,
-		Detail:   configPathDisplay,
-	})
+	items = append(items, checkConfigFileHealth(configPathDisplay)...)
 
 	sourceStatuses := operation.InspectSourceFoldersForValidation(cfg.SourceFolders, exeDir)
 	for _, src := range sourceStatuses {
@@ -79,59 +76,45 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 				Detail:   src.Resolved,
 			})
 		}
-
-		if shouldWarnSameVolumeSourceTarget(src.Resolved, targetDir, src.Skip) {
-			items = append(items, healthItem{
-				Severity: healthWarn,
-				Scope:    healthScopeSourceFolder,
-				Detail:   fmt.Sprintf("Same drive/share as target_folder (%s). RestoreSafe will use local staging.", util.VolumeDisplay(targetDir)),
-			})
-		}
-	}
-
-	sourceNeededBytes, sourceEstimateWarnings := estimateSourceDiskNeed(sourceStatuses)
-	sourceNeededDetail := fmt.Sprintf("Needed disk space (total): %s", util.FormatBytesBinary(uint64(sourceNeededBytes)))
-	if len(sourceEstimateWarnings) == 0 {
-		items = append(items, healthItem{
-			Severity: healthInfo,
-			Scope:    healthScopeSourceFolder,
-			Detail:   sourceNeededDetail,
-		})
-	} else {
-		sourceNeededDetail = fmt.Sprintf("%s (partial estimate; %d source folder(s) could not be measured)", sourceNeededDetail, len(sourceEstimateWarnings))
-		items = append(items, healthItem{
-			Severity: healthWarn,
-			Scope:    healthScopeSourceFolder,
-			Detail:   sourceNeededDetail,
-		})
-	}
-
-	if sourceNeededBytes > 0 {
-		if freeBytes, err := util.QueryFreeSpaceBytes(targetDir); err == nil && isTargetSpaceInsufficient(sourceNeededBytes, freeBytes) {
-			items = append(items, healthItem{
-				Severity: healthWarn,
-				Scope:    healthScopeTargetFolder,
-				Detail:   util.FormatInsufficientBackupSpaceMessage(uint64(sourceNeededBytes), freeBytes),
-			})
-		}
 	}
 
 	items = append(items, checkTargetFolderHealth(targetDir)...)
-	items = append(items, checkTempDirHealth()...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
 	items = append(items, checkBackupInventoryHealth(targetDir)...)
+
+	firstValidSource := ""
+	for _, src := range sourceStatuses {
+		if src.Err == nil && !src.Skip {
+			firstValidSource = src.Resolved
+			break
+		}
+	}
+	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
+	if stagingPlan.Enabled {
+		items = append(items, healthItem{
+			Severity: healthInfo,
+			Scope:    healthScopeLocalStagingNote,
+			Detail:   fmt.Sprintf("Local staging enabled, because source and target folders share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
+		})
+		items = append(items, checkTempDirHealth()...)
+	}
 
 	return items
 }
 
-func shouldWarnSameVolumeSourceTarget(sourceDir, targetDir string, skip bool) bool {
-	if skip {
-		return false
+func checkConfigFileHealth(configPathDisplay string) []healthItem {
+	if _, err := os.Stat(configPathDisplay); err != nil {
+		return []healthItem{{
+			Severity: healthError,
+			Scope:    healthScopeConfig,
+			Detail:   fmt.Sprintf("%s → %v. Remedy: Ensure config.yaml exists and is readable.", configPathDisplay, err),
+		}}
 	}
-	if !util.SameVolume(sourceDir, targetDir) {
-		return false
-	}
-	return util.IsNetworkVolume(targetDir)
+	return []healthItem{{
+		Severity: healthOK,
+		Scope:    healthScopeConfig,
+		Detail:   configPathDisplay,
+	}}
 }
 
 func checkTargetFolderHealth(targetDir string) []healthItem {
@@ -175,7 +158,7 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 	items := []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeTargetFolder,
-		Detail:   fmt.Sprintf("%s exists and is writable", targetDir),
+		Detail:   filepath.ToSlash(targetDir),
 	}}
 	if cleanupErr != nil {
 		items = append(items, healthItem{
@@ -184,22 +167,6 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions in target_folder.", cleanupErr),
 		})
 	}
-
-	freeBytes, err := util.QueryFreeSpaceBytes(targetDir)
-	if err != nil {
-		items = append(items, healthItem{
-			Severity: healthWarn,
-			Scope:    healthScopeTargetFolder,
-			Detail:   fmt.Sprintf("Free disk space could not be determined: %v. Remedy: Check drive availability and Windows permissions.", err),
-		})
-		return items
-	}
-
-	items = append(items, healthItem{
-		Severity: healthInfo,
-		Scope:    healthScopeTargetFolder,
-		Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
-	})
 
 	return items
 }
@@ -221,7 +188,7 @@ func checkTempDirHealth() []healthItem {
 	items := []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeTempDirectory,
-		Detail:   fmt.Sprintf("%s is writable", tempDirDisplay),
+		Detail:   tempDirDisplay,
 	}}
 
 	if err := os.Remove(probePath); err != nil {
@@ -229,14 +196,6 @@ func checkTempDirHealth() []healthItem {
 			Severity: healthWarn,
 			Scope:    healthScopeTempDirectory,
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions for TEMP/TMP.", err),
-		})
-	}
-
-	if freeBytes, err := util.QueryFreeSpaceBytes(tempDir); err == nil {
-		items = append(items, healthItem{
-			Severity: healthInfo,
-			Scope:    healthScopeTempDirectory,
-			Detail:   fmt.Sprintf("Free disk space: %s", util.FormatBytesBinary(freeBytes)),
 		})
 	}
 
@@ -248,7 +207,7 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 		return []healthItem{{
 			Severity: healthOK,
 			Scope:    healthScopeYubiKey,
-			Detail:   "Disabled in config.yaml",
+			Detail:   "Disabled",
 		}}
 	}
 
@@ -405,26 +364,6 @@ func runKey(entry util.BackupEntry) string {
 	return entry.Date + "|" + string(entry.ID)
 }
 
-func estimateSourceDiskNeed(sourceStatuses []operation.SourceValidationStatus) (int64, []string) {
-	var total int64
-	warnings := make([]string, 0)
-
-	for _, src := range sourceStatuses {
-		if src.Err != nil || src.Skip {
-			continue
-		}
-
-		size, err := util.DirectorySizeBytes(src.Resolved)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s (%v)", src.Resolved, err))
-			continue
-		}
-		total += size
-	}
-
-	return total, warnings
-}
-
 func printStartupHealthCheck(items []healthItem) {
 	fmt.Println("----------------------")
 	fmt.Println("Startup health check")
@@ -445,14 +384,19 @@ func printStartupHealthCheck(items []healthItem) {
 		}
 	}
 
+	regularItems := make([]healthItem, 0)
+	deferredItems := make([]healthItem, 0)
+	for _, item := range items {
+		if item.Scope == healthScopeLocalStagingNote || item.Scope == healthScopeTempDirectory {
+			deferredItems = append(deferredItems, item)
+		} else {
+			regularItems = append(regularItems, item)
+		}
+	}
+
 	orderedScopes := make([]string, 0)
 	itemsByScope := make(map[string][]healthItem)
-	deferredWarnings := make([]healthItem, 0)
-	for _, item := range items {
-		if isDeferredStartupWarning(item) {
-			deferredWarnings = append(deferredWarnings, item)
-			continue
-		}
+	for _, item := range regularItems {
 		if _, exists := itemsByScope[item.Scope]; !exists {
 			orderedScopes = append(orderedScopes, item.Scope)
 		}
@@ -471,10 +415,31 @@ func printStartupHealthCheck(items []healthItem) {
 		}
 	}
 
-	if len(deferredWarnings) > 0 {
+	if len(deferredItems) > 0 {
 		fmt.Println()
-		for _, item := range deferredWarnings {
-			fmt.Printf("[%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
+		deferredScopes := make([]string, 0)
+		deferredByScope := make(map[string][]healthItem)
+		for _, item := range deferredItems {
+			if _, exists := deferredByScope[item.Scope]; !exists {
+				deferredScopes = append(deferredScopes, item.Scope)
+			}
+			deferredByScope[item.Scope] = append(deferredByScope[item.Scope], item)
+		}
+		for _, scope := range deferredScopes {
+			if scope == healthScopeLocalStagingNote {
+				for _, item := range deferredByScope[scope] {
+					fmt.Println(item.Detail)
+				}
+			} else {
+				fmt.Printf("%s:\n", scope)
+				for _, item := range deferredByScope[scope] {
+					if item.Severity == healthInfo {
+						fmt.Printf("  %s\n", item.Detail)
+					} else {
+						fmt.Printf("  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
+					}
+				}
+			}
 		}
 		fmt.Println()
 	} else {
@@ -485,10 +450,6 @@ func printStartupHealthCheck(items []healthItem) {
 		fmt.Println("Review the reported errors before running backup, restore, or verify.")
 	}
 	fmt.Println()
-}
-
-func isDeferredStartupWarning(item healthItem) bool {
-	return item.Severity == healthWarn && strings.HasPrefix(item.Detail, "Insufficient free space for backup:")
 }
 
 func healthSeverityLabel(severity healthSeverity) string {
@@ -502,8 +463,4 @@ func healthSeverityLabel(severity healthSeverity) string {
 	default:
 		return "INFO"
 	}
-}
-
-func isTargetSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
-	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }

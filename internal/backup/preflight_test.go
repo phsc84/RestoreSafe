@@ -145,9 +145,9 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	authLine := "Authentication   : password + YubiKey"
+	authLine := "Authentication: password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting backup."
-	logLine := "Log level        : debug"
+	logLine := "Log level     : debug"
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
 	logIdx := strings.Index(output, logLine)
@@ -181,9 +181,9 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication   : password + YubiKey"
+	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
-	logLine := "Log level        : debug"
+	logLine := "Log level     : debug"
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
 	logIdx := strings.Index(output, logLine)
@@ -221,15 +221,19 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	localStagingLine := "Local staging    : enabled via "
-	localFreeSpaceLine := "Free space local :"
+	localStagingLine := "Local staging enabled, because source and target folders share the same drive/share"
+	tempDirLine := "Temp directory:"
 	localStagingIdx := strings.Index(output, localStagingLine)
-	localFreeSpaceIdx := strings.Index(output, localFreeSpaceLine)
-	if localStagingIdx < 0 || localFreeSpaceIdx < 0 {
-		t.Fatalf("expected local staging and local free-space lines in output, got: %q", output)
+	tempDirIdx := strings.Index(output, tempDirLine)
+	if localStagingIdx < 0 || tempDirIdx < 0 {
+		t.Fatalf("expected local staging and temp directory lines in output, got: %q", output)
 	}
-	if localFreeSpaceIdx <= localStagingIdx {
-		t.Fatalf("expected local free-space line to appear after local staging line, got: %q", output)
+	if localStagingIdx >= tempDirIdx {
+		t.Fatalf("expected local staging line before temp directory line, got: %q", output)
+	}
+	freeSpaceAfterTempDir := strings.Index(output[tempDirIdx:], "  Free disk space:")
+	if freeSpaceAfterTempDir < 0 {
+		t.Fatalf("expected free-space line under Temp directory section, got: %q", output)
 	}
 }
 
@@ -252,8 +256,8 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	})
 
-	if strings.Contains(output, "Free space local :") {
-		t.Fatalf("did not expect local free-space line when local staging is disabled, got: %q", output)
+	if strings.Contains(output, "Temp directory:") {
+		t.Fatalf("did not expect Temp directory section when local staging is disabled, got: %q", output)
 	}
 }
 
@@ -291,6 +295,48 @@ func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
 	}
 }
 
+func TestValidateStagingSpaceSkipsWhenStagingDisabled(t *testing.T) {
+	t.Parallel()
+
+	sources := []backupSourcePlan{{Resolved: "C:/some/source"}}
+	plan := operation.LocalStagingPlan{Enabled: false}
+
+	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
+		t.Fatalf("expected no error when staging is disabled, got: %v", err)
+	}
+}
+
+func TestValidateStagingSpaceReturnsErrorWhenTempSpaceInsufficient(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	stagingDir := filepath.Join(root, "staging")
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(stagingDir, 0o750); err != nil {
+		t.Fatalf("failed to create staging dir: %v", err)
+	}
+
+	bigFile := make([]byte, 10*1024*1024)
+	if err := os.WriteFile(filepath.Join(sourceDir, "big.bin"), bigFile, 0o600); err != nil {
+		t.Fatalf("failed to write big file: %v", err)
+	}
+
+	freeBytes, err := util.QueryFreeSpaceBytes(stagingDir)
+	if err != nil || freeBytes > uint64(len(bigFile)) {
+		t.Skip("staging dir has sufficient free space; cannot test insufficient-space path")
+	}
+
+	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingDir}
+
+	if err := validateStagingSpaceForBackup(plan, sources); err == nil {
+		t.Fatal("expected error for insufficient staging space, got nil")
+	}
+}
+
 func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSourceSection(t *testing.T) {
 	t.Parallel()
 
@@ -317,7 +363,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	})
 
 	sourceIdx := strings.Index(output, "Source folder(s):")
-	targetIdx := strings.Index(output, "Target folder:")
+	targetIdx := strings.Index(output, "Backup folder:")
 	if sourceIdx < 0 || targetIdx < 0 {
 		t.Fatalf("expected Source folder(s) and Target folder sections, got: %q", output)
 	}

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const preflightFieldLabelWidth = 17
+const preflightFieldLabelWidth = 14
 
 func printBackupPreflightWithYubiKeyCheck(
 	cfg *util.Config,
@@ -18,8 +18,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	checkYubiKeyConnected func() error,
 ) {
 	fmt.Println()
-	fmt.Println("Backup preflight")
-	fmt.Println("----------------")
+	fmt.Println("-----------------------------------------")
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
@@ -65,23 +64,12 @@ func printBackupPreflightWithYubiKeyCheck(
 	}
 	fmt.Printf("  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 
-	fmt.Println("Target folder:")
+	fmt.Println("Backup folder:")
 	fmt.Printf("  [OK] %s\n", targetDir)
 	if freeErr != nil {
 		fmt.Printf("  Free disk space: unknown (%v)\n", freeErr)
 	} else {
 		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
-	}
-
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because source and target folders share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-
-		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-		if localFreeErr != nil {
-			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", fmt.Sprintf("unknown (%v)", localFreeErr))
-		} else {
-			operation.PrintPreflightField(preflightFieldLabelWidth, "Free space local", util.FormatBytesBinary(localFreeBytes))
-		}
 	}
 
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
@@ -98,6 +86,19 @@ func printBackupPreflightWithYubiKeyCheck(
 	}
 
 	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+
+	if stagingPlan.Enabled {
+		fmt.Println()
+		fmt.Printf("Local staging enabled, because source and target folders share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Println("Temp directory:")
+		fmt.Printf("  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
+		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		if localFreeErr != nil {
+			fmt.Printf("  Free disk space: unknown (%v)\n", localFreeErr)
+		} else {
+			fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(localFreeBytes))
+		}
+	}
 }
 
 func validateSourceFolders(sources []backupSourcePlan) error {
@@ -131,6 +132,29 @@ func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) 
 
 func isTargetSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
 	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
+}
+
+func validateStagingSpaceForBackup(stagingPlan operation.LocalStagingPlan, sources []backupSourcePlan) error {
+	if !stagingPlan.Enabled {
+		return nil
+	}
+	estimatedBytes, _ := estimateSelectedSourceBytes(sources)
+	if estimatedBytes <= 0 {
+		return nil
+	}
+	freeBytes, err := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+	if err != nil {
+		return nil
+	}
+	if uint64(estimatedBytes) <= freeBytes {
+		return nil
+	}
+	return fmt.Errorf(
+		"Backup preflight failed: Insufficient free space in temp directory for local staging: needed %s, available %s. Remedy: Free disk space in %s or set TEMP/TMP to a different drive.",
+		util.FormatBytesBinary(uint64(estimatedBytes)),
+		util.FormatBytesBinary(freeBytes),
+		filepath.ToSlash(stagingPlan.ResolvedTempDir),
+	)
 }
 
 func runnableSourceCount(sources []backupSourcePlan) int {

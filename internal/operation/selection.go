@@ -27,7 +27,7 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 		fmt.Println()
 		selection = strings.TrimSpace(selection)
 		if selection == "" {
-			fmt.Println("Selection must not be empty. Remedy: Enter e.g. 'newest', a backup ID, or a full backup name.")
+			fmt.Println("Selection must not be empty.")
 			fmt.Println()
 			continue
 		}
