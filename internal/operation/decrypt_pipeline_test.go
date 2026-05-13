@@ -26,6 +26,7 @@ func TestRunDecryptPipelineSuccess(t *testing.T) {
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected successful decrypt pipeline, got: %v", err)
@@ -49,6 +50,7 @@ func TestRunDecryptPipelineWrongPassword(t *testing.T) {
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
+		nil,
 	)
 	if err == nil {
 		t.Fatal("expected wrong-password error, got nil")

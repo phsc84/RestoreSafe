@@ -60,6 +60,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
+		nil,
 	); err != nil {
 		t.Fatalf("verify step (decrypt+TAR validation) failed: %v", err)
 	}
@@ -73,6 +74,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 		"verified",
 		"Archive validation",
 		func(r io.Reader) error { return util.ValidateTar(r) },
+		nil,
 	); err == nil {
 		t.Fatal("verify with wrong password should have failed but succeeded")
 	}

@@ -124,7 +124,7 @@ func TestVerifyPassword(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create encrypted part: %v", err)
 	}
-	if err := security.Encrypt(f, bytes.NewReader([]byte("payload")), password); err != nil {
+	if err := security.Encrypt(f, bytes.NewReader([]byte("payload")), password, security.DefaultArgon2Params); err != nil {
 		f.Close()
 		t.Fatalf("failed to encrypt payload: %v", err)
 	}

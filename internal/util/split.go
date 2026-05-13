@@ -153,14 +153,21 @@ func (s *Writer) closeCurrent() error {
 
 // SequentialReader joins multiple part files into a single io.Reader.
 type SequentialReader struct {
-	paths   []string
-	idx     int
-	current *os.File
+	paths       []string
+	idx         int
+	current     *os.File
+	onFileOpen  func(partIndex, partTotal int) // called when a new part file is opened (1-based index)
 }
 
 // NewSequentialReader creates a reader that reads parts in order.
 func NewSequentialReader(paths []string) *SequentialReader {
 	return &SequentialReader{paths: paths}
+}
+
+// SetOnFileOpen registers a callback invoked each time a new part file is opened.
+// partIndex is 1-based; partTotal is the total number of parts.
+func (r *SequentialReader) SetOnFileOpen(fn func(partIndex, partTotal int)) {
+	r.onFileOpen = fn
 }
 
 // Read implements io.Reader across all part files.
@@ -176,6 +183,9 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 			}
 			r.current = f
 			r.idx++
+			if r.onFileOpen != nil {
+				r.onFileOpen(r.idx, len(r.paths))
+			}
 		}
 
 		n, err := r.current.Read(p)

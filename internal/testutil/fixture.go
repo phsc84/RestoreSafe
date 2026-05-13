@@ -98,7 +98,7 @@ func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, bac
 		tarErrCh <- err
 	}()
 
-	encryptErr := security.Encrypt(bw, pr, password)
+	encryptErr := security.Encrypt(bw, pr, password, security.DefaultArgon2Params)
 	pr.Close() //nolint:errcheck
 	if encryptErr != nil {
 		t.Fatalf("security.Encrypt returned error: %v", encryptErr)

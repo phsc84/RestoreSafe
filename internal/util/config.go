@@ -30,15 +30,31 @@ func (a AuthMode) Label() string {
 	}
 }
 
+// Argon2Config holds the Argon2id key-derivation tuning knobs exposed in config.yaml.
+//
+// What these parameters do:
+//   - Time: number of passes over memory (more = slower to brute-force, slower to run).
+//   - MemoryMB: working memory in megabytes (more = harder for GPUs, more RAM used).
+//   - Threads: parallel lanes (should match physical CPU cores; beyond that, no benefit).
+//
+// Documented minimums (enforced by validation): Time ≥ 1, MemoryMB ≥ 8, Threads ≥ 1.
+// OWASP recommended defaults: Time = 3, MemoryMB = 64, Threads = 4.
+type Argon2Config struct {
+	Time     int `yaml:"time"`
+	MemoryMB int `yaml:"memory_mb"`
+	Threads  int `yaml:"threads"`
+}
+
 // Config holds all application configuration.
 type Config struct {
-	SourceFolders      []string `yaml:"source_folders"`
-	TargetFolder       string   `yaml:"target_folder"`
-	SplitSizeMB        int64    `yaml:"split_size_mb"`
-	RetentionKeep      int      `yaml:"retention_keep"`
-	LogLevel           string   `yaml:"log_level"`
-	IODiagnostics      bool     `yaml:"io_diagnostics"`
-	AuthenticationMode AuthMode `yaml:"authentication_mode"`
+	SourceFolders      []string     `yaml:"source_folders"`
+	TargetFolder       string       `yaml:"target_folder"`
+	SplitSizeMB        int64        `yaml:"split_size_mb"`
+	RetentionKeep      int          `yaml:"retention_keep"`
+	LogLevel           string       `yaml:"log_level"`
+	IODiagnostics      bool         `yaml:"io_diagnostics"`
+	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
+	Argon2             Argon2Config `yaml:"argon2"`
 }
 
 // UseYubiKey reports whether the configured authentication mode requires a YubiKey.
@@ -86,6 +102,15 @@ func (c *Config) withDefaults() *Config {
 	if c.AuthenticationMode == 0 {
 		c.AuthenticationMode = AuthModePassword
 	}
+	if c.Argon2.Time == 0 {
+		c.Argon2.Time = 3
+	}
+	if c.Argon2.MemoryMB == 0 {
+		c.Argon2.MemoryMB = 64
+	}
+	if c.Argon2.Threads == 0 {
+		c.Argon2.Threads = 4
+	}
 	return c
 }
 
@@ -108,6 +133,15 @@ func (c *Config) validate() error {
 	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
 	default:
 		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
+	}
+	if c.Argon2.Time < 1 {
+		return fmt.Errorf("Invalid 'argon2.time': %d (minimum 1). Remedy: Set 'argon2.time' to 1 or higher; the recommended value is 3.", c.Argon2.Time)
+	}
+	if c.Argon2.MemoryMB < 8 {
+		return fmt.Errorf("Invalid 'argon2.memory_mb': %d (minimum 8). Remedy: Set 'argon2.memory_mb' to 8 or higher; the recommended value is 64.", c.Argon2.MemoryMB)
+	}
+	if c.Argon2.Threads < 1 {
+		return fmt.Errorf("Invalid 'argon2.threads': %d (minimum 1). Remedy: Set 'argon2.threads' to 1 or higher; the recommended value is 4.", c.Argon2.Threads)
 	}
 	return nil
 }

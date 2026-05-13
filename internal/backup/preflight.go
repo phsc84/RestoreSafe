@@ -72,6 +72,7 @@ func printBackupPreflightWithYubiKeyCheck(
 
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
 	operation.PrintYubiKeyPreflightStatus(cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))

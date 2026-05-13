@@ -172,6 +172,82 @@ func TestLoadRejectsMissingTargetFolder(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsArgon2Params(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgContent := `source_folders:
+  - "C:/Users/Test/Documents"
+target_folder: "C:/Backup"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Argon2.Time != 3 {
+		t.Errorf("expected default argon2.time 3, got %d", cfg.Argon2.Time)
+	}
+	if cfg.Argon2.MemoryMB != 64 {
+		t.Errorf("expected default argon2.memory_mb 64, got %d", cfg.Argon2.MemoryMB)
+	}
+	if cfg.Argon2.Threads != 4 {
+		t.Errorf("expected default argon2.threads 4, got %d", cfg.Argon2.Threads)
+	}
+}
+
+func TestLoadRejectsInvalidArgon2Params(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		yaml    string
+		wantKey string
+	}{
+		{
+			name:    "time_negative",
+			yaml:    "argon2:\n  time: -1\n  memory_mb: 64\n  threads: 4\n",
+			wantKey: "argon2.time",
+		},
+		{
+			name:    "memory_too_low",
+			yaml:    "argon2:\n  time: 3\n  memory_mb: 4\n  threads: 4\n",
+			wantKey: "argon2.memory_mb",
+		},
+		{
+			name:    "threads_negative",
+			yaml:    "argon2:\n  time: 3\n  memory_mb: 64\n  threads: -1\n",
+			wantKey: "argon2.threads",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			content := fmt.Sprintf("source_folders:\n  - \"C:/Docs\"\ntarget_folder: \"C:/Backup\"\n%s", tc.yaml)
+			if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+				t.Fatalf("failed to write config: %v", err)
+			}
+
+			_, err := Load(cfgPath)
+			if err == nil {
+				t.Fatalf("expected error for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.wantKey) {
+				t.Errorf("expected %q in error, got: %v", tc.wantKey, err)
+			}
+		})
+	}
+}
+
 func TestConfigUseYubiKeyAndIsYubiKeyOnly(t *testing.T) {
 	t.Parallel()
 

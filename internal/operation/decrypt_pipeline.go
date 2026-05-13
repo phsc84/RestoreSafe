@@ -10,6 +10,8 @@ import (
 )
 
 // RunDecryptPipeline decrypts selected parts and streams plaintext to consume.
+// onPartStart is called just before each part file is opened (1-based index, total count);
+// pass nil to skip per-part callbacks.
 func RunDecryptPipeline(
 	parts []string,
 	password []byte,
@@ -18,9 +20,16 @@ func RunDecryptPipeline(
 	progressVerb string,
 	consumeFailurePrefix string,
 	consume func(io.Reader) error,
+	onPartStart func(partIndex, partCount int),
 ) error {
 	seqReader := util.NewSequentialReader(parts)
 	defer seqReader.Close()
+
+	if onPartStart != nil {
+		seqReader.SetOnFileOpen(func(partIndex, partTotal int) {
+			onPartStart(partIndex, partTotal)
+		})
+	}
 
 	var inBytes atomic.Int64
 	var outBytes atomic.Int64

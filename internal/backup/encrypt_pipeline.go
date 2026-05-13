@@ -40,12 +40,13 @@ func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWri
 	return tarErrCh
 }
 
-func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, password []byte, counters *backupCounters) error {
+func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, password []byte, params security.Argon2Params, counters *backupCounters) error {
 	log.Debug("Starting encryption...")
 	err := security.Encrypt(
 		&operation.CountingWriter{W: bw, Total: &counters.outBytes, Calls: &counters.outWriteCalls},
 		&operation.CountingReader{R: pr, Total: &counters.inBytes},
 		password,
+		params,
 	)
 	pr.Close() //nolint:errcheck
 	return err

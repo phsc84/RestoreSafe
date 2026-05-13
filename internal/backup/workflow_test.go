@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"fmt"
 	"os"
@@ -32,7 +33,7 @@ func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), cfg, logger)
+	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupFolder failed: %v", backupErr)
@@ -81,7 +82,7 @@ func TestBackupFolderLogsPartNamesAtInfoLevel(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), cfg, logger)
+	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupFolder failed: %v", backupErr)

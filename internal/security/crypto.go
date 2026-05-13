@@ -11,7 +11,8 @@
 //   - Winner of the Password Hashing Competition (2015)
 //   - Memory-hard → resistant to GPU/ASIC brute-force
 //   - "id" variant combines side-channel and GPU resistance
-//   - Parameters: 64 MB memory, 3 iterations, 4 threads
+//   - Default parameters: 64 MB memory, 3 iterations, 4 threads
+//   - Parameters are configurable and stored in the file header
 //
 // Stream chunking
 //   - Large files are split into fixed-size chunks (chunkSize = 8 MB)
@@ -20,12 +21,17 @@
 //   - A 4-byte big-endian length prefix is written before each encrypted chunk
 //   - This avoids temp files and limits RAM usage to ~2× chunkSize
 //
-// File header layout (all values big-endian):
+// File header layout (all values big-endian), format version 2:
 //
-//	[8]  magic  "RSBKP\x00\x01\x00"
+//	[6]  magic prefix "RSBKP\x00"
+//	[1]  format version (currently 2)
+//	[1]  reserved (0x00)
 //	[4]  salt length (always saltLen = 32)
 //	[32] salt
 //	[4]  chunk size (bytes, currently 8388608)
+//	[4]  Argon2id time (iterations)
+//	[4]  Argon2id memory (kibibytes)
+//	[4]  Argon2id threads
 package security
 
 import (
@@ -41,15 +47,13 @@ import (
 )
 
 const (
-	// magic identifies a RestoreSafe encrypted file.
-	// Bytes 0–4 are the ASCII marker "RSBKP".
-	// Byte 5 is a null separator.
-	// Byte 6 is the format version (currently 1).
-	//   Increment the version on any breaking change to the header
-	//   or chunk layout so that older readers can reject files they
-	//   cannot safely parse.
-	// Byte 7 is reserved (must be 0x00).
-	magic = "RSBKP\x00\x01\x00"
+	// magicPrefix is the 6-byte file identifier: ASCII "RSBKP" + null separator.
+	magicPrefix = "RSBKP\x00"
+	// formatVersion is incremented on any breaking change to the header or chunk layout.
+	// Readers that encounter a different version emit a clear version-mismatch error.
+	formatVersion = byte(2)
+	// magic is the full 8-byte header marker: prefix + version + reserved byte.
+	magic = magicPrefix + "\x02\x00"
 	// saltLen is the byte length of the Argon2id salt.
 	saltLen = 32
 	// keyLen is the AES-256 key length in bytes.
@@ -62,32 +66,42 @@ const (
 	maxEncryptedChunkSize = chunkSize + 16
 )
 
-// Argon2id parameters (OWASP recommended minimum for high-security use).
-const (
-	argonTime    = 3
-	argonMemory  = 64 * 1024 // 64 MB
-	argonThreads = 4
-)
+// Argon2Params holds the Argon2id key-derivation parameters.
+// All three values are stored in the file header so that decryption always
+// uses the exact parameters that were in effect during encryption.
+type Argon2Params struct {
+	Time     uint32 // number of iterations (passes over memory)
+	MemoryKB uint32 // working memory in kibibytes
+	Threads  uint8  // degree of parallelism
+}
+
+// DefaultArgon2Params are the OWASP-recommended defaults:
+// 64 MB of memory, 3 iterations, 4 parallel threads.
+var DefaultArgon2Params = Argon2Params{
+	Time:     3,
+	MemoryKB: 64 * 1024,
+	Threads:  4,
+}
 
 // ErrWrongPassword is returned when decryption authentication fails.
 var ErrWrongPassword = errors.New("Wrong password or corrupted file.")
 
 // deriveKey derives a 256-bit AES key from the password and salt using Argon2id.
-func deriveKey(password, salt []byte) []byte {
-	return argon2.IDKey(password, salt, argonTime, argonMemory, argonThreads, keyLen)
+func deriveKey(password, salt []byte, params Argon2Params) []byte {
+	return argon2.IDKey(password, salt, params.Time, params.MemoryKB, params.Threads, keyLen)
 }
 
-// Encrypt reads plaintext from src, encrypts it with password, and writes
+// Encrypt reads plaintext from src, encrypts it with password and params, and writes
 // ciphertext to dst. The function streams data in chunkSize chunks so that
 // arbitrarily large files can be processed with constant memory.
-func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
+func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params) error {
 	// Generate a random salt.
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return fmt.Errorf("Failed to generate salt: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
 	}
 
-	key := deriveKey(password, salt)
+	key := deriveKey(password, salt, params)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -99,7 +113,7 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
 	}
 
 	// Write file header.
-	if err := writeHeader(dst, salt); err != nil {
+	if err := writeHeader(dst, salt, params); err != nil {
 		return err
 	}
 
@@ -138,14 +152,15 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte) error {
 }
 
 // Decrypt reads ciphertext from src, decrypts it with password, and writes
-// plaintext to dst. Returns ErrWrongPassword if authentication fails.
+// plaintext to dst. The Argon2id parameters are read from the file header.
+// Returns ErrWrongPassword if authentication fails.
 func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
-	salt, err := readHeader(src)
+	salt, params, err := readHeader(src)
 	if err != nil {
 		return err
 	}
 
-	key := deriveKey(password, salt)
+	key := deriveKey(password, salt, params)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -191,8 +206,8 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 	return nil
 }
 
-// writeHeader writes the fixed-size file header to w.
-func writeHeader(w io.Writer, salt []byte) error {
+// writeHeader writes the v2 file header to w.
+func writeHeader(w io.Writer, salt []byte, params Argon2Params) error {
 	if _, err := io.WriteString(w, magic); err != nil {
 		return fmt.Errorf("Failed to write magic: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
@@ -205,42 +220,80 @@ func writeHeader(w io.Writer, salt []byte) error {
 	if err := binary.Write(w, binary.BigEndian, uint32(chunkSize)); err != nil {
 		return fmt.Errorf("Failed to write chunk size: %w. Remedy: Check destination write permissions and free disk space.", err)
 	}
+	if err := binary.Write(w, binary.BigEndian, params.Time); err != nil {
+		return fmt.Errorf("Failed to write Argon2 time: %w. Remedy: Check destination write permissions and free disk space.", err)
+	}
+	if err := binary.Write(w, binary.BigEndian, params.MemoryKB); err != nil {
+		return fmt.Errorf("Failed to write Argon2 memory: %w. Remedy: Check destination write permissions and free disk space.", err)
+	}
+	if err := binary.Write(w, binary.BigEndian, uint32(params.Threads)); err != nil {
+		return fmt.Errorf("Failed to write Argon2 threads: %w. Remedy: Check destination write permissions and free disk space.", err)
+	}
 	return nil
 }
 
-// readHeader reads and validates the file header from r, returning the salt.
-func readHeader(r io.Reader) ([]byte, error) {
+// readHeader reads and validates the v2 file header from r, returning the salt
+// and Argon2id parameters stored in the header.
+func readHeader(r io.Reader) ([]byte, Argon2Params, error) {
 	magicBuf := make([]byte, len(magic))
 	if _, err := io.ReadFull(r, magicBuf); err != nil {
-		return nil, fmt.Errorf("Failed to read magic: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read magic: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
-	if string(magicBuf) != magic {
-		return nil, fmt.Errorf("Invalid file format (not a RestoreSafe backup). Remedy: Select a valid RestoreSafe .enc backup file.")
+
+	// Check the 6-byte identifier prefix before inspecting the version byte,
+	// so that a version mismatch produces a clear message rather than a generic
+	// "Invalid file format" error.
+	if string(magicBuf[:len(magicPrefix)]) != magicPrefix {
+		return nil, Argon2Params{}, fmt.Errorf("Invalid file format (not a RestoreSafe backup). Remedy: Select a valid RestoreSafe .enc backup file.")
+	}
+	fileVersion := magicBuf[len(magicPrefix)]
+	if fileVersion != formatVersion {
+		return nil, Argon2Params{}, fmt.Errorf(
+			"Incompatible backup format: version %d (this RestoreSafe version uses format %d). Remedy: Use the version of RestoreSafe that created this backup to restore it.",
+			fileVersion, formatVersion,
+		)
 	}
 
 	var saltLength uint32
 	if err := binary.Read(r, binary.BigEndian, &saltLength); err != nil {
-		return nil, fmt.Errorf("Failed to read salt length: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read salt length: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 	if saltLength != saltLen {
-		return nil, fmt.Errorf("Invalid salt length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", saltLength)
+		return nil, Argon2Params{}, fmt.Errorf("Invalid salt length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", saltLength)
 	}
 
 	salt := make([]byte, saltLen)
 	if _, err := io.ReadFull(r, salt); err != nil {
-		return nil, fmt.Errorf("Failed to read salt: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read salt: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 
 	// Read and validate stored chunk size for format compatibility.
 	var storedChunkSize uint32
 	if err := binary.Read(r, binary.BigEndian, &storedChunkSize); err != nil {
-		return nil, fmt.Errorf("Failed to read stored chunk size: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read stored chunk size: %w. Remedy: Check that the backup file is complete and readable.", err)
 	}
 	if storedChunkSize != uint32(chunkSize) {
-		return nil, fmt.Errorf("Unsupported chunk size in backup header: %d. Remedy: Use a backup created by this RestoreSafe version.", storedChunkSize)
+		return nil, Argon2Params{}, fmt.Errorf("Unsupported chunk size in backup header: %d. Remedy: Use a backup created by this RestoreSafe version.", storedChunkSize)
 	}
 
-	return salt, nil
+	// Read Argon2id parameters stored at encryption time.
+	var argonTime, argonMemoryKB, argonThreads uint32
+	if err := binary.Read(r, binary.BigEndian, &argonTime); err != nil {
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 time: %w. Remedy: Check that the backup file is complete and readable.", err)
+	}
+	if err := binary.Read(r, binary.BigEndian, &argonMemoryKB); err != nil {
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 memory: %w. Remedy: Check that the backup file is complete and readable.", err)
+	}
+	if err := binary.Read(r, binary.BigEndian, &argonThreads); err != nil {
+		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 threads: %w. Remedy: Check that the backup file is complete and readable.", err)
+	}
+
+	params := Argon2Params{
+		Time:     argonTime,
+		MemoryKB: argonMemoryKB,
+		Threads:  uint8(argonThreads),
+	}
+	return salt, params, nil
 }
 
 // chunkNonce derives a deterministic 12-byte nonce from the chunk index.

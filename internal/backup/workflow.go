@@ -158,7 +158,12 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.Info("Processing source folder: %s", srcAbs)
 		log.Debug("Folder name in archive: %s", folderName)
 
-		partCount, err := backupFolder(srcAbs, folderName, workingDir, date, id, password, cfg, log)
+		argon2Params := security.Argon2Params{
+			Time:     uint32(cfg.Argon2.Time),
+			MemoryKB: uint32(cfg.Argon2.MemoryMB) * 1024,
+			Threads:  uint8(cfg.Argon2.Threads),
+		}
+		partCount, err := backupFolder(srcAbs, folderName, workingDir, date, id, password, argon2Params, cfg, log)
 		if err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
@@ -203,6 +208,7 @@ func backupFolder(
 	srcDir, folderName, targetDir, date string,
 	id util.BackupID,
 	password []byte,
+	params security.Argon2Params,
 	cfg *util.Config,
 	log *util.Logger,
 ) (int, error) {
@@ -229,7 +235,7 @@ func backupFolder(
 	}()
 
 	tarErrCh := startTarProducer(log, srcDir, targetDir, pw)
-	encErr := runEncryptStage(log, bw, pr, password, counters)
+	encErr := runEncryptStage(log, bw, pr, password, params, counters)
 	tarErr := <-tarErrCh
 	closeErr := closeSplitOutput(bw, sw)
 

@@ -445,6 +445,7 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 		"decrypted",
 		"Extraction",
 		func(r io.Reader) error { return util.ExtractTar(r, outDir) },
+		nil,
 	)
 	if err != nil {
 		return 0, err
