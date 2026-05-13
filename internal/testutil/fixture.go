@@ -68,6 +68,19 @@ func NewRestoreFixture(t testing.TB, password []byte) *RestoreFixture {
 
 	return &RestoreFixture{BackupFixture: bf, RestoreRoot: restoreRoot}
 }
+// CreateBackupInDir creates an encrypted split backup for entry in targetDir,
+// using a small synthetic source directory. It is the exported entry point for
+// tests that need a second independent backup in an existing target directory.
+func CreateBackupInDir(t testing.TB, targetDir string, entry util.BackupEntry, password []byte) {
+	t.Helper()
+
+	srcDir := filepath.Join(targetDir, "_src_"+entry.FolderName)
+	mustMkdirAll(t, srcDir, 0o750)
+	mustWriteFile(t, filepath.Join(srcDir, "data.txt"), []byte("secondary backup content for "+entry.FolderName))
+
+	createEncryptedSplitBackup(t, srcDir, targetDir, entry.FolderName, entry.Date, entry.ID, password, defaultSplitSizeMB)
+}
+
 func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, backupDate string, backupID util.BackupID, password []byte, splitSizeMB int64) int {
 	t.Helper()
 

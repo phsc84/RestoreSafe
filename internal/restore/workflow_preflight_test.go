@@ -182,6 +182,46 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	}
 }
 
+func TestValidateRestorePreflightPassesWhenAllItemsOK(t *testing.T) {
+	t.Parallel()
+
+	items := []restorePreflightItem{
+		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1},
+		{Entry: util.BackupEntry{FolderName: "B"}, PartCount: 2},
+	}
+	if err := validateRestorePreflight(items); err != nil {
+		t.Fatalf("expected no error for valid items, got %v", err)
+	}
+}
+
+func TestValidateRestorePreflightFailsForPartError(t *testing.T) {
+	t.Parallel()
+
+	items := []restorePreflightItem{
+		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1},
+		{Entry: util.BackupEntry{FolderName: "B"}, Err: errors.New("no parts found")},
+	}
+	err := validateRestorePreflight(items)
+	if err == nil {
+		t.Fatal("expected error for item with Err set, got nil")
+	}
+	if !strings.Contains(err.Error(), "1 selected item") {
+		t.Fatalf("unexpected error text: %v", err)
+	}
+}
+
+func TestValidateRestorePreflightFailsForOutputDirError(t *testing.T) {
+	t.Parallel()
+
+	items := []restorePreflightItem{
+		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1, OutputDirErr: errors.New("already exists")},
+	}
+	err := validateRestorePreflight(items)
+	if err == nil {
+		t.Fatal("expected error for item with OutputDirErr set, got nil")
+	}
+}
+
 func TestValidateRestoreTargetSpaceReturnsErrorWhenInsufficient(t *testing.T) {
 	t.Parallel()
 

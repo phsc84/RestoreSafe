@@ -23,6 +23,12 @@ func Run(cfg *util.Config, exeDir string) error {
 		return fmt.Errorf("Failed to create target folder: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
 
+	lock, err := util.AcquireTargetLock(targetDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	sources := planBackupSources(cfg.SourceFolders, exeDir)
 
 	// Determine backup run identifiers.

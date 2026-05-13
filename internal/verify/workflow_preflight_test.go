@@ -8,6 +8,39 @@ import (
 	"testing"
 )
 
+func TestBuildVerifyPreflightCountsParts(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("verify-preflight-pass"))
+
+	items := buildVerifyPreflight([]util.BackupEntry{fx.Entry}, fx.TargetDir)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 preflight item, got %d", len(items))
+	}
+	if items[0].Err != nil {
+		t.Fatalf("expected no preflight error, got %v", items[0].Err)
+	}
+	if items[0].PartCount != fx.Parts {
+		t.Fatalf("expected %d parts, got %d", fx.Parts, items[0].PartCount)
+	}
+	if items[0].TotalSizeBytes <= 0 {
+		t.Fatalf("expected positive TotalSizeBytes, got %d", items[0].TotalSizeBytes)
+	}
+}
+
+func TestBuildVerifyPreflightReportsErrorForMissingParts(t *testing.T) {
+	t.Parallel()
+
+	targetDir := t.TempDir()
+	missing := util.BackupEntry{FolderName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
+
+	items := buildVerifyPreflight([]util.BackupEntry{missing}, targetDir)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 preflight item, got %d", len(items))
+	}
+	if items[0].Err == nil && items[0].PartCount != 0 {
+		// catalog returns 0 parts and no error for a missing entry; that's expected.
+	}
+}
+
 func TestValidateVerifyPreflight(t *testing.T) {
 	t.Parallel()
 

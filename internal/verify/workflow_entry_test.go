@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestVerifyEntryRoundTrip(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("verify-correct-pass"))
+
+	if err := verifyEntry(fx.Entry, fx.TargetDir, fx.Password, nil); err != nil {
+		t.Fatalf("verifyEntry failed for correct password: %v", err)
+	}
+}
+
 func TestVerifyEntryWrongPassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
 
