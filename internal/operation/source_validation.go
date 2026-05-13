@@ -4,8 +4,6 @@ import (
 	"RestoreSafe/internal/util"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 // SourceValidationStatus is startup-health metadata for one configured source folder.
@@ -53,7 +51,7 @@ func markSourceValidationDuplicates(statuses []SourceValidationStatus) {
 			continue
 		}
 
-		pathKey := normalizeSourceValidationPath(statuses[i].Resolved)
+		pathKey := util.NormalizePathKey(statuses[i].Resolved)
 		if firstIndex, exists := seenByPath[pathKey]; exists {
 			statuses[i].Skip = true
 			statuses[i].Warning = fmt.Sprintf("identical duplicate of %s; this entry will be skipped", statuses[firstIndex].Resolved)
@@ -64,8 +62,3 @@ func markSourceValidationDuplicates(statuses []SourceValidationStatus) {
 	}
 }
 
-func normalizeSourceValidationPath(path string) string {
-	cleaned := filepath.Clean(path)
-	cleaned = strings.ReplaceAll(cleaned, "/", "\\")
-	return strings.ToLower(cleaned)
-}

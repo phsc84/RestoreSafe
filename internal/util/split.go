@@ -126,7 +126,7 @@ func (s *Writer) openNext() error {
 		return fmt.Errorf("Failed to create target directory: %w. Remedy: Check path validity and write permissions.", err)
 	}
 
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("Failed to create part file %q: %w. Remedy: Check target-folder write permissions and free disk space.", path, err)
 	}

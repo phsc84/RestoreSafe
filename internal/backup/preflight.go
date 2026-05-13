@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-const preflightFieldLabelWidth = 14
-
 func printBackupPreflightWithYubiKeyCheck(
 	cfg *util.Config,
 	targetDir string,
@@ -72,20 +70,11 @@ func printBackupPreflightWithYubiKeyCheck(
 		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
 	}
 
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
-	if cfg.UseYubiKey() {
-		status := "[OK]"
-		msg := "YubiKey connected. Keep it connected now before starting backup."
-		if err := checkYubiKeyConnected(); err != nil {
-			status = "[WARN]"
-			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
-		}
-		fmt.Printf("  %s %s\n", status, msg)
-	}
-
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
+	operation.PrintYubiKeyPreflightStatus(cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {
 		fmt.Println()
@@ -120,7 +109,7 @@ func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) 
 		return nil
 	}
 
-	if !isTargetSpaceInsufficient(estimatedBytes, freeBytes) {
+	if !util.IsSpaceInsufficient(estimatedBytes, freeBytes) {
 		return nil
 	}
 
@@ -128,10 +117,6 @@ func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) 
 		"Backup preflight failed: %s",
 		util.FormatInsufficientBackupSpaceMessage(uint64(estimatedBytes), freeBytes),
 	)
-}
-
-func isTargetSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
-	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }
 
 func validateStagingSpaceForBackup(stagingPlan operation.LocalStagingPlan, sources []backupSourcePlan) error {

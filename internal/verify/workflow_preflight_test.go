@@ -1,7 +1,6 @@
 package verify
 
 import (
-	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
@@ -32,11 +31,11 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return nil })
 	})
 
-	selectionLine := "  [OK]    " + items[0].Entry.String() + " (parts: 1)"
-	authLine := "Authentication : password + YubiKey"
+	selectionLine := "  [OK] " + items[0].Entry.String() + " (parts: 1)"
+	authLine := "Authentication: password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting verification."
 	selectionIdx := strings.Index(output, selectionLine)
 	authIdx := strings.Index(output, authLine)
@@ -66,10 +65,10 @@ func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication : password + YubiKey"
+	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting verification."
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)

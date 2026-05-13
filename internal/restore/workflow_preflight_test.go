@@ -39,11 +39,11 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 		t.Fatalf("expected 2 preflight items, got %d", len(items))
 	}
 
-	if items[0].Err == nil {
-		t.Fatal("expected error for existing output directory")
+	if items[0].OutputDirErr == nil {
+		t.Fatal("expected OutputDirErr for existing output directory")
 	}
 	if items[1].Err == nil {
-		t.Fatal("expected error for missing part files")
+		t.Fatal("expected Err for missing part files")
 	}
 }
 
@@ -53,10 +53,10 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 	outputDir := filepath.Join(restorePath, "Docs")
 	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}
 	items := []restorePreflightItem{{
-		Entry:     entry,
-		PartCount: 4,
-		OutputDir: outputDir,
-		Err:       errors.New("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."),
+		Entry:        entry,
+		PartCount:    4,
+		OutputDir:    outputDir,
+		OutputDirErr: errors.New("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."),
 	}}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -66,13 +66,13 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 	if strings.Contains(output, "Restore target :") {
 		t.Fatalf("did not expect Restore target field, got: %q", output)
 	}
-	selectionLine := "  [OK]    " + entry.String() + " (parts: 4)"
+	selectionLine := "  [OK] " + entry.String() + " (parts: 4)"
 	folderLine := "  [ERROR] " + filepath.ToSlash(outputDir)
 	errorText := "Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."
 	if !strings.Contains(output, selectionLine) {
 		t.Fatalf("expected backup selection to remain an OK archive entry, got: %q", output)
 	}
-	if !strings.Contains(output, "Folder(s) to be restored:\n"+folderLine) {
+	if !strings.Contains(output, "Restored folder(s):\n"+folderLine) {
 		t.Fatalf("expected restore folder section with absolute destination path, got: %q", output)
 	}
 	if !strings.Contains(output, errorText) {
@@ -92,9 +92,9 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
 	})
 
-	authLine := "Authentication    : password + YubiKey"
+	authLine := "Authentication: password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting restore."
-	neededLine := "  Needed disk space:"
+	neededLine := "  Used disk space (total):"
 	authIdx := strings.Index(output, authLine)
 	okIdx := strings.Index(output, okLine)
 	neededIdx := strings.Index(output, neededLine)
@@ -118,9 +118,9 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
 	})
 
-	authLine := "Authentication    : password + YubiKey"
+	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
-	neededLine := "  Needed disk space:"
+	neededLine := "  Used disk space (total):"
 	authIdx := strings.Index(output, authLine)
 	warnIdx := strings.Index(output, warnLine)
 	neededIdx := strings.Index(output, neededLine)
@@ -201,16 +201,3 @@ func TestValidateRestoreTargetSpaceReturnsErrorWhenInsufficient(t *testing.T) {
 	}
 }
 
-func TestIsRestoreSpaceInsufficient(t *testing.T) {
-	t.Parallel()
-
-	if !isRestoreSpaceInsufficient(200, 100) {
-		t.Fatal("expected insufficient-space predicate to be true")
-	}
-	if isRestoreSpaceInsufficient(100, 100) {
-		t.Fatal("did not expect insufficient-space predicate when estimate equals free bytes")
-	}
-	if isRestoreSpaceInsufficient(0, 100) {
-		t.Fatal("did not expect insufficient-space predicate for zero estimate")
-	}
-}

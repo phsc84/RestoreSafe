@@ -44,3 +44,9 @@ func FormatInsufficientRestoreSpaceMessage(neededBytes, availableBytes uint64) s
 		FormatBytesBinary(availableBytes),
 	)
 }
+
+// IsSpaceInsufficient reports whether the estimated byte count exceeds available free bytes.
+// Returns false when estimatedBytes is zero or negative (unknown estimate).
+func IsSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
+	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
+}

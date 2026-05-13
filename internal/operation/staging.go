@@ -9,10 +9,9 @@ import (
 
 // LocalStagingPlan describes whether and how to use local staging to avoid same-volume contention.
 type LocalStagingPlan struct {
-	Enabled          bool
-	SameVolume       bool
-	ResolvedTempDir  string
-	TempSharesVolume bool
+	Enabled         bool
+	SameVolume      bool
+	ResolvedTempDir string
 }
 
 // PlanLocalStaging determines if local staging should be used based on source, destination, and TEMP volumes.
@@ -29,10 +28,9 @@ func PlanLocalStaging(sourceDir, destDir, tempDir string) LocalStagingPlan {
 	tempSharesVolume := resolvedTempDir != "" && util.SameVolume(sourceDir, resolvedTempDir)
 
 	return LocalStagingPlan{
-		Enabled:          sameVolume && resolvedTempDir != "" && !tempSharesVolume,
-		SameVolume:       sameVolume,
-		ResolvedTempDir:  resolvedTempDir,
-		TempSharesVolume: tempSharesVolume,
+		Enabled:         sameVolume && resolvedTempDir != "" && !tempSharesVolume,
+		SameVolume:      sameVolume,
+		ResolvedTempDir: resolvedTempDir,
 	}
 }
 
@@ -107,11 +105,3 @@ func (s *StagingScope) Cleanup() {
 	CleanupStagingDir(s.Dir, s.log)
 }
 
-// CleanupDuring removes the staging directory during error recovery, tagging the phase in the log.
-// Safe to call on a nil receiver.
-func (s *StagingScope) CleanupDuring(phase string) {
-	if s == nil {
-		return
-	}
-	CleanupStagingDirDuring(s.Dir, phase, s.log)
-}

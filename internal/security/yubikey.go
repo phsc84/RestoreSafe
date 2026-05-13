@@ -137,7 +137,7 @@ func CombineWithPasswordForRestore(password []byte, challengeHex string) ([]byte
 // CheckYubiKeyAvailability verifies that the required ykman CLI is
 // available without prompting or contacting the device.
 func CheckYubiKeyAvailability() error {
-	_, err := resolveYkmanExecutable()
+	_, err := resolveYkmanExecutableFn()
 	if err != nil {
 		return ErrYubikeyNotFound
 	}
@@ -164,7 +164,7 @@ func CheckYubiKeyConnected() error {
 // queryYubikey sends a raw challenge to YubiKey slot 2 and returns the
 // HMAC-SHA1 response bytes.
 func queryYubikey(challenge []byte) ([]byte, error) {
-	ykmanPath, err := resolveYkmanExecutable()
+	ykmanPath, err := resolveYkmanExecutableFn()
 	if err != nil {
 		return nil, err
 	}

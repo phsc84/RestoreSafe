@@ -22,7 +22,7 @@ func planBackupSources(sourceFolders []string, exeDir string) []backupSourcePlan
 	result := make([]backupSourcePlan, 0, len(sourceFolders))
 	for _, src := range sourceFolders {
 		resolved := util.ResolveDir(src, exeDir)
-		status := backupSourcePlan{Resolved: resolved, normalizedPath: normalizedSourcePathKey(resolved)}
+		status := backupSourcePlan{Resolved: resolved, normalizedPath: util.NormalizePathKey(resolved)}
 
 		info, err := os.Stat(resolved)
 		if err != nil {
@@ -62,12 +62,6 @@ func markIdenticalSourceDuplicates(sources []backupSourcePlan) {
 
 		seenByPath[pathKey] = i
 	}
-}
-
-func normalizedSourcePathKey(path string) string {
-	cleaned := filepath.Clean(path)
-	cleaned = strings.ReplaceAll(cleaned, "/", "\\")
-	return strings.ToLower(cleaned)
 }
 
 func assignSourceBackupNames(sources []backupSourcePlan) {

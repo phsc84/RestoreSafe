@@ -18,8 +18,6 @@ import (
 	"strings"
 )
 
-const preflightFieldLabelWidth = 18
-
 // Run executes the full restore workflow.
 func Run(cfg *util.Config, exeDir string) error {
 	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
@@ -149,7 +147,8 @@ type restorePreflightItem struct {
 	PartCount      int
 	TotalSizeBytes int64
 	OutputDir      string
-	Err            error
+	Err            error // parts-level error (inspection failure, no parts found)
+	OutputDirErr   error // output directory error (already exists)
 }
 
 func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath string) []restorePreflightItem {
@@ -168,8 +167,8 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 		if item.PartCount == 0 && item.Err == nil {
 			item.Err = fmt.Errorf("No part files found. Remedy: Ensure all .enc parts of this backup are in the same target_folder.")
 		}
-		if _, err := os.Stat(item.OutputDir); err == nil && item.Err == nil {
-			item.Err = fmt.Errorf("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory.")
+		if _, err := os.Stat(item.OutputDir); err == nil {
+			item.OutputDirErr = fmt.Errorf("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory.")
 		}
 		items = append(items, item)
 	}
@@ -184,65 +183,93 @@ func printRestorePreflightWithYubiKeyCheck(
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
 ) {
-	fmt.Println()
-	fmt.Println("Restore preflight")
-	fmt.Println("-----------------")
+	var issues []string
 
+	fmt.Println()
+	fmt.Println("-----------------------------------------")
+
+	// Backup selection
 	fmt.Println("Backup selection:")
-	entries := make([]operation.PreflightEntry, len(items))
-	for i, item := range items {
-		entries[i] = operation.PreflightEntry{
-			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
+	fmt.Printf("  Source folder: %s\n", filepath.ToSlash(targetDir))
+	for _, item := range items {
+		if item.Err != nil {
+			fmt.Printf("  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			issues = append(issues, item.Err.Error())
+		} else {
+			fmt.Printf("  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 		}
 	}
-	operation.PrintPreflightSelection(entries)
-
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	if estimatedRestoreBytes > 0 {
-		fmt.Printf("  Needed disk space: %s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
+		fmt.Printf("  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
 	} else {
-		fmt.Printf("  Needed disk space: unknown\n")
+		fmt.Printf("  Used disk space (total): unknown\n")
 	}
 
-	fmt.Println("Folder(s) to be restored:")
-	for _, item := range items {
-		displayOutputDir := displayRestoreOutputDir(item.OutputDir)
-		if item.Err != nil {
-			fmt.Printf("  [ERROR] %s\n", displayOutputDir)
-			fmt.Printf("          → %v\n", item.Err)
-			continue
-		}
-		fmt.Printf("  [OK] %s\n", displayOutputDir)
-	}
-
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder and restore target share the same drive/share (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
-		fmt.Printf("  [WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
-	}
-
+	// Restore destination
+	fmt.Println("Restore destination:")
+	destDisplay := displayRestoreOutputDir(restorePath)
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 	if restoreFreeErr != nil {
-		fmt.Printf("  Free disk space: unknown (%v)\n", restoreFreeErr)
+		fmt.Printf("  [ERROR] %s\n", destDisplay)
+		issues = append(issues, fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
+		fmt.Printf("  [OK] %s\n", destDisplay)
 		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(restoreFreeBytes))
-		if isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			fmt.Printf("  [ERROR] %s\n", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+		if util.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+			issues = append(issues, util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
-	if requiresYubiKey {
-		status := "[OK]"
-		msg := "YubiKey connected. Keep it connected now before starting restore."
-		if err := checkYubiKeyConnected(); err != nil {
-			status = "[WARN]"
-			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
+	// Restored folder(s)
+	fmt.Println("Restored folder(s):")
+	for _, item := range items {
+		displayDir := displayRestoreOutputDir(item.OutputDir)
+		if item.OutputDirErr != nil {
+			fmt.Printf("  [ERROR] %s\n", displayDir)
+			issues = append(issues, item.OutputDirErr.Error())
+		} else {
+			fmt.Printf("  [OK] %s\n", displayDir)
 		}
-		fmt.Printf("  %s %s\n", status, msg)
 	}
 
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	// Authentication and Log level
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "restore", checkYubiKeyConnected)
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+
+	// Local staging block
+	if stagingPlan.Enabled {
+		fmt.Println()
+		fmt.Printf("Local staging enabled, because backup folder and folder(s) to be restored share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Println("Temp directory:")
+		tempDir := filepath.ToSlash(stagingPlan.ResolvedTempDir)
+		tempFreeBytes, tempFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		if tempFreeErr != nil {
+			fmt.Printf("  [ERROR] %s\n", tempDir)
+			issues = append(issues, fmt.Sprintf("Cannot query free space for temp directory: %v. Remedy: Check that the temp directory exists and is accessible.", tempFreeErr))
+		} else {
+			fmt.Printf("  [OK] %s\n", tempDir)
+			fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(tempFreeBytes))
+			if estimatedRestoreBytes > 0 && uint64(estimatedRestoreBytes) > tempFreeBytes {
+				issues = append(issues, fmt.Sprintf("Insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.", util.FormatBytesBinary(uint64(estimatedRestoreBytes)), util.FormatBytesBinary(tempFreeBytes), tempDir))
+			}
+		}
+	} else if stagingPlan.SameVolume && util.IsNetworkVolume(targetDir) {
+		issues = append(issues, fmt.Sprintf("[WARN] Backup folder and restore target are on the same drive/share (%s). This can cause long stalls on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.", util.VolumeDisplay(targetDir)))
+	}
+
+	// Print collected issues
+	if len(issues) > 0 {
+		fmt.Println()
+		for _, issue := range issues {
+			if strings.HasPrefix(issue, "[WARN]") {
+				fmt.Println(issue)
+			} else {
+				fmt.Printf("[ERROR] %s\n", issue)
+			}
+		}
+	}
 }
 
 func displayRestoreOutputDir(outputDir string) string {
@@ -256,7 +283,7 @@ func displayRestoreOutputDir(outputDir string) string {
 func validateRestorePreflight(items []restorePreflightItem) error {
 	return operation.ValidatePreflightItems(
 		items,
-		func(item restorePreflightItem) bool { return item.Err != nil },
+		func(item restorePreflightItem) bool { return item.Err != nil || item.OutputDirErr != nil },
 		"Restore preflight failed: %d selected item(s) are invalid. Remedy: Fix the [ERROR] entries above and start restore again.",
 	)
 }
@@ -272,7 +299,7 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 		return nil
 	}
 
-	if !isRestoreSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+	if !util.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
 		return nil
 	}
 
@@ -309,10 +336,6 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 	}
 
 	return util.QueryFreeSpaceBytes(restorePath)
-}
-
-func isRestoreSpaceInsufficient(estimatedBytes int64, freeBytes uint64) bool {
-	return estimatedBytes > 0 && uint64(estimatedBytes) > freeBytes
 }
 
 func restoreSelectedEntries(selected []util.BackupEntry, targetDir, restorePath string, password []byte, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {

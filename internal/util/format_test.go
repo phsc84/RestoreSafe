@@ -43,3 +43,17 @@ func TestFormatInsufficientRestoreSpaceMessage(t *testing.T) {
 		t.Fatalf("unexpected message: got %q want %q", got, want)
 	}
 }
+
+func TestIsSpaceInsufficient(t *testing.T) {
+	t.Parallel()
+
+	if !IsSpaceInsufficient(200, 100) {
+		t.Fatal("expected insufficient-space predicate to be true")
+	}
+	if IsSpaceInsufficient(100, 100) {
+		t.Fatal("did not expect insufficient-space predicate when estimate equals free bytes")
+	}
+	if IsSpaceInsufficient(0, 100) {
+		t.Fatal("did not expect insufficient-space predicate for zero estimate")
+	}
+}

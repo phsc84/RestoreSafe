@@ -261,20 +261,6 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	}
 }
 
-func TestIsTargetSpaceInsufficient(t *testing.T) {
-	t.Parallel()
-
-	if !isTargetSpaceInsufficient(200, 100) {
-		t.Fatal("expected insufficient-space predicate to be true")
-	}
-	if isTargetSpaceInsufficient(100, 100) {
-		t.Fatal("did not expect insufficient-space predicate when estimate equals free bytes")
-	}
-	if isTargetSpaceInsufficient(0, 100) {
-		t.Fatal("did not expect insufficient-space predicate for unknown/zero estimate")
-	}
-}
-
 func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
 	t.Parallel()
 

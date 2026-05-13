@@ -7,12 +7,9 @@ import (
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
-
-const preflightFieldLabelWidth = 15
 
 // Run verifies selected backup sets without restoring them to disk.
 func Run(cfg *util.Config, exeDir string) error {
@@ -45,9 +42,8 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer log.Close()
 	log.Info("Verification started - Selection: %q", selection)
 
-	stagingPlan := operation.PlanLocalStaging(targetDir, targetDir, os.TempDir())
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
+	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -69,20 +65,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	fmt.Println("Verification started.")
 	log.Info("Verifying %d selected item(s)", len(selected))
-	var scope *operation.StagingScope
-	if stagingPlan.Enabled {
-		fmt.Println("Staging selected backups locally. This can take a moment on network storage.")
-		stagedDir, err := stageSelectedVerifyParts(selected, targetDir, stagingPlan.ResolvedTempDir, log)
-		if err != nil {
-			return fmt.Errorf("Local staging failed: %w", err)
-		}
-		fmt.Println("Local staging completed.")
-		scope = operation.ActiveStagingScope(stagedDir, log)
-	}
-	defer scope.Cleanup()
-
-	verifyDir := scope.ActiveDir(targetDir)
-	if err := verifySelectedEntries(selected, verifyDir, password, log); err != nil {
+	if err := verifySelectedEntries(selected, targetDir, password, log); err != nil {
 		return err
 	}
 
@@ -95,19 +78,21 @@ func resolveVerifySelection(targetDir string, index []util.BackupEntry) ([]util.
 }
 
 type verifyPreflightItem struct {
-	Entry     util.BackupEntry
-	PartCount int
-	Err       error
+	Entry          util.BackupEntry
+	PartCount      int
+	TotalSizeBytes int64
+	Err            error
 }
 
 func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
 	for _, entry := range selected {
-		partCount, _, err := catalog.InspectBackupParts(targetDir, entry)
+		partCount, totalSizeBytes, err := catalog.InspectBackupParts(targetDir, entry)
 		items = append(items, verifyPreflightItem{
-			Entry:     entry,
-			PartCount: partCount,
-			Err:       err,
+			Entry:          entry,
+			PartCount:      partCount,
+			TotalSizeBytes: totalSizeBytes,
+			Err:            err,
 		})
 	}
 	return items
@@ -118,38 +103,48 @@ func printVerifyPreflightWithYubiKeyCheck(
 	targetDir string,
 	items []verifyPreflightItem,
 	requiresYubiKey, yubiKeyOnly bool,
-	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
 ) {
+	var issues []string
+
 	fmt.Println()
-	fmt.Println("Verify preflight")
-	fmt.Println("----------------")
+	fmt.Println("-----------------------------------------")
 
+	// Backup selection
 	fmt.Println("Backup selection:")
-	entries := make([]operation.PreflightEntry, len(items))
-	for i, item := range items {
-		entries[i] = operation.PreflightEntry{
-			Label: fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount),
-			Err:   item.Err,
+	fmt.Printf("  Source folder: %s\n", filepath.ToSlash(targetDir))
+	for _, item := range items {
+		if item.Err != nil {
+			fmt.Printf("  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			issues = append(issues, item.Err.Error())
+		} else {
+			fmt.Printf("  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 		}
 	}
-	operation.PrintPreflightSelection(entries)
-	if stagingPlan.Enabled {
-		operation.PrintPreflightField(preflightFieldLabelWidth, "Local staging", fmt.Sprintf("enabled via %s because backup folder is on network storage (%s)", filepath.ToSlash(stagingPlan.ResolvedTempDir), util.VolumeDisplay(targetDir)))
-	}
-
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
-	if requiresYubiKey {
-		status := "[OK]"
-		msg := "YubiKey connected. Keep it connected now before starting verification."
-		if err := checkYubiKeyConnected(); err != nil {
-			status = "[WARN]"
-			msg = "YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting verification."
+	var totalBytes int64
+	for _, item := range items {
+		if item.Err == nil {
+			totalBytes += item.TotalSizeBytes
 		}
-		fmt.Printf("  %s %s\n", status, msg)
+	}
+	if totalBytes > 0 {
+		fmt.Printf("  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(totalBytes)))
+	} else {
+		fmt.Printf("  Used disk space (total): unknown\n")
 	}
 
-	operation.PrintPreflightField(preflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	// Authentication and Log level
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "verification", checkYubiKeyConnected)
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+
+	// Print collected issues
+	if len(issues) > 0 {
+		fmt.Println()
+		for _, issue := range issues {
+			fmt.Printf("[ERROR] %s\n", issue)
+		}
+	}
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {
@@ -160,47 +155,6 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	)
 }
 
-func stageSelectedVerifyParts(selected []util.BackupEntry, sourceDir, tempDir string, log *util.Logger) (string, error) {
-	stagingDir, err := operation.CreateStagingDir(tempDir, "verify-stage-*")
-	if err != nil {
-		return "", err
-	}
-
-	copied := 0
-	seen := make(map[string]struct{})
-	for _, entry := range selected {
-		parts, err := catalog.CollectParts(sourceDir, entry)
-		if err != nil {
-			operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
-			return "", err
-		}
-		if len(parts) == 0 {
-			operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
-			return "", fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same folder.", entry.String())
-		}
-
-		for _, partPath := range parts {
-			if _, exists := seen[partPath]; exists {
-				continue
-			}
-			seen[partPath] = struct{}{}
-
-			destinationPath := filepath.Join(stagingDir, filepath.Base(partPath))
-			if err := util.CopyFile(partPath, destinationPath); err != nil {
-				operation.CleanupStagingDirDuring(stagingDir, "error recovery", log)
-				if strings.Contains(err.Error(), "Remedy:") {
-					return "", err
-				}
-				return "", fmt.Errorf("Failed to stage selected part %q: %w. Remedy: Check network availability, TEMP/TMP free space, and write permissions.", filepath.Base(partPath), err)
-			}
-			copied++
-		}
-	}
-
-	log.Info("Local staging enabled: staged %d selected part file(s) to %s", copied, filepath.ToSlash(stagingDir))
-
-	return stagingDir, nil
-}
 
 func verifySelectedEntries(selected []util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
 	for _, entry := range selected {
