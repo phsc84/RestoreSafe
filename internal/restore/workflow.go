@@ -74,6 +74,9 @@ func Run(cfg *util.Config, exeDir string) error {
 	if err := validateRestoreTargetSpace(restorePath, preflight); err != nil {
 		return err
 	}
+	if err := validateStagingSpace(stagingPlan, preflight); err != nil {
+		return err
+	}
 
 	confirmed, err := operation.PromptStartAction("restore")
 	if err != nil {
@@ -304,6 +307,28 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 	}
 
 	return fmt.Errorf("Restore preflight failed: %s", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+}
+
+func validateStagingSpace(stagingPlan operation.LocalStagingPlan, items []restorePreflightItem) error {
+	if !stagingPlan.Enabled {
+		return nil
+	}
+	estimatedBytes := estimateRestoreBytes(items)
+	if estimatedBytes <= 0 {
+		return nil
+	}
+	freeBytes, err := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+	if err != nil {
+		// Fail-open: let the staging copy itself surface the error.
+		return nil
+	}
+	if uint64(estimatedBytes) > freeBytes {
+		return fmt.Errorf("Restore preflight failed: insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.",
+			util.FormatBytesBinary(uint64(estimatedBytes)),
+			util.FormatBytesBinary(freeBytes),
+			filepath.ToSlash(stagingPlan.ResolvedTempDir))
+	}
+	return nil
 }
 
 func estimateRestoreBytes(items []restorePreflightItem) int64 {

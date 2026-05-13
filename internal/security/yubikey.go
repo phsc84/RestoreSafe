@@ -11,6 +11,7 @@
 package security
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -32,7 +33,44 @@ var ErrYubikeyNotFound = errors.New(
 var resolveYkmanExecutableFn = resolveYkmanExecutable
 
 var ykmanListOutput = func(ykmanPath string) ([]byte, error) {
-	return exec.Command(ykmanPath, "list").Output()
+	var stderr bytes.Buffer
+	cmd := exec.Command(ykmanPath, "list")
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return out, ykmanAnnotateError(err, stderr.String())
+	}
+	return out, nil
+}
+
+var ykmanOtpCalculate = func(ykmanPath, challengeHex string) ([]byte, error) {
+	var stderr bytes.Buffer
+	cmd := exec.Command(ykmanPath, "otp", "calculate", "2", challengeHex)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, ykmanAnnotateError(err, stderr.String())
+	}
+	return out, nil
+}
+
+// ykmanAnnotateError enriches a ykman exit error with captured stderr text.
+// Known ykman error patterns are translated to actionable messages.
+func ykmanAnnotateError(err error, stderr string) error {
+	stderr = strings.TrimSpace(stderr)
+	if stderr == "" {
+		return err
+	}
+	lower := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(lower, "no yubikey") || strings.Contains(lower, "no device"):
+		return fmt.Errorf("no YubiKey detected: %s", stderr)
+	case strings.Contains(lower, "slot is empty") || strings.Contains(lower, "not programmed") || strings.Contains(lower, "not configured"):
+		return fmt.Errorf("YubiKey slot 2 is not configured for HMAC-SHA1: %s. Remedy: Program slot 2 with HMAC-SHA1 using YubiKey Manager.", stderr)
+	case strings.Contains(lower, "timeout"):
+		return fmt.Errorf("YubiKey response timed out (touch the key): %s", stderr)
+	}
+	return fmt.Errorf("%w; ykman stderr: %s", err, stderr)
 }
 
 func resolveYkmanExecutable() (string, error) {
@@ -161,6 +199,19 @@ func CheckYubiKeyConnected() error {
 	return nil
 }
 
+// ValidateChallengeHex reports whether s is a well-formed hex-encoded challenge
+// of the expected length. Returns a descriptive error if validation fails.
+func ValidateChallengeHex(s string) error {
+	decoded, err := hex.DecodeString(s)
+	if err != nil {
+		return fmt.Errorf("not valid hex: %w", err)
+	}
+	if len(decoded) != challengeLen {
+		return fmt.Errorf("unexpected length: got %d bytes, want %d", len(decoded), challengeLen)
+	}
+	return nil
+}
+
 // queryYubikey sends a raw challenge to YubiKey slot 2 and returns the
 // HMAC-SHA1 response bytes.
 func queryYubikey(challenge []byte) ([]byte, error) {
@@ -170,7 +221,7 @@ func queryYubikey(challenge []byte) ([]byte, error) {
 	}
 
 	challengeHex := hex.EncodeToString(challenge)
-	out, err := exec.Command(ykmanPath, "otp", "calculate", "2", challengeHex).Output()
+	out, err := ykmanOtpCalculate(ykmanPath, challengeHex)
 	if err != nil {
 		return nil, fmt.Errorf("YubiKey query failed (please touch the key): %w. Remedy: Keep the YubiKey connected, touch it, and verify HMAC-SHA1 is configured in slot 2.", err)
 	}
@@ -178,7 +229,7 @@ func queryYubikey(challenge []byte) ([]byte, error) {
 	responseHex := strings.TrimSpace(string(out))
 	response, err := hex.DecodeString(responseHex)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to decode YubiKey response: %w. Remedy: Check ykman version and verify YubiKey configuration (slot 2, HMAC-SHA1).", err)
+		return nil, fmt.Errorf("Failed to decode YubiKey response %q: %w. Remedy: Check ykman version and verify YubiKey configuration (slot 2, HMAC-SHA1).", responseHex, err)
 	}
 
 	return response, nil

@@ -222,6 +222,35 @@ func TestValidateRestorePreflightFailsForOutputDirError(t *testing.T) {
 	}
 }
 
+func TestValidateStagingSpacePassesWhenNotEnabled(t *testing.T) {
+	t.Parallel()
+	plan := operation.LocalStagingPlan{Enabled: false}
+	items := []restorePreflightItem{{TotalSizeBytes: math.MaxInt64}}
+	if err := validateStagingSpace(plan, items); err != nil {
+		t.Fatalf("expected no error when staging is disabled, got: %v", err)
+	}
+}
+
+func TestValidateStagingSpacePassesWhenSufficientSpace(t *testing.T) {
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
+	items := []restorePreflightItem{{TotalSizeBytes: 1}}
+	if err := validateStagingSpace(plan, items); err != nil {
+		t.Fatalf("expected no error when space is sufficient, got: %v", err)
+	}
+}
+
+func TestValidateStagingSpaceReturnsErrorWhenInsufficient(t *testing.T) {
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
+	items := []restorePreflightItem{{TotalSizeBytes: math.MaxInt64}}
+	err := validateStagingSpace(plan, items)
+	if err == nil {
+		t.Fatal("expected insufficient-staging-space error, got nil")
+	}
+	if !strings.Contains(err.Error(), "insufficient free space at temp directory") {
+		t.Fatalf("unexpected staging-space error: %v", err)
+	}
+}
+
 func TestValidateRestoreTargetSpaceReturnsErrorWhenInsufficient(t *testing.T) {
 	t.Parallel()
 

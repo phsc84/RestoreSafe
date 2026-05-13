@@ -41,7 +41,9 @@ func TestPasswordFailurePrefix(t *testing.T) {
 func TestReadChallengeFileTrimsWhitespace(t *testing.T) {
 	dir := t.TempDir()
 	challengePath := filepath.Join(dir, "sample.challenge")
-	if err := os.WriteFile(challengePath, []byte("  abcd1234  \n"), 0o600); err != nil {
+	// Write a valid 32-byte hex challenge (64 hex chars) with surrounding whitespace.
+	valid := strings.Repeat("ab", 32)
+	if err := os.WriteFile(challengePath, []byte("  "+valid+"  \n"), 0o600); err != nil {
 		t.Fatalf("failed to write challenge file: %v", err)
 	}
 
@@ -49,8 +51,67 @@ func TestReadChallengeFileTrimsWhitespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readChallengeFile returned error: %v", err)
 	}
-	if challenge != "abcd1234" {
+	if challenge != valid {
 		t.Fatalf("expected trimmed challenge, got %q", challenge)
+	}
+}
+
+func TestReadChallengeFileAcceptsNOPWPrefix(t *testing.T) {
+	dir := t.TempDir()
+	challengePath := filepath.Join(dir, "sample.challenge")
+	valid := strings.Repeat("cd", 32)
+	if err := os.WriteFile(challengePath, []byte("NOPW:"+valid), 0o600); err != nil {
+		t.Fatalf("failed to write challenge file: %v", err)
+	}
+
+	challenge, err := readChallengeFile(challengePath)
+	if err != nil {
+		t.Fatalf("expected no error for NOPW: prefix, got: %v", err)
+	}
+	if challenge != valid {
+		t.Fatalf("expected stripped challenge, got %q", challenge)
+	}
+}
+
+func TestReadChallengeFileRejectsEmpty(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	challengePath := filepath.Join(dir, "empty.challenge")
+	if err := os.WriteFile(challengePath, []byte("  "), 0o600); err != nil {
+		t.Fatalf("failed to write challenge file: %v", err)
+	}
+
+	_, err := readChallengeFile(challengePath)
+	if err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("expected empty-file error, got: %v", err)
+	}
+}
+
+func TestReadChallengeFileRejectsNonHex(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	challengePath := filepath.Join(dir, "bad.challenge")
+	if err := os.WriteFile(challengePath, []byte("not-hex-content"), 0o600); err != nil {
+		t.Fatalf("failed to write challenge file: %v", err)
+	}
+
+	_, err := readChallengeFile(challengePath)
+	if err == nil || !strings.Contains(err.Error(), "invalid format") {
+		t.Fatalf("expected invalid-format error, got: %v", err)
+	}
+}
+
+func TestReadChallengeFileRejectsWrongLength(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	challengePath := filepath.Join(dir, "short.challenge")
+	if err := os.WriteFile(challengePath, []byte("abcd"), 0o600); err != nil {
+		t.Fatalf("failed to write challenge file: %v", err)
+	}
+
+	_, err := readChallengeFile(challengePath)
+	if err == nil || !strings.Contains(err.Error(), "invalid format") {
+		t.Fatalf("expected invalid-format error for short hex, got: %v", err)
 	}
 }
 

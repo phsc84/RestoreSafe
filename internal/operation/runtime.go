@@ -197,6 +197,7 @@ func (vw *verifyWriter) Write(p []byte) (int, error) {
 // readChallengeFile reads the challenge hex from a .challenge file.
 // It strips the "NOPW:" prefix used by YubiKey-only backups so the caller
 // always receives a plain hex string suitable for CombineWithPasswordForRestore.
+// The content is validated: it must be non-empty, valid hex, and the correct length.
 func readChallengeFile(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -204,5 +205,11 @@ func readChallengeFile(path string) (string, error) {
 	}
 	content := strings.TrimSpace(string(data))
 	content = strings.TrimPrefix(content, "NOPW:")
+	if content == "" {
+		return "", fmt.Errorf("challenge file is empty or contains only the NOPW: prefix. Remedy: The .challenge file may be corrupted or truncated; restore it from a backup of the backup folder.")
+	}
+	if err := security.ValidateChallengeHex(content); err != nil {
+		return "", fmt.Errorf("challenge file has invalid format: %w. Remedy: The .challenge file may be corrupted; restore it from a backup of the backup folder.", err)
+	}
 	return content, nil
 }

@@ -1,9 +1,11 @@
 package security
 
 import (
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -164,6 +166,118 @@ func TestCheckYubiKeyConnectedListError(t *testing.T) {
 	err := CheckYubiKeyConnected()
 	if !errors.Is(err, ErrYubiKeyNotConnected) {
 		t.Fatalf("expected ErrYubiKeyNotConnected, got: %v", err)
+	}
+}
+
+func TestYkmanAnnotateErrorWithEmptyStderrReturnsOriginal(t *testing.T) {
+	t.Parallel()
+	original := errors.New("exit status 1")
+	got := ykmanAnnotateError(original, "  \n")
+	if got != original {
+		t.Fatalf("expected original error, got: %v", got)
+	}
+}
+
+func TestYkmanAnnotateErrorDetectsNoYubiKey(t *testing.T) {
+	t.Parallel()
+	err := ykmanAnnotateError(errors.New("exit 1"), "ERROR: No YubiKey detected.")
+	if !strings.Contains(err.Error(), "no YubiKey detected") {
+		t.Fatalf("expected no-yubikey message, got: %v", err)
+	}
+}
+
+func TestYkmanAnnotateErrorDetectsSlotNotConfigured(t *testing.T) {
+	t.Parallel()
+	err := ykmanAnnotateError(errors.New("exit 1"), "ERROR: Slot is empty.")
+	if !strings.Contains(err.Error(), "slot 2 is not configured") {
+		t.Fatalf("expected slot-not-configured message, got: %v", err)
+	}
+}
+
+func TestYkmanAnnotateErrorDetectsTimeout(t *testing.T) {
+	t.Parallel()
+	err := ykmanAnnotateError(errors.New("exit 1"), "Timeout waiting for response.")
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("expected timeout message, got: %v", err)
+	}
+}
+
+func TestYkmanAnnotateErrorUnknownIncludesStderr(t *testing.T) {
+	t.Parallel()
+	err := ykmanAnnotateError(errors.New("exit 1"), "Some unexpected ykman error")
+	if !strings.Contains(err.Error(), "ykman stderr: Some unexpected ykman error") {
+		t.Fatalf("expected stderr in error message, got: %v", err)
+	}
+}
+
+func TestQueryYukeyUsesInjectableOtpCalculate(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevCalc := ykmanOtpCalculate
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanOtpCalculate = prevCalc
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) { return "ykman", nil }
+	wantResponse := make([]byte, 20)
+	ykmanOtpCalculate = func(_, _ string) ([]byte, error) {
+		return []byte(hex.EncodeToString(wantResponse) + "\n"), nil
+	}
+
+	challenge := make([]byte, challengeLen)
+	resp, err := queryYubikey(challenge)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if string(resp) != string(wantResponse) {
+		t.Fatalf("response mismatch")
+	}
+}
+
+func TestQueryYukeyIncludesResponseHexOnDecodeError(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevCalc := ykmanOtpCalculate
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanOtpCalculate = prevCalc
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) { return "ykman", nil }
+	ykmanOtpCalculate = func(_, _ string) ([]byte, error) {
+		return []byte("not-hex-at-all\n"), nil
+	}
+
+	_, err := queryYubikey(make([]byte, challengeLen))
+	if err == nil {
+		t.Fatal("expected error for invalid hex response")
+	}
+	if !strings.Contains(err.Error(), "not-hex-at-all") {
+		t.Fatalf("expected response hex in error message, got: %v", err)
+	}
+}
+
+func TestValidateChallengeHexAcceptsValidChallenge(t *testing.T) {
+	t.Parallel()
+	valid := hex.EncodeToString(make([]byte, challengeLen))
+	if err := ValidateChallengeHex(valid); err != nil {
+		t.Fatalf("expected no error for valid challenge, got: %v", err)
+	}
+}
+
+func TestValidateChallengeHexRejectsNonHex(t *testing.T) {
+	t.Parallel()
+	err := ValidateChallengeHex("not-hex!")
+	if err == nil || !strings.Contains(err.Error(), "not valid hex") {
+		t.Fatalf("expected not-valid-hex error, got: %v", err)
+	}
+}
+
+func TestValidateChallengeHexRejectsWrongLength(t *testing.T) {
+	t.Parallel()
+	short := hex.EncodeToString(make([]byte, challengeLen-1))
+	err := ValidateChallengeHex(short)
+	if err == nil || !strings.Contains(err.Error(), "unexpected length") {
+		t.Fatalf("expected unexpected-length error, got: %v", err)
 	}
 }
 
