@@ -177,10 +177,6 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 
 	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
 
-	onPartStart := func(partIndex, partCount int) {
-		fmt.Printf("  Verifying part %d/%d...\n", partIndex, partCount)
-	}
-
 	err = operation.RunDecryptPipeline(
 		parts,
 		password,
@@ -189,7 +185,9 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
-		onPartStart,
+		func(partIndex, partCount int) {
+			fmt.Printf("  Verifying part %d/%d...\n", partIndex, partCount)
+		},
 	)
 	if err != nil {
 		return err

@@ -89,10 +89,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
 	}
 
-	return cfg.withDefaults(), cfg.validate()
+	cfg.withDefaults()
+	return &cfg, cfg.validate()
 }
 
-func (c *Config) withDefaults() *Config {
+func (c *Config) withDefaults() {
 	if c.SplitSizeMB <= 0 {
 		c.SplitSizeMB = DefaultSplitSizeMB
 	}
@@ -111,7 +112,6 @@ func (c *Config) withDefaults() *Config {
 	if c.Argon2.Threads == 0 {
 		c.Argon2.Threads = 4
 	}
-	return c
 }
 
 func (c *Config) validate() error {

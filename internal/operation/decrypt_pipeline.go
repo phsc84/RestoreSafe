@@ -25,11 +25,7 @@ func RunDecryptPipeline(
 	seqReader := util.NewSequentialReader(parts)
 	defer seqReader.Close()
 
-	if onPartStart != nil {
-		seqReader.SetOnFileOpen(func(partIndex, partTotal int) {
-			onPartStart(partIndex, partTotal)
-		})
-	}
+	seqReader.SetOnFileOpen(onPartStart)
 
 	var inBytes atomic.Int64
 	var outBytes atomic.Int64
