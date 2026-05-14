@@ -105,7 +105,7 @@ func ReadPasswordWithRetry(
 			}
 			// Verify ykman is installed and a device is physically connected.
 			if err := security.CheckYubiKeyConnected(); err != nil {
-				return nil, fmt.Errorf("YubiKey is required but no YubiKey was detected. Remedy: Connect the YubiKey and retry.")
+				return nil, security.ErrYubiKeyRequired
 			}
 			fmt.Println("YubiKey connected. Please touch the YubiKey button.")
 			password, err = security.CombineWithPasswordForRestore(password, challengeHex)

@@ -4,12 +4,11 @@ import (
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
 
-type backupSourcePlan struct {
+type backupSource struct {
 	Resolved       string
 	normalizedPath string // cached result of normalizedSourcePathKey(Resolved)
 	BackupName     string
@@ -18,27 +17,13 @@ type backupSourcePlan struct {
 	Err            error
 }
 
-func planBackupSources(sourceFolders []string, exeDir string) []backupSourcePlan {
-	result := make([]backupSourcePlan, 0, len(sourceFolders))
+func resolveBackupSources(sourceFolders []string, exeDir string) []backupSource {
+	result := make([]backupSource, 0, len(sourceFolders))
 	for _, src := range sourceFolders {
 		resolved := util.ResolveDir(src, exeDir)
-		status := backupSourcePlan{Resolved: resolved, normalizedPath: util.NormalizePathKey(resolved)}
+		status := backupSource{Resolved: resolved, normalizedPath: util.NormalizePathKey(resolved)}
 
-		info, err := os.Stat(resolved)
-		if err != nil {
-			status.Err = fmt.Errorf("Not found or inaccessible: %w. Remedy: Check the path in config.yaml and use forward slashes on Windows (e.g. C:/Users/Name/Documents).", err)
-			result = append(result, status)
-			continue
-		}
-		if !info.IsDir() {
-			status.Err = fmt.Errorf("Path is not a directory. Remedy: Provide a folder path, not a file path.")
-			result = append(result, status)
-			continue
-		}
-		if _, err := os.ReadDir(resolved); err != nil {
-			status.Err = fmt.Errorf("Directory not readable: %w. Remedy: Check permissions and ensure this user can read the folder.", err)
-		}
-
+		status.Err = util.ValidateSourceDirectory(resolved)
 		result = append(result, status)
 	}
 	markIdenticalSourceDuplicates(result)
@@ -46,7 +31,7 @@ func planBackupSources(sourceFolders []string, exeDir string) []backupSourcePlan
 	return result
 }
 
-func markIdenticalSourceDuplicates(sources []backupSourcePlan) {
+func markIdenticalSourceDuplicates(sources []backupSource) {
 	seenByPath := make(map[string]int)
 	for i := range sources {
 		if sources[i].Err != nil {
@@ -64,14 +49,14 @@ func markIdenticalSourceDuplicates(sources []backupSourcePlan) {
 	}
 }
 
-func assignSourceBackupNames(sources []backupSourcePlan) {
+func assignSourceBackupNames(sources []backupSource) {
 	grouped := groupSourcesByBasename(sources)
 	assignNamesByGroup(sources, grouped)
 	fillMissingBackupNames(sources)
 }
 
 // groupSourcesByBasename maps each unique base folder name to the indices of valid (non-error, non-skipped) sources that share it.
-func groupSourcesByBasename(sources []backupSourcePlan) map[string][]int {
+func groupSourcesByBasename(sources []backupSource) map[string][]int {
 	grouped := make(map[string][]int)
 	for i, source := range sources {
 		if source.Err != nil || source.Skip {
@@ -86,7 +71,7 @@ func groupSourcesByBasename(sources []backupSourcePlan) map[string][]int {
 // assignNamesByGroup assigns BackupNames from the grouped index map.
 // Unique base names are used directly; duplicate base names get a path-alias suffix.
 // Alias collisions mark both sources with an error.
-func assignNamesByGroup(sources []backupSourcePlan, grouped map[string][]int) {
+func assignNamesByGroup(sources []backupSource, grouped map[string][]int) {
 	for baseName, indices := range grouped {
 		if len(indices) == 1 {
 			sources[indices[0]].BackupName = baseName
@@ -115,7 +100,7 @@ func assignNamesByGroup(sources []backupSourcePlan, grouped map[string][]int) {
 
 // fillMissingBackupNames ensures every source has a BackupName set.
 // Skipped sources inherit the name of their non-skipped counterpart; others fall back to base folder name.
-func fillMissingBackupNames(sources []backupSourcePlan) {
+func fillMissingBackupNames(sources []backupSource) {
 	nameByPath := make(map[string]string)
 	for i := range sources {
 		if sources[i].Err != nil || sources[i].Skip {

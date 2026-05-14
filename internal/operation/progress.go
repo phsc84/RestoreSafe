@@ -6,6 +6,23 @@ import (
 	"time"
 )
 
+// StartProgressTracking launches a goroutine that logs I/O progress at regular
+// intervals. Pass log=nil to suppress output (the goroutine still runs so that
+// the channels stay in sync — LogProgressUntilDone handles nil gracefully).
+// The returned stop function must be called exactly once; defer it at the call site.
+func StartProgressTracking(log *util.Logger, folderName, verb string, inBytes, outBytes, calls *atomic.Int64) func() {
+	progressDone := make(chan struct{})
+	progressStopped := make(chan struct{})
+	go func() {
+		LogProgressUntilDone(log, folderName, verb, inBytes, outBytes, calls, progressDone)
+		close(progressStopped)
+	}()
+	return func() {
+		close(progressDone)
+		<-progressStopped
+	}
+}
+
 const (
 	progressLogInterval = 2 * time.Second
 	stallWarnAfter      = 10 * time.Second

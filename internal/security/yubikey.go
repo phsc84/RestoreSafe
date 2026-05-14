@@ -205,6 +205,10 @@ func CheckYubiKeyAvailability() error {
 // ErrYubiKeyNotConnected is returned when ykman is available but no device is plugged in.
 var ErrYubiKeyNotConnected = errors.New("no YubiKey detected")
 
+// ErrYubiKeyRequired is returned when a YubiKey is configured but none is detected.
+// Shared by backup and restore flows to avoid duplicating the message.
+var ErrYubiKeyRequired = errors.New("YubiKey is required but no YubiKey was detected. Remedy: Connect the YubiKey and retry.")
+
 // CheckYubiKeyConnected verifies that ykman is installed AND a YubiKey device
 // is currently connected. Call this before prompting the user to touch the key.
 func CheckYubiKeyConnected() error {

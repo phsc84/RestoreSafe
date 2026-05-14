@@ -3,7 +3,6 @@ package operation
 import (
 	"RestoreSafe/internal/util"
 	"fmt"
-	"os"
 )
 
 // SourceValidationStatus is startup-health metadata for one configured source folder.
@@ -22,21 +21,7 @@ func InspectSourceFoldersForValidation(sourceFolders []string, exeDir string) []
 		resolved := util.ResolveDir(src, exeDir)
 		status := SourceValidationStatus{Resolved: resolved}
 
-		info, err := os.Stat(resolved)
-		if err != nil {
-			status.Err = fmt.Errorf("Not found or inaccessible: %w. Remedy: Check the path in config.yaml and use forward slashes on Windows (e.g. C:/Users/Name/Documents).", err)
-			statuses = append(statuses, status)
-			continue
-		}
-		if !info.IsDir() {
-			status.Err = fmt.Errorf("Path is not a directory. Remedy: Provide a folder path, not a file path.")
-			statuses = append(statuses, status)
-			continue
-		}
-		if _, err := os.ReadDir(resolved); err != nil {
-			status.Err = fmt.Errorf("Directory not readable: %w. Remedy: Check permissions and ensure this user can read the folder.", err)
-		}
-
+		status.Err = util.ValidateSourceDirectory(resolved)
 		statuses = append(statuses, status)
 	}
 

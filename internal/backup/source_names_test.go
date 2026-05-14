@@ -21,7 +21,7 @@ func TestPlanBackupSourcesReportsExpectedStatuses(t *testing.T) {
 		t.Fatalf("failed to create file path: %v", err)
 	}
 
-	plans := planBackupSources([]string{"ok", "not-a-dir.txt", "missing"}, exeDir)
+	plans := resolveBackupSources([]string{"ok", "not-a-dir.txt", "missing"}, exeDir)
 	if len(plans) != 3 {
 		t.Fatalf("expected 3 source plans, got %d", len(plans))
 	}
@@ -56,7 +56,7 @@ func TestPlanBackupSourcesAssignsBaseNamesForUniqueFolders(t *testing.T) {
 		t.Fatalf("failed to create second source: %v", err)
 	}
 
-	plans := planBackupSources([]string{first, second}, exeDir)
+	plans := resolveBackupSources([]string{first, second}, exeDir)
 	if len(plans) != 2 {
 		t.Fatalf("expected 2 plans, got %d", len(plans))
 	}
@@ -94,7 +94,7 @@ func TestPlanBackupSourcesAssignsAliasForDuplicateBasename(t *testing.T) {
 		t.Fatalf("failed to create second source: %v", err)
 	}
 
-	plans := planBackupSources([]string{first, second}, exeDir)
+	plans := resolveBackupSources([]string{first, second}, exeDir)
 	if len(plans) != 2 {
 		t.Fatalf("expected 2 plans, got %d", len(plans))
 	}
@@ -127,7 +127,7 @@ func TestPlanBackupSourcesMarksIdenticalDuplicateAsSkipped(t *testing.T) {
 		t.Fatalf("failed to create shared source: %v", err)
 	}
 
-	plans := planBackupSources([]string{shared, shared}, exeDir)
+	plans := resolveBackupSources([]string{shared, shared}, exeDir)
 	if len(plans) != 2 {
 		t.Fatalf("expected 2 plans, got %d", len(plans))
 	}
@@ -161,7 +161,7 @@ func TestPlanBackupSourcesDistinguishesHyphenAndUnderscoreAliases(t *testing.T) 
 		t.Fatalf("failed to create second source: %v", err)
 	}
 
-	plans := planBackupSources([]string{first, second}, exeDir)
+	plans := resolveBackupSources([]string{first, second}, exeDir)
 	if len(plans) != 2 {
 		t.Fatalf("expected 2 plans, got %d", len(plans))
 	}
@@ -208,7 +208,7 @@ func TestPlanBackupSourcesDistinguishesSpaceFromHyphenAndUnderscoreAliases(t *te
 		t.Fatalf("failed to create third source: %v", err)
 	}
 
-	plans := planBackupSources([]string{first, second, third}, exeDir)
+	plans := resolveBackupSources([]string{first, second, third}, exeDir)
 	if len(plans) != 3 {
 		t.Fatalf("expected 3 plans, got %d", len(plans))
 	}
@@ -259,7 +259,7 @@ func TestPlanBackupSourcesEncodesSpecialCharactersUniquely(t *testing.T) {
 		t.Fatalf("failed to create fifth source: %v", err)
 	}
 
-	plans := planBackupSources([]string{first, second, third, fourth, fifth}, exeDir)
+	plans := resolveBackupSources([]string{first, second, third, fourth, fifth}, exeDir)
 	if len(plans) != 5 {
 		t.Fatalf("expected 5 plans, got %d", len(plans))
 	}

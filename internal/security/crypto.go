@@ -52,8 +52,6 @@ const (
 	// formatVersion is incremented on any breaking change to the header or chunk layout.
 	// Readers that encounter a different version emit a clear version-mismatch error.
 	formatVersion = byte(2)
-	// magic is the full 8-byte header marker: prefix + version + reserved byte.
-	magic = magicPrefix + "\x02\x00"
 	// saltLen is the byte length of the Argon2id salt.
 	saltLen = 32
 	// keyLen is the AES-256 key length in bytes.
@@ -83,8 +81,14 @@ var DefaultArgon2Params = Argon2Params{
 	Threads:  4,
 }
 
+// magic is the full 8-byte header marker: prefix + version + reserved byte.
+// Derived from magicPrefix + formatVersion so that bumping formatVersion
+// automatically updates the on-disk marker without a manual string edit.
+var magic = magicPrefix + string([]byte{formatVersion, 0x00})
+
 // ErrWrongPassword is returned when decryption authentication fails.
-var ErrWrongPassword = errors.New("Wrong password or corrupted file.")
+// No trailing period — callers append ". Remedy: …" themselves.
+var ErrWrongPassword = errors.New("Wrong password or corrupted file")
 
 // deriveKey derives a 256-bit AES key from the password and salt using Argon2id.
 func deriveKey(password, salt []byte, params Argon2Params) []byte {

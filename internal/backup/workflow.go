@@ -29,7 +29,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer lock.Release()
 
-	sources := planBackupSources(cfg.SourceFolders, exeDir)
+	sources := resolveBackupSources(cfg.SourceFolders, exeDir)
 
 	// Determine backup run identifiers.
 	id, err := util.NewBackupID()
@@ -106,7 +106,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	if cfg.UseYubiKey() {
 		// Verify ykman is installed and a device is physically connected.
 		if err := security.CheckYubiKeyConnected(); err != nil {
-			return fmt.Errorf("YubiKey is required but no YubiKey was detected. Remedy: Connect the YubiKey and retry.")
+			return security.ErrYubiKeyRequired
 		}
 		fmt.Println("YubiKey connected. Please touch the YubiKey button.")
 		var err error
@@ -219,20 +219,12 @@ func backupFolder(
 	pr, pw := io.Pipe()
 	counters := &backupCounters{}
 
-	progressDone := make(chan struct{})
-	progressStopped := make(chan struct{})
-	go func() {
-		if cfg.IODiagnostics {
-			operation.LogProgressUntilDone(log, folderName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls, progressDone)
-		} else {
-			<-progressDone
-		}
-		close(progressStopped)
-	}()
-	defer func() {
-		close(progressDone)
-		<-progressStopped
-	}()
+	var progressLog *util.Logger
+	if cfg.IODiagnostics {
+		progressLog = log
+	}
+	stopProgress := operation.StartProgressTracking(progressLog, folderName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls)
+	defer stopProgress()
 
 	tarErrCh := startTarProducer(log, srcDir, targetDir, pw)
 	encErr := runEncryptStage(log, bw, pr, password, params, counters)

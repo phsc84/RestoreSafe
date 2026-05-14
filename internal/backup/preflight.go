@@ -11,7 +11,7 @@ import (
 func printBackupPreflightWithYubiKeyCheck(
 	cfg *util.Config,
 	targetDir string,
-	sources []backupSourcePlan,
+	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
 ) {
@@ -91,15 +91,15 @@ func printBackupPreflightWithYubiKeyCheck(
 	}
 }
 
-func validateSourceFolders(sources []backupSourcePlan) error {
+func validateSourceFolders(sources []backupSource) error {
 	return operation.ValidatePreflightItems(
 		sources,
-		func(src backupSourcePlan) bool { return src.Err != nil },
+		func(src backupSource) bool { return src.Err != nil },
 		"Backup preflight failed: %d source folder(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
 	)
 }
 
-func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) error {
+func validateTargetSpaceForBackup(targetDir string, sources []backupSource) error {
 	estimatedBytes, _ := estimateSelectedSourceBytes(sources)
 	if estimatedBytes <= 0 {
 		return nil
@@ -120,7 +120,7 @@ func validateTargetSpaceForBackup(targetDir string, sources []backupSourcePlan) 
 	)
 }
 
-func validateStagingSpaceForBackup(stagingPlan operation.LocalStagingPlan, sources []backupSourcePlan) error {
+func validateStagingSpaceForBackup(stagingPlan operation.LocalStagingPlan, sources []backupSource) error {
 	if !stagingPlan.Enabled {
 		return nil
 	}
@@ -143,7 +143,7 @@ func validateStagingSpaceForBackup(stagingPlan operation.LocalStagingPlan, sourc
 	)
 }
 
-func runnableSourceCount(sources []backupSourcePlan) int {
+func runnableSourceCount(sources []backupSource) int {
 	count := 0
 	for _, source := range sources {
 		if source.Err != nil || source.Skip {
@@ -154,7 +154,7 @@ func runnableSourceCount(sources []backupSourcePlan) int {
 	return count
 }
 
-func estimateSelectedSourceBytes(sources []backupSourcePlan) (int64, []string) {
+func estimateSelectedSourceBytes(sources []backupSource) (int64, []string) {
 	var total int64
 	warnings := make([]string, 0)
 

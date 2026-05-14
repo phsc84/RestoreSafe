@@ -83,6 +83,12 @@ func (e BackupEntry) String() string {
 	return fmt.Sprintf("%s_%s_%s", e.FolderName, e.Date, string(e.ID))
 }
 
+// RunKey returns a unique key for the backup run (date + ID).
+// Used for deduplication and map lookups across catalog, retention, and health checks.
+func (e BackupEntry) RunKey() string {
+	return e.Date + "|" + string(e.ID)
+}
+
 // partFilePattern matches:  [name]_{YYYY-MM-DD}_{ID}-{seq}.enc
 // Named capture groups:
 //

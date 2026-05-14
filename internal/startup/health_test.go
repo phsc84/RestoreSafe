@@ -42,8 +42,8 @@ func TestRunKey(t *testing.T) {
 	t.Parallel()
 
 	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	if got := runKey(entry); got != "2026-03-14|ABC123" {
-		t.Fatalf("unexpected runKey: %q", got)
+	if got := entry.RunKey(); got != "2026-03-14|ABC123" {
+		t.Fatalf("unexpected RunKey: %q", got)
 	}
 }
 

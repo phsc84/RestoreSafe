@@ -13,7 +13,7 @@ import (
 
 var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
-func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupSourcePlan, log *util.Logger) error {
+func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupSource, log *util.Logger) error {
 	if retentionKeep <= 0 {
 		log.Info("Retention cleanup disabled (retention_keep=%d)", retentionKeep)
 		return nil
@@ -137,7 +137,7 @@ func deleteOrphanLogFiles(targetDir string) (int, error) {
 
 	activeRuns := make(map[string]bool)
 	for _, entry := range index {
-		activeRuns[entry.Date+"|"+string(entry.ID)] = true
+		activeRuns[entry.RunKey()] = true
 	}
 
 	des, err := os.ReadDir(targetDir)

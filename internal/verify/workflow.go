@@ -155,7 +155,6 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	)
 }
 
-
 func verifySelectedEntries(selected []util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
 	for _, entry := range selected {
 		if err := verifyEntry(entry, targetDir, password, log); err != nil {

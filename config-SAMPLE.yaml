@@ -31,6 +31,55 @@ io_diagnostics: false
 # 1 = Password only (default)
 # 2 = Password AND YubiKey HMAC-SHA1 (2FA; ykman.exe must be available)
 # 3 = YubiKey only, no password (ykman.exe must be available)
-#     In mode 3, physical possession of the YubiKey is the sole authentication
+#     Physical possession of the YubiKey is the sole authentication
 #     factor. No password is prompted during backup or restore.
 authentication_mode: 1
+
+# Argon2id key-derivation parameters.
+#
+# RestoreSafe uses Argon2id (RFC 9106) to derive the AES-256 encryption key from
+# your password. Argon2id is memory-hard, which makes GPU/ASIC-based brute-force
+# attacks orders of magnitude more expensive than classic password hashing (bcrypt,
+# PBKDF2, etc.).
+#
+# These three parameters control how much work is done each time the key is derived
+# (once per backup run, once per restore). Higher values slow down legitimate use
+# slightly, but make brute-force attacks proportionally harder — the cost grows for
+# an attacker exactly as it grows for you.
+#
+# The values in effect at encryption time are stored in every backup file, so
+# restore always uses the original parameters automatically. Changing these settings
+# only affects new backups, not existing ones.
+#
+# Parameters and their effect:
+#
+#   argon2.time       — Number of passes (iterations) over the memory block.
+#                       Each extra pass doubles the CPU time for key derivation.
+#                       Default: 3  |  Minimum: 2
+#                       Increasing to 4–8 raises security at moderate CPU cost.
+#
+#   argon2.memory_mb  — Working memory allocated per key derivation, in megabytes.
+#                       This is the primary defence against GPU/ASIC attacks; a GPU
+#                       cannot parallelise many attempts when each requires this much
+#                       RAM. Doubling memory doubles RAM usage for the single derive
+#                       call and roughly doubles attacker cost per guess.
+#                       Default: 512 MB  |  Minimum: 64 MB
+#                       Values of 1024–4096 MB are appropriate for high-security use.
+#                       Do not set this higher than your available free RAM.
+#
+#   argon2.threads    — Degree of parallelism (CPU threads used per key derivation).
+#                       Should match the number of physical cores available to the
+#                       process. Does not change total work — it only controls how
+#                       that work is spread across cores. An attacker with a machine
+#                       that has fewer cores than this value gains no benefit from
+#                       the extra threads setting.
+#                       Default: 4  |  Minimum: 1
+#                       Set to the number of CPU cores on your backup machine.
+#
+# Defaults follow the OWASP password hashing recommendations (64 MB / 3 / 4) and
+# provide strong protection for typical hardware. Values below the stated minimums
+# are rejected at startup to enforce a baseline security level.
+argon2:
+  time: 3
+  memory_mb: 512
+  threads: 4

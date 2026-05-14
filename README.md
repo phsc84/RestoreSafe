@@ -29,7 +29,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 - Streaming pipeline: no intermediate temp files, low CPU/RAM footprint
 
 ### Usability
-- Portable, standalone `.exe` — no runtime dependencies
+- Portable, standalone `.exe` - no runtime dependencies
 - Interactive menu; custom config path via `-config` flag
 - Per-run log files; configurable log level
 - Backup split size configurable; supports multiple source folders with automatic alias disambiguation
@@ -162,12 +162,9 @@ C:\Root~A\Documents → [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
 
 ## YubiKey setup
 
-1. Obtain `ykman.exe` — choose one option:
-   - **Recommended (no install needed):** Download the standalone `ykman.exe` from the [RestoreSafe releases](https://github.com/phsc84/RestoreSafe/releases) page and place it in the same folder as `RestoreSafe.exe`. RestoreSafe detects it there automatically.
-   - **System-wide install:** Install [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/). RestoreSafe auto-detects `ykman` on PATH and in the default Windows install directory (`C:\Program Files\Yubico\YubiKey Manager\ykman.exe`).
+Compatibility note: RestoreSafe supports only YubiKey v5 hardware.
 
-   Compatibility note: RestoreSafe supports only YubiKey v5 hardware.
-2. Open the YubiKey Manager GUI > Applications > OTP > Configure slot 2 with HMAC-SHA1 challenge-response.
+1. Install [Yubico Authenticator](https://www.yubico.com/products/yubico-authenticator/) and open it.
+2. Go to **Slots**, select a slot (slot 2 recommended - slot 1 holds the factory Yubico OTP by default), and choose **Challenge-response**. Generate a random secret key, enable **Require touch**, and save.
 3. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
 4. Insert and touch the YubiKey when prompted during backup or restore.
-

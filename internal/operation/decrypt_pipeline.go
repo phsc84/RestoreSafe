@@ -30,16 +30,8 @@ func RunDecryptPipeline(
 	var inBytes atomic.Int64
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
-	progressDone := make(chan struct{})
-	progressStopped := make(chan struct{})
-	go func() {
-		LogProgressUntilDone(log, folderName, progressVerb, &inBytes, &outBytes, &outWriteCalls, progressDone)
-		close(progressStopped)
-	}()
-	defer func() {
-		close(progressDone)
-		<-progressStopped
-	}()
+	stopProgress := StartProgressTracking(log, folderName, progressVerb, &inBytes, &outBytes, &outWriteCalls)
+	defer stopProgress()
 
 	pr, pw := io.Pipe()
 	decErrCh := make(chan error, 1)

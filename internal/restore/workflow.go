@@ -422,8 +422,7 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 		return 0, err
 	}
 	if len(parts) == 0 {
-		errMsg := fmt.Sprintf("No part files found for %s", entry.String())
-		return 0, fmt.Errorf("%s. Remedy: Put all related .enc files into the same target_folder.", errMsg)
+		return 0, fmt.Errorf("No part files found for %s. Remedy: Put all related .enc files into the same target_folder.", entry.String())
 	}
 
 	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
@@ -431,8 +430,7 @@ func restoreEntry(entry util.BackupEntry, targetDir, destDir string, password []
 	// Verify target directory can be created before starting decryption.
 	outDir := filepath.Join(destDir, entry.FolderName)
 	if err := os.MkdirAll(outDir, 0o750); err != nil {
-		errMsg := fmt.Sprintf("Failed to create target directory: %v", err)
-		return 0, fmt.Errorf("%s. Remedy: Check write permissions and use a valid destination path.", errMsg)
+		return 0, fmt.Errorf("Failed to create target directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
 	}
 
 	log.Info("Extracting to: %s", outDir)

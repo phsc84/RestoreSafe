@@ -37,8 +37,8 @@ func (a AuthMode) Label() string {
 //   - MemoryMB: working memory in megabytes (more = harder for GPUs, more RAM used).
 //   - Threads: parallel lanes (should match physical CPU cores; beyond that, no benefit).
 //
-// Documented minimums (enforced by validation): Time ≥ 1, MemoryMB ≥ 8, Threads ≥ 1.
-// OWASP recommended defaults: Time = 3, MemoryMB = 64, Threads = 4.
+// Documented minimums (enforced by validation): Time ≥ 2, MemoryMB ≥ 64, Threads ≥ 1.
+// Defaults: Time = 3, MemoryMB = 512, Threads = 4.
 type Argon2Config struct {
 	Time     int `yaml:"time"`
 	MemoryMB int `yaml:"memory_mb"`
@@ -107,7 +107,7 @@ func (c *Config) withDefaults() {
 		c.Argon2.Time = 3
 	}
 	if c.Argon2.MemoryMB == 0 {
-		c.Argon2.MemoryMB = 64
+		c.Argon2.MemoryMB = 512
 	}
 	if c.Argon2.Threads == 0 {
 		c.Argon2.Threads = 4
@@ -134,11 +134,11 @@ func (c *Config) validate() error {
 	default:
 		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
 	}
-	if c.Argon2.Time < 1 {
-		return fmt.Errorf("Invalid 'argon2.time': %d (minimum 1). Remedy: Set 'argon2.time' to 1 or higher; the recommended value is 3.", c.Argon2.Time)
+	if c.Argon2.Time < 2 {
+		return fmt.Errorf("Invalid 'argon2.time': %d (minimum 2). Remedy: Set 'argon2.time' to 2 or higher; the recommended value is 3.", c.Argon2.Time)
 	}
-	if c.Argon2.MemoryMB < 8 {
-		return fmt.Errorf("Invalid 'argon2.memory_mb': %d (minimum 8). Remedy: Set 'argon2.memory_mb' to 8 or higher; the recommended value is 64.", c.Argon2.MemoryMB)
+	if c.Argon2.MemoryMB < 64 {
+		return fmt.Errorf("Invalid 'argon2.memory_mb': %d (minimum 64). Remedy: Set 'argon2.memory_mb' to 64 or higher; the recommended value is 512.", c.Argon2.MemoryMB)
 	}
 	if c.Argon2.Threads < 1 {
 		return fmt.Errorf("Invalid 'argon2.threads': %d (minimum 1). Remedy: Set 'argon2.threads' to 1 or higher; the recommended value is 4.", c.Argon2.Threads)

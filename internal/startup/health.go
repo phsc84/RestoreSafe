@@ -22,21 +22,21 @@ const (
 )
 
 const (
-	healthScopeConfig           = "Config"
-	healthScopeSourceFolder     = "Source folder(s)"
-	healthScopeTargetFolder     = "Backup folder"
-	healthScopeTempDirectory    = "Temp directory"
-	healthScopeLocalStagingNote = "\x00local-staging-note"
-	healthScopeYubiKey          = "YubiKey"
-	healthScopeBackupInventory  = "Backup inventory"
-	healthScopeBackupSet        = "Backup set"
-	healthScopeChallengeFile    = "Challenge file"
+	healthScopeConfig          = "Config"
+	healthScopeSourceFolder    = "Source folder(s)"
+	healthScopeTargetFolder    = "Backup folder"
+	healthScopeTempDirectory   = "Temp directory"
+	healthScopeYubiKey         = "YubiKey"
+	healthScopeBackupInventory = "Backup inventory"
+	healthScopeBackupSet       = "Backup set"
+	healthScopeChallengeFile   = "Challenge file"
 )
 
 type healthItem struct {
 	Severity healthSeverity
 	Scope    string
 	Detail   string
+	isNote   bool // printed as plain unindented text; skipped in OK/WARN/ERROR counts
 }
 
 // RunStartupHealthCheck performs a non-interactive diagnostic pass when the
@@ -92,9 +92,8 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
-			Severity: healthInfo,
-			Scope:    healthScopeLocalStagingNote,
-			Detail:   fmt.Sprintf("Local staging enabled, because source and target folders share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
+			isNote: true,
+			Detail: fmt.Sprintf("Local staging enabled, because source and target folders share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
 		})
 		items = append(items, checkTempDirHealth()...)
 	}
@@ -297,11 +296,11 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 		hasChallenge := challengeFiles[challengeBase]
 		entryHasChallenge[entryLabel] = hasChallenge
 		expectedChallengeFiles[challengeBase] = true
-		runHasChallenge[runKey(entry)] = runHasChallenge[runKey(entry)] || hasChallenge
+		runHasChallenge[entry.RunKey()] = runHasChallenge[entry.RunKey()] || hasChallenge
 	}
 
 	for _, entry := range sorted {
-		if runHasChallenge[runKey(entry)] && !entryHasChallenge[entry.String()] {
+		if runHasChallenge[entry.RunKey()] && !entryHasChallenge[entry.String()] {
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
@@ -360,10 +359,6 @@ func orphanChallengeFiles(actual, expected map[string]bool) []string {
 	return orphans
 }
 
-func runKey(entry util.BackupEntry) string {
-	return entry.Date + "|" + string(entry.ID)
-}
-
 func printStartupHealthCheck(items []healthItem) {
 	fmt.Println("----------------------")
 	fmt.Println("Startup health check")
@@ -374,6 +369,9 @@ func printStartupHealthCheck(items []healthItem) {
 	errorCount := 0
 
 	for _, item := range items {
+		if item.isNote {
+			continue // notes are informational only; don't count toward summary
+		}
 		switch item.Severity {
 		case healthOK:
 			okCount++
@@ -384,12 +382,18 @@ func printStartupHealthCheck(items []healthItem) {
 		}
 	}
 
+	// Separate items: regular (printed in grouped-scope table), notes (plain
+	// unindented text shown after the table), temp-dir (scoped, shown after notes).
 	regularItems := make([]healthItem, 0)
-	deferredItems := make([]healthItem, 0)
+	noteItems := make([]healthItem, 0)
+	tempDirItems := make([]healthItem, 0)
 	for _, item := range items {
-		if item.Scope == healthScopeLocalStagingNote || item.Scope == healthScopeTempDirectory {
-			deferredItems = append(deferredItems, item)
-		} else {
+		switch {
+		case item.isNote:
+			noteItems = append(noteItems, item)
+		case item.Scope == healthScopeTempDirectory:
+			tempDirItems = append(tempDirItems, item)
+		default:
 			regularItems = append(regularItems, item)
 		}
 	}
@@ -415,29 +419,18 @@ func printStartupHealthCheck(items []healthItem) {
 		}
 	}
 
-	if len(deferredItems) > 0 {
+	if len(noteItems) > 0 || len(tempDirItems) > 0 {
 		fmt.Println()
-		deferredScopes := make([]string, 0)
-		deferredByScope := make(map[string][]healthItem)
-		for _, item := range deferredItems {
-			if _, exists := deferredByScope[item.Scope]; !exists {
-				deferredScopes = append(deferredScopes, item.Scope)
-			}
-			deferredByScope[item.Scope] = append(deferredByScope[item.Scope], item)
+		for _, item := range noteItems {
+			fmt.Println(item.Detail)
 		}
-		for _, scope := range deferredScopes {
-			if scope == healthScopeLocalStagingNote {
-				for _, item := range deferredByScope[scope] {
-					fmt.Println(item.Detail)
-				}
-			} else {
-				fmt.Printf("%s:\n", scope)
-				for _, item := range deferredByScope[scope] {
-					if item.Severity == healthInfo {
-						fmt.Printf("  %s\n", item.Detail)
-					} else {
-						fmt.Printf("  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
-					}
+		if len(tempDirItems) > 0 {
+			fmt.Printf("%s:\n", healthScopeTempDirectory)
+			for _, item := range tempDirItems {
+				if item.Severity == healthInfo {
+					fmt.Printf("  %s\n", item.Detail)
+				} else {
+					fmt.Printf("  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
 				}
 			}
 		}

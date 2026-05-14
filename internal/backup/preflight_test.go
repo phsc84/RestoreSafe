@@ -12,7 +12,7 @@ import (
 )
 
 func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
-	plans := []backupSourcePlan{
+	plans := []backupSource{
 		{Resolved: "A"},
 		{Resolved: "B", Skip: true},
 		{Resolved: "C", Err: errors.New("inaccessible")},
@@ -26,7 +26,7 @@ func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 }
 
 func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
-	err := validateSourceFolders([]backupSourcePlan{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
+	err := validateSourceFolders([]backupSource{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
 	if err == nil {
 		t.Fatal("expected preflight validation error, got nil")
 	}
@@ -54,7 +54,7 @@ func TestEstimateSelectedSourceBytes(t *testing.T) {
 		t.Fatalf("failed to write source B file: %v", err)
 	}
 
-	sources := []backupSourcePlan{
+	sources := []backupSource{
 		{Resolved: srcA},
 		{Resolved: srcB, Skip: true},
 		{Resolved: filepath.Join(root, "missing"), Err: os.ErrNotExist},
@@ -76,7 +76,7 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 		t.Fatalf("failed to write file path: %v", err)
 	}
 
-	total, warnings := estimateSelectedSourceBytes([]backupSourcePlan{{Resolved: filePath}})
+	total, warnings := estimateSelectedSourceBytes([]backupSource{{Resolved: filePath}})
 	if total != 0 {
 		t.Fatalf("expected total 0 bytes when estimation fails, got %d", total)
 	}
@@ -97,7 +97,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -113,7 +113,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
 	targetDir := `\\server\share\target`
-	sources := []backupSourcePlan{{Resolved: `\\server\share\source`}}
+	sources := []backupSource{{Resolved: `\\server\share\source`}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -138,7 +138,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: util.AuthModePasswordYubiKey, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -174,7 +174,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: util.AuthModePasswordYubiKey, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -214,7 +214,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -249,7 +249,7 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	output := testutil.CaptureStdout(t, func() {
@@ -274,7 +274,7 @@ func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
 	}
 
 	missingTarget := filepath.Join(root, "missing-target")
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 
 	if err := validateTargetSpaceForBackup(missingTarget, sources); err != nil {
 		t.Fatalf("expected no error when free space cannot be determined, got: %v", err)
@@ -284,7 +284,7 @@ func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
 func TestValidateStagingSpaceSkipsWhenStagingDisabled(t *testing.T) {
 	t.Parallel()
 
-	sources := []backupSourcePlan{{Resolved: "C:/some/source"}}
+	sources := []backupSource{{Resolved: "C:/some/source"}}
 	plan := operation.LocalStagingPlan{Enabled: false}
 
 	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
@@ -315,7 +315,7 @@ func TestValidateStagingSpaceReturnsErrorWhenTempSpaceInsufficient(t *testing.T)
 		t.Skip("staging dir has sufficient free space; cannot test insufficient-space path")
 	}
 
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingDir}
 
 	if err := validateStagingSpaceForBackup(plan, sources); err == nil {
@@ -341,7 +341,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	}
 
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSourcePlan{{Resolved: sourceDir}}
+	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	output := testutil.CaptureStdout(t, func() {

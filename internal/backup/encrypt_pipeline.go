@@ -97,6 +97,8 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), folderName)
 }
 
+type stagedFile struct{ name, src, dst string }
+
 // copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.
 // folderOrder specifies the folder names in processing order; if nil, folders are sorted alphabetically.
 // folderSourcePaths maps folder name to original source path for display in log output.
@@ -105,10 +107,8 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
 	}
-
-	type fileInfo struct{ name, src, dst string }
-	filesByFolder := make(map[string][]fileInfo)
-	var challengeFiles []fileInfo
+	filesByFolder := make(map[string][]stagedFile)
+	var challengeFiles []stagedFile
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -121,10 +121,10 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 		case ".enc":
 			if backupEntry, _, ok := util.ParsePartFileName(name); ok {
 				fn := backupEntry.FolderName
-				filesByFolder[fn] = append(filesByFolder[fn], fileInfo{name, srcPath, dstPath})
+				filesByFolder[fn] = append(filesByFolder[fn], stagedFile{name, srcPath, dstPath})
 			}
 		case ".challenge":
-			challengeFiles = append(challengeFiles, fileInfo{name, srcPath, dstPath})
+			challengeFiles = append(challengeFiles, stagedFile{name, srcPath, dstPath})
 		}
 	}
 
@@ -150,33 +150,8 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 			log.Info("Copying backup files of source folder: %s", filepath.ToSlash(srcPath))
 		}
 
-		var inBytes, outBytes, outWriteCalls atomic.Int64
-		progressDone := make(chan struct{})
-		progressStopped := make(chan struct{})
-		go func() {
-			operation.LogProgressUntilDone(log, folderName, "copied", &inBytes, &outBytes, &outWriteCalls, progressDone)
-			close(progressStopped)
-		}()
-
-		var copyErr error
-		for _, f := range files {
-			if log != nil {
-				log.Info("  Copy: %s", f.name)
-			}
-			if err := copyFileWithCounters(f.src, f.dst, &inBytes, &outBytes, &outWriteCalls); err != nil {
-				copyErr = err
-				break
-			}
-		}
-		close(progressDone)
-		<-progressStopped
-
-		if copyErr != nil {
-			return copyErr
-		}
-
-		if log != nil {
-			log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), folderName)
+		if err := copyFolderFiles(log, folderName, files); err != nil {
+			return err
 		}
 	}
 
@@ -189,6 +164,28 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 		}
 	}
 
+	return nil
+}
+
+// copyFolderFiles copies a single folder's staged part files to the target,
+// logging progress with a deferred stop so the goroutine is always cleaned up.
+func copyFolderFiles(log *util.Logger, folderName string, files []stagedFile) error {
+	var inBytes, outBytes, outWriteCalls atomic.Int64
+	stopProgress := operation.StartProgressTracking(log, folderName, "copied", &inBytes, &outBytes, &outWriteCalls)
+	defer stopProgress()
+
+	for _, f := range files {
+		if log != nil {
+			log.Info("  Copy: %s", f.name)
+		}
+		if err := copyFileWithCounters(f.src, f.dst, &inBytes, &outBytes, &outWriteCalls); err != nil {
+			return err
+		}
+	}
+
+	if log != nil {
+		log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), folderName)
+	}
 	return nil
 }
 

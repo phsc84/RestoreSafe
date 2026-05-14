@@ -192,8 +192,8 @@ target_folder: "C:/Backup"
 	if cfg.Argon2.Time != 3 {
 		t.Errorf("expected default argon2.time 3, got %d", cfg.Argon2.Time)
 	}
-	if cfg.Argon2.MemoryMB != 64 {
-		t.Errorf("expected default argon2.memory_mb 64, got %d", cfg.Argon2.MemoryMB)
+	if cfg.Argon2.MemoryMB != 512 {
+		t.Errorf("expected default argon2.memory_mb 512, got %d", cfg.Argon2.MemoryMB)
 	}
 	if cfg.Argon2.Threads != 4 {
 		t.Errorf("expected default argon2.threads 4, got %d", cfg.Argon2.Threads)
@@ -214,8 +214,18 @@ func TestLoadRejectsInvalidArgon2Params(t *testing.T) {
 			wantKey: "argon2.time",
 		},
 		{
+			name:    "time_below_minimum",
+			yaml:    "argon2:\n  time: 1\n  memory_mb: 64\n  threads: 4\n",
+			wantKey: "argon2.time",
+		},
+		{
 			name:    "memory_too_low",
 			yaml:    "argon2:\n  time: 3\n  memory_mb: 4\n  threads: 4\n",
+			wantKey: "argon2.memory_mb",
+		},
+		{
+			name:    "memory_below_minimum",
+			yaml:    "argon2:\n  time: 3\n  memory_mb: 32\n  threads: 4\n",
 			wantKey: "argon2.memory_mb",
 		},
 		{

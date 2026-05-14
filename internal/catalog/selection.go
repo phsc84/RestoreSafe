@@ -23,7 +23,7 @@ func BackupRunSummaries(targetDir string, index []util.BackupEntry) ([]BackupRun
 			return nil, fmt.Errorf("Failed to inspect backup sets: %w. Remedy: Check whether all part files are readable.", err)
 		}
 
-		key := entry.Date + "|" + string(entry.ID)
+		key := entry.RunKey()
 		run := runsByKey[key]
 		run.Date = entry.Date
 		run.ID = entry.ID

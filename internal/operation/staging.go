@@ -104,4 +104,3 @@ func (s *StagingScope) Cleanup() {
 	}
 	CleanupStagingDir(s.Dir, s.log)
 }
-
