@@ -60,7 +60,7 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 	}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }, "")
 	})
 
 	if strings.Contains(output, "Restore target :") {
@@ -89,7 +89,7 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil }, "")
 	})
 
 	authLine := "Authentication: password + YubiKey"
@@ -115,7 +115,7 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") }, "")
 	})
 
 	authLine := "Authentication: password + YubiKey"
@@ -174,7 +174,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }, "")
 	})
 
 	if !strings.Contains(output, "[ERROR] Insufficient free space for restore:") {

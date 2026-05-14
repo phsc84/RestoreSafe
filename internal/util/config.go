@@ -14,8 +14,9 @@ type AuthMode int
 // AuthMode values.
 const (
 	AuthModePassword        AuthMode = 1 // password only
-	AuthModePasswordYubiKey AuthMode = 2 // password + YubiKey HMAC-SHA1
-	AuthModeYubiKey         AuthMode = 3 // YubiKey only, no password
+	AuthModePasswordKeyfile AuthMode = 2 // password + keyfile
+	AuthModePasswordYubiKey AuthMode = 3 // password + YubiKey HMAC-SHA1
+	AuthModeYubiKey         AuthMode = 4 // YubiKey only, no password
 )
 
 // Label returns a human-readable description of the authentication mode.
@@ -25,6 +26,8 @@ func (a AuthMode) Label() string {
 		return "YubiKey only (no password)"
 	case AuthModePasswordYubiKey:
 		return "password + YubiKey"
+	case AuthModePasswordKeyfile:
+		return "password + keyfile"
 	default:
 		return "password only"
 	}
@@ -54,6 +57,7 @@ type Config struct {
 	LogLevel           string       `yaml:"log_level"`
 	IODiagnostics      bool         `yaml:"io_diagnostics"`
 	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
+	KeyfilePath        string       `yaml:"keyfile_path"`
 	Argon2             Argon2Config `yaml:"argon2"`
 }
 
@@ -65,6 +69,11 @@ func (c *Config) UseYubiKey() bool {
 // IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).
 func (c *Config) IsYubiKeyOnly() bool {
 	return c.AuthenticationMode == AuthModeYubiKey
+}
+
+// UseKeyfile reports whether the configured authentication mode requires a keyfile.
+func (c *Config) UseKeyfile() bool {
+	return c.AuthenticationMode == AuthModePasswordKeyfile
 }
 
 // DefaultSplitSizeMB is 4 GB expressed in megabytes.
@@ -130,9 +139,12 @@ func (c *Config) validate() error {
 		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0). Remedy: Use 0 (disabled) or a positive number, e.g. 7.", c.RetentionKeep)
 	}
 	switch c.AuthenticationMode {
-	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
+	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey, AuthModePasswordKeyfile:
 	default:
-		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
+		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + keyfile, 3 = password + YubiKey, 4 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, 3, or 4.", c.AuthenticationMode)
+	}
+	if c.AuthenticationMode == AuthModePasswordKeyfile && strings.TrimSpace(c.KeyfilePath) == "" {
+		return fmt.Errorf("'keyfile_path' is required when 'authentication_mode' is 2 (password + keyfile). Remedy: Set 'keyfile_path' to the path of your keyfile, e.g. 'D:/Keys/backup.key'.")
 	}
 	if c.Argon2.Time < 1 {
 		return fmt.Errorf("Invalid 'argon2.time': %d (minimum 1). Remedy: Set 'argon2.time' to 1 or higher; the recommended value is 3.", c.Argon2.Time)

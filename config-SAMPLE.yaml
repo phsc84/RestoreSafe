@@ -29,9 +29,17 @@ io_diagnostics: false
 
 # Authentication mode.
 # 1 = Password only (default)
-# 2 = Password AND YubiKey HMAC-SHA1 (2FA, ykchalresp must be installed)
-# 3 = YubiKey only, no password (ykchalresp must be installed)
-#
-# In mode 3, physical possession of the YubiKey is the sole authentication
-# factor. No password is prompted during backup or restore.
+# 2 = Password AND keyfile (keyfile_path must be set)
+#     In mode 2, the keyfile's contents are combined with the password during key
+#     derivation. Physical possession of the keyfile is required for restore.
+#     Store the keyfile on a USB drive and only connect it during backup/restore.
+# 3 = Password AND YubiKey HMAC-SHA1 (2FA; ykman.exe must be available)
+# 4 = YubiKey only, no password (ykman.exe must be available)
+#     In mode 4, physical possession of the YubiKey is the sole authentication
+#     factor. No password is prompted during backup or restore.
 authentication_mode: 1
+
+# Path to the keyfile used in authentication_mode 2 (password + keyfile).
+# May be absolute or relative to RestoreSafe.exe.
+# Required when authentication_mode is 2; ignored otherwise.
+keyfile_path: "D:/Keys/backup.key"

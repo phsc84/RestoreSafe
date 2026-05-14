@@ -101,7 +101,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	warnLinePrefix := "→ Source and target folders are on the same drive/share"
@@ -117,7 +117,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	warnLinePrefix := "→ Source and target folders are on the same drive/share"
@@ -142,7 +142,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	authLine := "Authentication: password + YubiKey"
@@ -178,7 +178,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") }, "")
 	})
 
 	authLine := "Authentication: password + YubiKey"
@@ -218,7 +218,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	localStagingLine := "Local staging enabled, because source and target folders share the same drive/share"
@@ -253,7 +253,7 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	if strings.Contains(output, "Temp directory:") {
@@ -345,7 +345,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil }, "")
 	})
 
 	sourceIdx := strings.Index(output, "Source folder(s):")

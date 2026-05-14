@@ -19,7 +19,7 @@ func TestResolveYkmanExecutableWithPrefersLookPath(t *testing.T) {
 	}
 	getenv := func(_ string) string { return "" }
 
-	resolved, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows")
+	resolved, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows", "")
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestResolveYkmanExecutableWithFallsBackToWindowsInstallDir(t *testing.T) {
 		}
 	}
 
-	resolved, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows")
+	resolved, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows", "")
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
@@ -72,9 +72,33 @@ func TestResolveYkmanExecutableWithReturnsNotFound(t *testing.T) {
 	}
 	getenv := func(_ string) string { return "" }
 
-	_, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows")
+	_, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows", "")
 	if !errors.Is(err, ErrYubikeyNotFound) {
 		t.Fatalf("expected ErrYubikeyNotFound, got: %v", err)
+	}
+}
+
+func TestResolveYkmanExecutableWithFindsInExeDir(t *testing.T) {
+	exeDir := `C:\RestoreSafe`
+	expected := filepath.Join(exeDir, "ykman.exe")
+
+	lookPath := func(_ string) (string, error) {
+		return "", errors.New("not on PATH")
+	}
+	stat := func(path string) (os.FileInfo, error) {
+		if path == expected {
+			return nil, nil
+		}
+		return nil, os.ErrNotExist
+	}
+	getenv := func(_ string) string { return "" }
+
+	resolved, err := resolveYkmanExecutableWith(lookPath, stat, getenv, "windows", exeDir)
+	if err != nil {
+		t.Fatalf("expected nil error, got: %v", err)
+	}
+	if resolved != expected {
+		t.Fatalf("expected exeDir path %q, got: %q", expected, resolved)
 	}
 }
 

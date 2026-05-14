@@ -32,6 +32,17 @@ var ErrYubikeyNotFound = errors.New(
 
 var resolveYkmanExecutableFn = resolveYkmanExecutable
 
+// ykmanExeDir is set at startup to the directory containing RestoreSafe.exe,
+// allowing ykman.exe to be shipped alongside the application without requiring
+// a system-wide YubiKey Manager installation.
+var ykmanExeDir string
+
+// SetYkmanExeDir registers the application's own directory so that ykman.exe
+// placed next to RestoreSafe.exe is found automatically.
+func SetYkmanExeDir(dir string) {
+	ykmanExeDir = dir
+}
+
 var ykmanListOutput = func(ykmanPath string) ([]byte, error) {
 	var stderr bytes.Buffer
 	cmd := exec.Command(ykmanPath, "list")
@@ -74,7 +85,7 @@ func ykmanAnnotateError(err error, stderr string) error {
 }
 
 func resolveYkmanExecutable() (string, error) {
-	return resolveYkmanExecutableWith(exec.LookPath, os.Stat, os.Getenv, runtime.GOOS)
+	return resolveYkmanExecutableWith(exec.LookPath, os.Stat, os.Getenv, runtime.GOOS, ykmanExeDir)
 }
 
 func resolveYkmanExecutableWith(
@@ -82,9 +93,18 @@ func resolveYkmanExecutableWith(
 	stat func(string) (os.FileInfo, error),
 	getenv func(string) string,
 	goos string,
+	exeDir string,
 ) (string, error) {
 	if path, err := lookPath("ykman"); err == nil {
 		return path, nil
+	}
+
+	// Check alongside the RestoreSafe.exe (ship-alongside distribution).
+	if exeDir != "" {
+		candidate := filepath.Join(exeDir, "ykman.exe")
+		if _, err := stat(candidate); err == nil {
+			return candidate, nil
+		}
 	}
 
 	if goos == "windows" {

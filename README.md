@@ -60,15 +60,18 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 
    Authentication mode comparison
 
-   | Setting | Password prompt | YubiKey required | Description |
+   | Setting | Password prompt | Second factor | Description |
    |---|---|---|---|
-   | `authentication_mode: 1` | Yes | No | Standard password-only backup |
-   | `authentication_mode: 2` | Yes | Yes | Password + YubiKey two-factor |
-   | `authentication_mode: 3` | No | Yes | Password-less, key-in-hand authentication |
+   | `authentication_mode: 1` | Yes | None | Standard password-only backup |
+   | `authentication_mode: 2` | Yes | Keyfile | Password + keyfile two-factor |
+   | `authentication_mode: 3` | Yes | YubiKey | Password + YubiKey two-factor |
+   | `authentication_mode: 4` | No | YubiKey | Password-less, key-in-hand authentication |
 
-   The automatically generated `.challenge` file(s) in `authentication_mode: 2` and `authentication_mode: 3` must be stored together with the corresponding `.enc` file(s). The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
+   The automatically generated `.challenge` file(s) in `authentication_mode: 3` and `authentication_mode: 4` must be stored together with the corresponding `.enc` file(s). The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
    
-   In `authentication_mode: 3` physical possession of the YubiKey is the sole authentication factor. Keep your YubiKey safe - anyone with the YubiKey and the `.challenge` file can restore the backup. 
+   In `authentication_mode: 4` physical possession of the YubiKey is the sole authentication factor. Keep your YubiKey safe - anyone with the YubiKey and the `.challenge` file can restore the backup.
+
+   In `authentication_mode: 2` a keyfile is combined with the password during key derivation. Set `keyfile_path` in `config.yaml` to the keyfile location. Store the keyfile on a USB drive and only connect it during backup and restore operations. 
 
 ### Updating
 
@@ -115,7 +118,7 @@ Samples:
 
 ### `.challenge` files
 
-only created if YubiKey is enabled → `authentication_mode: 2` and `authentication_mode: 3`
+only created if YubiKey is enabled → `authentication_mode: 3` and `authentication_mode: 4`
 
 `[FolderName]_YYYY-MM-DD_ID.challenge`
 
@@ -162,19 +165,22 @@ C:\Root~A\Documents → [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
 
 ## YubiKey setup
 
-### Installation & configuration
-
-1. Install YubiKey Manager: [YubiKey Manager Downloads](https://www.yubico.com/support/download/yubikey-manager/) (includes the `ykman` CLI tool)
+1. Obtain `ykman.exe` — choose one option:
+   - **Recommended (no install needed):** Download the standalone `ykman.exe` from the [RestoreSafe releases](https://github.com/phsc84/RestoreSafe/releases) page and place it in the same folder as `RestoreSafe.exe`. RestoreSafe detects it there automatically.
+   - **System-wide install:** Install [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/). RestoreSafe auto-detects `ykman` on PATH and in the default Windows install directory (`C:\Program Files\Yubico\YubiKey Manager\ykman.exe`).
 
    Compatibility note: RestoreSafe supports only YubiKey v5 hardware.
 2. Open the YubiKey Manager GUI > Applications > OTP > Configure slot 2 with HMAC-SHA1 challenge-response.
-3. Verify the YubiKey Manager CLI tool (`ykman`) is available:
-   RestoreSafe auto-detects `ykman` on PATH and also in the default Windows install directory: `C:\Program Files\Yubico\YubiKey Manager\ykman.exe`.
+3. Set `authentication_mode` in `config.yaml`: `3` for password + YubiKey (2FA), or `4` for password-less YubiKey-only mode.
+4. Insert and touch the YubiKey when prompted during backup or restore.
 
-   Optional PATH check in **PowerShell**:
-   ```powershell
-   where.exe ykman
+## Keyfile setup
+
+1. Generate a random keyfile (any file with random content works; 32–256 bytes is sufficient). You can use any tool that produces random bytes, or run RestoreSafe once with mode 2 — it will report an error and show the expected path, then you can place the file there.
+2. Copy the keyfile to a USB drive and store it safely. Do not leave it permanently on the backup machine.
+3. Set `authentication_mode: 2` and `keyfile_path` in `config.yaml`:
+   ```yaml
+   authentication_mode: 2
+   keyfile_path: "D:/Keys/backup.key"
    ```
-   If `where.exe` shows no result, RestoreSafe can still work as long as `ykman.exe` exists in the default install directory above.
-4. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
-5. Insert and touch the YubiKey when prompted during backup or restore.
+4. Connect the USB drive and ensure the keyfile is accessible before starting a backup or restore.

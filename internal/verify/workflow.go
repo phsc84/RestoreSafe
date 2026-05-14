@@ -42,8 +42,9 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer log.Close()
 	log.Info("Verification started - Selection: %q", selection)
 
+	resolvedKeyfilePath := util.ResolveDir(cfg.KeyfilePath, exeDir)
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
+	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected, resolvedKeyfilePath)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -58,7 +59,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
+	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log, resolvedKeyfilePath)
 	if err != nil {
 		return err
 	}
@@ -104,6 +105,7 @@ func printVerifyPreflightWithYubiKeyCheck(
 	items []verifyPreflightItem,
 	requiresYubiKey, yubiKeyOnly bool,
 	checkYubiKeyConnected func() error,
+	resolvedKeyfilePath string,
 ) {
 	var issues []string
 
@@ -134,8 +136,9 @@ func printVerifyPreflightWithYubiKeyCheck(
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly, cfg.UseKeyfile()))
 	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "verification", checkYubiKeyConnected)
+	operation.PrintKeyfilePreflightStatus(cfg.UseKeyfile(), resolvedKeyfilePath)
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Print collected issues

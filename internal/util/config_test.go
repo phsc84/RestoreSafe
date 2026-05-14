@@ -109,7 +109,7 @@ target_folder: "C:/Backup"
 func TestLoadRejectsInvalidAuthenticationMode(t *testing.T) {
 	t.Parallel()
 
-	for _, bad := range []int{4, -1, 99} {
+	for _, bad := range []int{5, -1, 99} {
 		bad := bad
 		t.Run(fmt.Sprintf("mode_%d", bad), func(t *testing.T) {
 			t.Parallel()

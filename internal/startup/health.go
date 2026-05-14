@@ -28,6 +28,7 @@ const (
 	healthScopeTempDirectory    = "Temp directory"
 	healthScopeLocalStagingNote = "\x00local-staging-note"
 	healthScopeYubiKey          = "YubiKey"
+	healthScopeKeyfile          = "Keyfile"
 	healthScopeBackupInventory  = "Backup inventory"
 	healthScopeBackupSet        = "Backup set"
 	healthScopeChallengeFile    = "Challenge file"
@@ -80,6 +81,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 
 	items = append(items, checkTargetFolderHealth(targetDir)...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
+	items = append(items, checkKeyfileHealth(cfg, exeDir)...)
 	items = append(items, checkBackupInventoryHealth(targetDir)...)
 
 	firstValidSource := ""
@@ -215,14 +217,39 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeYubiKey,
-			Detail:   fmt.Sprintf("%v. Remedy: Install YubiKey Manager (v5), then restart RestoreSafe. If still failing, add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
+			Detail:   fmt.Sprintf("%v. Remedy: Place ykman.exe in the same folder as RestoreSafe.exe, install YubiKey Manager (v5), or add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
 		}}
 	}
 
 	return []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeYubiKey,
-		Detail:   "ykman found (PATH or standard install directory, YubiKey v5 supported)",
+		Detail:   "ykman found (application folder, PATH, or standard install directory; YubiKey v5 supported)",
+	}}
+}
+
+func checkKeyfileHealth(cfg *util.Config, exeDir string) []healthItem {
+	if !cfg.UseKeyfile() {
+		return []healthItem{{
+			Severity: healthOK,
+			Scope:    healthScopeKeyfile,
+			Detail:   "Disabled",
+		}}
+	}
+
+	resolvedPath := util.ResolveDir(cfg.KeyfilePath, exeDir)
+	if _, err := os.Stat(resolvedPath); err != nil {
+		return []healthItem{{
+			Severity: healthError,
+			Scope:    healthScopeKeyfile,
+			Detail:   fmt.Sprintf("%s not found. Remedy: Ensure the keyfile exists at the configured keyfile_path and is readable.", resolvedPath),
+		}}
+	}
+
+	return []healthItem{{
+		Severity: healthOK,
+		Scope:    healthScopeKeyfile,
+		Detail:   filepath.ToSlash(resolvedPath),
 	}}
 }
 

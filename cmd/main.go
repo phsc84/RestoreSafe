@@ -3,6 +3,7 @@ package main
 import (
 	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/restore"
+	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/startup"
 	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
@@ -28,6 +29,7 @@ func main() {
 	if err := os.Chdir(exeDir); err != nil {
 		exitWithError("Error setting working directory", err)
 	}
+	security.SetYkmanExeDir(exeDir)
 
 	// CLI flag for custom config path
 	configPath := filepath.Join(exeDir, "config.yaml")
