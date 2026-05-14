@@ -14,33 +14,27 @@ import (
 
 func TestBackupAuthenticationLabel(t *testing.T) {
 	t.Parallel()
-	if got := BackupAuthenticationLabel(true, false, false); got != "password + YubiKey" {
+	if got := BackupAuthenticationLabel(true, false); got != "password + YubiKey" {
 		t.Fatalf("unexpected label for YubiKey: %q", got)
 	}
-	if got := BackupAuthenticationLabel(false, false, false); got != "password only" {
+	if got := BackupAuthenticationLabel(false, false); got != "password only" {
 		t.Fatalf("unexpected label without YubiKey: %q", got)
 	}
-	if got := BackupAuthenticationLabel(true, true, false); got != "YubiKey only (no password)" {
+	if got := BackupAuthenticationLabel(true, true); got != "YubiKey only (no password)" {
 		t.Fatalf("unexpected label for YubiKey-only: %q", got)
-	}
-	if got := BackupAuthenticationLabel(false, false, true); got != "password + keyfile" {
-		t.Fatalf("unexpected label for keyfile: %q", got)
 	}
 }
 
 func TestPasswordFailurePrefix(t *testing.T) {
 	t.Parallel()
-	if got := PasswordFailurePrefix(true, false, false); got != "Wrong password or invalid YubiKey response." {
+	if got := PasswordFailurePrefix(true, false); got != "Wrong password or invalid YubiKey response." {
 		t.Fatalf("unexpected prefix for YubiKey: %q", got)
 	}
-	if got := PasswordFailurePrefix(false, false, false); got != "Wrong password." {
+	if got := PasswordFailurePrefix(false, false); got != "Wrong password." {
 		t.Fatalf("unexpected prefix without YubiKey: %q", got)
 	}
-	if got := PasswordFailurePrefix(true, true, false); got != "Wrong YubiKey or corrupted file." {
+	if got := PasswordFailurePrefix(true, true); got != "Wrong YubiKey or corrupted file." {
 		t.Fatalf("unexpected prefix for YubiKey-only: %q", got)
-	}
-	if got := PasswordFailurePrefix(false, false, true); got != "Wrong password or incorrect keyfile." {
-		t.Fatalf("unexpected prefix for keyfile: %q", got)
 	}
 }
 

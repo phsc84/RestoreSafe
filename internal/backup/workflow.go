@@ -62,8 +62,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
 
-	resolvedKeyfilePath := util.ResolveDir(cfg.KeyfilePath, exeDir)
-	printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected, resolvedKeyfilePath)
+	printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
@@ -120,16 +119,6 @@ func Run(cfg *util.Config, exeDir string) error {
 		} else {
 			log.Info("YubiKey-2FA successful. Challenge: %s", challengeHex)
 		}
-	}
-
-	// Optional keyfile factor.
-	if cfg.UseKeyfile() {
-		var err error
-		password, err = security.CombineWithKeyfile(password, resolvedKeyfilePath)
-		if err != nil {
-			return err
-		}
-		log.Info("Keyfile authentication applied: %s", filepath.ToSlash(resolvedKeyfilePath))
 	}
 
 	fmt.Println("Backup started.")

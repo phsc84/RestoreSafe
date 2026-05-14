@@ -43,27 +43,23 @@ func PromptStartAction(action string) (bool, error) {
 	}
 }
 
-func BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly, requiresKeyfile bool) string {
+func BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly bool) string {
 	switch {
 	case yubiKeyOnly:
 		return "YubiKey only (no password)"
 	case requiresYubiKey:
 		return "password + YubiKey"
-	case requiresKeyfile:
-		return "password + keyfile"
 	default:
 		return "password only"
 	}
 }
 
-func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly, requiresKeyfile bool) string {
+func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {
 	switch {
 	case yubiKeyOnly:
 		return "Wrong YubiKey or corrupted file."
 	case requiresYubiKey:
 		return "Wrong password or invalid YubiKey response."
-	case requiresKeyfile:
-		return "Wrong password or incorrect keyfile."
 	default:
 		return "Wrong password."
 	}
@@ -73,13 +69,11 @@ func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly, requiresKeyfile bool) s
 // It verifies the password by attempting to decrypt the first byte of the first part.
 // In YubiKey-only mode (no password factor), the retry loop runs at most once since
 // there is no password that can be corrected between attempts.
-// keyfilePath is the resolved absolute path to a keyfile (empty string = no keyfile).
 func ReadPasswordWithRetry(
 	targetDir string,
 	rep util.BackupEntry,
 	passwordPrompt string,
 	log *util.Logger,
-	keyfilePath string,
 ) ([]byte, error) {
 	challengePath, requiresYubiKey, err := catalog.FindChallengeFileForRun(targetDir, rep.Date, rep.ID)
 	if err != nil {
@@ -91,8 +85,6 @@ func ReadPasswordWithRetry(
 	if requiresYubiKey {
 		yubiKeyOnly = catalog.IsChallengeFileYubiKeyOnly(challengePath)
 	}
-
-	requiresKeyfile := keyfilePath != ""
 
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
 		var password []byte
@@ -127,13 +119,6 @@ func ReadPasswordWithRetry(
 			}
 		}
 
-		if requiresKeyfile {
-			password, err = security.CombineWithKeyfile(password, keyfilePath)
-			if err != nil {
-				return nil, err
-			}
-		}
-
 		// Verify password by attempting a trial decrypt.
 		parts, err := catalog.CollectParts(targetDir, rep)
 		if err != nil {
@@ -149,7 +134,7 @@ func ReadPasswordWithRetry(
 				}
 				remaining := maxPasswordAttempts - attempt
 				if remaining > 0 {
-					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly, requiresKeyfile), remaining)
+					fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly), remaining)
 					log.WarnLogOnly("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 				}
 				continue

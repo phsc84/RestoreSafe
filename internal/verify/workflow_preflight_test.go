@@ -64,7 +64,7 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return nil }, "")
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return nil })
 	})
 
 	selectionLine := "  [OK] " + items[0].Entry.String() + " (parts: 1)"
@@ -98,7 +98,7 @@ func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") }, "")
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") })
 	})
 
 	authLine := "Authentication: password + YubiKey"

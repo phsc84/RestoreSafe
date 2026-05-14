@@ -65,10 +65,9 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	resolvedKeyfilePath := util.ResolveDir(cfg.KeyfilePath, exeDir)
 	stagingPlan := operation.PlanLocalStaging(targetDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
-	printRestorePreflightWithYubiKeyCheck(cfg, targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected, resolvedKeyfilePath)
+	printRestorePreflightWithYubiKeyCheck(cfg, targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -95,7 +94,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	// Collect password (with retry).
 	rep := selected[0]
-	password, err := operation.ReadPasswordWithRetry(targetDir, rep, "Enter restore password: ", log, resolvedKeyfilePath)
+	password, err := operation.ReadPasswordWithRetry(targetDir, rep, "Enter restore password: ", log)
 	if err != nil {
 		return err
 	}
@@ -186,7 +185,6 @@ func printRestorePreflightWithYubiKeyCheck(
 	requiresYubiKey, yubiKeyOnly bool,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
-	resolvedKeyfilePath string,
 ) {
 	var issues []string
 
@@ -239,9 +237,8 @@ func printRestorePreflightWithYubiKeyCheck(
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly, cfg.UseKeyfile()))
+	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "restore", checkYubiKeyConnected)
-	operation.PrintKeyfilePreflightStatus(cfg.UseKeyfile(), resolvedKeyfilePath)
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Local staging block

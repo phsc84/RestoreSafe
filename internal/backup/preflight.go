@@ -14,7 +14,6 @@ func printBackupPreflightWithYubiKeyCheck(
 	sources []backupSourcePlan,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
-	resolvedKeyfilePath string,
 ) {
 	fmt.Println()
 	fmt.Println("-----------------------------------------")
@@ -76,7 +75,6 @@ func printBackupPreflightWithYubiKeyCheck(
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
 	operation.PrintYubiKeyPreflightStatus(cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
-	operation.PrintKeyfilePreflightStatus(cfg.UseKeyfile(), resolvedKeyfilePath)
 	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {

@@ -51,8 +51,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Create release ZIP archive...
+set ZIP_NAME=RestoreSafe-%VERSION%.zip
+powershell -NoProfile -Command "Compress-Archive -Path 'RestoreSafe.exe','assets\ykman.exe','config-SAMPLE.yaml' -DestinationPath '%ZIP_NAME%' -Force"
+if errorlevel 1 (
+    echo [ERROR] Failed to create ZIP archive
+    exit /b 1
+)
+
 echo.
 echo [OK] RestoreSafe.exe successfully created.
+echo [OK] %ZIP_NAME% contains RestoreSafe.exe, ykman.exe, config-SAMPLE.yaml.
 echo.
 
 endlocal

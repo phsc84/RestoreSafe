@@ -2,7 +2,6 @@ package operation
 
 import (
 	"fmt"
-	"os"
 )
 
 // PreflightFieldLabelWidth is the standard label column width for preflight summary fields.
@@ -42,15 +41,3 @@ func PrintYubiKeyPreflightStatus(requiresYubiKey bool, action string, checkYubiK
 	}
 }
 
-// PrintKeyfilePreflightStatus prints the keyfile availability status line under
-// the Authentication field. No output is produced when requiresKeyfile is false.
-func PrintKeyfilePreflightStatus(requiresKeyfile bool, keyfilePath string) {
-	if !requiresKeyfile {
-		return
-	}
-	if _, err := os.Stat(keyfilePath); err != nil {
-		fmt.Printf("  [WARN] Keyfile not found at %q. Remedy: Ensure the keyfile is available at the configured keyfile_path before starting the operation.\n", keyfilePath)
-	} else {
-		fmt.Printf("  [OK] Keyfile found: %s\n", keyfilePath)
-	}
-}
