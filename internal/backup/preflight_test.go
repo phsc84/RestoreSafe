@@ -85,6 +85,36 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 	}
 }
 
+func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
+	targetDir := t.TempDir()
+	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "info"}
+	sources := []backupSource{
+		{Resolved: filepath.Join(targetDir, "Docs"), BackupName: "CustomDocs", Err: errors.New("access denied")},
+		{Resolved: filepath.Join(targetDir, "Photos"), Warning: "Large source"},
+	}
+	stagingPlan := operation.LocalStagingPlan{}
+
+	output := testutil.CaptureStdout(t, func() {
+		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	})
+
+	if !strings.Contains(output, "[ERROR]") {
+		t.Fatalf("expected [ERROR] line for source with error, got: %q", output)
+	}
+	if !strings.Contains(output, "access denied") {
+		t.Fatalf("expected error message in output, got: %q", output)
+	}
+	if !strings.Contains(output, "→ backup name: CustomDocs") {
+		t.Fatalf("expected custom backup name in error section, got: %q", output)
+	}
+	if !strings.Contains(output, "[WARN]") {
+		t.Fatalf("expected [WARN] line for source with warning, got: %q", output)
+	}
+	if !strings.Contains(output, "Large source") {
+		t.Fatalf("expected warning message in output, got: %q", output)
+	}
+}
+
 func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
@@ -289,6 +319,60 @@ func TestValidateStagingSpaceSkipsWhenStagingDisabled(t *testing.T) {
 
 	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
 		t.Fatalf("expected no error when staging is disabled, got: %v", err)
+	}
+}
+
+func TestValidateStagingSpaceSkipsWhenEstimatedBytesZero(t *testing.T) {
+	t.Parallel()
+
+	// All sources are skipped → estimatedBytes = 0 → return nil.
+	sources := []backupSource{{Resolved: "C:/source", Skip: true}}
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
+
+	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
+		t.Fatalf("expected no error when estimated bytes is zero, got: %v", err)
+	}
+}
+
+func TestValidateStagingSpacePassesWhenSpaceIsSufficient(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	stagingDir := filepath.Join(root, "staging")
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(stagingDir, 0o750); err != nil {
+		t.Fatalf("failed to create staging dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "small.bin"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	sources := []backupSource{{Resolved: sourceDir}}
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingDir}
+
+	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
+		t.Fatalf("expected no error when space is sufficient, got: %v", err)
+	}
+}
+
+func TestValidateTargetSpacePassesWhenSpaceIsSufficient(t *testing.T) {
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "source")
+	targetDir := filepath.Join(root, "target")
+	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceDir, "small.bin"), []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	sources := []backupSource{{Resolved: sourceDir}}
+	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
+		t.Fatalf("expected no error when target space is sufficient, got: %v", err)
 	}
 }
 

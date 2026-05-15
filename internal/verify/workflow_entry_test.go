@@ -3,9 +3,25 @@ package verify
 import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/util"
 	"errors"
+	"strings"
 	"testing"
 )
+
+func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
+	t.Parallel()
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
+
+	err := verifyEntry(entry, targetDir, []byte("pw"), nil)
+	if err == nil {
+		t.Fatal("expected error when no parts found, got nil")
+	}
+	if !strings.Contains(err.Error(), "No part files found") {
+		t.Fatalf("expected no-parts error, got: %v", err)
+	}
+}
 
 func TestVerifyEntryRoundTrip(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-correct-pass"))
@@ -15,7 +31,7 @@ func TestVerifyEntryRoundTrip(t *testing.T) {
 	}
 }
 
-func TestVerifyEntryWrongPassword(t *testing.T) {
+func TestVerifyEntryRejectsWrongPassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
 
 	err := verifyEntry(fx.Entry, fx.TargetDir, []byte("wrong-pass"), nil)

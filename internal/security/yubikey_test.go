@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"os"
@@ -305,6 +306,45 @@ func TestValidateChallengeHexRejectsWrongLength(t *testing.T) {
 	}
 }
 
+func TestUniqueStringsDeduplicatesAndSkipsEmpty(t *testing.T) {
+	t.Parallel()
+	input := []string{"a", "  ", "b", "a", "", "c", "b"}
+	result := uniqueStrings(input)
+	if len(result) != 3 {
+		t.Fatalf("expected 3 unique non-empty strings, got %d: %v", len(result), result)
+	}
+	if result[0] != "a" || result[1] != "b" || result[2] != "c" {
+		t.Fatalf("unexpected uniqueStrings result: %v", result)
+	}
+}
+
+func TestCheckYubiKeyAvailabilitySucceeds(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	t.Cleanup(func() { resolveYkmanExecutableFn = prevResolve })
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "C:/ykman.exe", nil
+	}
+
+	if err := CheckYubiKeyAvailability(); err != nil {
+		t.Fatalf("expected nil error when ykman found, got: %v", err)
+	}
+}
+
+func TestCheckYubiKeyAvailabilityNotFound(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	t.Cleanup(func() { resolveYkmanExecutableFn = prevResolve })
+
+	resolveYkmanExecutableFn = func() (string, error) {
+		return "", ErrYubikeyNotFound
+	}
+
+	err := CheckYubiKeyAvailability()
+	if !errors.Is(err, ErrYubikeyNotFound) {
+		t.Fatalf("expected ErrYubikeyNotFound, got: %v", err)
+	}
+}
+
 func TestCheckYubiKeyConnectedMissingYkman(t *testing.T) {
 	prevResolve := resolveYkmanExecutableFn
 	prevList := ykmanListOutput
@@ -324,5 +364,97 @@ func TestCheckYubiKeyConnectedMissingYkman(t *testing.T) {
 	err := CheckYubiKeyConnected()
 	if !errors.Is(err, ErrYubikeyNotFound) {
 		t.Fatalf("expected ErrYubikeyNotFound, got: %v", err)
+	}
+}
+
+func TestSetYkmanExeDirUpdatesVariable(t *testing.T) {
+	prev := ykmanExeDir
+	t.Cleanup(func() { ykmanExeDir = prev })
+	SetYkmanExeDir("test-dir")
+	if ykmanExeDir != "test-dir" {
+		t.Fatalf("expected ykmanExeDir = %q, got %q", "test-dir", ykmanExeDir)
+	}
+}
+
+func TestResolveYkmanExecutableCallsRealOSFunctions(t *testing.T) {
+	// resolveYkmanExecutable wraps resolveYkmanExecutableWith with real OS functions.
+	// In the test environment ykman is typically absent, so we expect either
+	// nil (found on PATH) or ErrYubikeyNotFound.
+	_, err := resolveYkmanExecutable()
+	if err != nil && !errors.Is(err, ErrYubikeyNotFound) {
+		t.Fatalf("expected nil or ErrYubikeyNotFound, got: %v", err)
+	}
+}
+
+func TestCombineWithPasswordForRestoreSucceeds(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevCalc := ykmanOtpCalculate
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanOtpCalculate = prevCalc
+	})
+
+	wantResponse := make([]byte, 20)
+	wantResponse[0] = 0xAB
+	resolveYkmanExecutableFn = func() (string, error) { return "ykman", nil }
+	ykmanOtpCalculate = func(_, _ string) ([]byte, error) {
+		return []byte(hex.EncodeToString(wantResponse) + "\n"), nil
+	}
+
+	challenge := hex.EncodeToString(make([]byte, challengeLen))
+	password := []byte("restore-pw")
+	combined, err := CombineWithPasswordForRestore(password, challenge)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(combined, append(password, wantResponse...)) {
+		t.Fatalf("combined password mismatch")
+	}
+}
+
+func TestCombineWithPasswordForRestoreReturnsQueryError(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevCalc := ykmanOtpCalculate
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanOtpCalculate = prevCalc
+	})
+
+	resolveYkmanExecutableFn = func() (string, error) { return "ykman", nil }
+	ykmanOtpCalculate = func(_, _ string) ([]byte, error) {
+		return nil, errors.New("device error")
+	}
+
+	challenge := hex.EncodeToString(make([]byte, challengeLen))
+	_, err := CombineWithPasswordForRestore([]byte("pw"), challenge)
+	if err == nil {
+		t.Fatal("expected error from queryYubikey, got nil")
+	}
+}
+
+func TestCombineWithPasswordSucceeds(t *testing.T) {
+	prevResolve := resolveYkmanExecutableFn
+	prevCalc := ykmanOtpCalculate
+	t.Cleanup(func() {
+		resolveYkmanExecutableFn = prevResolve
+		ykmanOtpCalculate = prevCalc
+	})
+
+	wantResponse := make([]byte, 20)
+	resolveYkmanExecutableFn = func() (string, error) { return "ykman", nil }
+	ykmanOtpCalculate = func(_, _ string) ([]byte, error) {
+		return []byte(hex.EncodeToString(wantResponse) + "\n"), nil
+	}
+
+	password := []byte("backup-pw")
+	combined, challengeHex, err := CombineWithPassword(password)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if challengeHex == "" {
+		t.Fatal("expected non-empty challengeHex")
+	}
+	if len(combined) != len(password)+len(wantResponse) {
+		t.Fatalf("unexpected combined length: got %d, want %d", len(combined), len(password)+len(wantResponse))
 	}
 }

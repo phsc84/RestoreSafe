@@ -291,6 +291,35 @@ func TestPlanBackupSourcesEncodesSpecialCharactersUniquely(t *testing.T) {
 	}
 }
 
+func TestAliasFromPartsReturnsFallbackForEmptySlice(t *testing.T) {
+	t.Parallel()
+	if got := aliasFromParts([]string{}); got != "source" {
+		t.Fatalf("expected 'source' for empty parts, got %q", got)
+	}
+}
+
+func TestAssignNamesByGroupSetsCollisionErrorForIdenticalAliases(t *testing.T) {
+	t.Parallel()
+
+	// Two sources with identical paths produce identical aliases → collision.
+	sources := []backupSource{
+		{Resolved: `C:\parent\Docs`},
+		{Resolved: `C:\parent\Docs`},
+	}
+	grouped := map[string][]int{"Docs": {0, 1}}
+	assignNamesByGroup(sources, grouped)
+
+	if sources[0].Err == nil {
+		t.Fatal("expected collision error on first source, got nil")
+	}
+	if sources[1].Err == nil {
+		t.Fatal("expected collision error on second source, got nil")
+	}
+	if !strings.Contains(sources[0].Err.Error(), "alias collision") {
+		t.Fatalf("expected 'alias collision' in error, got: %v", sources[0].Err)
+	}
+}
+
 func TestSanitizeAliasPartEncodesNonAlphaNumericAsUTF8Hex(t *testing.T) {
 	t.Parallel()
 

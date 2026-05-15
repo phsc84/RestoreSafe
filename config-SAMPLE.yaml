@@ -17,8 +17,10 @@ target_folder: "C:/Backup"
 split_size_mb: 4096
 
 # Retention: number of backup sets to keep per source folder.
+# Just the N newest backups and log files are kept; any older backup and log files are
+# deleted automatically.
 # 0 = keep all backups (no automatic cleanup)
-retention_keep: 0
+retention_keep: 3
 
 # Log level: "info" (default) or "debug" (verbose output)
 log_level: "info"

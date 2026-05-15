@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestVerifySelectedEntriesSuccess(t *testing.T) {
+func TestVerifySelectedEntriesSucceeds(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-selected-pass"))
 
 	if err := verifySelectedEntries([]util.BackupEntry{fx.Entry}, fx.TargetDir, fx.Password, nil); err != nil {
@@ -16,7 +16,7 @@ func TestVerifySelectedEntriesSuccess(t *testing.T) {
 	}
 }
 
-func TestVerifySelectedEntriesWrongPasswordFails(t *testing.T) {
+func TestVerifySelectedEntriesRejectsWrongPassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("correct-password"))
 
 	err := verifySelectedEntries(
@@ -33,7 +33,7 @@ func TestVerifySelectedEntriesWrongPasswordFails(t *testing.T) {
 	}
 }
 
-func TestVerifySelectedEntriesMultipleEntries(t *testing.T) {
+func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	password := []byte("multi-verify-pass")
 	fx1 := testutil.NewBackupFixture(t, password)
 

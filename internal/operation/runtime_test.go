@@ -10,7 +10,23 @@ import (
 	"testing"
 
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/util"
 )
+
+func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &util.Config{LogLevel: "info"}
+	rep := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+
+	log := OpenLogger(cfg, tmpDir, rep)
+	if log == nil {
+		t.Fatal("expected non-nil logger for valid target dir")
+	}
+	if log.IsConsoleOnly() {
+		t.Fatal("expected file-backed logger for valid target dir")
+	}
+	log.Close()
+}
 
 func TestBackupAuthenticationLabel(t *testing.T) {
 	t.Parallel()
@@ -115,7 +131,7 @@ func TestReadChallengeFileRejectsWrongLength(t *testing.T) {
 	}
 }
 
-func TestVerifyPassword(t *testing.T) {
+func TestVerifyPasswordAcceptsCorrectAndRejectsWrong(t *testing.T) {
 	dir := t.TempDir()
 	partPath := filepath.Join(dir, "part-001.enc")
 	password := []byte("restore-safe")

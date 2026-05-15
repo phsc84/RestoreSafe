@@ -6,9 +6,43 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestCopyFileWithCountersReturnsErrorForMissingSource(t *testing.T) {
+	t.Parallel()
+	missing := filepath.Join(t.TempDir(), "nonexistent.bin")
+	dst := filepath.Join(t.TempDir(), "dst.bin")
+	var in, out, calls atomic.Int64
+	err := copyFileWithCounters(missing, dst, &in, &out, &calls)
+	if err == nil {
+		t.Fatal("expected error for missing source file, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to open source file") {
+		t.Fatalf("expected open-source error, got: %v", err)
+	}
+}
+
+func TestCopyFileWithCountersReturnsErrorForBadDestination(t *testing.T) {
+	t.Parallel()
+	srcDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "src.bin")
+	if err := os.WriteFile(srcFile, []byte("data"), 0o600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+	nonExistentDstDir := filepath.Join(t.TempDir(), "missing")
+	dst := filepath.Join(nonExistentDstDir, "dst.bin")
+	var in, out, calls atomic.Int64
+	err := copyFileWithCounters(srcFile, dst, &in, &out, &calls)
+	if err == nil {
+		t.Fatal("expected error for bad destination, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to create destination file") {
+		t.Fatalf("expected create-destination error, got: %v", err)
+	}
+}
 
 func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 	t.Parallel()

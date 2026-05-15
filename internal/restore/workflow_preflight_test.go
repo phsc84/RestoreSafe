@@ -270,3 +270,37 @@ func TestValidateRestoreTargetSpaceReturnsErrorWhenInsufficient(t *testing.T) {
 	}
 }
 
+func TestValidateRestoreTargetSpaceReturnsNilWhenEstimatedZero(t *testing.T) {
+	t.Parallel()
+	items := []restorePreflightItem{{TotalSizeBytes: 0}}
+	if err := validateRestoreTargetSpace(t.TempDir(), items); err != nil {
+		t.Fatalf("expected nil when estimated bytes is zero, got: %v", err)
+	}
+}
+
+func TestQueryRestoreTargetFreeBytesForExistingDir(t *testing.T) {
+	t.Parallel()
+	existingDir := t.TempDir()
+	free, err := queryRestoreTargetFreeBytes(existingDir)
+	if err != nil {
+		t.Fatalf("expected no error for existing directory, got: %v", err)
+	}
+	if free == 0 {
+		t.Fatal("expected non-zero free bytes for existing directory")
+	}
+}
+
+func TestQueryRestoreTargetFreeBytesWalksUpToExistingParent(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	// A non-existent subdirectory path; queryRestoreTargetFreeBytes should walk up to base.
+	nonExistent := filepath.Join(base, "missing", "subdir")
+	free, err := queryRestoreTargetFreeBytes(nonExistent)
+	if err != nil {
+		t.Fatalf("expected no error when walking up to existing parent, got: %v", err)
+	}
+	if free == 0 {
+		t.Fatal("expected non-zero free bytes after walking up to existing parent")
+	}
+}
+

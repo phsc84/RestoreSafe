@@ -9,6 +9,55 @@ import (
 	"testing"
 )
 
+type failReader struct{ err error }
+
+func (r *failReader) Read([]byte) (int, error) { return 0, r.err }
+
+func TestDecryptRejectsWrongStoredChunkSize(t *testing.T) {
+	t.Parallel()
+
+	buf := bytes.NewBuffer(nil)
+	buf.WriteString(magic)
+	if err := binary.Write(buf, binary.BigEndian, uint32(saltLen)); err != nil {
+		t.Fatalf("failed to write salt length: %v", err)
+	}
+	buf.Write(bytes.Repeat([]byte{1}, saltLen))
+	if err := binary.Write(buf, binary.BigEndian, uint32(chunkSize+1)); err != nil {
+		t.Fatalf("failed to write wrong chunk size: %v", err)
+	}
+
+	err := Decrypt(io.Discard, bytes.NewReader(buf.Bytes()), []byte("pw"))
+	if err == nil {
+		t.Fatal("expected error for wrong stored chunk size, got nil")
+	}
+	if !strings.Contains(err.Error(), "Unsupported chunk size") {
+		t.Fatalf("expected unsupported-chunk-size error, got: %v", err)
+	}
+}
+
+func TestDecryptReturnsWriteError(t *testing.T) {
+	t.Parallel()
+
+	password := []byte("pw")
+	var encrypted bytes.Buffer
+	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello world")), password, Argon2Params{Time: 1, MemoryKB: 8 * 1024, Threads: 1}); err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
+
+	writeErr := errors.New("disk full")
+	err := Decrypt(&failWriter{err: writeErr}, bytes.NewReader(encrypted.Bytes()), password)
+	if err == nil {
+		t.Fatal("expected write error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to write decrypted data") {
+		t.Fatalf("expected write-error message, got: %v", err)
+	}
+}
+
+type failWriter struct{ err error }
+
+func (fw *failWriter) Write([]byte) (int, error) { return 0, fw.err }
+
 func TestEncryptDecryptRoundTrip(t *testing.T) {
 	password := []byte("super-secret")
 	plaintext := []byte("RestoreSafe round-trip payload")
@@ -186,5 +235,29 @@ func TestChunkNonceDeterministic(t *testing.T) {
 	}
 	if len(nonceA) != nonceLen {
 		t.Fatalf("expected nonce length %d, got %d", nonceLen, len(nonceA))
+	}
+}
+
+func TestEncryptFailsWhenWriterFailsOnHeader(t *testing.T) {
+	t.Parallel()
+	params := Argon2Params{Time: 1, MemoryKB: 8 * 1024, Threads: 1}
+	err := Encrypt(&failWriter{err: errors.New("disk full")}, bytes.NewReader([]byte("hello")), []byte("pw"), params)
+	if err == nil {
+		t.Fatal("expected error for failing writer, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to write magic") {
+		t.Fatalf("expected magic-write failure, got: %v", err)
+	}
+}
+
+func TestEncryptFailsWhenReaderFails(t *testing.T) {
+	t.Parallel()
+	params := Argon2Params{Time: 1, MemoryKB: 8 * 1024, Threads: 1}
+	err := Encrypt(&bytes.Buffer{}, &failReader{err: errors.New("read error")}, []byte("pw"), params)
+	if err == nil {
+		t.Fatal("expected error for failing reader, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to read plaintext") {
+		t.Fatalf("expected read-plaintext failure, got: %v", err)
 	}
 }

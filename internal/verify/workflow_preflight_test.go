@@ -93,6 +93,50 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	}
 }
 
+func TestPrintVerifyPreflightShowsErrorItemAndUnknownTotalSize(t *testing.T) {
+	targetDir := t.TempDir()
+	items := []verifyPreflightItem{{
+		Entry:     util.BackupEntry{FolderName: "Broken", Date: "2026-03-20", ID: util.BackupID("ERR001")},
+		PartCount: 0,
+		Err:       errors.New("parts missing"),
+	}}
+
+	output := testutil.CaptureStdout(t, func() {
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, false, false, func() error { return nil })
+	})
+
+	errorLine := "  [ERROR] " + items[0].Entry.String() + " (parts: 0)"
+	if !strings.Contains(output, errorLine) {
+		t.Fatalf("expected [ERROR] line for failed item, got: %q", output)
+	}
+	if !strings.Contains(output, "Used disk space (total): unknown") {
+		t.Fatalf("expected unknown total size when all items have errors, got: %q", output)
+	}
+	if !strings.Contains(output, "parts missing") {
+		t.Fatalf("expected error detail in issues section, got: %q", output)
+	}
+}
+
+func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T) {
+	targetDir := t.TempDir()
+	items := []verifyPreflightItem{{
+		Entry:          util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("DOC001")},
+		PartCount:      2,
+		TotalSizeBytes: 1024,
+	}}
+
+	output := testutil.CaptureStdout(t, func() {
+		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, false, false, func() error { return nil })
+	})
+
+	if strings.Contains(output, "Used disk space (total): unknown") {
+		t.Fatalf("expected known total size, got 'unknown' in: %q", output)
+	}
+	if !strings.Contains(output, "  [OK] "+items[0].Entry.String()+" (parts: 2)") {
+		t.Fatalf("expected [OK] line for successful item, got: %q", output)
+	}
+}
+
 func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}

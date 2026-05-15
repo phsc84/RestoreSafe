@@ -40,17 +40,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [BUILD] Copy RestoreSafe.exe to test directory...
-if not exist test\ (
-    mkdir test
-)
-
-copy /Y RestoreSafe.exe test\RestoreSafe.exe >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to copy RestoreSafe.exe to test directory
-    exit /b 1
-)
-
 echo [BUILD] Create release ZIP archive...
 set ZIP_NAME=RestoreSafe-%VERSION%.zip
 powershell -NoProfile -Command "Compress-Archive -Path 'RestoreSafe.exe','assets\ykman.exe','config-SAMPLE.yaml' -DestinationPath '%ZIP_NAME%' -Force"
@@ -59,9 +48,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Extract ZIP archive to test directory...
+if not exist test\ (
+    mkdir test
+)
+powershell -NoProfile -Command "Expand-Archive -Path '%ZIP_NAME%' -DestinationPath 'test' -Force"
+if errorlevel 1 (
+    echo [ERROR] Failed to extract ZIP archive to test directory
+    exit /b 1
+)
+
 echo.
-echo [OK] RestoreSafe.exe successfully created.
-echo [OK] %ZIP_NAME% contains RestoreSafe.exe, ykman.exe, config-SAMPLE.yaml.
+echo [OK] RestoreSafe.exe successfully compiled.
+echo [OK] %ZIP_NAME% successfully created and extracted to test directory.
 echo.
 
 endlocal

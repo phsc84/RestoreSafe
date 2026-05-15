@@ -9,6 +9,174 @@ import (
 	"testing"
 )
 
+func TestHealthSeverityLabelDefaultReturnsInfo(t *testing.T) {
+	t.Parallel()
+	if got := healthSeverityLabel(healthSeverity(99)); got != "INFO" {
+		t.Fatalf("expected INFO for unknown severity, got %q", got)
+	}
+}
+
+func TestCheckConfigFileHealthOKForExistingFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	items := checkConfigFileHealth(filepath.ToSlash(configPath))
+	if len(items) != 1 || items[0].Severity != healthOK {
+		t.Fatalf("expected OK health item for existing config, got: %#v", items)
+	}
+}
+
+func TestCheckConfigFileHealthErrorForMissingFile(t *testing.T) {
+	t.Parallel()
+	items := checkConfigFileHealth("/nonexistent/config.yaml")
+	if len(items) != 1 || items[0].Severity != healthError {
+		t.Fatalf("expected ERROR health item for missing config, got: %#v", items)
+	}
+}
+
+func TestCheckBackupInventoryHealthWarnsWhenNoBackups(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	items := checkBackupInventoryHealth(dir)
+	if len(items) == 0 {
+		t.Fatal("expected at least one health item for empty inventory")
+	}
+	if items[0].Severity != healthWarn {
+		t.Fatalf("expected WARN for empty backup inventory, got severity: %v", items[0].Severity)
+	}
+}
+
+func TestCheckTempDirHealthReturnsOK(t *testing.T) {
+	t.Parallel()
+	items := checkTempDirHealth()
+	if len(items) == 0 {
+		t.Fatal("expected at least one health item from temp dir check")
+	}
+	if items[0].Severity != healthOK {
+		t.Fatalf("expected temp dir health to be OK, got severity %v with detail: %s", items[0].Severity, items[0].Detail)
+	}
+}
+
+func TestListChallengeFilesReturnsOnlyChallengeFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for _, name := range []string{"run1.challenge", "run2.challenge"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatalf("failed to write %s: %v", name, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "backup.enc"), []byte("z"), 0o600); err != nil {
+		t.Fatalf("failed to write enc file: %v", err)
+	}
+
+	files, err := listChallengeFiles(dir)
+	if err != nil {
+		t.Fatalf("listChallengeFiles returned error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 challenge files, got %d", len(files))
+	}
+	if !files["run1.challenge"] || !files["run2.challenge"] {
+		t.Fatalf("expected both challenge files in result, got: %v", files)
+	}
+}
+
+func TestListChallengeFilesEmptyDirectoryReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	files, err := listChallengeFiles(t.TempDir())
+	if err != nil {
+		t.Fatalf("listChallengeFiles returned error: %v", err)
+	}
+	if len(files) != 0 {
+		t.Fatalf("expected empty result for empty directory, got: %v", files)
+	}
+}
+
+func TestOrphanChallengeFilesReturnsEmptyWhenAllExpected(t *testing.T) {
+	t.Parallel()
+	actual := map[string]bool{"a.challenge": true, "b.challenge": true}
+	expected := map[string]bool{"a.challenge": true, "b.challenge": true}
+	if orphans := orphanChallengeFiles(actual, expected); len(orphans) != 0 {
+		t.Fatalf("expected no orphans when all files are expected, got: %v", orphans)
+	}
+}
+
+func TestBuildBackupInventoryIssueItemsDetectsOrphanChallengeFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+
+	part := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
+	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
+		t.Fatalf("failed to create part dir: %v", err)
+	}
+	if err := os.WriteFile(part, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to write part file: %v", err)
+	}
+
+	orphanChallenge := filepath.Join(dir, "[Other]_2025-01-01_XYZ999.challenge")
+	if err := os.WriteFile(orphanChallenge, []byte("hex"), 0o600); err != nil {
+		t.Fatalf("failed to write orphan challenge: %v", err)
+	}
+
+	items := buildBackupInventoryIssueItems(dir, []util.BackupEntry{entry})
+
+	hasOrphanWarn := false
+	for _, item := range items {
+		if item.Severity == healthWarn && item.Scope == healthScopeChallengeFile {
+			hasOrphanWarn = true
+			break
+		}
+	}
+	if !hasOrphanWarn {
+		t.Fatalf("expected orphan challenge file warning, got items: %#v", items)
+	}
+}
+
+func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
+	items := []healthItem{
+		{isNote: true, Detail: "Local staging enabled."},
+		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
+	}
+
+	output := testutil.CaptureStdout(t, func() {
+		printStartupHealthCheck(items)
+	})
+
+	if !strings.Contains(output, "Local staging enabled.") {
+		t.Fatalf("expected note text in output, got: %q", output)
+	}
+	if !strings.Contains(output, "Temp directory:") {
+		t.Fatalf("expected Temp directory section in output, got: %q", output)
+	}
+	if !strings.Contains(output, "  [OK] C:/Temp") {
+		t.Fatalf("expected temp dir OK line in output, got: %q", output)
+	}
+}
+
+func TestPrintStartupHealthCheckNoAdviceLineWhenNoErrors(t *testing.T) {
+	t.Parallel()
+	items := []healthItem{
+		{Severity: healthOK, Scope: "Config", Detail: "ok"},
+		{Severity: healthWarn, Scope: "Target", Detail: "warn"},
+	}
+
+	output := testutil.CaptureStdout(t, func() {
+		printStartupHealthCheck(items)
+	})
+
+	if strings.Contains(output, "Review the reported errors") {
+		t.Fatalf("did not expect advice line when no errors, got: %q", output)
+	}
+	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 0 error(s)") {
+		t.Fatalf("expected summary line, got: %q", output)
+	}
+}
+
 func TestHealthSeverityLabel(t *testing.T) {
 	t.Parallel()
 

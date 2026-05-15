@@ -9,6 +9,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 - [Usage](#usage)
 - [Naming scheme of created files](#naming-scheme-of-created-files)
 - [YubiKey setup](#yubikey-setup)
+- [Building from source](#building-from-source)
 
 ## Features
 
@@ -42,21 +43,19 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 
 ### First time usage
 
-1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and store it in any directory on your computer.
-2. [Download](https://github.com/phsc84/RestoreSafe/releases) `config-SAMPLE.yaml`, rename it to `config.yaml` and put it into the same directory as RestoreSafe.exe.
-   
-   By default, RestoreSafe loads config.yaml from the same directory as the executable. Use the `-config` flag to point to a different config file (always use an absolute path). This is useful when managing multiple backup configurations.
-   
-   Create a `.bat` file to launch RestoreSafe with the desired config:
-   
+1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe and extract it to any directory on your computer.
+2. Rename `config-SAMPLE.yaml` to `config.yaml`.
+
+   By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a `.bat` file to launch RestoreSafe with the desired config (always use an absolute path):
+
    ```bat
    @echo off
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
    pause
    ```
-3. Edit `config.yaml` and at least set parameters `source_folders` and `target_folder`.
-   
-   Set `retention_keep` to keep only the newest N backup sets per source folder. Older backup and log files are deleted automatically.
+3. In `config.yaml` edit at least parameters `source_folders` and `target_folder`.
+
+   For any other parameters you may keep the default values or adjust them according to your needs.
 
    Authentication mode comparison
 
@@ -168,3 +167,19 @@ Compatibility note: RestoreSafe supports only YubiKey v5 hardware.
 2. Go to **Slots**, select a slot (slot 2 recommended - slot 1 holds the factory Yubico OTP by default), and choose **Challenge-response**. Generate a random secret key, enable **Require touch**, and save.
 3. Set `authentication_mode` in `config.yaml`: `2` for password + YubiKey (2FA), or `3` for password-less YubiKey-only mode.
 4. Insert and touch the YubiKey when prompted during backup or restore.
+
+## Building from source
+
+### Prerequisites
+
+- [Go](https://go.dev/dl/) 1.26 or later
+- [goversioninfo](https://github.com/josephspurrier/goversioninfo): `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`
+- `ykman.exe` placed in `assets\`: install [YubiKey Manager](https://www.yubico.com/support/download/yubikey-manager/) and copy `ykman.exe` from its installation directory to `assets\`
+
+### Build
+
+```bat
+build.bat
+```
+
+This compiles `RestoreSafe.exe`, creates `RestoreSafe-<version>.zip`, and extracts it to the `test\` directory for local testing.

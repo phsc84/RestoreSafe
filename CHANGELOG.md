@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-05-15
+
+### Added
+- Target directory locking: backup and restore now acquire an exclusive lock on the target folder at startup, preventing concurrent runs from corrupting the same backup set.
+- Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
+- Backup pre-flight now validates available staging space before starting, not just target space.
+
+### Changed
+- Duplicate source-folder basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
+- Improved error messages across backup, restore, and verify flows with more concrete remediation guidance.
+- Consolidated YubiKey connectivity checks into a shared helper used consistently by backup, restore, and verify preflights.
+- Internal refactoring of the decrypt pipeline and progress-tracking helpers for simpler, more testable code.
+- Updated Go toolchain to 1.26.3 and refreshed all dependencies.
+
+### Fixed
+- Challenge file validation in restore and verify now rejects empty, non-hex, and wrong-length content with a clear error rather than a cryptic decryption failure.
+
 ## [2.2.0] - 2026-04-25
 
 ### Added

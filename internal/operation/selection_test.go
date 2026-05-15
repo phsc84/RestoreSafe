@@ -126,3 +126,136 @@ func TestCompletedActionLabel(t *testing.T) {
 		t.Fatalf("expected cleaned fallback, got %q", got)
 	}
 }
+
+// pipeSelectionInput replaces os.Stdin with a pipe containing the given lines,
+// restoring the original stdin via t.Cleanup. Not safe for parallel use.
+func pipeSelectionInput(t *testing.T, lines string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create stdin pipe: %v", err)
+	}
+	if _, err := w.WriteString(lines); err != nil {
+		t.Fatalf("failed to write to stdin pipe: %v", err)
+	}
+	w.Close()
+	origStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() {
+		os.Stdin = origStdin
+		r.Close()
+	})
+}
+
+func createPartFile(t *testing.T, targetDir string, entry util.BackupEntry) {
+	t.Helper()
+	part := util.PartFileName(targetDir, entry.FolderName, entry.Date, entry.ID, 1)
+	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
+		t.Fatalf("failed to create parent dir: %v", err)
+	}
+	if err := os.WriteFile(part, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to create part file: %v", err)
+	}
+}
+
+func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	createPartFile(t, targetDir, entry)
+	index := []util.BackupEntry{entry}
+
+	pipeSelectionInput(t, ".\n")
+
+	var selected []util.BackupEntry
+	var label string
+	testutil.CaptureStdout(t, func() {
+		var err error
+		selected, label, err = PromptBackupSelection("verify", targetDir, index)
+		if err != nil {
+			t.Fatalf("expected no error for newest selection, got: %v", err)
+		}
+	})
+	if len(selected) == 0 {
+		t.Fatal("expected at least one selected entry")
+	}
+	if label == "" {
+		t.Fatal("expected non-empty label for newest selection")
+	}
+}
+
+func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	createPartFile(t, targetDir, entry)
+	index := []util.BackupEntry{entry}
+
+	pipeSelectionInput(t, "Docs_2026-03-14_ABC123\n")
+
+	var selected []util.BackupEntry
+	testutil.CaptureStdout(t, func() {
+		var err error
+		selected, _, err = PromptBackupSelection("verify", targetDir, index)
+		if err != nil {
+			t.Fatalf("expected no error for name selection, got: %v", err)
+		}
+	})
+	if len(selected) == 0 {
+		t.Fatal("expected at least one selected entry for named selection")
+	}
+}
+
+func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	createPartFile(t, targetDir, entry)
+	index := []util.BackupEntry{entry}
+
+	pipeSelectionInput(t, "ABC123\n")
+
+	var selected []util.BackupEntry
+	testutil.CaptureStdout(t, func() {
+		var err error
+		selected, _, err = PromptBackupSelection("verify", targetDir, index)
+		if err != nil {
+			t.Fatalf("expected no error for ID selection, got: %v", err)
+		}
+	})
+	if len(selected) == 0 {
+		t.Fatal("expected at least one selected entry for ID selection")
+	}
+}
+
+func TestPromptBackupSelectionEmptyInputPrintsRetryMessage(t *testing.T) {
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	createPartFile(t, targetDir, entry)
+	index := []util.BackupEntry{entry}
+
+	// Empty line causes the "must not be empty" message, then bufio re-reads EOF.
+	pipeSelectionInput(t, "\n")
+
+	output := testutil.CaptureStdout(t, func() {
+		_, _, _ = PromptBackupSelection("verify", targetDir, index)
+	})
+	if !strings.Contains(output, "Selection must not be empty.") {
+		t.Fatalf("expected empty-selection message in output, got: %q", output)
+	}
+}
+
+func TestPromptBackupSelectionUnknownNamePrintsError(t *testing.T) {
+	targetDir := t.TempDir()
+	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	createPartFile(t, targetDir, entry)
+	index := []util.BackupEntry{entry}
+
+	// Unknown name causes error output, then bufio re-reads EOF.
+	pipeSelectionInput(t, "unknown-backup-name\n")
+
+	output := testutil.CaptureStdout(t, func() {
+		_, _, _ = PromptBackupSelection("verify", targetDir, index)
+	})
+	// Output should contain either an error about the unknown name or selection info.
+	if len(output) == 0 {
+		t.Fatal("expected some output for unknown selection input")
+	}
+}

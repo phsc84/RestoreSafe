@@ -25,7 +25,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 	testutil.AssertFileContentEqual(t, filepath.Join(fx.SrcDir, "large.bin"), filepath.Join(restoredDir, "large.bin"))
 }
 
-func TestRestoreEntryWrongPassword(t *testing.T) {
+func TestRestoreEntryRejectsWrongPassword(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("correct-password"))
 
 	_, err := restoreEntry(fx.Entry, fx.TargetDir, fx.RestoreRoot, []byte("wrong-password"), nil)

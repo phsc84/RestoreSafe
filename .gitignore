@@ -2,6 +2,7 @@
 *.log
 dev_setup.txt
 RestoreSafe.exe
+RestoreSafe-*.zip
 cmd/resource.syso
 
 assets/**
