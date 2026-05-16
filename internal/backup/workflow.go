@@ -53,14 +53,21 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	// Plan local staging to mitigate same-volume read+write contention.
-	firstValidSource := ""
+	// Prefer a source that shares the target volume so the plan correctly detects contention
+	// when only some sources are on the same drive as the target.
+	stagingSourceDir := ""
 	for _, src := range sources {
 		if src.Err == nil && !src.Skip {
-			firstValidSource = src.Resolved
-			break
+			if stagingSourceDir == "" {
+				stagingSourceDir = src.Resolved
+			}
+			if util.SameVolume(src.Resolved, targetDir) {
+				stagingSourceDir = src.Resolved
+				break
+			}
 		}
 	}
-	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
+	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, targetDir, os.TempDir())
 
 	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
