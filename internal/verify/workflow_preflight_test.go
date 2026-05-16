@@ -60,12 +60,13 @@ func TestValidateVerifyPreflight(t *testing.T) {
 }
 
 func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return nil })
-	})
+	var sb strings.Builder
+	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, true, false, func() error { return nil })
+	output := sb.String()
 
 	selectionLine := "  [OK] " + items[0].Entry.String() + " (parts: 1)"
 	authLine := "Authentication: password + YubiKey"
@@ -94,6 +95,7 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 }
 
 func TestPrintVerifyPreflightShowsErrorItemAndUnknownTotalSize(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{
 		Entry:     util.BackupEntry{FolderName: "Broken", Date: "2026-03-20", ID: util.BackupID("ERR001")},
@@ -101,9 +103,9 @@ func TestPrintVerifyPreflightShowsErrorItemAndUnknownTotalSize(t *testing.T) {
 		Err:       errors.New("parts missing"),
 	}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, false, false, func() error { return nil })
-	})
+	var sb strings.Builder
+	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, false, false, func() error { return nil })
+	output := sb.String()
 
 	errorLine := "  [ERROR] " + items[0].Entry.String() + " (parts: 0)"
 	if !strings.Contains(output, errorLine) {
@@ -118,6 +120,7 @@ func TestPrintVerifyPreflightShowsErrorItemAndUnknownTotalSize(t *testing.T) {
 }
 
 func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{
 		Entry:          util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("DOC001")},
@@ -125,9 +128,9 @@ func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T)
 		TotalSizeBytes: 1024,
 	}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, false, false, func() error { return nil })
-	})
+	var sb strings.Builder
+	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, false, false, func() error { return nil })
+	output := sb.String()
 
 	if strings.Contains(output, "Used disk space (total): unknown") {
 		t.Fatalf("expected known total size, got 'unknown' in: %q", output)
@@ -138,12 +141,13 @@ func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T)
 }
 
 func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printVerifyPreflightWithYubiKeyCheck(&util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") })
-	})
+	var sb strings.Builder
+	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") })
+	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting verification."

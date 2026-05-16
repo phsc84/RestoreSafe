@@ -2,6 +2,7 @@ package operation
 
 import (
 	"fmt"
+	"io"
 )
 
 // PreflightFieldLabelWidth is the standard label column width for preflight summary fields.
@@ -23,21 +24,20 @@ func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemp
 }
 
 // PrintPreflightField prints an aligned key/value field for preflight summaries.
-func PrintPreflightField(labelWidth int, label, value string) {
-	fmt.Printf("%-*s: %s\n", labelWidth, label, value)
+func PrintPreflightField(w io.Writer, labelWidth int, label, value string) {
+	fmt.Fprintf(w, "%-*s: %s\n", labelWidth, label, value)
 }
 
 // PrintYubiKeyPreflightStatus prints the YubiKey connection status line under
 // the Authentication field. action is the operation label ("backup", "restore",
 // "verification"). No output is produced when requiresYubiKey is false.
-func PrintYubiKeyPreflightStatus(requiresYubiKey bool, action string, checkYubiKeyConnected func() error) {
+func PrintYubiKeyPreflightStatus(w io.Writer, requiresYubiKey bool, action string, checkYubiKeyConnected func() error) {
 	if !requiresYubiKey {
 		return
 	}
 	if err := checkYubiKeyConnected(); err != nil {
-		fmt.Printf("  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting %s.\n", action)
+		fmt.Fprintf(w, "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting %s.\n", action)
 	} else {
-		fmt.Printf("  [OK] YubiKey connected. Keep it connected now before starting %s.\n", action)
+		fmt.Fprintf(w, "  [OK] YubiKey connected. Keep it connected now before starting %s.\n", action)
 	}
 }
-

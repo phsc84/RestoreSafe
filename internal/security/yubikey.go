@@ -172,7 +172,11 @@ func CombineWithPassword(password []byte) (combined []byte, challengeHex string,
 	}
 
 	challengeHex = hex.EncodeToString(challenge)
-	combined = append(password, response...)
+	// Always allocate a new backing array so the caller can safely zero the
+	// original password slice without corrupting the combined value.
+	combined = make([]byte, len(password)+len(response))
+	copy(combined, password)
+	copy(combined[len(password):], response)
 	return combined, challengeHex, nil
 }
 
@@ -189,7 +193,12 @@ func CombineWithPasswordForRestore(password []byte, challengeHex string) ([]byte
 		return nil, err
 	}
 
-	return append(password, response...), nil
+	// Always allocate a new backing array so the caller can safely zero the
+	// original password slice without corrupting the combined value.
+	combined := make([]byte, len(password)+len(response))
+	copy(combined, password)
+	copy(combined[len(password):], response)
+	return combined, nil
 }
 
 // CheckYubiKeyAvailability verifies that the required ykman CLI is

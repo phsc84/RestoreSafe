@@ -2,7 +2,6 @@ package operation
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
@@ -20,7 +19,7 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 			return nil, "", err
 		}
 
-		selection, err := security.ReadLine("Selection: ")
+		selection, err := readLineFn("Selection: ")
 		if err != nil {
 			return nil, "", err
 		}

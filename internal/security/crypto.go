@@ -127,10 +127,10 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 
 	for {
 		n, readErr := io.ReadFull(src, buf)
-		if n == 0 && readErr == io.EOF {
+		if n == 0 && errors.Is(readErr, io.EOF) {
 			break
 		}
-		if readErr != nil && readErr != io.ErrUnexpectedEOF && readErr != io.EOF {
+		if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) && !errors.Is(readErr, io.EOF) {
 			return fmt.Errorf("Failed to read plaintext: %w. Remedy: Check source-file readability and permissions.", readErr)
 		}
 
@@ -147,7 +147,7 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 		}
 
 		chunkIndex++
-		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+		if errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF) {
 			break
 		}
 	}

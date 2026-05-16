@@ -1,7 +1,6 @@
 package operation
 
 import (
-	"RestoreSafe/internal/testutil"
 	"errors"
 	"strings"
 	"testing"
@@ -41,10 +40,10 @@ func TestValidatePreflightItems_EmptyInput(t *testing.T) {
 }
 
 func TestPrintPreflightFieldFormatsAlignedOutput(t *testing.T) {
-	// NOT parallel — testutil.CaptureStdout replaces os.Stdout globally.
-	output := testutil.CaptureStdout(t, func() {
-		PrintPreflightField(14, "Log level", "info")
-	})
+	t.Parallel()
+	var sb strings.Builder
+	PrintPreflightField(&sb, 14, "Log level", "info")
+	output := sb.String()
 	if !strings.Contains(output, "Log level") {
 		t.Fatalf("expected label in output, got: %q", output)
 	}
@@ -54,31 +53,28 @@ func TestPrintPreflightFieldFormatsAlignedOutput(t *testing.T) {
 }
 
 func TestPrintYubiKeyPreflightStatusSkipsWhenNotRequired(t *testing.T) {
-	// NOT parallel — testutil.CaptureStdout replaces os.Stdout globally.
-	output := testutil.CaptureStdout(t, func() {
-		PrintYubiKeyPreflightStatus(false, "backup", func() error { return nil })
-	})
-	if output != "" {
-		t.Fatalf("expected no output when YubiKey not required, got: %q", output)
+	t.Parallel()
+	var sb strings.Builder
+	PrintYubiKeyPreflightStatus(&sb, false, "backup", func() error { return nil })
+	if sb.String() != "" {
+		t.Fatalf("expected no output when YubiKey not required, got: %q", sb.String())
 	}
 }
 
 func TestPrintYubiKeyPreflightStatusPrintsWarnWhenDisconnected(t *testing.T) {
-	// NOT parallel — testutil.CaptureStdout replaces os.Stdout globally.
-	output := testutil.CaptureStdout(t, func() {
-		PrintYubiKeyPreflightStatus(true, "backup", func() error { return errors.New("not connected") })
-	})
-	if !strings.Contains(output, "[WARN]") {
-		t.Fatalf("expected [WARN] in output, got: %q", output)
+	t.Parallel()
+	var sb strings.Builder
+	PrintYubiKeyPreflightStatus(&sb, true, "backup", func() error { return errors.New("not connected") })
+	if !strings.Contains(sb.String(), "[WARN]") {
+		t.Fatalf("expected [WARN] in output, got: %q", sb.String())
 	}
 }
 
 func TestPrintYubiKeyPreflightStatusPrintsOKWhenConnected(t *testing.T) {
-	// NOT parallel — testutil.CaptureStdout replaces os.Stdout globally.
-	output := testutil.CaptureStdout(t, func() {
-		PrintYubiKeyPreflightStatus(true, "backup", func() error { return nil })
-	})
-	if !strings.Contains(output, "[OK]") {
-		t.Fatalf("expected [OK] in output, got: %q", output)
+	t.Parallel()
+	var sb strings.Builder
+	PrintYubiKeyPreflightStatus(&sb, true, "backup", func() error { return nil })
+	if !strings.Contains(sb.String(), "[OK]") {
+		t.Fatalf("expected [OK] in output, got: %q", sb.String())
 	}
 }

@@ -62,7 +62,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
 
-	printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
+	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
@@ -100,6 +100,7 @@ func Run(cfg *util.Config, exeDir string) error {
 			return err
 		}
 	}
+	defer func() { security.ZeroBytes(password) }()
 
 	// Optional YubiKey factor (2FA or sole factor in yubikey mode).
 	var challengeHex string
@@ -109,11 +110,14 @@ func Run(cfg *util.Config, exeDir string) error {
 			return security.ErrYubiKeyRequired
 		}
 		fmt.Println("YubiKey connected. Please touch the YubiKey button.")
-		var err error
-		password, challengeHex, err = security.CombineWithPassword(password)
+		rawPassword := password
+		combined, hex, err := security.CombineWithPassword(rawPassword)
+		security.ZeroBytes(rawPassword)
 		if err != nil {
 			return fmt.Errorf("YubiKey authentication failed: %w", err)
 		}
+		password = combined
+		challengeHex = hex
 		if cfg.IsYubiKeyOnly() {
 			log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
 		} else {
@@ -198,7 +202,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	log.Info("Backup completed successfully")
-	printBackupCompletionSummary(processedFolders, totalPartsCreated, logPath, warningCount)
+	printBackupCompletionSummary(os.Stdout, processedFolders, totalPartsCreated, logPath, warningCount)
 	fmt.Println("\nBackup completed.")
 	return nil
 }
@@ -245,16 +249,16 @@ func backupFolder(
 	return len(sw.Paths()), nil
 }
 
-func printBackupCompletionSummary(processedFolders []string, totalPartsCreated int, logPath string, warningCount int) {
-	fmt.Println()
-	fmt.Println("Backup summary")
-	fmt.Println("--------------")
-	fmt.Printf("Processed folders: %d\n", len(processedFolders))
-	fmt.Printf("Parts created    : %d\n", totalPartsCreated)
-	fmt.Printf("Log file         : %s\n", logPath)
+func printBackupCompletionSummary(w io.Writer, processedFolders []string, totalPartsCreated int, logPath string, warningCount int) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Backup summary")
+	fmt.Fprintln(w, "--------------")
+	fmt.Fprintf(w, "Processed folders: %d\n", len(processedFolders))
+	fmt.Fprintf(w, "Parts created    : %d\n", totalPartsCreated)
+	fmt.Fprintf(w, "Log file         : %s\n", logPath)
 	if warningCount > 0 {
-		fmt.Printf("Warnings         : %d\n", warningCount)
+		fmt.Fprintf(w, "Warnings         : %d\n", warningCount)
 	} else {
-		fmt.Println("Warnings         : none")
+		fmt.Fprintln(w, "Warnings         : none")
 	}
 }

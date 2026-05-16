@@ -2,7 +2,6 @@ package backup
 
 import (
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
 	"os"
@@ -12,6 +11,7 @@ import (
 )
 
 func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
+	t.Parallel()
 	plans := []backupSource{
 		{Resolved: "A"},
 		{Resolved: "B", Skip: true},
@@ -26,6 +26,7 @@ func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 }
 
 func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
+	t.Parallel()
 	err := validateSourceFolders([]backupSource{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
 	if err == nil {
 		t.Fatal("expected preflight validation error, got nil")
@@ -37,6 +38,7 @@ func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
 }
 
 func TestEstimateSelectedSourceBytes(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	srcA := filepath.Join(root, "A")
 	srcB := filepath.Join(root, "B")
@@ -70,6 +72,7 @@ func TestEstimateSelectedSourceBytes(t *testing.T) {
 }
 
 func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	filePath := filepath.Join(root, "not-a-dir-file")
 	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
@@ -86,6 +89,7 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 }
 
 func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "info"}
 	sources := []backupSource{
@@ -94,9 +98,9 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 	stagingPlan := operation.LocalStagingPlan{}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
 		t.Fatalf("expected [ERROR] line for source with error, got: %q", output)
@@ -116,6 +120,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 }
 
 func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
+	t.Parallel()
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -130,9 +135,9 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	warnLinePrefix := "→ Source and target folders are on the same drive/share"
 	if strings.Contains(output, warnLinePrefix) {
@@ -141,14 +146,15 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 }
 
 func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
+	t.Parallel()
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
 	targetDir := `\\server\share\target`
 	sources := []backupSource{{Resolved: `\\server\share\source`}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	warnLinePrefix := "→ Source and target folders are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
@@ -157,6 +163,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 }
 
 func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -171,9 +178,9 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting backup."
@@ -193,6 +200,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 }
 
 func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -207,9 +215,9 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
+	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting backup."
@@ -229,6 +237,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 }
 
 func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T) {
+	t.Parallel()
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -247,9 +256,9 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	localStagingLine := "Local staging enabled, because source and target folders share the same drive/share"
 	tempDirLine := "Temp directory:"
@@ -268,6 +277,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 }
 
 func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T) {
+	t.Parallel()
 	tempRoot := t.TempDir()
 	targetDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -282,9 +292,9 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	if strings.Contains(output, "Temp directory:") {
 		t.Fatalf("did not expect Temp directory section when local staging is disabled, got: %q", output)
@@ -335,6 +345,7 @@ func TestValidateStagingSpaceSkipsWhenEstimatedBytesZero(t *testing.T) {
 }
 
 func TestValidateStagingSpacePassesWhenSpaceIsSufficient(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source")
 	stagingDir := filepath.Join(root, "staging")
@@ -357,6 +368,7 @@ func TestValidateStagingSpacePassesWhenSpaceIsSufficient(t *testing.T) {
 }
 
 func TestValidateTargetSpacePassesWhenSpaceIsSufficient(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source")
 	targetDir := filepath.Join(root, "target")
@@ -428,9 +440,9 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	sources := []backupSource{{Resolved: sourceDir}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
-	output := testutil.CaptureStdout(t, func() {
-		printBackupPreflightWithYubiKeyCheck(cfg, targetDir, sources, stagingPlan, func() error { return nil })
-	})
+	var sb strings.Builder
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source folder(s):")
 	targetIdx := strings.Index(output, "Backup folder:")

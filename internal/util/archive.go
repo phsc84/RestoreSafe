@@ -2,6 +2,7 @@ package util
 
 import (
 	"archive/tar"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,7 +40,7 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 		for _, ex := range exs {
 			rel, relErr := filepath.Rel(ex, path)
-			if relErr == nil && rel != "" && !strings.HasPrefix(rel, "..") {
+			if relErr == nil && !strings.HasPrefix(rel, "..") {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}
@@ -91,7 +92,7 @@ func ExtractTar(r io.Reader, destDir string) error {
 
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -131,7 +132,7 @@ func ValidateTar(r io.Reader) error {
 
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

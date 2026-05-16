@@ -2,7 +2,6 @@ package restore
 
 import (
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
 	"math"
@@ -48,6 +47,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 }
 
 func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 	outputDir := filepath.Join(restorePath, "Docs")
@@ -59,9 +59,9 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 		OutputDirErr: errors.New("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."),
 	}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
-	})
+	var sb strings.Builder
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+	output := sb.String()
 
 	if strings.Contains(output, "Restore target :") {
 		t.Fatalf("did not expect Restore target field, got: %q", output)
@@ -84,13 +84,14 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 }
 
 func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
-	})
+	var sb strings.Builder
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
+	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
 	okLine := "  [OK] YubiKey connected. Keep it connected now before starting restore."
@@ -110,13 +111,14 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 }
 
 func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
-	})
+	var sb strings.Builder
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
+	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
 	warnLine := "  [WARN] YubiKey authentication is enabled and no YubiKey is currently detected. Remedy: Connect the YubiKey now before starting restore."
@@ -173,9 +175,9 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 		TotalSizeBytes: math.MaxInt64,
 	}}
 
-	output := testutil.CaptureStdout(t, func() {
-		printRestorePreflightWithYubiKeyCheck(&util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
-	})
+	var sb strings.Builder
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", output)
@@ -232,6 +234,7 @@ func TestValidateStagingSpacePassesWhenNotEnabled(t *testing.T) {
 }
 
 func TestValidateStagingSpacePassesWhenSufficientSpace(t *testing.T) {
+	t.Parallel()
 	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
 	items := []restorePreflightItem{{TotalSizeBytes: 1}}
 	if err := validateStagingSpace(plan, items); err != nil {
@@ -240,6 +243,7 @@ func TestValidateStagingSpacePassesWhenSufficientSpace(t *testing.T) {
 }
 
 func TestValidateStagingSpaceReturnsErrorWhenInsufficient(t *testing.T) {
+	t.Parallel()
 	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
 	items := []restorePreflightItem{{TotalSizeBytes: math.MaxInt64}}
 	err := validateStagingSpace(plan, items)
@@ -303,4 +307,3 @@ func TestQueryRestoreTargetFreeBytesWalksUpToExistingParent(t *testing.T) {
 		t.Fatal("expected non-zero free bytes after walking up to existing parent")
 	}
 }
-

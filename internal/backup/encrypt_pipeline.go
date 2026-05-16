@@ -88,10 +88,7 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 			log.Warn("Failed to inspect part file %s: %v", filepath.Base(p), err)
 			continue
 		}
-		size := int64(0)
-		if fi != nil {
-			size = fi.Size()
-		}
+		size := fi.Size()
 		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
 	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), folderName)

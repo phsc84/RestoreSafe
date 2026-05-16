@@ -1,7 +1,6 @@
 package startup
 
 import (
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"os"
 	"path/filepath"
@@ -9,10 +8,10 @@ import (
 	"testing"
 )
 
-func TestHealthSeverityLabelDefaultReturnsInfo(t *testing.T) {
+func TestHealthSeverityLabelDefaultReturnsUnknown(t *testing.T) {
 	t.Parallel()
-	if got := healthSeverityLabel(healthSeverity(99)); got != "INFO" {
-		t.Fatalf("expected INFO for unknown severity, got %q", got)
+	if got := healthSeverityLabel(healthSeverity(99)); got != "UNKNOWN" {
+		t.Fatalf("expected UNKNOWN for unknown severity, got %q", got)
 	}
 }
 
@@ -138,14 +137,15 @@ func TestBuildBackupInventoryIssueItemsDetectsOrphanChallengeFile(t *testing.T) 
 }
 
 func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
+	t.Parallel()
 	items := []healthItem{
 		{isNote: true, Detail: "Local staging enabled."},
 		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
-		printStartupHealthCheck(items)
-	})
+	var sb strings.Builder
+	printStartupHealthCheck(&sb, items)
+	output := sb.String()
 
 	if !strings.Contains(output, "Local staging enabled.") {
 		t.Fatalf("expected note text in output, got: %q", output)
@@ -165,9 +165,9 @@ func TestPrintStartupHealthCheckNoAdviceLineWhenNoErrors(t *testing.T) {
 		{Severity: healthWarn, Scope: "Target", Detail: "warn"},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
-		printStartupHealthCheck(items)
-	})
+	var sb strings.Builder
+	printStartupHealthCheck(&sb, items)
+	output := sb.String()
 
 	if strings.Contains(output, "Review the reported errors") {
 		t.Fatalf("did not expect advice line when no errors, got: %q", output)
@@ -308,15 +308,16 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 }
 
 func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
+	t.Parallel()
 	items := []healthItem{
 		{Severity: healthOK, Scope: "Config", Detail: "ok"},
 		{Severity: healthWarn, Scope: "Target", Detail: "warn"},
 		{Severity: healthError, Scope: "Source", Detail: "error"},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
-		printStartupHealthCheck(items)
-	})
+	var sb strings.Builder
+	printStartupHealthCheck(&sb, items)
+	output := sb.String()
 
 	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 1 error(s)") {
 		t.Fatalf("summary line missing or incorrect in output: %q", output)
@@ -335,9 +336,9 @@ func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
 		{Severity: healthOK, Scope: "Backup folder", Detail: "C:/Backup"},
 	}
 
-	output := testutil.CaptureStdout(t, func() {
-		printStartupHealthCheck(items)
-	})
+	var sb strings.Builder
+	printStartupHealthCheck(&sb, items)
+	output := sb.String()
 
 	if strings.Count(output, "Source folder(s):") != 1 {
 		t.Fatalf("expected Source folder(s) title once, got output: %q", output)

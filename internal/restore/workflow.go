@@ -67,7 +67,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	stagingPlan := operation.PlanLocalStaging(targetDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selected, targetDir, restorePath)
-	printRestorePreflightWithYubiKeyCheck(cfg, targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
+	printRestorePreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, restorePath, preflight, requiresYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -98,6 +98,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	if err != nil {
 		return err
 	}
+	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println("Restore started.")
 	log.Info("Restore destination: %s", restorePath)
@@ -108,7 +109,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	log.Info("Restore completed successfully.")
-	printRestoreCompletionSummary(selected, totalPartsProcessed, logPath, warningCount)
+	printRestoreCompletionSummary(os.Stdout, selected, totalPartsProcessed, logPath, warningCount)
 	fmt.Println("\nRestore completed successfully.")
 	return nil
 }
@@ -179,6 +180,7 @@ func buildRestorePreflight(selected []util.BackupEntry, targetDir, restorePath s
 }
 
 func printRestorePreflightWithYubiKeyCheck(
+	w io.Writer,
 	cfg *util.Config,
 	targetDir, restorePath string,
 	items []restorePreflightItem,
@@ -188,72 +190,72 @@ func printRestorePreflightWithYubiKeyCheck(
 ) {
 	var issues []string
 
-	fmt.Println()
-	fmt.Println("-----------------------------------------")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "-----------------------------------------")
 
 	// Backup selection
-	fmt.Println("Backup selection:")
-	fmt.Printf("  Source folder: %s\n", filepath.ToSlash(targetDir))
+	fmt.Fprintln(w, "Backup selection:")
+	fmt.Fprintf(w, "  Source folder: %s\n", filepath.ToSlash(targetDir))
 	for _, item := range items {
 		if item.Err != nil {
-			fmt.Printf("  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 			issues = append(issues, item.Err.Error())
 		} else {
-			fmt.Printf("  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			fmt.Fprintf(w, "  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 		}
 	}
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	if estimatedRestoreBytes > 0 {
-		fmt.Printf("  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
+		fmt.Fprintf(w, "  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedRestoreBytes)))
 	} else {
-		fmt.Printf("  Used disk space (total): unknown\n")
+		fmt.Fprintf(w, "  Used disk space (total): unknown\n")
 	}
 
 	// Restore destination
-	fmt.Println("Restore destination:")
+	fmt.Fprintln(w, "Restore destination:")
 	destDisplay := displayRestoreOutputDir(restorePath)
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 	if restoreFreeErr != nil {
-		fmt.Printf("  [ERROR] %s\n", destDisplay)
+		fmt.Fprintf(w, "  [ERROR] %s\n", destDisplay)
 		issues = append(issues, fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
-		fmt.Printf("  [OK] %s\n", destDisplay)
-		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(restoreFreeBytes))
+		fmt.Fprintf(w, "  [OK] %s\n", destDisplay)
+		fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(restoreFreeBytes))
 		if util.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
 			issues = append(issues, util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
 	// Restored folder(s)
-	fmt.Println("Restored folder(s):")
+	fmt.Fprintln(w, "Restored folder(s):")
 	for _, item := range items {
 		displayDir := displayRestoreOutputDir(item.OutputDir)
 		if item.OutputDirErr != nil {
-			fmt.Printf("  [ERROR] %s\n", displayDir)
+			fmt.Fprintf(w, "  [ERROR] %s\n", displayDir)
 			issues = append(issues, item.OutputDirErr.Error())
 		} else {
-			fmt.Printf("  [OK] %s\n", displayDir)
+			fmt.Fprintf(w, "  [OK] %s\n", displayDir)
 		}
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
-	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "restore", checkYubiKeyConnected)
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintYubiKeyPreflightStatus(w, requiresYubiKey, "restore", checkYubiKeyConnected)
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Local staging block
 	if stagingPlan.Enabled {
-		fmt.Println()
-		fmt.Printf("Local staging enabled, because backup folder and folder(s) to be restored share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
-		fmt.Println("Temp directory:")
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Local staging enabled, because backup folder and folder(s) to be restored share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Fprintln(w, "Temp directory:")
 		tempDir := filepath.ToSlash(stagingPlan.ResolvedTempDir)
 		tempFreeBytes, tempFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 		if tempFreeErr != nil {
-			fmt.Printf("  [ERROR] %s\n", tempDir)
+			fmt.Fprintf(w, "  [ERROR] %s\n", tempDir)
 			issues = append(issues, fmt.Sprintf("Cannot query free space for temp directory: %v. Remedy: Check that the temp directory exists and is accessible.", tempFreeErr))
 		} else {
-			fmt.Printf("  [OK] %s\n", tempDir)
-			fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(tempFreeBytes))
+			fmt.Fprintf(w, "  [OK] %s\n", tempDir)
+			fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(tempFreeBytes))
 			if estimatedRestoreBytes > 0 && uint64(estimatedRestoreBytes) > tempFreeBytes {
 				issues = append(issues, fmt.Sprintf("Insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.", util.FormatBytesBinary(uint64(estimatedRestoreBytes)), util.FormatBytesBinary(tempFreeBytes), tempDir))
 			}
@@ -264,12 +266,12 @@ func printRestorePreflightWithYubiKeyCheck(
 
 	// Print collected issues
 	if len(issues) > 0 {
-		fmt.Println()
+		fmt.Fprintln(w)
 		for _, issue := range issues {
 			if strings.HasPrefix(issue, "[WARN]") {
-				fmt.Println(issue)
+				fmt.Fprintln(w, issue)
 			} else {
-				fmt.Printf("[ERROR] %s\n", issue)
+				fmt.Fprintf(w, "[ERROR] %s\n", issue)
 			}
 		}
 	}
@@ -468,22 +470,22 @@ func restoreSelectionWarningCount(selection string, index []util.BackupEntry) in
 	return 0
 }
 
-func printRestoreCompletionSummary(selected []util.BackupEntry, totalPartsProcessed int, logPath string, warningCount int) {
+func printRestoreCompletionSummary(w io.Writer, selected []util.BackupEntry, totalPartsProcessed int, logPath string, warningCount int) {
 	folderNames := make([]string, 0, len(selected))
 	for _, entry := range selected {
 		folderNames = append(folderNames, entry.FolderName)
 	}
 
-	fmt.Println()
-	fmt.Println("Restore summary")
-	fmt.Println("---------------")
-	fmt.Printf("Processed folders: %d (%s)\n", len(selected), summarizeNames(folderNames))
-	fmt.Printf("Parts processed  : %d\n", totalPartsProcessed)
-	fmt.Printf("Log file         : %s\n", logPath)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Restore summary")
+	fmt.Fprintln(w, "---------------")
+	fmt.Fprintf(w, "Processed folders: %d (%s)\n", len(selected), summarizeNames(folderNames))
+	fmt.Fprintf(w, "Parts processed  : %d\n", totalPartsProcessed)
+	fmt.Fprintf(w, "Log file         : %s\n", logPath)
 	if warningCount > 0 {
-		fmt.Printf("Warnings         : %d\n", warningCount)
+		fmt.Fprintf(w, "Warnings         : %d\n", warningCount)
 	} else {
-		fmt.Println("Warnings         : none")
+		fmt.Fprintln(w, "Warnings         : none")
 	}
 }
 

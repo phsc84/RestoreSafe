@@ -101,17 +101,22 @@ func ReadPasswordWithRetry(
 		if requiresYubiKey {
 			challengeHex, err := readChallengeFile(challengePath)
 			if err != nil {
+				security.ZeroBytes(password)
 				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
 			}
 			// Verify ykman is installed and a device is physically connected.
 			if err := security.CheckYubiKeyConnected(); err != nil {
+				security.ZeroBytes(password)
 				return nil, security.ErrYubiKeyRequired
 			}
 			fmt.Println("YubiKey connected. Please touch the YubiKey button.")
-			password, err = security.CombineWithPasswordForRestore(password, challengeHex)
+			rawPassword := password
+			combined, err := security.CombineWithPasswordForRestore(rawPassword, challengeHex)
+			security.ZeroBytes(rawPassword)
 			if err != nil {
 				return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
 			}
+			password = combined
 			if yubiKeyOnly {
 				log.Info("YubiKey-only authentication successful. Challenge: %s", challengeHex)
 			} else {
@@ -122,12 +127,14 @@ func ReadPasswordWithRetry(
 		// Verify password by attempting a trial decrypt.
 		parts, err := catalog.CollectParts(targetDir, rep)
 		if err != nil {
+			security.ZeroBytes(password)
 			return nil, err
 		}
 		if len(parts) > 0 {
 			if err := verifyPassword(parts[0], password); err == nil {
-				return password, nil
+				return password, nil // caller is responsible for zeroing
 			} else if errors.Is(err, security.ErrWrongPassword) {
+				security.ZeroBytes(password)
 				// In YubiKey-only mode there is no password to correct, so return immediately.
 				if yubiKeyOnly {
 					return nil, fmt.Errorf("YubiKey authentication failed: wrong key or corrupted file.")
@@ -139,12 +146,13 @@ func ReadPasswordWithRetry(
 				}
 				continue
 			} else {
+				security.ZeroBytes(password)
 				return nil, err
 			}
 		}
 
 		// If no part file was found, accept the password and let the caller fail later.
-		return password, nil
+		return password, nil // caller is responsible for zeroing
 	}
 
 	if yubiKeyOnly {

@@ -7,6 +7,8 @@ import (
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -43,7 +45,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	log.Info("Verification started - Selection: %q", selection)
 
 	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflightWithYubiKeyCheck(cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
+	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -62,6 +64,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	if err != nil {
 		return err
 	}
+	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println("Verification started.")
 	log.Info("Verifying %d selected item(s)", len(selected))
@@ -99,6 +102,7 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 }
 
 func printVerifyPreflightWithYubiKeyCheck(
+	w io.Writer,
 	cfg *util.Config,
 	targetDir string,
 	items []verifyPreflightItem,
@@ -107,44 +111,49 @@ func printVerifyPreflightWithYubiKeyCheck(
 ) {
 	var issues []string
 
-	fmt.Println()
-	fmt.Println("-----------------------------------------")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "-----------------------------------------")
 
 	// Backup selection
-	fmt.Println("Backup selection:")
-	fmt.Printf("  Source folder: %s\n", filepath.ToSlash(targetDir))
+	fmt.Fprintln(w, "Backup selection:")
+	fmt.Fprintf(w, "  Source folder: %s\n", filepath.ToSlash(targetDir))
 	for _, item := range items {
 		if item.Err != nil {
-			fmt.Printf("  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 			issues = append(issues, item.Err.Error())
 		} else {
-			fmt.Printf("  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			fmt.Fprintf(w, "  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
 		}
 	}
-	var totalBytes int64
-	for _, item := range items {
-		if item.Err == nil {
-			totalBytes += item.TotalSizeBytes
-		}
-	}
+	totalBytes := estimateVerifyBytes(items)
 	if totalBytes > 0 {
-		fmt.Printf("  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(totalBytes)))
+		fmt.Fprintf(w, "  Used disk space (total): %s\n", util.FormatBytesBinary(uint64(totalBytes)))
 	} else {
-		fmt.Printf("  Used disk space (total): unknown\n")
+		fmt.Fprintf(w, "  Used disk space (total): unknown\n")
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
-	operation.PrintYubiKeyPreflightStatus(requiresYubiKey, "verification", checkYubiKeyConnected)
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintYubiKeyPreflightStatus(w, requiresYubiKey, "verification", checkYubiKeyConnected)
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Print collected issues
 	if len(issues) > 0 {
-		fmt.Println()
+		fmt.Fprintln(w)
 		for _, issue := range issues {
-			fmt.Printf("[ERROR] %s\n", issue)
+			fmt.Fprintf(w, "[ERROR] %s\n", issue)
 		}
 	}
+}
+
+func estimateVerifyBytes(items []verifyPreflightItem) int64 {
+	var total int64
+	for _, item := range items {
+		if item.Err == nil {
+			total += item.TotalSizeBytes
+		}
+	}
+	return total
 }
 
 func validateVerifyPreflight(items []verifyPreflightItem) error {

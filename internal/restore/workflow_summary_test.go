@@ -1,7 +1,6 @@
 package restore
 
 import (
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
 	"strings"
@@ -66,13 +65,14 @@ func TestEstimateRestoreBytesReturnsZeroForAllErrors(t *testing.T) {
 }
 
 func TestPrintRestoreCompletionSummaryWithWarnings(t *testing.T) {
+	t.Parallel()
 	selected := []util.BackupEntry{
 		{FolderName: "Docs"},
 		{FolderName: "Photos"},
 	}
-	output := testutil.CaptureStdout(t, func() {
-		printRestoreCompletionSummary(selected, 4, "/backup/restore.log", 2)
-	})
+	var sb strings.Builder
+	printRestoreCompletionSummary(&sb, selected, 4, "/backup/restore.log", 2)
+	output := sb.String()
 
 	if !strings.Contains(output, "Processed folders: 2 (Docs, Photos)") {
 		t.Fatalf("expected processed-folders line, got: %q", output)
@@ -86,10 +86,11 @@ func TestPrintRestoreCompletionSummaryWithWarnings(t *testing.T) {
 }
 
 func TestPrintRestoreCompletionSummaryNoWarnings(t *testing.T) {
+	t.Parallel()
 	selected := []util.BackupEntry{{FolderName: "Docs"}}
-	output := testutil.CaptureStdout(t, func() {
-		printRestoreCompletionSummary(selected, 2, "/backup/restore.log", 0)
-	})
+	var sb strings.Builder
+	printRestoreCompletionSummary(&sb, selected, 2, "/backup/restore.log", 0)
+	output := sb.String()
 
 	if !strings.Contains(output, "Warnings         : none") {
 		t.Fatalf("expected 'none' warnings in summary, got: %q", output)

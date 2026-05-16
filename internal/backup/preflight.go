@@ -4,24 +4,26 @@ import (
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/util"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 )
 
 func printBackupPreflightWithYubiKeyCheck(
+	w io.Writer,
 	cfg *util.Config,
 	targetDir string,
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
 ) {
-	fmt.Println()
-	fmt.Println("-----------------------------------------")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "-----------------------------------------")
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
 
-	fmt.Println("Source folder(s):")
+	fmt.Fprintln(w, "Source folder(s):")
 	for _, src := range sources {
 		baseName := util.FolderBaseName(src.Resolved)
 		backupName := src.BackupName
@@ -30,63 +32,63 @@ func printBackupPreflightWithYubiKeyCheck(
 		}
 
 		if src.Err != nil {
-			fmt.Printf("  [ERROR] %s\n", src.Resolved)
+			fmt.Fprintf(w, "  [ERROR] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          → backup name: %s\n", backupName)
+				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
 			}
-			fmt.Printf("          → %v\n", src.Err)
+			fmt.Fprintf(w, "          → %v\n", src.Err)
 			continue
 		}
 		if src.Warning != "" {
-			fmt.Printf("  [WARN] %s\n", src.Resolved)
+			fmt.Fprintf(w, "  [WARN] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          → backup name: %s\n", backupName)
+				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
 			}
-			fmt.Printf("          → %s\n", src.Warning)
+			fmt.Fprintf(w, "          → %s\n", src.Warning)
 		} else {
-			fmt.Printf("  [OK] %s\n", src.Resolved)
+			fmt.Fprintf(w, "  [OK] %s\n", src.Resolved)
 			if backupName != baseName {
-				fmt.Printf("          → backup name: %s\n", backupName)
+				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
 			}
 		}
 
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
-			fmt.Printf("          → Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+			fmt.Fprintf(w, "          → Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}
 	for _, warning := range estimateWarnings {
-		fmt.Printf("  [WARN] size estimate: %s\n", warning)
+		fmt.Fprintf(w, "  [WARN] size estimate: %s\n", warning)
 	}
 	if estimatedBytes < 0 {
 		estimatedBytes = 0
 	}
-	fmt.Printf("  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
+	fmt.Fprintf(w, "  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 
-	fmt.Println("Backup folder:")
-	fmt.Printf("  [OK] %s\n", targetDir)
+	fmt.Fprintln(w, "Backup folder:")
+	fmt.Fprintf(w, "  [OK] %s\n", targetDir)
 	if freeErr != nil {
-		fmt.Printf("  Free disk space: unknown (%v)\n", freeErr)
+		fmt.Fprintf(w, "  Free disk space: unknown (%v)\n", freeErr)
 	} else {
-		fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
+		fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
 	}
 
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
-	operation.PrintYubiKeyPreflightStatus(cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
-	operation.PrintPreflightField(operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
+	operation.PrintYubiKeyPreflightStatus(w, cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
+	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {
-		fmt.Println()
-		fmt.Printf("Local staging enabled, because source and target folders share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
-		fmt.Println("Temp directory:")
-		fmt.Printf("  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Local staging enabled, because source and target folders share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Fprintln(w, "Temp directory:")
+		fmt.Fprintf(w, "  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 		if localFreeErr != nil {
-			fmt.Printf("  Free disk space: unknown (%v)\n", localFreeErr)
+			fmt.Fprintf(w, "  Free disk space: unknown (%v)\n", localFreeErr)
 		} else {
-			fmt.Printf("  Free disk space: %s\n", util.FormatBytesBinary(localFreeBytes))
+			fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(localFreeBytes))
 		}
 	}
 }

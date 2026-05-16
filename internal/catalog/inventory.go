@@ -56,7 +56,7 @@ func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 		if !ok {
 			continue
 		}
-		if e.FolderName != entry.FolderName || e.Date != entry.Date || e.ID != entry.ID {
+		if e != entry {
 			continue
 		}
 		parts = append(parts, seqPath{seq, filepath.Join(targetDir, de.Name())})

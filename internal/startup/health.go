@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,7 +19,6 @@ const (
 	healthOK healthSeverity = iota
 	healthWarn
 	healthError
-	healthInfo
 )
 
 const (
@@ -43,7 +43,7 @@ type healthItem struct {
 // application starts. It never aborts startup; it only reports findings.
 func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) {
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath)
-	printStartupHealthCheck(items)
+	printStartupHealthCheck(os.Stdout, items)
 }
 
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
@@ -141,44 +141,33 @@ func checkTargetFolderHealth(targetDir string) []healthItem {
 		}}
 	}
 
-	probe, err := os.CreateTemp(targetDir, ".restoresafe-health-*.tmp")
-	if err != nil {
-		return []healthItem{{
-			Severity: healthError,
-			Scope:    healthScopeTargetFolder,
-			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Adjust write permissions or choose a different target_folder.", targetDir, err),
-		}}
-	}
-	probePath := probe.Name()
-	probe.Close()
-
-	cleanupErr := os.Remove(probePath)
-
-	items := []healthItem{{
-		Severity: healthOK,
-		Scope:    healthScopeTargetFolder,
-		Detail:   filepath.ToSlash(targetDir),
-	}}
-	if cleanupErr != nil {
-		items = append(items, healthItem{
-			Severity: healthWarn,
-			Scope:    healthScopeTargetFolder,
-			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions in target_folder.", cleanupErr),
-		})
-	}
-
-	return items
+	return probeWriteAccess(
+		targetDir,
+		healthScopeTargetFolder,
+		"Adjust write permissions or choose a different target_folder.",
+		"Check delete permissions in target_folder.",
+	)
 }
 
 func checkTempDirHealth() []healthItem {
-	tempDir := os.TempDir()
-	tempDirDisplay := filepath.ToSlash(tempDir)
-	probe, err := os.CreateTemp(tempDir, ".restoresafe-health-*.tmp")
+	return probeWriteAccess(
+		os.TempDir(),
+		healthScopeTempDirectory,
+		"Point TEMP/TMP to a writable folder or adjust permissions.",
+		"Check delete permissions for TEMP/TMP.",
+	)
+}
+
+// probeWriteAccess creates and removes a temporary file in dir to confirm write
+// and delete access. It returns health items using the given scope and remedy strings.
+func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []healthItem {
+	display := filepath.ToSlash(dir)
+	probe, err := os.CreateTemp(dir, ".restoresafe-health-*.tmp")
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    healthScopeTempDirectory,
-			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: Point TEMP/TMP to a writable folder or adjust permissions.", tempDirDisplay, err),
+			Scope:    scope,
+			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: %s", display, err, writeErrRemedy),
 		}}
 	}
 	probePath := probe.Name()
@@ -186,18 +175,16 @@ func checkTempDirHealth() []healthItem {
 
 	items := []healthItem{{
 		Severity: healthOK,
-		Scope:    healthScopeTempDirectory,
-		Detail:   tempDirDisplay,
+		Scope:    scope,
+		Detail:   display,
 	}}
-
 	if err := os.Remove(probePath); err != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
-			Scope:    healthScopeTempDirectory,
-			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: Check delete permissions for TEMP/TMP.", err),
+			Scope:    scope,
+			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: %s", err, cleanupErrRemedy),
 		})
 	}
-
 	return items
 }
 
@@ -359,10 +346,10 @@ func orphanChallengeFiles(actual, expected map[string]bool) []string {
 	return orphans
 }
 
-func printStartupHealthCheck(items []healthItem) {
-	fmt.Println("----------------------")
-	fmt.Println("Startup health check")
-	fmt.Println("----------------------")
+func printStartupHealthCheck(w io.Writer, items []healthItem) {
+	fmt.Fprintln(w, "----------------------")
+	fmt.Fprintln(w, "Startup health check")
+	fmt.Fprintln(w, "----------------------")
 
 	okCount := 0
 	warnCount := 0
@@ -408,41 +395,32 @@ func printStartupHealthCheck(items []healthItem) {
 	}
 
 	for _, scope := range orderedScopes {
-		fmt.Printf("%s:\n", scope)
+		fmt.Fprintf(w, "%s:\n", scope)
 		for _, item := range itemsByScope[scope] {
-			if item.Severity == healthInfo {
-				fmt.Printf("  %s\n", item.Detail)
-			} else {
-				label := healthSeverityLabel(item.Severity)
-				fmt.Printf("  [%s] %s\n", label, item.Detail)
-			}
+			fmt.Fprintf(w, "  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
 		}
 	}
 
 	if len(noteItems) > 0 || len(tempDirItems) > 0 {
-		fmt.Println()
+		fmt.Fprintln(w)
 		for _, item := range noteItems {
-			fmt.Println(item.Detail)
+			fmt.Fprintln(w, item.Detail)
 		}
 		if len(tempDirItems) > 0 {
-			fmt.Printf("%s:\n", healthScopeTempDirectory)
+			fmt.Fprintf(w, "%s:\n", healthScopeTempDirectory)
 			for _, item := range tempDirItems {
-				if item.Severity == healthInfo {
-					fmt.Printf("  %s\n", item.Detail)
-				} else {
-					fmt.Printf("  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
-				}
+				fmt.Fprintf(w, "  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
 			}
 		}
-		fmt.Println()
+		fmt.Fprintln(w)
 	} else {
-		fmt.Println()
+		fmt.Fprintln(w)
 	}
-	fmt.Printf("Summary: %d OK, %d warning(s), %d error(s)\n", okCount, warnCount, errorCount)
+	fmt.Fprintf(w, "Summary: %d OK, %d warning(s), %d error(s)\n", okCount, warnCount, errorCount)
 	if errorCount > 0 {
-		fmt.Println("Review the reported errors before running backup, restore, or verify.")
+		fmt.Fprintln(w, "Review the reported errors before running backup, restore, or verify.")
 	}
-	fmt.Println()
+	fmt.Fprintln(w)
 }
 
 func healthSeverityLabel(severity healthSeverity) string {
@@ -454,6 +432,6 @@ func healthSeverityLabel(severity healthSeverity) string {
 	case healthError:
 		return "ERROR"
 	default:
-		return "INFO"
+		return "UNKNOWN"
 	}
 }

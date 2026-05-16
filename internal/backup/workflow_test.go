@@ -13,9 +13,10 @@ import (
 )
 
 func TestPrintBackupCompletionSummaryWithWarnings(t *testing.T) {
-	output := testutil.CaptureStdout(t, func() {
-		printBackupCompletionSummary([]string{"Docs", "Photos"}, 4, "/target/backup.log", 2)
-	})
+	t.Parallel()
+	var sb strings.Builder
+	printBackupCompletionSummary(&sb, []string{"Docs", "Photos"}, 4, "/target/backup.log", 2)
+	output := sb.String()
 
 	if !strings.Contains(output, "Processed folders: 2") {
 		t.Fatalf("expected folder count in summary, got: %q", output)
@@ -29,9 +30,10 @@ func TestPrintBackupCompletionSummaryWithWarnings(t *testing.T) {
 }
 
 func TestPrintBackupCompletionSummaryNoWarnings(t *testing.T) {
-	output := testutil.CaptureStdout(t, func() {
-		printBackupCompletionSummary([]string{"Docs"}, 1, "/target/backup.log", 0)
-	})
+	t.Parallel()
+	var sb strings.Builder
+	printBackupCompletionSummary(&sb, []string{"Docs"}, 1, "/target/backup.log", 0)
+	output := sb.String()
 
 	if !strings.Contains(output, "Warnings         : none") {
 		t.Fatalf("expected 'none' for zero warnings, got: %q", output)

@@ -7,12 +7,28 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/term"
 )
 
+// ZeroBytes overwrites b with zeros to reduce the window in which a password
+// is present in process memory. Call it as soon as the password is no longer
+// needed; use defer for correctness on all return paths.
+func ZeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
 // ReadPassword prints the prompt text to stdout and reads a password,
-// displaying '*' for each character typed.
+// displaying '*' for each accepted character.
+//
+// UTF-8 multi-byte characters are accepted: bytes are buffered until a
+// complete codepoint is assembled, then accepted if printable. Backspace
+// removes the last complete codepoint (not just one byte). Non-printable or
+// invalid bytes produce a terminal bell and are silently discarded.
 func ReadPassword(prompt string) ([]byte, error) {
 	fmt.Print(prompt)
 
@@ -23,7 +39,8 @@ func ReadPassword(prompt string) ([]byte, error) {
 	}
 	defer term.Restore(fd, oldState)
 
-	var buf []byte
+	var buf []byte     // accepted password bytes (complete codepoints only)
+	var partial []byte // bytes of an incomplete multi-byte UTF-8 codepoint
 	b := make([]byte, 1)
 	for {
 		if _, err := os.Stdin.Read(b); err != nil {
@@ -32,11 +49,14 @@ func ReadPassword(prompt string) ([]byte, error) {
 		}
 		switch b[0] {
 		case '\r', '\n':
+			partial = partial[:0]
 			fmt.Print("\r\n")
 			return buf, nil
 		case 0x7f, 0x08: // backspace / delete
+			partial = partial[:0]
 			if len(buf) > 0 {
-				buf = buf[:len(buf)-1]
+				_, runeSize := utf8.DecodeLastRune(buf)
+				buf = buf[:len(buf)-runeSize]
 				fmt.Print("\b \b")
 			}
 		case 0x03: // Ctrl+C
@@ -46,10 +66,52 @@ func ReadPassword(prompt string) ([]byte, error) {
 			fmt.Print("\r\n")
 			return nil, fmt.Errorf("Failed to read password: EOF. Remedy: Ensure stdin is available and retry.")
 		default:
-			if b[0] >= 0x20 { // printable ASCII
-				buf = append(buf, b[0])
-				fmt.Print("*")
+			if b[0] < 0x20 {
+				// Non-printable control byte — alert and discard.
+				fmt.Print("\a")
+				continue
 			}
+			// Accumulate for UTF-8 decoding.
+			partial = append(partial, b[0])
+
+			if b[0] < 0x80 {
+				// Single-byte ASCII codepoint (0x20–0x7E): process immediately.
+				r := rune(partial[0])
+				partial = partial[:0]
+				if !unicode.IsPrint(r) {
+					fmt.Print("\a")
+					continue
+				}
+				buf = append(buf, byte(r))
+				fmt.Print("*")
+				continue
+			}
+
+			// High byte: may be part of a multi-byte UTF-8 codepoint.
+			if !utf8.FullRune(partial) {
+				// Sequence not yet complete — wait for more bytes,
+				// but guard against impossibly long sequences.
+				if len(partial) > utf8.UTFMax {
+					partial = partial[:0]
+					fmt.Print("\a")
+				}
+				continue
+			}
+
+			// Full codepoint (or provably invalid byte sequence) available.
+			r, size := utf8.DecodeRune(partial)
+			partial = partial[:0]
+			if r == utf8.RuneError && size == 1 {
+				// Invalid UTF-8 byte sequence — alert and discard.
+				fmt.Print("\a")
+				continue
+			}
+			if !unicode.IsPrint(r) {
+				fmt.Print("\a")
+				continue
+			}
+			buf = append(buf, []byte(string(r))...)
+			fmt.Print("*")
 		}
 	}
 }
