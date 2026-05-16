@@ -62,7 +62,7 @@ func main() {
 	}
 
 	printStartupBanner(Version)
-	startup.RunStartupHealthCheck(cfg, exeDir, configPath)
+	health := startup.RunStartupHealthCheck(cfg, exeDir, configPath)
 
 	// Interactive menu mode.
 	for {
@@ -72,19 +72,28 @@ func main() {
 
 		switch strings.TrimSpace(choice) {
 		case "1":
-			if err := backup.Run(cfg, exeDir); err != nil {
+			if health.BlocksBackup() {
+				reportHealthCheckBlocking("Backup")
+				waitForKeyPress()
+			} else if err := backup.Run(cfg, exeDir); err != nil {
 				reportOperationError("Backup", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "2":
-			if err := restore.Run(cfg, exeDir); err != nil {
+			if health.BlocksRestoreOrVerify() {
+				reportHealthCheckBlocking("Restore")
+				waitForKeyPress()
+			} else if err := restore.Run(cfg, exeDir); err != nil {
 				reportOperationError("Restore", err)
 				waitForKeyPress()
 			}
 			fmt.Println()
 		case "3":
-			if err := verify.Run(cfg, exeDir); err != nil {
+			if health.BlocksRestoreOrVerify() {
+				reportHealthCheckBlocking("Verification")
+				waitForKeyPress()
+			} else if err := verify.Run(cfg, exeDir); err != nil {
 				reportOperationError("Verification", err)
 				waitForKeyPress()
 			}
@@ -97,6 +106,12 @@ func main() {
 			fmt.Println()
 		}
 	}
+}
+
+func reportHealthCheckBlocking(action string) {
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(os.Stderr, "%s cannot proceed: resolve the health check errors reported above first.\n", action)
+	fmt.Fprintln(os.Stderr)
 }
 
 func reportOperationError(action string, err error) {

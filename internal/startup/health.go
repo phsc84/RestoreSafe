@@ -39,11 +39,43 @@ type healthItem struct {
 	isNote   bool // printed as plain unindented text; skipped in OK/WARN/ERROR counts
 }
 
+// HealthCheckResult captures which health error scopes were detected at startup.
+type HealthCheckResult struct {
+	errorScopes map[string]bool
+}
+
+// BlocksBackup reports whether any health check error prevents running a backup.
+func (r HealthCheckResult) BlocksBackup() bool {
+	return r.errorScopes[healthScopeConfig] ||
+		r.errorScopes[healthScopeSourceDirectory] ||
+		r.errorScopes[healthScopeTargetDirectory] ||
+		r.errorScopes[healthScopeYubiKey] ||
+		r.errorScopes[healthScopeTempDirectory]
+}
+
+// BlocksRestoreOrVerify reports whether any health check error prevents restore or verify.
+func (r HealthCheckResult) BlocksRestoreOrVerify() bool {
+	return r.errorScopes[healthScopeConfig] ||
+		r.errorScopes[healthScopeTargetDirectory] ||
+		r.errorScopes[healthScopeYubiKey]
+}
+
+func buildHealthCheckResult(items []healthItem) HealthCheckResult {
+	scopes := make(map[string]bool)
+	for _, item := range items {
+		if item.Severity == healthError && !item.isNote {
+			scopes[item.Scope] = true
+		}
+	}
+	return HealthCheckResult{errorScopes: scopes}
+}
+
 // RunStartupHealthCheck performs a non-interactive diagnostic pass when the
 // application starts. It never aborts startup; it only reports findings.
-func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) {
+func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) HealthCheckResult {
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath)
 	printStartupHealthCheck(os.Stdout, items)
+	return buildHealthCheckResult(items)
 }
 
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
