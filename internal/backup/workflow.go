@@ -46,8 +46,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer log.Close()
 
-	log.Info("RestoreSafe backup started - ID: %s, date: %s", string(id), date)
-
 	if err := validateSourceDirectories(sources); err != nil {
 		return err
 	}
@@ -138,7 +136,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	if n == 1 {
 		dirWord = "directory"
 	}
-	log.Info("Backup started - %d source %s", n, dirWord)
+	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(id), date, n, dirWord)
 	warningCount := 0
 	totalPartsCreated := 0
 	processedDirectories := make([]string, 0)

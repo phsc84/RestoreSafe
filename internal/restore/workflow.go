@@ -54,8 +54,6 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer log.Close()
 
-	log.Info("Restore started - Selection: %q", selection)
-
 	restorePath, err := promptRestoreDestination(targetDir)
 	if err != nil {
 		if errors.Is(err, operation.ErrSelectionCancelled) {
@@ -101,7 +99,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println()
-	fmt.Println("Restore started.")
+	log.Info("Restore started - ID: %s, date: %s, selection: %q", string(selected[0].ID), selected[0].Date, selection)
 	log.Info("Restore destination: %s", restorePath)
 
 	totalPartsProcessed, err := restoreSelectedEntries(selected, targetDir, restorePath, password, log, stagingPlan)

@@ -42,8 +42,6 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	log := operation.OpenLogger(cfg, targetDir, selected[0])
 	defer log.Close()
-	log.Info("Verification started - Selection: %q", selection)
-
 	preflight := buildVerifyPreflight(selected, targetDir)
 	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
@@ -67,7 +65,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println()
-	fmt.Println("Verification started.")
+	log.Info("Verification started - ID: %s, date: %s, selection: %q", string(selected[0].ID), selected[0].Date, selection)
 	log.Info("Verifying %d selected item(s)", len(selected))
 	if err := verifySelectedEntries(selected, targetDir, password, log); err != nil {
 		return err
