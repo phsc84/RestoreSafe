@@ -9,13 +9,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [3.0.0] - 2026-05-15
 
 ### Added
+- Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
 - Target directory locking: backup and restore now acquire an exclusive lock on the target directory at startup, preventing concurrent runs from corrupting the same backup set.
 - Password prompt now echoes `*` characters as the user types.
-- Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
 - Backup pre-flight now validates available staging space before starting, not just target space.
 
 ### Changed
-- Updated Go toolchain to 1.26.3 and refreshed all dependencies.
+- Encrypted file format bumped to header version 2: the Argon2id parameters (time, memory, threads) are now stored in each file header so decryption always uses the exact parameters from encryption, enabling per-backup tuning without loss of restorability. Version 1 backup files are no longer compatible and must be restored with an older RestoreSafe build.
 - Duplicate source-directory basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
 - Improved error messages across backup, restore, and verify flows with more concrete remediation guidance.
 - Consolidated YubiKey connectivity checks into a shared helper used consistently by backup, restore, and verify preflights.
@@ -24,6 +24,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Trimmed "Remedy:" guidance from generic I/O error messages; kept only where the fix is non-obvious (format version mismatches, missing challenge files, config field values, TEMP/TMP redirection).
 - Backup log summary lines now use bracket notation for directory names and correct singular/plural for source count.
 - Removed redundant "Backup started." console line; added a blank line before the started log entry in backup, restore, and verify.
+- Updated Go to 1.26.3 and refreshed all dependencies.
 
 ### Fixed
 - Challenge file validation in restore and verify now rejects empty, non-hex, and wrong-length content with a clear error rather than a cryptic decryption failure.

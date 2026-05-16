@@ -73,12 +73,12 @@ func printBackupPreflightWithYubiKeyCheck(
 		fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(freeBytes))
 	}
 
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Authentication", cfg.AuthenticationMode.Label())
 	operation.PrintYubiKeyPreflightStatus(w, cfg.UseYubiKey(), "backup", checkYubiKeyConnected)
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {
 		fmt.Fprintln(w)

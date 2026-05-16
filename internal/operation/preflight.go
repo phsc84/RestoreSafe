@@ -5,9 +5,6 @@ import (
 	"io"
 )
 
-// PreflightFieldLabelWidth is the standard label column width for preflight summary fields.
-const PreflightFieldLabelWidth = 14
-
 // ValidatePreflightItems returns a formatted error when one or more items fail
 // a caller-supplied validity check.
 func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemplate string) error {
@@ -21,11 +18,6 @@ func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemp
 		return fmt.Errorf(failureTemplate, invalid)
 	}
 	return nil
-}
-
-// PrintPreflightField prints an aligned key/value field for preflight summaries.
-func PrintPreflightField(w io.Writer, labelWidth int, label, value string) {
-	fmt.Fprintf(w, "%-*s: %s\n", labelWidth, label, value)
 }
 
 // PrintYubiKeyPreflightStatus prints the YubiKey connection status line under

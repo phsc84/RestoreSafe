@@ -263,12 +263,13 @@ func printBackupCompletionSummary(w io.Writer, processedDirectories []string, to
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Backup summary")
 	fmt.Fprintln(w, "--------------")
-	fmt.Fprintf(w, "Processed directories: %d\n", len(processedDirectories))
-	fmt.Fprintf(w, "Parts created    : %d\n", totalPartsCreated)
-	fmt.Fprintf(w, "Log file         : %s\n", logPath)
+	const w21 = 21
+	operation.PrintField(w, w21, "Processed directories", fmt.Sprintf("%d", len(processedDirectories)))
+	operation.PrintField(w, w21, "Parts created", fmt.Sprintf("%d", totalPartsCreated))
+	operation.PrintField(w, w21, "Log file", logPath)
 	if warningCount > 0 {
-		fmt.Fprintf(w, "Warnings         : %d\n", warningCount)
+		operation.PrintField(w, w21, "Warnings", fmt.Sprintf("%d", warningCount))
 	} else {
-		fmt.Fprintln(w, "Warnings         : none")
+		operation.PrintField(w, w21, "Warnings", "none")
 	}
 }

@@ -239,9 +239,9 @@ func printRestorePreflightWithYubiKeyCheck(
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	operation.PrintYubiKeyPreflightStatus(w, requiresYubiKey, "restore", checkYubiKeyConnected)
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Local staging block
 	if stagingPlan.Enabled {
@@ -479,13 +479,14 @@ func printRestoreCompletionSummary(w io.Writer, selected []util.BackupEntry, tot
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Restore summary")
 	fmt.Fprintln(w, "---------------")
-	fmt.Fprintf(w, "Processed directories: %d (%s)\n", len(selected), summarizeNames(directoryNames))
-	fmt.Fprintf(w, "Parts processed  : %d\n", totalPartsProcessed)
-	fmt.Fprintf(w, "Log file         : %s\n", logPath)
+	const w21 = 21
+	operation.PrintField(w, w21, "Processed directories", fmt.Sprintf("%d (%s)", len(selected), summarizeNames(directoryNames)))
+	operation.PrintField(w, w21, "Parts processed", fmt.Sprintf("%d", totalPartsProcessed))
+	operation.PrintField(w, w21, "Log file", logPath)
 	if warningCount > 0 {
-		fmt.Fprintf(w, "Warnings         : %d\n", warningCount)
+		operation.PrintField(w, w21, "Warnings", fmt.Sprintf("%d", warningCount))
 	} else {
-		fmt.Fprintln(w, "Warnings         : none")
+		operation.PrintField(w, w21, "Warnings", "none")
 	}
 }
 

@@ -77,10 +77,10 @@ func TestPrintRestoreCompletionSummaryWithWarnings(t *testing.T) {
 	if !strings.Contains(output, "Processed directories: 2 (Docs, Photos)") {
 		t.Fatalf("expected processed-directories line, got: %q", output)
 	}
-	if !strings.Contains(output, "Parts processed  : 4") {
+	if !strings.Contains(output, "Parts processed      : 4") {
 		t.Fatalf("expected parts-processed line, got: %q", output)
 	}
-	if !strings.Contains(output, "Warnings         : 2") {
+	if !strings.Contains(output, "Warnings             : 2") {
 		t.Fatalf("expected warning count in summary, got: %q", output)
 	}
 }
@@ -92,7 +92,7 @@ func TestPrintRestoreCompletionSummaryNoWarnings(t *testing.T) {
 	printRestoreCompletionSummary(&sb, selected, 2, "/backup/restore.log", 0)
 	output := sb.String()
 
-	if !strings.Contains(output, "Warnings         : none") {
+	if !strings.Contains(output, "Warnings             : none") {
 		t.Fatalf("expected 'none' warnings in summary, got: %q", output)
 	}
 }

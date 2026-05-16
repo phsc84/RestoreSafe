@@ -133,9 +133,9 @@ func printVerifyPreflightWithYubiKeyCheck(
 	}
 
 	// Authentication and Log level
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Authentication", operation.BackupAuthenticationLabel(requiresYubiKey, yubiKeyOnly))
 	operation.PrintYubiKeyPreflightStatus(w, requiresYubiKey, "verification", checkYubiKeyConnected)
-	operation.PrintPreflightField(w, operation.PreflightFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	// Print collected issues
 	if len(issues) > 0 {

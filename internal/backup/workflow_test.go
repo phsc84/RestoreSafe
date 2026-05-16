@@ -21,10 +21,10 @@ func TestPrintBackupCompletionSummaryWithWarnings(t *testing.T) {
 	if !strings.Contains(output, "Processed directories: 2") {
 		t.Fatalf("expected directory count in summary, got: %q", output)
 	}
-	if !strings.Contains(output, "Parts created    : 4") {
+	if !strings.Contains(output, "Parts created        : 4") {
 		t.Fatalf("expected parts count in summary, got: %q", output)
 	}
-	if !strings.Contains(output, "Warnings         : 2") {
+	if !strings.Contains(output, "Warnings             : 2") {
 		t.Fatalf("expected warning count in summary, got: %q", output)
 	}
 }
@@ -35,7 +35,7 @@ func TestPrintBackupCompletionSummaryNoWarnings(t *testing.T) {
 	printBackupCompletionSummary(&sb, []string{"Docs"}, 1, "/target/backup.log", 0)
 	output := sb.String()
 
-	if !strings.Contains(output, "Warnings         : none") {
+	if !strings.Contains(output, "Warnings             : none") {
 		t.Fatalf("expected 'none' for zero warnings, got: %q", output)
 	}
 }
