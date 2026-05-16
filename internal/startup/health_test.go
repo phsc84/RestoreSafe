@@ -107,9 +107,9 @@ func TestOrphanChallengeFilesReturnsEmptyWhenAllExpected(t *testing.T) {
 func TestBuildBackupInventoryIssueItemsDetectsOrphanChallengeFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create part dir: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestOrphanChallengeFilesReturnsSortedList(t *testing.T) {
 func TestRunKey(t *testing.T) {
 	t.Parallel()
 
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	if got := entry.RunKey(); got != "2026-03-14|ABC123" {
 		t.Fatalf("unexpected RunKey: %q", got)
 	}
@@ -230,8 +230,8 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	}
 
 	cfg := &util.Config{
-		SourceFolders: []string{shared, shared},
-		TargetFolder:  target,
+		SourceDirectories: []string{shared, shared},
+		TargetDirectory:  target,
 		SplitSizeMB:   64,
 		LogLevel:      "info",
 	}
@@ -239,14 +239,14 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasDuplicateWarn := false
 	for _, item := range items {
-		if item.Scope == "Source folder(s)" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
+		if item.Scope == "Source directory(s)" && item.Severity == healthWarn && strings.Contains(strings.ToLower(item.Detail), "identical duplicate") {
 			hasDuplicateWarn = true
 			break
 		}
 	}
 
 	if !hasDuplicateWarn {
-		t.Fatalf("expected source-folder warning for true identical duplicate, got items: %#v", items)
+		t.Fatalf("expected source-directory warning for true identical duplicate, got items: %#v", items)
 	}
 }
 
@@ -281,29 +281,29 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 	}
 
 	cfg := &util.Config{
-		SourceFolders: []string{first, second, third, fourth, fifth},
-		TargetFolder:  target,
+		SourceDirectories: []string{first, second, third, fourth, fifth},
+		TargetDirectory:  target,
 		SplitSizeMB:   64,
 		LogLevel:      "info",
 	}
 
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	hasCollisionError := false
-	hasSourceFolderError := false
+	hasSourceDirectoryError := false
 	for _, item := range items {
-		if item.Scope == "Source folder" && item.Severity == healthError && strings.Contains(strings.ToLower(item.Detail), "alias collision") {
+		if item.Scope == "Source directory" && item.Severity == healthError && strings.Contains(strings.ToLower(item.Detail), "alias collision") {
 			hasCollisionError = true
 		}
-		if item.Scope == "Source folder" && item.Severity == healthError {
-			hasSourceFolderError = true
+		if item.Scope == "Source directory" && item.Severity == healthError {
+			hasSourceDirectoryError = true
 		}
 	}
 
 	if hasCollisionError {
 		t.Fatalf("did not expect alias-collision error, got items: %#v", items)
 	}
-	if hasSourceFolderError {
-		t.Fatalf("did not expect source-folder errors for encoded special-character variants, got items: %#v", items)
+	if hasSourceDirectoryError {
+		t.Fatalf("did not expect source-directory errors for encoded special-character variants, got items: %#v", items)
 	}
 }
 
@@ -331,25 +331,25 @@ func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
 	t.Parallel()
 
 	items := []healthItem{
-		{Severity: healthOK, Scope: "Source folder(s)", Detail: "C:/A"},
-		{Severity: healthWarn, Scope: "Source folder(s)", Detail: "C:/B → some warning"},
-		{Severity: healthOK, Scope: "Backup folder", Detail: "C:/Backup"},
+		{Severity: healthOK, Scope: "Source directory(s)", Detail: "C:/A"},
+		{Severity: healthWarn, Scope: "Source directory(s)", Detail: "C:/B → some warning"},
+		{Severity: healthOK, Scope: "Backup directory", Detail: "C:/Backup"},
 	}
 
 	var sb strings.Builder
 	printStartupHealthCheck(&sb, items)
 	output := sb.String()
 
-	if strings.Count(output, "Source folder(s):") != 1 {
-		t.Fatalf("expected Source folder(s) title once, got output: %q", output)
+	if strings.Count(output, "Source directory(s):") != 1 {
+		t.Fatalf("expected Source directory(s) title once, got output: %q", output)
 	}
-	if strings.Contains(output, "[OK] Source folder(s):") {
+	if strings.Contains(output, "[OK] Source directory(s):") {
 		t.Fatalf("did not expect old inline scope format, got output: %q", output)
 	}
 	if !strings.Contains(output, "  [OK] C:/A") {
-		t.Fatalf("expected grouped detail line for Source folder, got output: %q", output)
+		t.Fatalf("expected grouped detail line for Source directory, got output: %q", output)
 	}
-	if !strings.Contains(output, "Backup folder:") {
-		t.Fatalf("expected Backup folder title, got output: %q", output)
+	if !strings.Contains(output, "Backup directory:") {
+		t.Fatalf("expected Backup directory title, got output: %q", output)
 	}
 }

@@ -38,15 +38,15 @@ func NewBackupFixture(t testing.TB, password []byte) *BackupFixture {
 	mustWriteFile(t, filepath.Join(srcDir, "nested", "small.txt"), []byte("hello restoresafe"))
 	mustWriteFile(t, filepath.Join(srcDir, "large.bin"), bytes.Repeat([]byte("A"), 2*1024*1024+256))
 
-	folderName := filepath.Base(srcDir)
+	directoryName := filepath.Base(srcDir)
 	backupDate := "2026-03-14"
 	backupID := util.BackupID("FIX001")
-	parts := createEncryptedSplitBackup(t, srcDir, targetDir, folderName, backupDate, backupID, password, defaultSplitSizeMB)
+	parts := createEncryptedSplitBackup(t, srcDir, targetDir, directoryName, backupDate, backupID, password, defaultSplitSizeMB)
 
 	return &BackupFixture{
 		SrcDir:    srcDir,
 		TargetDir: targetDir,
-		Entry:     util.BackupEntry{FolderName: folderName, Date: backupDate, ID: backupID},
+		Entry:     util.BackupEntry{DirectoryName: directoryName, Date: backupDate, ID: backupID},
 		Parts:     parts,
 		Password:  password,
 	}
@@ -74,18 +74,18 @@ func NewRestoreFixture(t testing.TB, password []byte) *RestoreFixture {
 func CreateBackupInDir(t testing.TB, targetDir string, entry util.BackupEntry, password []byte) {
 	t.Helper()
 
-	srcDir := filepath.Join(targetDir, "_src_"+entry.FolderName)
+	srcDir := filepath.Join(targetDir, "_src_"+entry.DirectoryName)
 	mustMkdirAll(t, srcDir, 0o750)
-	mustWriteFile(t, filepath.Join(srcDir, "data.txt"), []byte("secondary backup content for "+entry.FolderName))
+	mustWriteFile(t, filepath.Join(srcDir, "data.txt"), []byte("secondary backup content for "+entry.DirectoryName))
 
-	createEncryptedSplitBackup(t, srcDir, targetDir, entry.FolderName, entry.Date, entry.ID, password, defaultSplitSizeMB)
+	createEncryptedSplitBackup(t, srcDir, targetDir, entry.DirectoryName, entry.Date, entry.ID, password, defaultSplitSizeMB)
 }
 
-func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, folderName, backupDate string, backupID util.BackupID, password []byte, splitSizeMB int64) int {
+func createEncryptedSplitBackup(t testing.TB, srcDir, targetDir, directoryName, backupDate string, backupID util.BackupID, password []byte, splitSizeMB int64) int {
 	t.Helper()
 
 	nameFunc := func(seq int) string {
-		return util.PartFileName(targetDir, folderName, backupDate, backupID, seq)
+		return util.PartFileName(targetDir, directoryName, backupDate, backupID, seq)
 	}
 	sw := util.NewWriter(nameFunc, splitSizeMB*1024*1024)
 	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)

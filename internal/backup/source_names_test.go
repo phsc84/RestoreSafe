@@ -43,7 +43,7 @@ func TestPlanBackupSourcesReportsExpectedStatuses(t *testing.T) {
 	}
 }
 
-func TestPlanBackupSourcesAssignsBaseNamesForUniqueFolders(t *testing.T) {
+func TestPlanBackupSourcesAssignsBaseNamesForUniqueDirectories(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()

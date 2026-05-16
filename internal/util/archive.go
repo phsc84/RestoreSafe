@@ -35,7 +35,7 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("Failed to scan source folder at %q: %w. Remedy: Check source-folder readability and permissions.", path, err)
+			return fmt.Errorf("Failed to scan source directory at %q: %w. Remedy: Check source-directory readability and permissions.", path, err)
 		}
 
 		for _, ex := range exs {
@@ -111,11 +111,11 @@ func ExtractTar(r io.Reader, destDir string) error {
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(target, 0o750); err != nil {
-				return fmt.Errorf("Failed to create folder %q: %w. Remedy: Check write permissions in the restore destination.", target, err)
+				return fmt.Errorf("Failed to create directory %q: %w. Remedy: Check write permissions in the restore destination.", target, err)
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
-				return fmt.Errorf("Failed to create parent folder: %w. Remedy: Check write permissions in the restore destination.", err)
+				return fmt.Errorf("Failed to create parent directory: %w. Remedy: Check write permissions in the restore destination.", err)
 			}
 			if err := writeArchiveFile(target, tr); err != nil {
 				return err

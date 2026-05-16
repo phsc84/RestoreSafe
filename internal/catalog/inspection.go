@@ -31,13 +31,13 @@ func InspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, e
 
 		info, err := dirEntry.Info()
 		if err != nil {
-			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check file/folder permissions.", dirEntry.Name(), err)
+			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check file/directory permissions.", dirEntry.Name(), err)
 		}
 		parts = append(parts, partInfo{seq: seq, size: info.Size()})
 	}
 
 	if len(parts) == 0 {
-		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in target_folder.")
+		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in target_directory.")
 	}
 
 	sort.Slice(parts, func(i, j int) bool {

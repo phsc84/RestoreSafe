@@ -16,7 +16,7 @@ import (
 func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &util.Config{LogLevel: "info"}
-	rep := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	rep := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
 	log := OpenLogger(cfg, tmpDir, rep)
 	if log == nil {

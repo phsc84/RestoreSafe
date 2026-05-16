@@ -9,8 +9,8 @@ func TestResolveDir(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
-	relative := ResolveDir("sub/folder", base)
-	expected := filepath.Join(base, "sub", "folder")
+	relative := ResolveDir("sub/directory", base)
+	expected := filepath.Join(base, "sub", "directory")
 	if relative != expected {
 		t.Fatalf("expected %q, got %q", expected, relative)
 	}
@@ -41,10 +41,10 @@ func TestSameVolume(t *testing.T) {
 func TestVolumeDisplay(t *testing.T) {
 	t.Parallel()
 
-	if got := VolumeDisplay(`M:\Backups\Folder`); got != "M:" {
+	if got := VolumeDisplay(`M:\Backups\Directory`); got != "M:" {
 		t.Fatalf("expected drive display M:, got %q", got)
 	}
-	if got := VolumeDisplay(`\\server\share\Folder`); got != "//server/share" {
+	if got := VolumeDisplay(`\\server\share\Directory`); got != "//server/share" {
 		t.Fatalf("expected UNC display //server/share, got %q", got)
 	}
 }

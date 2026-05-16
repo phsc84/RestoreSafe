@@ -1,22 +1,22 @@
 # RestoreSafe configuration file
 # Place this file in the same directory as RestoreSafe.exe.
 
-# Source folders to back up.
+# Source directories to back up.
 # Paths may be absolute or relative to RestoreSafe.exe.
 # On Windows, prefer forward slashes in YAML paths (C:/Users/...) to avoid escape issues.
-source_folders:
+source_directories:
   - "C:/Users/Username/Documents"
   - "C:/Users/Username/Pictures"
 
-# Destination folder for encrypted backup files.
+# Destination directory for encrypted backup files.
 # Path may be absolute or relative to RestoreSafe.exe.
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 
 # Maximum size of each split file (in MB).
 # Default: 4096 MB (= 4 GB)
 split_size_mb: 4096
 
-# Retention: number of backup sets to keep per source folder.
+# Retention: number of backup sets to keep per source directory.
 # Just the N newest backups and log files are kept; any older backup and log files are
 # deleted automatically.
 # 0 = keep all backups (no automatic cleanup)

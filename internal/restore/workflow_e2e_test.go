@@ -35,7 +35,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 	}
 
 	// Step 3a: Assert restored files byte-for-byte match originals.
-	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.FolderName)
+	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName)
 	testutil.AssertFileContentEqual(t,
 		filepath.Join(fx.SrcDir, "nested", "small.txt"),
 		filepath.Join(restoredDir, "nested", "small.txt"),
@@ -56,7 +56,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 		parts,
 		password,
 		nil,
-		fx.Entry.FolderName,
+		fx.Entry.DirectoryName,
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
@@ -70,7 +70,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 		parts,
 		[]byte("wrong-password"),
 		nil,
-		fx.Entry.FolderName,
+		fx.Entry.DirectoryName,
 		"verified",
 		"Archive validation",
 		func(r io.Reader) error { return util.ValidateTar(r) },

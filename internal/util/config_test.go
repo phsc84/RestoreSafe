@@ -13,9 +13,9 @@ func TestLoadAppliesDefaultsAndParsesRetention(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgContent := `source_folders:
+	cfgContent := `source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 retention_keep: 3
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
@@ -43,9 +43,9 @@ func TestLoadRejectsNegativeRetentionKeep(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgContent := `source_folders:
+	cfgContent := `source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 retention_keep: -1
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
@@ -66,9 +66,9 @@ func TestLoadRejectsInvalidLogLevel(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgContent := `source_folders:
+	cfgContent := `source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 log_level: "trace"
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
@@ -89,9 +89,9 @@ func TestLoadDefaultsAuthenticationMode(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgContent := `source_folders:
+	cfgContent := `source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("failed to write config: %v", err)
@@ -116,9 +116,9 @@ func TestLoadRejectsInvalidAuthenticationMode(t *testing.T) {
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfgContent := fmt.Sprintf(`source_folders:
+			cfgContent := fmt.Sprintf(`source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 authentication_mode: %d
 `, bad)
 			if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
@@ -136,39 +136,39 @@ authentication_mode: %d
 	}
 }
 
-func TestLoadRejectsMissingSourceFolders(t *testing.T) {
+func TestLoadRejectsMissingSourceDirectories(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("target_folder: \"C:/Backup\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("target_directory: \"C:/Backup\"\n"), 0o600); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
 	_, err := Load(cfgPath)
 	if err == nil {
-		t.Fatal("expected error for missing source_folders, got nil")
+		t.Fatal("expected error for missing source_directories, got nil")
 	}
-	if !strings.Contains(err.Error(), "source_folders") {
-		t.Fatalf("expected source_folders error, got: %v", err)
+	if !strings.Contains(err.Error(), "source_directories") {
+		t.Fatalf("expected source_directories error, got: %v", err)
 	}
 }
 
-func TestLoadRejectsMissingTargetFolder(t *testing.T) {
+func TestLoadRejectsMissingTargetDirectory(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("source_folders:\n  - \"C:/Docs\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("source_directories:\n  - \"C:/Docs\"\n"), 0o600); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
 	_, err := Load(cfgPath)
 	if err == nil {
-		t.Fatal("expected error for missing target_folder, got nil")
+		t.Fatal("expected error for missing target_directory, got nil")
 	}
-	if !strings.Contains(err.Error(), "target_folder") {
-		t.Fatalf("expected target_folder error, got: %v", err)
+	if !strings.Contains(err.Error(), "target_directory") {
+		t.Fatalf("expected target_directory error, got: %v", err)
 	}
 }
 
@@ -177,9 +177,9 @@ func TestLoadDefaultsArgon2Params(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgContent := `source_folders:
+	cfgContent := `source_directories:
   - "C:/Users/Test/Documents"
-target_folder: "C:/Backup"
+target_directory: "C:/Backup"
 `
 	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatalf("failed to write config: %v", err)
@@ -242,7 +242,7 @@ func TestLoadRejectsInvalidArgon2Params(t *testing.T) {
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			content := fmt.Sprintf("source_folders:\n  - \"C:/Docs\"\ntarget_folder: \"C:/Backup\"\n%s", tc.yaml)
+			content := fmt.Sprintf("source_directories:\n  - \"C:/Docs\"\ntarget_directory: \"C:/Backup\"\n%s", tc.yaml)
 			if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
 				t.Fatalf("failed to write config: %v", err)
 			}

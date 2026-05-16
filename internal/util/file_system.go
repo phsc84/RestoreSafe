@@ -14,10 +14,10 @@ func ValidateSourceDirectory(resolved string) error {
 		return fmt.Errorf("Not found or inaccessible: %w. Remedy: Check the path in config.yaml and use forward slashes on Windows (e.g. C:/Users/Name/Documents).", err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("Path is not a directory. Remedy: Provide a folder path, not a file path.")
+		return fmt.Errorf("Path is not a directory. Remedy: Provide a directory path, not a file path.")
 	}
 	if _, err := os.ReadDir(resolved); err != nil {
-		return fmt.Errorf("Directory not readable: %w. Remedy: Check permissions and ensure this user can read the folder.", err)
+		return fmt.Errorf("Directory not readable: %w. Remedy: Check permissions and ensure this user can read the directory.", err)
 	}
 	return nil
 }
@@ -32,7 +32,7 @@ func DirectorySizeBytes(root string) (int64, error) {
 		return 0, err
 	}
 	if !info.IsDir() {
-		return 0, fmt.Errorf("Path is not a directory. Remedy: Use only directory paths in source_folders.")
+		return 0, fmt.Errorf("Path is not a directory. Remedy: Use only directory paths in source_directories.")
 	}
 
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {

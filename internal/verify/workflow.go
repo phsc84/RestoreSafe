@@ -15,14 +15,14 @@ import (
 
 // Run verifies selected backup sets without restoring them to disk.
 func Run(cfg *util.Config, exeDir string) error {
-	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
 
 	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan target folder %q: %w. Remedy: Check the target_folder path in config.yaml and ensure the folder is readable.", targetDir, err)
+		return fmt.Errorf("Failed to scan target directory %q: %w. Remedy: Check the target_directory path in config.yaml and ensure the directory is readable.", targetDir, err)
 	}
 	if len(index) == 0 {
-		fmt.Println("No backups found in target folder. Remedy: Check whether .enc files are in target_folder and whether the correct folder is selected.")
+		fmt.Println("No backups found in target directory. Remedy: Check whether .enc files are in target_directory and whether the correct directory is selected.")
 		return nil
 	}
 
@@ -37,7 +37,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
 	if err != nil {
-		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup folder and existing .challenge files.", err)
+		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup directory and existing .challenge files.", err)
 	}
 
 	log := operation.OpenLogger(cfg, targetDir, selected[0])
@@ -116,7 +116,7 @@ func printVerifyPreflightWithYubiKeyCheck(
 
 	// Backup selection
 	fmt.Fprintln(w, "Backup selection:")
-	fmt.Fprintf(w, "  Source folder: %s\n", filepath.ToSlash(targetDir))
+	fmt.Fprintf(w, "  Source directory: %s\n", filepath.ToSlash(targetDir))
 	for _, item := range items {
 		if item.Err != nil {
 			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
@@ -167,9 +167,9 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 func verifySelectedEntries(selected []util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
 	for _, entry := range selected {
 		if err := verifyEntry(entry, targetDir, password, log); err != nil {
-			return fmt.Errorf("Failed to verify folder %q: %w", entry.String(), err)
+			return fmt.Errorf("Failed to verify directory %q: %w", entry.String(), err)
 		}
-		log.Info("Folder %q successfully verified", entry.FolderName)
+		log.Info("Directory %q successfully verified", entry.DirectoryName)
 	}
 	return nil
 }
@@ -180,7 +180,7 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		return err
 	}
 	if len(parts) == 0 {
-		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_folder.", entry.String())
+		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_directory.", entry.String())
 	}
 
 	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
@@ -189,7 +189,7 @@ func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log 
 		parts,
 		password,
 		log,
-		entry.FolderName,
+		entry.DirectoryName,
 		"verified",
 		"Archive validation",
 		util.ValidateTar,

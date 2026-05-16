@@ -30,11 +30,11 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 	os.Stdin = r
 
 	index := []util.BackupEntry{{
-		FolderName: "Docs",
+		DirectoryName: "Docs",
 		Date:       "2026-03-14",
 		ID:         util.BackupID("ABC123"),
 	}}
-	part := util.PartFileName(targetDir, index[0].FolderName, index[0].Date, index[0].ID, 1)
+	part := util.PartFileName(targetDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -57,15 +57,15 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) {
 	targetDir := t.TempDir()
 	index := []util.BackupEntry{
-		{FolderName: "SourceFolder1", Date: "2026-03-18", ID: util.BackupID("ABC125")},
-		{FolderName: "SourceFolder2", Date: "2026-03-18", ID: util.BackupID("ABC125")},
-		{FolderName: "SourceFolder", Date: "2026-03-18", ID: util.BackupID("ABC123")},
+		{DirectoryName: "SourceDirectory1", Date: "2026-03-18", ID: util.BackupID("ABC125")},
+		{DirectoryName: "SourceDirectory2", Date: "2026-03-18", ID: util.BackupID("ABC125")},
+		{DirectoryName: "SourceDirectory", Date: "2026-03-18", ID: util.BackupID("ABC123")},
 	}
 
 	partPaths := []string{
-		util.PartFileName(targetDir, index[0].FolderName, index[0].Date, index[0].ID, 1),
-		util.PartFileName(targetDir, index[1].FolderName, index[1].Date, index[1].ID, 1),
-		util.PartFileName(targetDir, index[2].FolderName, index[2].Date, index[2].ID, 1),
+		util.PartFileName(targetDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1),
+		util.PartFileName(targetDir, index[1].DirectoryName, index[1].Date, index[1].ID, 1),
+		util.PartFileName(targetDir, index[2].DirectoryName, index[2].Date, index[2].ID, 1),
 	}
 	for _, part := range partPaths {
 		if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
@@ -105,10 +105,10 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 	if strings.Index(output, firstGroup) > strings.Index(output, secondGroup) {
 		t.Fatalf("expected newest run first, got output: %q", output)
 	}
-	if !strings.Contains(output, "    - SourceFolder_2026-03-18_ABC123") {
+	if !strings.Contains(output, "    - SourceDirectory_2026-03-18_ABC123") {
 		t.Fatalf("expected nested entry for ABC123, got: %q", output)
 	}
-	if !strings.Contains(output, "    - SourceFolder1_2026-03-18_ABC125") || !strings.Contains(output, "    - SourceFolder2_2026-03-18_ABC125") {
+	if !strings.Contains(output, "    - SourceDirectory1_2026-03-18_ABC125") || !strings.Contains(output, "    - SourceDirectory2_2026-03-18_ABC125") {
 		t.Fatalf("expected grouped nested entries for ABC125, got: %q", output)
 	}
 }
@@ -149,7 +149,7 @@ func pipeSelectionInput(t *testing.T, lines string) {
 
 func createPartFile(t *testing.T, targetDir string, entry util.BackupEntry) {
 	t.Helper()
-	part := util.PartFileName(targetDir, entry.FolderName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -160,7 +160,7 @@ func createPartFile(t *testing.T, targetDir string, entry util.BackupEntry) {
 
 func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	createPartFile(t, targetDir, entry)
 	index := []util.BackupEntry{entry}
 
@@ -185,7 +185,7 @@ func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
 
 func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	createPartFile(t, targetDir, entry)
 	index := []util.BackupEntry{entry}
 
@@ -206,7 +206,7 @@ func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
 
 func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	createPartFile(t, targetDir, entry)
 	index := []util.BackupEntry{entry}
 
@@ -227,7 +227,7 @@ func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
 
 func TestPromptBackupSelectionEmptyInputPrintsRetryMessage(t *testing.T) {
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	createPartFile(t, targetDir, entry)
 	index := []util.BackupEntry{entry}
 
@@ -244,7 +244,7 @@ func TestPromptBackupSelectionEmptyInputPrintsRetryMessage(t *testing.T) {
 
 func TestPromptBackupSelectionUnknownNamePrintsError(t *testing.T) {
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	createPartFile(t, targetDir, entry)
 	index := []util.BackupEntry{entry}
 

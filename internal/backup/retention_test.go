@@ -12,11 +12,11 @@ func TestDeleteBackupEntryFilesRemovesPartsAndChallenge(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part1 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 2)
-	challenge := util.ChallengeFileName(dir, entry.FolderName, entry.Date, entry.ID)
+	part1 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part2 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 2)
+	challenge := util.ChallengeFileName(dir, entry.DirectoryName, entry.Date, entry.ID)
 
 	createFile(t, part1, "p1")
 	createFile(t, part2, "p2")
@@ -39,10 +39,10 @@ func TestDeleteBackupEntryFilesSkipsWhenNoChallengeFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("NCC001")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("NCC001")}
 
 	// Create only a part file, no challenge file.
-	part := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	createFile(t, part, "data")
 
 	removed, err := deleteBackupEntryFiles(dir, entry)
@@ -59,11 +59,11 @@ func TestDeleteOrphanLogFilesKeepsActiveRunLogs(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	active := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	active := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	otherDate := "2026-03-13"
 	otherID := util.BackupID("ZZZ999")
 
-	activePart := util.PartFileName(dir, active.FolderName, active.Date, active.ID, 1)
+	activePart := util.PartFileName(dir, active.DirectoryName, active.Date, active.ID, 1)
 	createFile(t, activePart, "enc")
 
 	activeLog := util.LogFileName(dir, active.Date, active.ID)
@@ -121,7 +121,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 		{Resolved: dir, Err: errors.New("inaccessible")},
 	}
 	if err := applyRetentionPolicy(dir, 1, sources, log); err != nil {
-		t.Fatalf("expected nil when folderSet is empty, got: %v", err)
+		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
 
@@ -129,8 +129,8 @@ func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
 	dir := t.TempDir()
 	log := util.NewConsoleLogger("info")
 
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ONE001")}
-	part := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ONE001")}
+	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	createFile(t, part, "data")
 
 	sources := []backupSource{{Resolved: dir + "/Docs", BackupName: "Docs"}}
@@ -144,11 +144,11 @@ func TestApplyRetentionPolicyDeletesOlderSetsAboveRetentionKeep(t *testing.T) {
 	dir := t.TempDir()
 	log := util.NewConsoleLogger("info")
 
-	entry1 := util.BackupEntry{FolderName: "Docs", Date: "2026-03-13", ID: util.BackupID("OLD001")}
-	entry2 := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("NEW002")}
+	entry1 := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-13", ID: util.BackupID("OLD001")}
+	entry2 := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("NEW002")}
 
-	part1 := util.PartFileName(dir, entry1.FolderName, entry1.Date, entry1.ID, 1)
-	part2 := util.PartFileName(dir, entry2.FolderName, entry2.Date, entry2.ID, 1)
+	part1 := util.PartFileName(dir, entry1.DirectoryName, entry1.Date, entry1.ID, 1)
+	part2 := util.PartFileName(dir, entry2.DirectoryName, entry2.Date, entry2.ID, 1)
 	createFile(t, part1, "old data")
 	createFile(t, part2, "new data")
 

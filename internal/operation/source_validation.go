@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// SourceValidationStatus is startup-health metadata for one configured source folder.
+// SourceValidationStatus is startup-health metadata for one configured source directory.
 type SourceValidationStatus struct {
 	Resolved string
 	Warning  string
@@ -13,11 +13,11 @@ type SourceValidationStatus struct {
 	Err      error
 }
 
-// InspectSourceFoldersForValidation resolves and validates configured source folders
+// InspectSourceDirectoriesForValidation resolves and validates configured source directories
 // for startup diagnostics without depending on backup workflow internals.
-func InspectSourceFoldersForValidation(sourceFolders []string, exeDir string) []SourceValidationStatus {
-	statuses := make([]SourceValidationStatus, 0, len(sourceFolders))
-	for _, src := range sourceFolders {
+func InspectSourceDirectoriesForValidation(sourceDirectories []string, exeDir string) []SourceValidationStatus {
+	statuses := make([]SourceValidationStatus, 0, len(sourceDirectories))
+	for _, src := range sourceDirectories {
 		resolved := util.ResolveDir(src, exeDir)
 		status := SourceValidationStatus{Resolved: resolved}
 

@@ -1,6 +1,6 @@
 # RestoreSafe
 
-RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folders into encrypted, split archive files, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
+RestoreSafe is a standalone Windows 64-bit backup tool that backs up your directories into encrypted, split archive files, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
 
 ## Table of Contents
 
@@ -14,10 +14,10 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 ## Features
 
 ### Core
-- Backs up one or more source folders into split, encrypted `.enc` archive files
+- Backs up one or more source directories into split, encrypted `.enc` archive files
 - Restores selected backup sets to a chosen destination
 - Verifies backup integrity (decryption + archive readability) without restoring
-- Retention policy: automatically keeps only the newest N backup sets per source folder
+- Retention policy: automatically keeps only the newest N backup sets per source directory
 
 ### Security
 - AES-256-GCM encryption (content and metadata/file names)
@@ -26,14 +26,14 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
 
 ### Reliability
 - Local staging: when source and target share the same drive/share (e.g. NAS), parts are written to local TEMP first, then moved
-- Startup health check: validates folders, temp access, YubiKey CLI, and structural integrity of existing backups at launch
+- Startup health check: validates directories, temp access, YubiKey CLI, and structural integrity of existing backups at launch
 - Streaming pipeline: no intermediate temp files, low CPU/RAM footprint
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
 - Interactive menu; custom config path via `-config` flag
 - Per-run log files; configurable log level
-- Backup split size configurable; supports multiple source folders with automatic alias disambiguation
+- Backup split size configurable; supports multiple source directories with automatic alias disambiguation
 
 ## Installation & Configuration
 
@@ -53,7 +53,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your folder
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
    pause
    ```
-3. In `config.yaml` edit at least parameters `source_folders` and `target_folder`.
+3. In `config.yaml` edit at least parameters `source_directories` and `target_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs.
 
@@ -83,7 +83,7 @@ This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a
 Double-click RestoreSafe.exe, choose **Backup** from the menu, confirm the preflight summary, and enter your password (and touch the YubiKey if enabled).
 
 ### Restore a backup
-Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination folder, then enter your password (and touch the YubiKey if enabled).
+Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination directory, then enter your password (and touch the YubiKey if enabled).
 
 ### Verify a backup
 Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive - without writing any files to disk.
@@ -94,14 +94,14 @@ Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the ba
 
 | Name part | Meaning |
 |---|---|
-| FolderName | Name of the source folder |
+| DirectoryName | Name of the source directory |
 | YYYY-MM-DD | Backup date |
 | ID | Short backup run code (6 characters, A-Z and 0-9) |
 | 001 / 002 / ... | File part number when the backup is split |
 
 ### Backup files
 
-`[FolderName]_YYYY-MM-DD_ID-001.enc`
+`[DirectoryName]_YYYY-MM-DD_ID-001.enc`
 
 Samples:
 
@@ -116,7 +116,7 @@ Samples:
 
 only created if YubiKey is enabled → `authentication_mode: 2` and `authentication_mode: 3`
 
-`[FolderName]_YYYY-MM-DD_ID.challenge`
+`[DirectoryName]_YYYY-MM-DD_ID.challenge`
 
 Samples:
 
@@ -137,7 +137,7 @@ Sample:
 
 ### Special cases
 
-If several configured source folders have the same folder name (for example all end with `Documents`), RestoreSafe keeps the folder name and adds an extra alias derived from the remaining path and the drive letter. Only this added alias part is adjusted. The source folder name itself stays unchanged.
+If several configured source directories have the same directory name (for example all end with `Documents`), RestoreSafe keeps the directory name and adds an extra alias derived from the remaining path and the drive letter. Only this added alias part is adjusted. The source directory name itself stays unchanged.
 In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8 hex bytes in the form `~XX~`:
 
 Examples **without** special characters in that added alias part:

@@ -12,10 +12,10 @@ func TestInspectBackupPartsTotalsAndMissingSequence(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part1 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 2)
+	part1 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part2 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 2)
 	if err := os.MkdirAll(filepath.Dir(part1), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -41,7 +41,7 @@ func TestInspectBackupPartsTotalsAndMissingSequence(t *testing.T) {
 	if err := os.Remove(part2); err != nil {
 		t.Fatalf("failed to remove part2: %v", err)
 	}
-	part3 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 3)
+	part3 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 3)
 	if err := os.WriteFile(part3, []byte("ccc"), 0o600); err != nil {
 		t.Fatalf("failed to create part3: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestInspectBackupPartsReturnsErrorForNoParts(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
 	_, _, err := InspectBackupParts(dir, entry)
 	if err == nil {

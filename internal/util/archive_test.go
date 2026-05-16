@@ -14,8 +14,8 @@ func TestValidateTarAcceptsRegularArchive(t *testing.T) {
 	t.Parallel()
 
 	archiveBytes := makeTarBytes(t, []tarEntry{
-		{name: "folder", typeflag: tar.TypeDir, mode: 0o750},
-		{name: "folder/file.txt", typeflag: tar.TypeReg, mode: 0o640, body: "hello"},
+		{name: "directory", typeflag: tar.TypeDir, mode: 0o750},
+		{name: "directory/file.txt", typeflag: tar.TypeReg, mode: 0o640, body: "hello"},
 	})
 
 	if err := ValidateTar(bytes.NewReader(archiveBytes)); err != nil {

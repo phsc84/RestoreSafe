@@ -12,7 +12,7 @@ import (
 
 const lockFileName = "restoresafe.lock"
 
-// TargetLock holds an exclusive Windows file lock on the backup target folder.
+// TargetLock holds an exclusive Windows file lock on the backup target directory.
 // The lock is automatically released when the holding process exits.
 type TargetLock struct {
 	file *os.File
@@ -20,7 +20,7 @@ type TargetLock struct {
 
 // AcquireTargetLock opens (or creates) the lock file in targetDir and acquires
 // an exclusive byte-range lock via LockFileEx. Returns an error if another
-// RestoreSafe process already holds the lock on the same folder.
+// RestoreSafe process already holds the lock on the same directory.
 //
 // If the lock file cannot be created (e.g. read-only media), locking is skipped
 // and a no-op TargetLock is returned so the caller can always call Release().

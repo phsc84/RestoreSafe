@@ -23,8 +23,8 @@ const (
 
 const (
 	healthScopeConfig          = "Config"
-	healthScopeSourceFolder    = "Source folder(s)"
-	healthScopeTargetFolder    = "Backup folder"
+	healthScopeSourceDirectory    = "Source directory(s)"
+	healthScopeTargetDirectory    = "Backup directory"
 	healthScopeTempDirectory   = "Temp directory"
 	healthScopeYubiKey         = "YubiKey"
 	healthScopeBackupInventory = "Backup inventory"
@@ -47,18 +47,18 @@ func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) {
 }
 
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
-	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
+	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
 	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
 	items := make([]healthItem, 0)
 
 	items = append(items, checkConfigFileHealth(configPathDisplay)...)
 
-	sourceStatuses := operation.InspectSourceFoldersForValidation(cfg.SourceFolders, exeDir)
+	sourceStatuses := operation.InspectSourceDirectoriesForValidation(cfg.SourceDirectories, exeDir)
 	for _, src := range sourceStatuses {
 		if src.Err != nil {
 			items = append(items, healthItem{
 				Severity: healthError,
-				Scope:    healthScopeSourceFolder,
+				Scope:    healthScopeSourceDirectory,
 				Detail:   fmt.Sprintf("%s → %v", src.Resolved, src.Err),
 			})
 			continue
@@ -66,19 +66,19 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		if src.Warning != "" {
 			items = append(items, healthItem{
 				Severity: healthWarn,
-				Scope:    healthScopeSourceFolder,
+				Scope:    healthScopeSourceDirectory,
 				Detail:   fmt.Sprintf("%s → %s", src.Resolved, src.Warning),
 			})
 		} else {
 			items = append(items, healthItem{
 				Severity: healthOK,
-				Scope:    healthScopeSourceFolder,
+				Scope:    healthScopeSourceDirectory,
 				Detail:   src.Resolved,
 			})
 		}
 	}
 
-	items = append(items, checkTargetFolderHealth(targetDir)...)
+	items = append(items, checkTargetDirectoryHealth(targetDir)...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
 	items = append(items, checkBackupInventoryHealth(targetDir)...)
 
@@ -93,7 +93,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
 			isNote: true,
-			Detail: fmt.Sprintf("Local staging enabled, because source and target folders share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
+			Detail: fmt.Sprintf("Local staging enabled, because source and target directories share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
 		})
 		items = append(items, checkTempDirHealth()...)
 	}
@@ -116,36 +116,36 @@ func checkConfigFileHealth(configPathDisplay string) []healthItem {
 	}}
 }
 
-func checkTargetFolderHealth(targetDir string) []healthItem {
+func checkTargetDirectoryHealth(targetDir string) []healthItem {
 	info, err := os.Stat(targetDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []healthItem{{
 				Severity: healthWarn,
-				Scope:    healthScopeTargetFolder,
+				Scope:    healthScopeTargetDirectory,
 				Detail:   fmt.Sprintf("%s does not exist yet and will be created during backup", targetDir),
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    healthScopeTargetFolder,
-			Detail:   fmt.Sprintf("%s → %v. Remedy: Check target_folder in config.yaml and ensure read access.", targetDir, err),
+			Scope:    healthScopeTargetDirectory,
+			Detail:   fmt.Sprintf("%s → %v. Remedy: Check target_directory in config.yaml and ensure read access.", targetDir, err),
 		}}
 	}
 
 	if !info.IsDir() {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    healthScopeTargetFolder,
-			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a folder path, not a file path.", targetDir),
+			Scope:    healthScopeTargetDirectory,
+			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a directory path, not a file path.", targetDir),
 		}}
 	}
 
 	return probeWriteAccess(
 		targetDir,
-		healthScopeTargetFolder,
-		"Adjust write permissions or choose a different target_folder.",
-		"Check delete permissions in target_folder.",
+		healthScopeTargetDirectory,
+		"Adjust write permissions or choose a different target_directory.",
+		"Check delete permissions in target_directory.",
 	)
 }
 
@@ -153,7 +153,7 @@ func checkTempDirHealth() []healthItem {
 	return probeWriteAccess(
 		os.TempDir(),
 		healthScopeTempDirectory,
-		"Point TEMP/TMP to a writable folder or adjust permissions.",
+		"Point TEMP/TMP to a writable directory or adjust permissions.",
 		"Check delete permissions for TEMP/TMP.",
 	)
 }
@@ -201,14 +201,14 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeYubiKey,
-			Detail:   fmt.Sprintf("%v. Remedy: Place ykman.exe in the same folder as RestoreSafe.exe, install YubiKey Manager (v5), or add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
+			Detail:   fmt.Sprintf("%v. Remedy: Place ykman.exe in the same directory as RestoreSafe.exe, install YubiKey Manager (v5), or add ykman to PATH. Compatibility note: RestoreSafe supports only YubiKey v5 hardware.", err),
 		}}
 	}
 
 	return []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeYubiKey,
-		Detail:   "ykman found (application folder, PATH, or standard install directory; YubiKey v5 supported)",
+		Detail:   "ykman found (application directory, PATH, or standard install directory; YubiKey v5 supported)",
 	}}
 }
 
@@ -219,13 +219,13 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 			return []healthItem{{
 				Severity: healthWarn,
 				Scope:    healthScopeBackupInventory,
-				Detail:   "Target folder does not exist yet, no backups to inspect",
+				Detail:   "Target directory does not exist yet, no backups to inspect",
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in target_folder.", err),
+			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in target_directory.", err),
 		}}
 	}
 
@@ -233,7 +233,7 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    healthScopeBackupInventory,
-			Detail:   "No backup sets found. Remedy: Check target_folder or create a new backup run.",
+			Detail:   "No backup sets found. Remedy: Check target_directory or create a new backup run.",
 		}}
 	}
 
@@ -256,7 +256,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in target_folder.", err),
+			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in target_directory.", err),
 		}}
 	}
 
@@ -279,7 +279,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			})
 		}
 
-		challengeBase := filepath.Base(util.ChallengeFileName(targetDir, entry.FolderName, entry.Date, entry.ID))
+		challengeBase := filepath.Base(util.ChallengeFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID))
 		hasChallenge := challengeFiles[challengeBase]
 		entryHasChallenge[entryLabel] = hasChallenge
 		expectedChallengeFiles[challengeBase] = true
@@ -292,7 +292,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			items = append(items, healthItem{
 				Severity: healthError,
 				Scope:    healthScopeChallengeFile,
-				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run. Remedy: Put the matching .challenge file in the same folder as the .enc files.", entry.String()),
+				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run. Remedy: Put the matching .challenge file in the same directory as the .enc files.", entry.String()),
 			})
 		}
 	}

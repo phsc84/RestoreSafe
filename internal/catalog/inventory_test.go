@@ -12,10 +12,10 @@ func TestScanBackupsIndexesDistinctEntries(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part1 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 2)
+	part1 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part2 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 2)
 	if err := os.WriteFile(part1, []byte("a"), 0o600); err != nil {
 		t.Fatalf("failed to write part1: %v", err)
 	}
@@ -55,10 +55,10 @@ func TestCollectPartsReturnsSortedPaths(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Pics", Date: "2026-03-15", ID: util.BackupID("ZZZ001")}
+	entry := util.BackupEntry{DirectoryName: "Pics", Date: "2026-03-15", ID: util.BackupID("ZZZ001")}
 
 	for seq := 3; seq >= 1; seq-- {
-		path := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, seq)
+		path := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, seq)
 		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 			t.Fatalf("failed to write part %d: %v", seq, err)
 		}
@@ -72,7 +72,7 @@ func TestCollectPartsReturnsSortedPaths(t *testing.T) {
 		t.Fatalf("expected 3 parts, got %d", len(parts))
 	}
 	for i, part := range parts {
-		expected := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, i+1)
+		expected := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, i+1)
 		if part != expected {
 			t.Fatalf("part[%d]: expected %s, got %s", i, expected, part)
 		}
@@ -83,8 +83,8 @@ func TestFindChallengeFileForRunFindsMatchingFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Music", Date: "2026-03-15", ID: util.BackupID("ABC123")}
-	challengePath := util.ChallengeFileName(dir, entry.FolderName, entry.Date, entry.ID)
+	entry := util.BackupEntry{DirectoryName: "Music", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	challengePath := util.ChallengeFileName(dir, entry.DirectoryName, entry.Date, entry.ID)
 
 	if err := os.WriteFile(challengePath, []byte("deadbeef"), 0o600); err != nil {
 		t.Fatalf("failed to write challenge file: %v", err)
@@ -118,7 +118,7 @@ func TestBackupRunUsesYubiKeyNoChallengeFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
 
 	useYubiKey, yubiKeyOnly, err := BackupRunUsesYubiKey(dir, entry)
 	if err != nil {
@@ -136,8 +136,8 @@ func TestBackupRunUsesYubiKeyDetectsPasswordMode(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
-	challengePath := util.ChallengeFileName(dir, entry.FolderName, entry.Date, entry.ID)
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	challengePath := util.ChallengeFileName(dir, entry.DirectoryName, entry.Date, entry.ID)
 
 	// Challenge file without NOPW: prefix means password+YubiKey mode.
 	if err := os.WriteFile(challengePath, []byte("deadbeef"), 0o600); err != nil {
@@ -160,8 +160,8 @@ func TestBackupRunUsesYubiKeyDetectsYubiKeyOnlyMode(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
-	challengePath := util.ChallengeFileName(dir, entry.FolderName, entry.Date, entry.ID)
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	challengePath := util.ChallengeFileName(dir, entry.DirectoryName, entry.Date, entry.ID)
 
 	// Challenge file with NOPW: prefix means YubiKey-only mode.
 	if err := os.WriteFile(challengePath, []byte("NOPW:deadbeef"), 0o600); err != nil {
@@ -184,9 +184,9 @@ func TestNewestPartModTimeReturnsNewest(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
-	part1 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.FolderName, entry.Date, entry.ID, 2)
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	part1 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part2 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 2)
 
 	if err := os.WriteFile(part1, []byte("x"), 0o600); err != nil {
 		t.Fatalf("failed to write part1: %v", err)
@@ -216,7 +216,7 @@ func TestNewestPartModTimeReturnsNewest(t *testing.T) {
 func TestNewestPartModTimeErrorsForMissingParts(t *testing.T) {
 	t.Parallel()
 
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("ABC123")}
 	_, err := NewestPartModTime(t.TempDir(), entry)
 	if err == nil {
 		t.Fatal("expected error for missing parts, got nil")

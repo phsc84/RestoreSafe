@@ -16,7 +16,7 @@ func RunDecryptPipeline(
 	parts []string,
 	password []byte,
 	log *util.Logger,
-	folderName string,
+	directoryName string,
 	progressVerb string,
 	consumeFailurePrefix string,
 	consume func(io.Reader) error,
@@ -30,7 +30,7 @@ func RunDecryptPipeline(
 	var inBytes atomic.Int64
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
-	stopProgress := StartProgressTracking(log, folderName, progressVerb, &inBytes, &outBytes, &outWriteCalls)
+	stopProgress := StartProgressTracking(log, directoryName, progressVerb, &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
 	pr, pw := io.Pipe()
@@ -53,7 +53,7 @@ func RunDecryptPipeline(
 
 	if decErr != nil {
 		if errors.Is(decErr, security.ErrWrongPassword) {
-			return fmt.Errorf("%w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same folder as the .enc files.", security.ErrWrongPassword)
+			return fmt.Errorf("%w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same directory as the .enc files.", security.ErrWrongPassword)
 		}
 		return fmt.Errorf("Decryption failed: %w", decErr)
 	}

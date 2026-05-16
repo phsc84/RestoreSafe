@@ -1,6 +1,6 @@
 // Package backup orchestrates the full backup workflow:
 //  1. Prompt for password (and optionally YubiKey 2FA)
-//  2. For each source folder: stream TAR → split → encrypt → write .enc parts
+//  2. For each source directory: stream TAR → split → encrypt → write .enc parts
 //  3. Write a log file per backup run
 package backup
 
@@ -17,10 +17,10 @@ import (
 
 // Run executes the full backup workflow.
 func Run(cfg *util.Config, exeDir string) error {
-	// Resolve target folder (may be relative to exe dir).
-	targetDir := util.ResolveDir(cfg.TargetFolder, exeDir)
+	// Resolve target directory (may be relative to exe dir).
+	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
 	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		return fmt.Errorf("Failed to create target folder: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
+		return fmt.Errorf("Failed to create target directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
 
 	lock, err := util.AcquireTargetLock(targetDir)
@@ -29,7 +29,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer lock.Release()
 
-	sources := resolveBackupSources(cfg.SourceFolders, exeDir)
+	sources := resolveBackupSources(cfg.SourceDirectories, exeDir)
 
 	// Determine backup run identifiers.
 	id, err := util.NewBackupID()
@@ -48,7 +48,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	log.Info("RestoreSafe backup started - ID: %s, date: %s", string(id), date)
 
-	if err := validateSourceFolders(sources); err != nil {
+	if err := validateSourceDirectories(sources); err != nil {
 		return err
 	}
 
@@ -126,11 +126,11 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	fmt.Println("Backup started.")
-	log.Info("Backup started - %d source folders", runnableSourceCount(sources))
+	log.Info("Backup started - %d source directories", runnableSourceCount(sources))
 	warningCount := 0
 	totalPartsCreated := 0
-	processedFolders := make([]string, 0)
-	folderSourcePaths := make(map[string]string)
+	processedDirectories := make([]string, 0)
+	directorySourcePaths := make(map[string]string)
 
 	// Determine actual working directory (staging or target).
 	staging, err := operation.NewStagingScope(stagingPlan, "restoresafe-backup-stage-*", log)
@@ -143,10 +143,10 @@ func Run(cfg *util.Config, exeDir string) error {
 	workingDir := staging.ActiveDir(targetDir)
 	defer staging.Cleanup()
 
-	// Back up each source folder.
+	// Back up each source directory.
 	for _, source := range sources {
 		if source.Warning != "" {
-			log.Warn("Source folder warning: %s → %s", source.Resolved, source.Warning)
+			log.Warn("Source directory warning: %s → %s", source.Resolved, source.Warning)
 			warningCount++
 		}
 		if source.Skip {
@@ -154,26 +154,26 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 
 		srcAbs := source.Resolved
-		folderName := source.BackupName
-		if folderName == "" {
-			folderName = util.FolderBaseName(srcAbs)
+		directoryName := source.BackupName
+		if directoryName == "" {
+			directoryName = util.DirectoryBaseName(srcAbs)
 		}
 
-		log.Info("Processing source folder: %s", srcAbs)
-		log.Debug("Folder name in archive: %s", folderName)
+		log.Info("Processing source directory: %s", srcAbs)
+		log.Debug("Directory name in archive: %s", directoryName)
 
 		argon2Params := security.Argon2Params{
 			Time:     uint32(cfg.Argon2.Time),
 			MemoryKB: uint32(cfg.Argon2.MemoryMB) * 1024,
 			Threads:  uint8(cfg.Argon2.Threads),
 		}
-		partCount, err := backupFolder(srcAbs, folderName, workingDir, date, id, password, argon2Params, cfg, log)
+		partCount, err := backupDirectory(srcAbs, directoryName, workingDir, date, id, password, argon2Params, cfg, log)
 		if err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
 		totalPartsCreated += partCount
-		processedFolders = append(processedFolders, folderName)
-		folderSourcePaths[folderName] = srcAbs
+		processedDirectories = append(processedDirectories, directoryName)
+		directorySourcePaths[directoryName] = srcAbs
 
 		// Write YubiKey challenge file if needed.
 		if cfg.UseYubiKey() && challengeHex != "" {
@@ -181,9 +181,9 @@ func Run(cfg *util.Config, exeDir string) error {
 			if cfg.IsYubiKeyOnly() {
 				challengeContent = "NOPW:" + challengeHex
 			}
-			challengePath := util.ChallengeFileName(workingDir, folderName, date, id)
+			challengePath := util.ChallengeFileName(workingDir, directoryName, date, id)
 			if err := os.WriteFile(challengePath, []byte(challengeContent), 0o600); err != nil {
-				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target folder; for YubiKey backups, the .challenge file must be in the same folder as the .enc files.", err)
+				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target directory; for YubiKey backups, the .challenge file must be in the same directory as the .enc files.", err)
 			}
 			log.Debug("Challenge file written: %s", challengePath)
 		}
@@ -191,8 +191,8 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	// Copy results from staging to target if needed.
 	if staging.Dir != "" {
-		if err := copyBackupResults(workingDir, targetDir, processedFolders, folderSourcePaths, log); err != nil {
-			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target folder write permissions and free disk space.", err)
+		if err := copyBackupResults(workingDir, targetDir, processedDirectories, directorySourcePaths, log); err != nil {
+			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target directory write permissions and free disk space.", err)
 		}
 	}
 
@@ -202,21 +202,21 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	log.Info("Backup completed successfully")
-	printBackupCompletionSummary(os.Stdout, processedFolders, totalPartsCreated, logPath, warningCount)
+	printBackupCompletionSummary(os.Stdout, processedDirectories, totalPartsCreated, logPath, warningCount)
 	fmt.Println("\nBackup completed.")
 	return nil
 }
 
-// backupFolder streams folder → TAR → encrypt → split-writer.
-func backupFolder(
-	srcDir, folderName, targetDir, date string,
+// backupDirectory streams directory → TAR → encrypt → split-writer.
+func backupDirectory(
+	srcDir, directoryName, targetDir, date string,
 	id util.BackupID,
 	password []byte,
 	params security.Argon2Params,
 	cfg *util.Config,
 	log *util.Logger,
 ) (int, error) {
-	sw, bw := newSplitOutput(targetDir, folderName, date, id, cfg.SplitSizeMB)
+	sw, bw := newSplitOutput(targetDir, directoryName, date, id, cfg.SplitSizeMB)
 	sw.SetPartOpenedHook(func(seq int, path string) {
 		log.Info("  Part %03d: %s", seq, filepath.Base(path))
 	})
@@ -227,7 +227,7 @@ func backupFolder(
 	if cfg.IODiagnostics {
 		progressLog = log
 	}
-	stopProgress := operation.StartProgressTracking(progressLog, folderName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls)
+	stopProgress := operation.StartProgressTracking(progressLog, directoryName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls)
 	defer stopProgress()
 
 	tarErrCh := startTarProducer(log, srcDir, targetDir, pw)
@@ -242,18 +242,18 @@ func backupFolder(
 		return 0, closeErr
 	}
 	if tarErr != nil {
-		return 0, fmt.Errorf("Creating TAR failed: %w. Remedy: Check source-folder access and file permissions.", tarErr)
+		return 0, fmt.Errorf("Creating TAR failed: %w. Remedy: Check source-directory access and file permissions.", tarErr)
 	}
 
-	logPartSummary(sw, folderName, cfg.IODiagnostics, counters, log)
+	logPartSummary(sw, directoryName, cfg.IODiagnostics, counters, log)
 	return len(sw.Paths()), nil
 }
 
-func printBackupCompletionSummary(w io.Writer, processedFolders []string, totalPartsCreated int, logPath string, warningCount int) {
+func printBackupCompletionSummary(w io.Writer, processedDirectories []string, totalPartsCreated int, logPath string, warningCount int) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Backup summary")
 	fmt.Fprintln(w, "--------------")
-	fmt.Fprintf(w, "Processed folders: %d\n", len(processedFolders))
+	fmt.Fprintf(w, "Processed directories: %d\n", len(processedDirectories))
 	fmt.Fprintf(w, "Parts created    : %d\n", totalPartsCreated)
 	fmt.Fprintf(w, "Log file         : %s\n", logPath)
 	if warningCount > 0 {

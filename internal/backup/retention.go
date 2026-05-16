@@ -19,24 +19,24 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		return nil
 	}
 
-	folderSet := make(map[string]bool)
+	directorySet := make(map[string]bool)
 	for _, source := range sources {
 		if source.Err != nil {
 			continue
 		}
 		backupName := source.BackupName
 		if backupName == "" {
-			backupName = util.FolderBaseName(source.Resolved)
+			backupName = util.DirectoryBaseName(source.Resolved)
 		}
-		folderSet[backupName] = true
+		directorySet[backupName] = true
 	}
-	if len(folderSet) == 0 {
+	if len(directorySet) == 0 {
 		return nil
 	}
 
 	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backups for retention: %w. Remedy: Check target-folder readability and path configuration.", err)
+		return fmt.Errorf("Failed to scan backups for retention: %w. Remedy: Check target-directory readability and path configuration.", err)
 	}
 
 	type datedEntry struct {
@@ -44,9 +44,9 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		newestTime time.Time
 	}
 
-	entriesByFolder := make(map[string][]datedEntry)
+	entriesByDirectory := make(map[string][]datedEntry)
 	for _, entry := range index {
-		if !folderSet[entry.FolderName] {
+		if !directorySet[entry.DirectoryName] {
 			continue
 		}
 		newestTime, err := catalog.NewestPartModTime(targetDir, entry)
@@ -55,13 +55,13 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 			log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
 			return nil
 		}
-		entriesByFolder[entry.FolderName] = append(entriesByFolder[entry.FolderName], datedEntry{entry: entry, newestTime: newestTime})
+		entriesByDirectory[entry.DirectoryName] = append(entriesByDirectory[entry.DirectoryName], datedEntry{entry: entry, newestTime: newestTime})
 	}
 
 	deletedSets := 0
 	deletedFiles := 0
 
-	for folderName, entries := range entriesByFolder {
+	for directoryName, entries := range entriesByDirectory {
 		sort.Slice(entries, func(i, j int) bool {
 			if !entries[i].newestTime.Equal(entries[j].newestTime) {
 				return entries[i].newestTime.After(entries[j].newestTime)
@@ -73,7 +73,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		})
 
 		if len(entries) <= retentionKeep {
-			log.Info("Retention [%s]: %d backup set(s), nothing to delete (keep=%d)", folderName, len(entries), retentionKeep)
+			log.Info("Retention [%s]: %d backup set(s), nothing to delete (keep=%d)", directoryName, len(entries), retentionKeep)
 			continue
 		}
 
@@ -81,13 +81,13 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		for _, candidate := range toDelete {
 			removed, err := deleteBackupEntryFiles(targetDir, candidate.entry)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the target folder.", candidate.entry.String(), err)
+				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the target directory.", candidate.entry.String(), err)
 			}
 			deletedSets++
 			deletedFiles += removed
 		}
 
-		log.Info("Retention [%s]: deleted %d old backup set(s), keep=%d", folderName, len(toDelete), retentionKeep)
+		log.Info("Retention [%s]: deleted %d old backup set(s), keep=%d", directoryName, len(toDelete), retentionKeep)
 	}
 
 	deletedLogs, err := deleteOrphanLogFiles(targetDir)
@@ -116,7 +116,7 @@ func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, erro
 		removed++
 	}
 
-	challengePath := util.ChallengeFileName(targetDir, entry.FolderName, entry.Date, entry.ID)
+	challengePath := util.ChallengeFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID)
 	if err := os.Remove(challengePath); err == nil {
 		removed++
 	} else if !os.IsNotExist(err) {

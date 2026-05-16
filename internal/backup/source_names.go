@@ -17,9 +17,9 @@ type backupSource struct {
 	Err            error
 }
 
-func resolveBackupSources(sourceFolders []string, exeDir string) []backupSource {
-	result := make([]backupSource, 0, len(sourceFolders))
-	for _, src := range sourceFolders {
+func resolveBackupSources(sourceDirectories []string, exeDir string) []backupSource {
+	result := make([]backupSource, 0, len(sourceDirectories))
+	for _, src := range sourceDirectories {
 		resolved := util.ResolveDir(src, exeDir)
 		status := backupSource{Resolved: resolved, normalizedPath: util.NormalizePathKey(resolved)}
 
@@ -55,14 +55,14 @@ func assignSourceBackupNames(sources []backupSource) {
 	fillMissingBackupNames(sources)
 }
 
-// groupSourcesByBasename maps each unique base folder name to the indices of valid (non-error, non-skipped) sources that share it.
+// groupSourcesByBasename maps each unique base directory name to the indices of valid (non-error, non-skipped) sources that share it.
 func groupSourcesByBasename(sources []backupSource) map[string][]int {
 	grouped := make(map[string][]int)
 	for i, source := range sources {
 		if source.Err != nil || source.Skip {
 			continue
 		}
-		baseName := util.FolderBaseName(source.Resolved)
+		baseName := util.DirectoryBaseName(source.Resolved)
 		grouped[baseName] = append(grouped[baseName], i)
 	}
 	return grouped
@@ -99,7 +99,7 @@ func assignNamesByGroup(sources []backupSource, grouped map[string][]int) {
 }
 
 // fillMissingBackupNames ensures every source has a BackupName set.
-// Skipped sources inherit the name of their non-skipped counterpart; others fall back to base folder name.
+// Skipped sources inherit the name of their non-skipped counterpart; others fall back to base directory name.
 func fillMissingBackupNames(sources []backupSource) {
 	nameByPath := make(map[string]string)
 	for i := range sources {
@@ -107,7 +107,7 @@ func fillMissingBackupNames(sources []backupSource) {
 			continue
 		}
 		if sources[i].BackupName == "" {
-			sources[i].BackupName = util.FolderBaseName(sources[i].Resolved)
+			sources[i].BackupName = util.DirectoryBaseName(sources[i].Resolved)
 		}
 		nameByPath[sources[i].normalizedPath] = sources[i].BackupName
 	}
@@ -122,7 +122,7 @@ func fillMissingBackupNames(sources []backupSource) {
 				continue
 			}
 		}
-		sources[i].BackupName = util.FolderBaseName(sources[i].Resolved)
+		sources[i].BackupName = util.DirectoryBaseName(sources[i].Resolved)
 	}
 }
 

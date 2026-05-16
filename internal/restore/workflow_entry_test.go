@@ -20,7 +20,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 		t.Fatalf("restoreEntry returned error: %v", err)
 	}
 
-	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.FolderName)
+	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName)
 	testutil.AssertFileContentEqual(t, filepath.Join(fx.SrcDir, "nested", "small.txt"), filepath.Join(restoredDir, "nested", "small.txt"))
 	testutil.AssertFileContentEqual(t, filepath.Join(fx.SrcDir, "large.bin"), filepath.Join(restoredDir, "large.bin"))
 }

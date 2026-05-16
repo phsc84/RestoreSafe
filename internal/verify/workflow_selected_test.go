@@ -39,7 +39,7 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 
 	// Create a second independent backup in the same target dir.
 	password2 := []byte("multi-verify-pass")
-	entry2 := util.BackupEntry{FolderName: fx1.Entry.FolderName + "2", Date: "2026-04-01", ID: util.BackupID("VER002")}
+	entry2 := util.BackupEntry{DirectoryName: fx1.Entry.DirectoryName + "2", Date: "2026-04-01", ID: util.BackupID("VER002")}
 	testutil.CreateBackupInDir(t, fx1.TargetDir, entry2, password2)
 
 	err := verifySelectedEntries(

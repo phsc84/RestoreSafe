@@ -12,7 +12,7 @@ import (
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
+	entry := util.BackupEntry{DirectoryName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
 
 	err := verifyEntry(entry, targetDir, []byte("pw"), nil)
 	if err == nil {

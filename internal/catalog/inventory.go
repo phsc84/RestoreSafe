@@ -42,7 +42,7 @@ func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
 func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 	des, err := os.ReadDir(targetDir)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read backup folder %q: %w. Remedy: Check that target_folder exists and is readable.", targetDir, err)
+		return nil, fmt.Errorf("Failed to read backup directory %q: %w. Remedy: Check that target_directory exists and is readable.", targetDir, err)
 	}
 
 	type seqPath struct {
@@ -71,7 +71,7 @@ func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 	return paths, nil
 }
 
-// SortedEntries returns entries sorted by date desc, then folder name.
+// SortedEntries returns entries sorted by date desc, then directory name.
 func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
 	sorted := make([]util.BackupEntry, len(index))
 	copy(sorted, index)
@@ -79,7 +79,7 @@ func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
 		if sorted[i].Date != sorted[j].Date {
 			return sorted[i].Date > sorted[j].Date
 		}
-		return sorted[i].FolderName < sorted[j].FolderName
+		return sorted[i].DirectoryName < sorted[j].DirectoryName
 	})
 	return sorted
 }
@@ -133,7 +133,7 @@ func NewestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, err
 		return time.Time{}, err
 	}
 	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_folder.")
+		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_directory.")
 	}
 
 	var newest time.Time

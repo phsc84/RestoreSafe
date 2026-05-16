@@ -44,7 +44,7 @@ func TestDateStringFormat(t *testing.T) {
 func TestBackupEntryString(t *testing.T) {
 	t.Parallel()
 
-	entry := BackupEntry{FolderName: "Docs", Date: "2026-03-15", ID: BackupID("ABC123")}
+	entry := BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: BackupID("ABC123")}
 	if got := entry.String(); got != "Docs_2026-03-15_ABC123" {
 		t.Fatalf("unexpected BackupEntry.String output: %q", got)
 	}
@@ -55,12 +55,12 @@ func TestPartFileNameAndParsePartFileNameRoundTrip(t *testing.T) {
 
 	targetDir := t.TempDir()
 	entry := BackupEntry{
-		FolderName: "Docs",
+		DirectoryName: "Docs",
 		Date:       "2026-03-15",
 		ID:         BackupID("ABC123"),
 	}
 
-	fullPath := PartFileName(targetDir, entry.FolderName, entry.Date, entry.ID, 7)
+	fullPath := PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 7)
 	if !strings.HasSuffix(fullPath, "[Docs]_2026-03-15_ABC123-007.enc") {
 		t.Fatalf("unexpected part filename: %s", fullPath)
 	}
@@ -116,11 +116,11 @@ func TestLogAndChallengeFileName(t *testing.T) {
 	}
 }
 
-func TestFolderBaseName(t *testing.T) {
+func TestDirectoryBaseName(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "Documents") + string(filepath.Separator)
-	if got := FolderBaseName(path); got != "Documents" {
+	if got := DirectoryBaseName(path); got != "Documents" {
 		t.Fatalf("expected Documents, got %q", got)
 	}
 }

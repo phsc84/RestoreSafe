@@ -10,11 +10,11 @@ import (
 // intervals. Pass log=nil to suppress output (the goroutine still runs so that
 // the channels stay in sync — LogProgressUntilDone handles nil gracefully).
 // The returned stop function must be called exactly once; defer it at the call site.
-func StartProgressTracking(log *util.Logger, folderName, verb string, inBytes, outBytes, calls *atomic.Int64) func() {
+func StartProgressTracking(log *util.Logger, directoryName, verb string, inBytes, outBytes, calls *atomic.Int64) func() {
 	progressDone := make(chan struct{})
 	progressStopped := make(chan struct{})
 	go func() {
-		LogProgressUntilDone(log, folderName, verb, inBytes, outBytes, calls, progressDone)
+		LogProgressUntilDone(log, directoryName, verb, inBytes, outBytes, calls, progressDone)
 		close(progressStopped)
 	}()
 	return func() {
@@ -29,7 +29,7 @@ const (
 )
 
 // LogStreamProgress formats and logs stream I/O progress for backup/restore operations.
-func LogStreamProgress(log *util.Logger, folderName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, isFinal bool) {
+func LogStreamProgress(log *util.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, isFinal bool) {
 	inMB := float64(inBytes.Load()) / (1024 * 1024)
 	outMB := float64(outBytes.Load()) / (1024 * 1024)
 	calls := outWriteCalls.Load()
@@ -43,11 +43,11 @@ func LogStreamProgress(log *util.Logger, folderName, processedLabel string, inBy
 		suffix = " final"
 	}
 
-	log.Debug("I/O progress [%s]%s: input=%.2f MB, %s=%.2f MB, writes=%d, avg write=%.2f KB", folderName, suffix, inMB, processedLabel, outMB, calls, avgWriteKB)
+	log.Debug("I/O progress [%s]%s: input=%.2f MB, %s=%.2f MB, writes=%d, avg write=%.2f KB", directoryName, suffix, inMB, processedLabel, outMB, calls, avgWriteKB)
 }
 
 // LogProgressUntilDone periodically logs stream progress until done is closed.
-func LogProgressUntilDone(log *util.Logger, folderName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
+func LogProgressUntilDone(log *util.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
 	if log == nil {
 		<-done
 		return
@@ -65,7 +65,7 @@ func LogProgressUntilDone(log *util.Logger, folderName, processedLabel string, i
 	for {
 		select {
 		case <-done:
-			LogStreamProgress(log, folderName, processedLabel, inBytes, outBytes, outWriteCalls, true)
+			LogStreamProgress(log, directoryName, processedLabel, inBytes, outBytes, outWriteCalls, true)
 			return
 		case <-ticker.C:
 			currentIn := inBytes.Load()
@@ -74,7 +74,7 @@ func LogProgressUntilDone(log *util.Logger, folderName, processedLabel string, i
 
 			changed := currentIn != lastIn || currentOut != lastOut || currentCalls != lastCalls
 			if changed {
-				LogStreamProgress(log, folderName, processedLabel, inBytes, outBytes, outWriteCalls, false)
+				LogStreamProgress(log, directoryName, processedLabel, inBytes, outBytes, outWriteCalls, false)
 				lastIn = currentIn
 				lastOut = currentOut
 				lastCalls = currentCalls
@@ -88,7 +88,7 @@ func LogProgressUntilDone(log *util.Logger, folderName, processedLabel string, i
 				continue
 			}
 			if !stallWarned && time.Since(stalledSince) >= stallWarnAfter {
-				log.Warn("I/O appears stalled [%s]: input=%.2f MB, %s=%.2f MB, writes=%d unchanged for %.0f s. Remedy: Check source/destination drive or network availability and retry.", folderName, float64(currentIn)/(1024*1024), processedLabel, float64(currentOut)/(1024*1024), currentCalls, time.Since(stalledSince).Seconds())
+				log.Warn("I/O appears stalled [%s]: input=%.2f MB, %s=%.2f MB, writes=%d unchanged for %.0f s. Remedy: Check source/destination drive or network availability and retry.", directoryName, float64(currentIn)/(1024*1024), processedLabel, float64(currentOut)/(1024*1024), currentCalls, time.Since(stalledSince).Seconds())
 				stallWarned = true
 			}
 		}

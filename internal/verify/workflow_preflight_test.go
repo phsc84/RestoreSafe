@@ -30,7 +30,7 @@ func TestBuildVerifyPreflightReportsErrorForMissingParts(t *testing.T) {
 	t.Parallel()
 
 	targetDir := t.TempDir()
-	missing := util.BackupEntry{FolderName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
+	missing := util.BackupEntry{DirectoryName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
 
 	items := buildVerifyPreflight([]util.BackupEntry{missing}, targetDir)
 	if len(items) != 1 {
@@ -62,7 +62,7 @@ func TestValidateVerifyPreflight(t *testing.T) {
 func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
-	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
+	items := []verifyPreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
 	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, true, false, func() error { return nil })
@@ -86,8 +86,8 @@ func TestPrintVerifyPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	if strings.Contains(output, "Items selected") {
 		t.Fatalf("did not expect items selected line, got: %q", output)
 	}
-	if strings.Contains(output, "Backup folder") {
-		t.Fatalf("did not expect backup folder field, got: %q", output)
+	if strings.Contains(output, "Backup directory") {
+		t.Fatalf("did not expect backup directory field, got: %q", output)
 	}
 	if strings.Contains(output, "size:") {
 		t.Fatalf("did not expect backup size in verify preflight selection, got: %q", output)
@@ -98,7 +98,7 @@ func TestPrintVerifyPreflightShowsErrorItemAndUnknownTotalSize(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{
-		Entry:     util.BackupEntry{FolderName: "Broken", Date: "2026-03-20", ID: util.BackupID("ERR001")},
+		Entry:     util.BackupEntry{DirectoryName: "Broken", Date: "2026-03-20", ID: util.BackupID("ERR001")},
 		PartCount: 0,
 		Err:       errors.New("parts missing"),
 	}}
@@ -123,7 +123,7 @@ func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T)
 	t.Parallel()
 	targetDir := t.TempDir()
 	items := []verifyPreflightItem{{
-		Entry:          util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("DOC001")},
+		Entry:          util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("DOC001")},
 		PartCount:      2,
 		TotalSizeBytes: 1024,
 	}}
@@ -143,7 +143,7 @@ func TestPrintVerifyPreflightShowsKnownTotalSizeForSuccessfulItems(t *testing.T)
 func TestPrintVerifyPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
-	items := []verifyPreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
+	items := []verifyPreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
 	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, items, true, false, func() error { return errors.New("no YubiKey detected") })

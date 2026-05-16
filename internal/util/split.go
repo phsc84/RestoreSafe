@@ -86,7 +86,7 @@ func (s *Writer) Write(p []byte) (int, error) {
 		p = p[written:]
 
 		if err != nil {
-			return total, fmt.Errorf("Failed to write to part file: %w. Remedy: Check target-folder write permissions and free disk space.", err)
+			return total, fmt.Errorf("Failed to write to part file: %w. Remedy: Check target-directory write permissions and free disk space.", err)
 		}
 
 		if s.written >= s.maxBytes {
@@ -128,7 +128,7 @@ func (s *Writer) openNext() error {
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("Failed to create part file %q: %w. Remedy: Check target-folder write permissions and free disk space.", path, err)
+		return fmt.Errorf("Failed to create part file %q: %w. Remedy: Check target-directory write permissions and free disk space.", path, err)
 	}
 
 	s.current = f

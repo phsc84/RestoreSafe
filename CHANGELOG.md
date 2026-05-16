@@ -9,12 +9,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [3.0.0] - 2026-05-15
 
 ### Added
-- Target directory locking: backup and restore now acquire an exclusive lock on the target folder at startup, preventing concurrent runs from corrupting the same backup set.
+- Target directory locking: backup and restore now acquire an exclusive lock on the target directory at startup, preventing concurrent runs from corrupting the same backup set.
 - Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
 - Backup pre-flight now validates available staging space before starting, not just target space.
 
 ### Changed
-- Duplicate source-folder basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
+- Duplicate source-directory basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
 - Improved error messages across backup, restore, and verify flows with more concrete remediation guidance.
 - Consolidated YubiKey connectivity checks into a shared helper used consistently by backup, restore, and verify preflights.
 - Internal refactoring of the decrypt pipeline and progress-tracking helpers for simpler, more testable code.
@@ -52,7 +52,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backup preflight now includes `Free space local` when local staging is enabled, showing free space on the staging drive.
 - Improved backup progress visibility during archive creation: after the existing `Created: N part file(s)` summary, each created part filename is now logged at info level.
 - Improved staging finalization visibility: while copying from local staging to the backup target, each copied `.enc` part file is now logged at info level.
-- Added a short per-folder copy completion log line during staging finalization once all part files for a source folder are copied.
+- Added a short per-directory copy completion log line during staging finalization once all part files for a source directory are copied.
 
 ### Fixed
 - Fixed retention timing in backup workflow when local staging is enabled: retention cleanup now runs after staged files are copied to the target directory, so `retention_keep` is applied to the actual final target state (avoids effectively keeping one extra backup set).
@@ -78,16 +78,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.0.0] - 2026-03-19
 
 ### Added
-- Added automatic local staging for restore when the backup folder and restore target share the same drive/share and TEMP/TMP is on a different local drive. RestoreSafe now copies the selected `.enc` parts to local temp storage first to reduce same-share read/write contention.
+- Added automatic local staging for restore when the backup directory and restore target share the same drive/share and TEMP/TMP is on a different local drive. RestoreSafe now copies the selected `.enc` parts to local temp storage first to reduce same-share read/write contention.
 - Added password-less YubiKey-only mode. Authentication is now configured via a single `authentication_mode` key in `config.yaml` with three numeric options: `1` (default, password only), `2` (password + YubiKey HMAC-SHA1 second factor), and `3` (YubiKey only, no password). The challenge file written by a YubiKey-only backup is marked with a `NOPW:` prefix so that restore and verify detect the mode without relying on `config.yaml`. Backup and restore/verify preflight summaries display the resolved authentication label.
 - Added CLI flags `-backup`, `-restore`, and `-verify` to run operations directly without opening the interactive menu.
 - Added safety guard for unattended backup: non-interactive `-backup` now requires `authentication_mode: 3` and exits with an error otherwise.
 - Added automatic newest-run resolution in non-interactive `-restore` and `-verify` modes (no backup picker).
-- Added CLI flag `-config` to load `config.yaml` from a custom location; if omitted, RestoreSafe still uses `config.yaml` in the application folder.
-- Added automatic startup health check. RestoreSafe now runs a non-interactive diagnostic pass on launch and reports configuration, source/target folder access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
+- Added CLI flag `-config` to load `config.yaml` from a custom location; if omitted, RestoreSafe still uses `config.yaml` in the application directory.
+- Added automatic startup health check. RestoreSafe now runs a non-interactive diagnostic pass on launch and reports configuration, source/target directory access, temp directory access, YubiKey CLI availability, and structural issues in existing backup/challenge files before showing the main menu.
 - Added interactive verify mode for existing backups. Verification checks selected backup sets for missing parts, validates decryption with password and optional YubiKey challenge-response, and confirms that the decrypted stream is a readable TAR archive without restoring files.
-- Added backup and restore completion summaries showing processed folders, total part files created/processed, log file location, and whether warnings occurred.
-- Added a simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source folder, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
+- Added backup and restore completion summaries showing processed directories, total part files created/processed, log file location, and whether warnings occurred.
+- Added a simple retention policy via `retention_keep` in `config.yaml`: after a successful backup, RestoreSafe keeps only the newest N backup sets per source directory, deletes older encrypted part/challenge files, and removes orphan `.log` files only when no backup parts remain for the same backup run.
 - Added unit and integration tests for config validation, TAR verification, health/retention helpers, backup/restore selection logic, and backup/restore round-trip behavior.
 
 ### Changed
@@ -96,9 +96,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Improved backup preflight output: RestoreSafe now shows estimated total source size, free target disk space, and a warning when estimated size likely exceeds currently free target space.
 - Improved restore/verify backup selection and ID handling: backup sets are grouped by `date + ID`, support date filtering, include a quick `newest` shortcut, and when the same backup ID exists on multiple dates RestoreSafe warns and automatically uses the newest date.
 - Changed restore authentication detection so it no longer depends on `config.yaml` alone: YubiKey requirement is inferred from backup-side challenge files when available.
-- Improved duplicate source-folder handling: when multiple configured sources share the same basename, RestoreSafe appends a full path-derived alias (including drive hint) to backup naming. Every non-alphanumeric character in that alias is encoded as UTF-8 hex (`~XX~`, for example `-` → `~2D~`, `_` → `~5F~`, space → `~20~`), and true identical source-path duplicates are warned and skipped.
+- Improved duplicate source-directory handling: when multiple configured sources share the same basename, RestoreSafe appends a full path-derived alias (including drive hint) to backup naming. Every non-alphanumeric character in that alias is encoded as UTF-8 hex (`~XX~`, for example `-` → `~2D~`, `_` → `~5F~`, space → `~20~`), and true identical source-path duplicates are warned and skipped.
 - Improved user-facing messaging across config, backup, restore, verify, health check, YubiKey, and low-level crypto/split/logging/retention/archive paths: messages use clearer punctuation and include concrete remediation steps (for example forward-slash path hints, missing part/challenge guidance, and permission checks).
-- Startup health check now reports a warning when the write-probe temporary file cannot be cleaned up in the target folder or TEMP directory.
+- Startup health check now reports a warning when the write-probe temporary file cannot be cleaned up in the target directory or TEMP directory.
 - Logger now falls back to console-only output when the log file cannot be opened, rather than silently dropping all log calls.
 - Shared staging lifecycle helpers and a generic preflight validation helper extracted to the `operation` package and used consistently across backup, restore, and verify workflows.
 
@@ -137,12 +137,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added / Changed
 - Initial stable release of RestoreSafe for Windows 64-bit.
-- Encrypted backup creation for one or more configured source folders.
+- Encrypted backup creation for one or more configured source directories.
 - Secure restore flow for encrypted backup archives.
 - AES-256-GCM encryption for authenticated confidentiality and integrity.
 - Argon2id key derivation for password-based protection.
 - Optional YubiKey challenge-response (HMAC-SHA1, slot 2) as second factor.
-- Encrypted metadata (file and folder names) in backup archives.
+- Encrypted metadata (file and directory names) in backup archives.
 - Automatic archive splitting into numbered `.enc` parts.
 - Deterministic backup naming scheme with date, random ID, and sequence number.
 - Backup logging to per-run `.log` files.

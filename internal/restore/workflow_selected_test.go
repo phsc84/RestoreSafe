@@ -29,7 +29,7 @@ func TestRestoreSelectedEntriesRoundTrip(t *testing.T) {
 		t.Fatalf("expected %d total parts processed, got %d", fx.Parts, total)
 	}
 
-	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.FolderName)
+	restoredDir := filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName)
 	testutil.AssertFileContentEqual(t,
 		filepath.Join(fx.SrcDir, "large.bin"),
 		filepath.Join(restoredDir, "large.bin"),
@@ -85,7 +85,7 @@ func TestRestoreSelectionWarningCountNonIDSelection(t *testing.T) {
 	t.Parallel()
 
 	index := []util.BackupEntry{
-		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
+		{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
 	}
 	if got := restoreSelectionWarningCount("all", index); got != 0 {
 		t.Fatalf("expected 0 warnings for non-ID selection, got %d", got)
@@ -96,7 +96,7 @@ func TestRestoreSelectionWarningCountSingleDateNoWarning(t *testing.T) {
 	t.Parallel()
 
 	index := []util.BackupEntry{
-		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
+		{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
 	}
 	if got := restoreSelectionWarningCount("ABC123", index); got != 0 {
 		t.Fatalf("expected 0 warnings for single-date backup ID, got %d", got)
@@ -107,8 +107,8 @@ func TestRestoreSelectionWarningCountMultipleDatesWarns(t *testing.T) {
 	t.Parallel()
 
 	index := []util.BackupEntry{
-		{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
-		{FolderName: "Photos", Date: "2026-03-15", ID: util.BackupID("ABC123")},
+		{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")},
+		{DirectoryName: "Photos", Date: "2026-03-15", ID: util.BackupID("ABC123")},
 	}
 	if got := restoreSelectionWarningCount("ABC123", index); got != 1 {
 		t.Fatalf("expected 1 warning for multi-date backup ID, got %d", got)

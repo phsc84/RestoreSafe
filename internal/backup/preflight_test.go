@@ -25,14 +25,14 @@ func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 	}
 }
 
-func TestValidateSourceFoldersIncludesFailureCount(t *testing.T) {
+func TestValidateSourceDirectoriesIncludesFailureCount(t *testing.T) {
 	t.Parallel()
-	err := validateSourceFolders([]backupSource{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
+	err := validateSourceDirectories([]backupSource{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
 	if err == nil {
 		t.Fatal("expected preflight validation error, got nil")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "2 source folder(s)") {
+	if !strings.Contains(msg, "2 source directory(s)") {
 		t.Fatalf("expected failure count in message, got %q", msg)
 	}
 }
@@ -139,7 +139,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	warnLinePrefix := "→ Source and target folders are on the same drive/share"
+	warnLinePrefix := "→ Source and target directories are on the same drive/share"
 	if strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
 	}
@@ -156,7 +156,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	warnLinePrefix := "→ Source and target folders are on the same drive/share"
+	warnLinePrefix := "→ Source and target directories are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
@@ -260,7 +260,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	localStagingLine := "Local staging enabled, because source and target folders share the same drive/share"
+	localStagingLine := "Local staging enabled, because source and target directories share the same drive/share"
 	tempDirLine := "Temp directory:"
 	localStagingIdx := strings.Index(output, localStagingLine)
 	tempDirIdx := strings.Index(output, tempDirLine)
@@ -444,16 +444,16 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	sourceIdx := strings.Index(output, "Source folder(s):")
-	targetIdx := strings.Index(output, "Backup folder:")
+	sourceIdx := strings.Index(output, "Source directory(s):")
+	targetIdx := strings.Index(output, "Backup directory:")
 	if sourceIdx < 0 || targetIdx < 0 {
-		t.Fatalf("expected Source folder(s) and Target folder sections, got: %q", output)
+		t.Fatalf("expected Source directory(s) and Target directory sections, got: %q", output)
 	}
 	if sourceIdx > targetIdx {
-		t.Fatalf("expected Source folder(s) section before Target folder section, got: %q", output)
+		t.Fatalf("expected Source directory(s) section before Target directory section, got: %q", output)
 	}
 	if !strings.Contains(output, "Needed disk space (total):") {
-		t.Fatalf("expected needed disk space line in Source folder(s) section, got: %q", output)
+		t.Fatalf("expected needed disk space line in Source directory(s) section, got: %q", output)
 	}
 	if strings.Contains(output, "Est. source size :") {
 		t.Fatalf("did not expect standalone est-source-size field line, got: %q", output)

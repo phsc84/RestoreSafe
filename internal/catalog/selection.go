@@ -35,13 +35,13 @@ func BackupRunSummaries(targetDir string, index []util.BackupEntry) ([]BackupRun
 	}
 
 	if len(runsByKey) == 0 {
-		return nil, fmt.Errorf("No backups found. Remedy: Check whether .enc files are present in target_folder.")
+		return nil, fmt.Errorf("No backups found. Remedy: Check whether .enc files are present in target_directory.")
 	}
 
 	runs := make([]BackupRunSummary, 0, len(runsByKey))
 	for _, run := range runsByKey {
 		sort.Slice(run.Entries, func(i, j int) bool {
-			return run.Entries[i].FolderName < run.Entries[j].FolderName
+			return run.Entries[i].DirectoryName < run.Entries[j].DirectoryName
 		})
 		runs = append(runs, run)
 	}
@@ -65,7 +65,7 @@ func ResolveNewestBackupRunSelection(targetDir string, index []util.BackupEntry)
 		return nil, "", fmt.Errorf("Failed to inspect newest backup set: %w", err)
 	}
 	if len(runs) == 0 {
-		return nil, "", fmt.Errorf("No backup sets found. Remedy: Ensure backup folder contains valid backup parts.")
+		return nil, "", fmt.Errorf("No backup sets found. Remedy: Ensure backup directory contains valid backup parts.")
 	}
 	run := runs[0]
 	return run.Entries, fmt.Sprintf("newest set %s/%s", run.Date, run.ID), nil

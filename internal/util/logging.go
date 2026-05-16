@@ -108,7 +108,7 @@ func (l *Logger) Close() {
 		}
 		// Overwrite the original file with the complete temp log content.
 		if err := os.WriteFile(l.originalPath, data, 0o600); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing log file to target directory: %v. Remedy: Check target-folder write permissions.\n", err)
+			fmt.Fprintf(os.Stderr, "Error writing log file to target directory: %v. Remedy: Check target-directory write permissions.\n", err)
 			fmt.Fprintf(os.Stderr, "Log file is located in temp directory: %s\n", l.actualPath)
 			// Intentionally do not remove the temp file — it is the user's only copy.
 			return

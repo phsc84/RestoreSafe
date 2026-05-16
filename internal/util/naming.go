@@ -2,8 +2,8 @@
 //
 // Naming scheme:
 //
-//	[SourceFolderName]_YYYY-MM-DD_ABC123-{Seq}.enc
-//	[SourceFolderName]_YYYY-MM-DD_ABC123.challenge  (YubiKey challenge file)
+//	[SourceDirectoryName]_YYYY-MM-DD_ABC123-{Seq}.enc
+//	[SourceDirectoryName]_YYYY-MM-DD_ABC123.challenge  (YubiKey challenge file)
 //
 // The backup ID (ABC123) is a random 6-character string drawn from [A-Z0-9].
 package util
@@ -49,9 +49,9 @@ func DateString() string {
 
 // PartFileName returns the path for a backup part file.
 //
-//	{targetDir}/[folderName]_YYYY-MM-DD_{id}-{seq:03d}.enc
-func PartFileName(targetDir, folderName, date string, id BackupID, seq int) string {
-	name := fmt.Sprintf("[%s]_%s_%s-%03d.enc", folderName, date, string(id), seq)
+//	{targetDir}/[directoryName]_YYYY-MM-DD_{id}-{seq:03d}.enc
+func PartFileName(targetDir, directoryName, date string, id BackupID, seq int) string {
+	name := fmt.Sprintf("[%s]_%s_%s-%03d.enc", directoryName, date, string(id), seq)
 	return filepath.Join(targetDir, name)
 }
 
@@ -65,22 +65,22 @@ func LogFileName(targetDir, date string, id BackupID) string {
 
 // ChallengeFileName returns the path for the YubiKey challenge file.
 //
-//	{targetDir}/[folderName]_YYYY-MM-DD_{id}.challenge
-func ChallengeFileName(targetDir, folderName, date string, id BackupID) string {
-	name := fmt.Sprintf("[%s]_%s_%s.challenge", folderName, date, string(id))
+//	{targetDir}/[directoryName]_YYYY-MM-DD_{id}.challenge
+func ChallengeFileName(targetDir, directoryName, date string, id BackupID) string {
+	name := fmt.Sprintf("[%s]_%s_%s.challenge", directoryName, date, string(id))
 	return filepath.Join(targetDir, name)
 }
 
-// BackupEntry represents one logical backup (all parts of one source folder).
+// BackupEntry represents one logical backup (all parts of one source directory).
 type BackupEntry struct {
-	FolderName string
+	DirectoryName string
 	Date       string
 	ID         BackupID
 }
 
 // String returns the display name without part/extension.
 func (e BackupEntry) String() string {
-	return fmt.Sprintf("%s_%s_%s", e.FolderName, e.Date, string(e.ID))
+	return fmt.Sprintf("%s_%s_%s", e.DirectoryName, e.Date, string(e.ID))
 }
 
 // RunKey returns a unique key for the backup run (date + ID).
@@ -92,7 +92,7 @@ func (e BackupEntry) RunKey() string {
 // partFilePattern matches:  [name]_{YYYY-MM-DD}_{ID}-{seq}.enc
 // Named capture groups:
 //
-//	1 (.+?)              - Folder name (non-greedy)
+//	1 (.+?)              - Directory name (non-greedy)
 //	2 (\d{4}-\d{2}-\d{2}) - Date in YYYY-MM-DD format
 //	3 ([A-Z0-9]{6})      - 6-character backup ID
 //	4 (\d{3})            - 3-digit sequence number (001, 002, ...)
@@ -110,14 +110,14 @@ func ParsePartFileName(basename string) (BackupEntry, int, bool) {
 	var seq int
 	fmt.Sscanf(m[4], "%d", &seq)
 	return BackupEntry{
-		FolderName: m[1],
+		DirectoryName: m[1],
 		Date:       m[2],
 		ID:         BackupID(m[3]),
 	}, seq, true
 }
 
-// FolderBaseName returns the last element of a path.
-func FolderBaseName(path string) string {
+// DirectoryBaseName returns the last element of a path.
+func DirectoryBaseName(path string) string {
 	base := filepath.Base(strings.TrimRight(filepath.Clean(path), string(filepath.Separator)))
 	return base
 }

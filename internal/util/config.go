@@ -47,8 +47,8 @@ type Argon2Config struct {
 
 // Config holds all application configuration.
 type Config struct {
-	SourceFolders      []string     `yaml:"source_folders"`
-	TargetFolder       string       `yaml:"target_folder"`
+	SourceDirectories      []string     `yaml:"source_directories"`
+	TargetDirectory       string       `yaml:"target_directory"`
 	SplitSizeMB        int64        `yaml:"split_size_mb"`
 	RetentionKeep      int          `yaml:"retention_keep"`
 	LogLevel           string       `yaml:"log_level"`
@@ -75,7 +75,7 @@ func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("Config file not found: %w\n"+
-			"Remedy: Place 'config.yaml' in the same folder as the application or start RestoreSafe from that folder.", err)
+			"Remedy: Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.", err)
 	}
 
 	var cfg Config
@@ -115,11 +115,11 @@ func (c *Config) withDefaults() {
 }
 
 func (c *Config) validate() error {
-	if len(c.SourceFolders) == 0 {
-		return fmt.Errorf("No 'source_folders' specified in config file. Remedy: Add at least one source folder under 'source_folders', e.g. ['C:/Users/Name/Documents'].")
+	if len(c.SourceDirectories) == 0 {
+		return fmt.Errorf("No 'source_directories' specified in config file. Remedy: Add at least one source directory under 'source_directories', e.g. ['C:/Users/Name/Documents'].")
 	}
-	if c.TargetFolder == "" {
-		return fmt.Errorf("No 'target_folder' specified in config file. Remedy: Set a target folder, e.g. 'C:/Backups'.")
+	if c.TargetDirectory == "" {
+		return fmt.Errorf("No 'target_directory' specified in config file. Remedy: Set a target directory, e.g. 'C:/Backups'.")
 	}
 	switch c.LogLevel {
 	case "debug", "info":

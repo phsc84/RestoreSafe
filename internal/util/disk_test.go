@@ -35,7 +35,7 @@ func TestIsNetworkVolumeLocalTempDir(t *testing.T) {
 func TestIsNetworkVolumeUNCPath(t *testing.T) {
 	t.Parallel()
 
-	if !IsNetworkVolume(`\\server\share\folder`) {
+	if !IsNetworkVolume(`\\server\share\directory`) {
 		t.Fatal("expected UNC path to be classified as network volume")
 	}
 }

@@ -17,10 +17,10 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 
-	entryWithParts := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	entryWithoutParts := util.BackupEntry{FolderName: "Missing", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entryWithParts := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entryWithoutParts := util.BackupEntry{DirectoryName: "Missing", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part := util.PartFileName(targetDir, entryWithParts.FolderName, entryWithParts.Date, entryWithParts.ID, 1)
+	part := util.PartFileName(targetDir, entryWithParts.DirectoryName, entryWithParts.Date, entryWithParts.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 		t.Fatalf("failed to create part file: %v", err)
 	}
 
-	existingOutDir := filepath.Join(restorePath, entryWithParts.FolderName)
+	existingOutDir := filepath.Join(restorePath, entryWithParts.DirectoryName)
 	if err := os.MkdirAll(existingOutDir, 0o750); err != nil {
 		t.Fatalf("failed to create restore output dir: %v", err)
 	}
@@ -46,12 +46,12 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 }
 
-func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.T) {
+func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 	outputDir := filepath.Join(restorePath, "Docs")
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}
 	items := []restorePreflightItem{{
 		Entry:        entry,
 		PartCount:    4,
@@ -67,19 +67,19 @@ func TestPrintRestorePreflightShowsRestoreFoldersWithPerFolderErrors(t *testing.
 		t.Fatalf("did not expect Restore target field, got: %q", output)
 	}
 	selectionLine := "  [OK] " + entry.String() + " (parts: 4)"
-	folderLine := "  [ERROR] " + filepath.ToSlash(outputDir)
+	directoryLine := "  [ERROR] " + filepath.ToSlash(outputDir)
 	errorText := "Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."
 	if !strings.Contains(output, selectionLine) {
 		t.Fatalf("expected backup selection to remain an OK archive entry, got: %q", output)
 	}
-	if !strings.Contains(output, "Restored folder(s):\n"+folderLine) {
-		t.Fatalf("expected restore folder section with absolute destination path, got: %q", output)
+	if !strings.Contains(output, "Restored directory(s):\n"+directoryLine) {
+		t.Fatalf("expected restore directory section with absolute destination path, got: %q", output)
 	}
 	if !strings.Contains(output, errorText) {
-		t.Fatalf("expected restore folder error text, got: %q", output)
+		t.Fatalf("expected restore directory error text, got: %q", output)
 	}
-	if strings.Index(output, errorText) <= strings.Index(output, folderLine) {
-		t.Fatalf("expected restore folder error below folder line, got: %q", output)
+	if strings.Index(output, errorText) <= strings.Index(output, directoryLine) {
+		t.Fatalf("expected restore directory error below directory line, got: %q", output)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
-	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
+	items := []restorePreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
 	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
@@ -114,7 +114,7 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 	t.Parallel()
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
-	items := []restorePreflightItem{{Entry: util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
+	items := []restorePreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
 	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
@@ -142,9 +142,9 @@ func TestBuildRestorePreflightIncludesTotalSizeBytes(t *testing.T) {
 
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
-	entry := util.BackupEntry{FolderName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
+	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part := util.PartFileName(targetDir, entry.FolderName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	targetDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{
-		Entry:          util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")},
+		Entry:          util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")},
 		PartCount:      1,
 		TotalSizeBytes: math.MaxInt64,
 	}}
@@ -188,8 +188,8 @@ func TestValidateRestorePreflightPassesWhenAllItemsOK(t *testing.T) {
 	t.Parallel()
 
 	items := []restorePreflightItem{
-		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1},
-		{Entry: util.BackupEntry{FolderName: "B"}, PartCount: 2},
+		{Entry: util.BackupEntry{DirectoryName: "A"}, PartCount: 1},
+		{Entry: util.BackupEntry{DirectoryName: "B"}, PartCount: 2},
 	}
 	if err := validateRestorePreflight(items); err != nil {
 		t.Fatalf("expected no error for valid items, got %v", err)
@@ -200,8 +200,8 @@ func TestValidateRestorePreflightFailsForPartError(t *testing.T) {
 	t.Parallel()
 
 	items := []restorePreflightItem{
-		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1},
-		{Entry: util.BackupEntry{FolderName: "B"}, Err: errors.New("no parts found")},
+		{Entry: util.BackupEntry{DirectoryName: "A"}, PartCount: 1},
+		{Entry: util.BackupEntry{DirectoryName: "B"}, Err: errors.New("no parts found")},
 	}
 	err := validateRestorePreflight(items)
 	if err == nil {
@@ -216,7 +216,7 @@ func TestValidateRestorePreflightFailsForOutputDirError(t *testing.T) {
 	t.Parallel()
 
 	items := []restorePreflightItem{
-		{Entry: util.BackupEntry{FolderName: "A"}, PartCount: 1, OutputDirErr: errors.New("already exists")},
+		{Entry: util.BackupEntry{DirectoryName: "A"}, PartCount: 1, OutputDirErr: errors.New("already exists")},
 	}
 	err := validateRestorePreflight(items)
 	if err == nil {
@@ -260,7 +260,7 @@ func TestValidateRestoreTargetSpaceReturnsErrorWhenInsufficient(t *testing.T) {
 
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{
-		Entry:          util.BackupEntry{FolderName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")},
+		Entry:          util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")},
 		PartCount:      1,
 		TotalSizeBytes: math.MaxInt64,
 	}}

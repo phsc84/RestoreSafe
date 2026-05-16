@@ -142,7 +142,7 @@ func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 	}
 }
 
-func TestCopyBackupResultsLogsPerFolderHeaderAndSummary(t *testing.T) {
+func TestCopyBackupResultsLogsPerDirectoryHeaderAndSummary(t *testing.T) {
 	stagingDir := t.TempDir()
 	targetDir := t.TempDir()
 
@@ -163,11 +163,11 @@ func TestCopyBackupResultsLogsPerFolderHeaderAndSummary(t *testing.T) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
-	folderSourcePaths := map[string]string{
+	directorySourcePaths := map[string]string{
 		"00_Gemeinsam": "/data/00_Gemeinsam",
 		"10_Daten":     "/data/10_Daten",
 	}
-	if err := copyBackupResults(stagingDir, targetDir, nil, folderSourcePaths, logger); err != nil {
+	if err := copyBackupResults(stagingDir, targetDir, nil, directorySourcePaths, logger); err != nil {
 		logger.Close()
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
@@ -179,11 +179,11 @@ func TestCopyBackupResultsLogsPerFolderHeaderAndSummary(t *testing.T) {
 	}
 	logContent := string(data)
 
-	if !strings.Contains(logContent, "Copying backup files of source folder: /data/00_Gemeinsam") {
-		t.Fatalf("expected folder header for 00_Gemeinsam, got: %q", logContent)
+	if !strings.Contains(logContent, "Copying backup files of source directory: /data/00_Gemeinsam") {
+		t.Fatalf("expected directory header for 00_Gemeinsam, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, "Copying backup files of source folder: /data/10_Daten") {
-		t.Fatalf("expected folder header for 10_Daten, got: %q", logContent)
+	if !strings.Contains(logContent, "Copying backup files of source directory: /data/10_Daten") {
+		t.Fatalf("expected directory header for 10_Daten, got: %q", logContent)
 	}
 	if !strings.Contains(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`) {
 		t.Fatalf("expected completion message for 00_Gemeinsam, got: %q", logContent)
@@ -192,7 +192,7 @@ func TestCopyBackupResultsLogsPerFolderHeaderAndSummary(t *testing.T) {
 		t.Fatalf("expected completion message for 10_Daten, got: %q", logContent)
 	}
 
-	// "Copied:" summary must appear after the last "Copy:" of its folder.
+	// "Copied:" summary must appear after the last "Copy:" of its directory.
 	part2Idx := strings.Index(logContent, "Copy: [00_Gemeinsam]_2026-03-21_AB12CD-002.enc")
 	finishedIdx := strings.Index(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`)
 	if part2Idx < 0 || finishedIdx < 0 {

@@ -18,7 +18,7 @@ func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.
 	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to open log file: %v. Remedy: Check write permissions in target_folder; operation continues without a log file.\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to open log file: %v. Remedy: Check write permissions in target_directory; operation continues without a log file.\n", err)
 		return util.NewConsoleLogger(cfg.LogLevel)
 	}
 	return log
@@ -102,7 +102,7 @@ func ReadPasswordWithRetry(
 			challengeHex, err := readChallengeFile(challengePath)
 			if err != nil {
 				security.ZeroBytes(password)
-				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same folder as the .enc files.", err)
+				return nil, fmt.Errorf("YubiKey challenge file not found: %w. Remedy: Ensure the matching .challenge file is in the same directory as the .enc files.", err)
 			}
 			// Verify ykman is installed and a device is physically connected.
 			if err := security.CheckYubiKeyConnected(); err != nil {
@@ -214,10 +214,10 @@ func readChallengeFile(path string) (string, error) {
 	content := strings.TrimSpace(string(data))
 	content = strings.TrimPrefix(content, "NOPW:")
 	if content == "" {
-		return "", fmt.Errorf("challenge file is empty or contains only the NOPW: prefix. Remedy: The .challenge file may be corrupted or truncated; restore it from a backup of the backup folder.")
+		return "", fmt.Errorf("challenge file is empty or contains only the NOPW: prefix. Remedy: The .challenge file may be corrupted or truncated; restore it from a backup of the backup directory.")
 	}
 	if err := security.ValidateChallengeHex(content); err != nil {
-		return "", fmt.Errorf("challenge file has invalid format: %w. Remedy: The .challenge file may be corrupted; restore it from a backup of the backup folder.", err)
+		return "", fmt.Errorf("challenge file has invalid format: %w. Remedy: The .challenge file may be corrupted; restore it from a backup of the backup directory.", err)
 	}
 	return content, nil
 }

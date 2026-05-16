@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestInspectSourceFoldersForValidationReportsDirectoryErrors(t *testing.T) {
+func TestInspectSourceDirectoriesForValidationReportsDirectoryErrors(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -20,7 +20,7 @@ func TestInspectSourceFoldersForValidationReportsDirectoryErrors(t *testing.T) {
 		t.Fatalf("failed to create file path: %v", err)
 	}
 
-	statuses := InspectSourceFoldersForValidation([]string{"ok", "not-a-dir.txt", "missing"}, exeDir)
+	statuses := InspectSourceDirectoriesForValidation([]string{"ok", "not-a-dir.txt", "missing"}, exeDir)
 	if len(statuses) != 3 {
 		t.Fatalf("expected 3 statuses, got %d", len(statuses))
 	}
@@ -35,16 +35,16 @@ func TestInspectSourceFoldersForValidationReportsDirectoryErrors(t *testing.T) {
 	}
 }
 
-func TestInspectSourceFoldersForValidationMarksIdenticalDuplicates(t *testing.T) {
+func TestInspectSourceDirectoriesForValidationMarksIdenticalDuplicates(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
 	shared := filepath.Join(exeDir, "Docs")
 	if err := os.MkdirAll(shared, 0o750); err != nil {
-		t.Fatalf("failed to create shared folder: %v", err)
+		t.Fatalf("failed to create shared directory: %v", err)
 	}
 
-	statuses := InspectSourceFoldersForValidation([]string{shared, shared}, exeDir)
+	statuses := InspectSourceDirectoriesForValidation([]string{shared, shared}, exeDir)
 	if len(statuses) != 2 {
 		t.Fatalf("expected 2 statuses, got %d", len(statuses))
 	}

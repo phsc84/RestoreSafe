@@ -19,10 +19,10 @@ type backupCounters struct {
 	outWriteCalls atomic.Int64
 }
 
-func newSplitOutput(targetDir, folderName, date string, id util.BackupID, splitSizeMB int64) (*util.Writer, *bufio.Writer) {
+func newSplitOutput(targetDir, directoryName, date string, id util.BackupID, splitSizeMB int64) (*util.Writer, *bufio.Writer) {
 	splitSizeBytes := splitSizeMB * 1024 * 1024
 	nameFunc := func(seq int) string {
-		return util.PartFileName(targetDir, folderName, date, id, seq)
+		return util.PartFileName(targetDir, directoryName, date, id, seq)
 	}
 	sw := util.NewWriter(nameFunc, splitSizeBytes)
 	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
@@ -54,15 +54,15 @@ func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, pass
 
 func closeSplitOutput(bw *bufio.Writer, sw *util.Writer) error {
 	if err := bw.Flush(); err != nil {
-		return fmt.Errorf("Flushing split buffer failed: %w. Remedy: Check free disk space and write permissions in target_folder.", err)
+		return fmt.Errorf("Flushing split buffer failed: %w. Remedy: Check free disk space and write permissions in target_directory.", err)
 	}
 	if err := sw.Close(); err != nil {
-		return fmt.Errorf("Closing split-writer failed: %w. Remedy: Check free disk space and write permissions in target_folder.", err)
+		return fmt.Errorf("Closing split-writer failed: %w. Remedy: Check free disk space and write permissions in target_directory.", err)
 	}
 	return nil
 }
 
-func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, counters *backupCounters, log *util.Logger) {
+func logPartSummary(sw *util.Writer, directoryName string, ioDiagnostics bool, counters *backupCounters, log *util.Logger) {
 	parts := sw.Paths()
 	if ioDiagnostics {
 		stats := sw.Stats()
@@ -75,8 +75,8 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		if stats.FileWriteCalls > 0 {
 			avgFileWriteKB = float64(stats.FileWriteBytes) / float64(stats.FileWriteCalls) / 1024
 		}
-		log.Debug("I/O diagnostics [%s]: encrypt writes=%d, avg encrypt write=%.2f KB", folderName, calls, avgEncryptWriteKB)
-		log.Debug("I/O diagnostics [%s]: file writes=%d, avg file write=%.2f KB, parts opened=%d, parts closed=%d", folderName, stats.FileWriteCalls, avgFileWriteKB, stats.PartsOpened, stats.PartsClosed)
+		log.Debug("I/O diagnostics [%s]: encrypt writes=%d, avg encrypt write=%.2f KB", directoryName, calls, avgEncryptWriteKB)
+		log.Debug("I/O diagnostics [%s]: file writes=%d, avg file write=%.2f KB, parts opened=%d, parts closed=%d", directoryName, stats.FileWriteCalls, avgFileWriteKB, stats.PartsOpened, stats.PartsClosed)
 	}
 	for i, p := range parts {
 		if !ioDiagnostics {
@@ -91,20 +91,20 @@ func logPartSummary(sw *util.Writer, folderName string, ioDiagnostics bool, coun
 		size := fi.Size()
 		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
-	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), folderName)
+	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), directoryName)
 }
 
 type stagedFile struct{ name, src, dst string }
 
 // copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.
-// folderOrder specifies the folder names in processing order; if nil, folders are sorted alphabetically.
-// folderSourcePaths maps folder name to original source path for display in log output.
-func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folderSourcePaths map[string]string, log *util.Logger) error {
+// directoryOrder specifies the directory names in processing order; if nil, directories are sorted alphabetically.
+// directorySourcePaths maps directory name to original source path for display in log output.
+func copyBackupResults(stagingDir, targetDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
 	}
-	filesByFolder := make(map[string][]stagedFile)
+	filesByDirectory := make(map[string][]stagedFile)
 	var challengeFiles []stagedFile
 
 	for _, entry := range entries {
@@ -117,37 +117,37 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 		switch filepath.Ext(name) {
 		case ".enc":
 			if backupEntry, _, ok := util.ParsePartFileName(name); ok {
-				fn := backupEntry.FolderName
-				filesByFolder[fn] = append(filesByFolder[fn], stagedFile{name, srcPath, dstPath})
+				fn := backupEntry.DirectoryName
+				filesByDirectory[fn] = append(filesByDirectory[fn], stagedFile{name, srcPath, dstPath})
 			}
 		case ".challenge":
 			challengeFiles = append(challengeFiles, stagedFile{name, srcPath, dstPath})
 		}
 	}
 
-	order := folderOrder
+	order := directoryOrder
 	if len(order) == 0 {
-		for fn := range filesByFolder {
+		for fn := range filesByDirectory {
 			order = append(order, fn)
 		}
 		sort.Strings(order)
 	}
 
-	for _, folderName := range order {
-		files := filesByFolder[folderName]
+	for _, directoryName := range order {
+		files := filesByDirectory[directoryName]
 		if len(files) == 0 {
 			continue
 		}
 
 		if log != nil {
-			srcPath := folderSourcePaths[folderName]
+			srcPath := directorySourcePaths[directoryName]
 			if srcPath == "" {
-				srcPath = folderName
+				srcPath = directoryName
 			}
-			log.Info("Copying backup files of source folder: %s", filepath.ToSlash(srcPath))
+			log.Info("Copying backup files of source directory: %s", filepath.ToSlash(srcPath))
 		}
 
-		if err := copyFolderFiles(log, folderName, files); err != nil {
+		if err := copyDirectoryFiles(log, directoryName, files); err != nil {
 			return err
 		}
 	}
@@ -164,11 +164,11 @@ func copyBackupResults(stagingDir, targetDir string, folderOrder []string, folde
 	return nil
 }
 
-// copyFolderFiles copies a single folder's staged part files to the target,
+// copyDirectoryFiles copies a single directory's staged part files to the target,
 // logging progress with a deferred stop so the goroutine is always cleaned up.
-func copyFolderFiles(log *util.Logger, folderName string, files []stagedFile) error {
+func copyDirectoryFiles(log *util.Logger, directoryName string, files []stagedFile) error {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
-	stopProgress := operation.StartProgressTracking(log, folderName, "copied", &inBytes, &outBytes, &outWriteCalls)
+	stopProgress := operation.StartProgressTracking(log, directoryName, "copied", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
 	for _, f := range files {
@@ -181,7 +181,7 @@ func copyFolderFiles(log *util.Logger, folderName string, files []stagedFile) er
 	}
 
 	if log != nil {
-		log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), folderName)
+		log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), directoryName)
 	}
 	return nil
 }

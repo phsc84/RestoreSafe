@@ -18,8 +18,8 @@ func TestPrintBackupCompletionSummaryWithWarnings(t *testing.T) {
 	printBackupCompletionSummary(&sb, []string{"Docs", "Photos"}, 4, "/target/backup.log", 2)
 	output := sb.String()
 
-	if !strings.Contains(output, "Processed folders: 2") {
-		t.Fatalf("expected folder count in summary, got: %q", output)
+	if !strings.Contains(output, "Processed directories: 2") {
+		t.Fatalf("expected directory count in summary, got: %q", output)
 	}
 	if !strings.Contains(output, "Parts created    : 4") {
 		t.Fatalf("expected parts count in summary, got: %q", output)
@@ -40,7 +40,7 @@ func TestPrintBackupCompletionSummaryNoWarnings(t *testing.T) {
 	}
 }
 
-func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
+func TestBackupDirectoryLogsTarBeforeEncryption(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
 	targetDir := filepath.Join(tempRoot, "target")
@@ -62,10 +62,10 @@ func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
-		t.Fatalf("backupFolder failed: %v", backupErr)
+		t.Fatalf("backupDirectory failed: %v", backupErr)
 	}
 
 	data, err := os.ReadFile(logPath)
@@ -89,7 +89,7 @@ func TestBackupFolderLogsTarBeforeEncryption(t *testing.T) {
 	}
 }
 
-func TestBackupFolderLogsIODiagnosticsWhenEnabled(t *testing.T) {
+func TestBackupDirectoryLogsIODiagnosticsWhenEnabled(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
 	targetDir := filepath.Join(tempRoot, "target")
@@ -110,10 +110,10 @@ func TestBackupFolderLogsIODiagnosticsWhenEnabled(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: true}
-	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("DIA999"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("DIA999"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
-		t.Fatalf("backupFolder failed: %v", backupErr)
+		t.Fatalf("backupDirectory failed: %v", backupErr)
 	}
 
 	data, err := os.ReadFile(logPath)
@@ -139,12 +139,12 @@ func TestRunReturnsErrorWhenTargetDirCannotBeCreated(t *testing.T) {
 		t.Fatalf("failed to create file: %v", err)
 	}
 	// Append a subdir to the file path — MkdirAll will fail.
-	cfg := &util.Config{TargetFolder: filepath.Join(filePath, "sub")}
+	cfg := &util.Config{TargetDirectory: filepath.Join(filePath, "sub")}
 	err := Run(cfg, "")
 	if err == nil {
 		t.Fatal("expected error when target dir cannot be created, got nil")
 	}
-	if !strings.Contains(err.Error(), "Failed to create target folder") {
+	if !strings.Contains(err.Error(), "Failed to create target directory") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -153,8 +153,8 @@ func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 	t.Parallel()
 	targetDir := t.TempDir()
 	cfg := &util.Config{
-		TargetFolder:  targetDir,
-		SourceFolders: []string{filepath.Join(targetDir, "nonexistent-source")},
+		TargetDirectory:  targetDir,
+		SourceDirectories: []string{filepath.Join(targetDir, "nonexistent-source")},
 	}
 	err := Run(cfg, "")
 	if err == nil {
@@ -184,8 +184,8 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	t.Cleanup(func() { os.Stdin = origStdin; r.Close() })
 
 	cfg := &util.Config{
-		TargetFolder:  targetDir,
-		SourceFolders: []string{sourceDir},
+		TargetDirectory:  targetDir,
+		SourceDirectories: []string{sourceDir},
 	}
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
@@ -199,7 +199,7 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	}
 }
 
-func TestBackupFolderLogsPartNamesAtInfoLevel(t *testing.T) {
+func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
 	targetDir := filepath.Join(tempRoot, "target")
@@ -221,10 +221,10 @@ func TestBackupFolderLogsPartNamesAtInfoLevel(t *testing.T) {
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupFolder(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
-		t.Fatalf("backupFolder failed: %v", backupErr)
+		t.Fatalf("backupDirectory failed: %v", backupErr)
 	}
 
 	data, err := os.ReadFile(logPath)

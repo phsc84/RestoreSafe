@@ -23,9 +23,9 @@ func printBackupPreflightWithYubiKeyCheck(
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
 
-	fmt.Fprintln(w, "Source folder(s):")
+	fmt.Fprintln(w, "Source directory(s):")
 	for _, src := range sources {
-		baseName := util.FolderBaseName(src.Resolved)
+		baseName := util.DirectoryBaseName(src.Resolved)
 		backupName := src.BackupName
 		if backupName == "" {
 			backupName = baseName
@@ -53,7 +53,7 @@ func printBackupPreflightWithYubiKeyCheck(
 		}
 
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
-			fmt.Fprintf(w, "          → Source and target folders are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+			fmt.Fprintf(w, "          → Source and target directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
 		}
 	}
 	for _, warning := range estimateWarnings {
@@ -64,7 +64,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	}
 	fmt.Fprintf(w, "  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 
-	fmt.Fprintln(w, "Backup folder:")
+	fmt.Fprintln(w, "Backup directory:")
 	fmt.Fprintf(w, "  [OK] %s\n", targetDir)
 	if freeErr != nil {
 		fmt.Fprintf(w, "  Free disk space: unknown (%v)\n", freeErr)
@@ -81,7 +81,7 @@ func printBackupPreflightWithYubiKeyCheck(
 
 	if stagingPlan.Enabled {
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Local staging enabled, because source and target folders share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Fprintf(w, "Local staging enabled, because source and target directories share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
 		fmt.Fprintln(w, "Temp directory:")
 		fmt.Fprintf(w, "  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
@@ -93,11 +93,11 @@ func printBackupPreflightWithYubiKeyCheck(
 	}
 }
 
-func validateSourceFolders(sources []backupSource) error {
+func validateSourceDirectories(sources []backupSource) error {
 	return operation.ValidatePreflightItems(
 		sources,
 		func(src backupSource) bool { return src.Err != nil },
-		"Backup preflight failed: %d source folder(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
+		"Backup preflight failed: %d source directory(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
 	)
 }
 

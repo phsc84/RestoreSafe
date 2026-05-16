@@ -40,21 +40,22 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [BUILD] Create release ZIP archive...
 set ZIP_NAME=RestoreSafe-%VERSION%.zip
+
+echo [BUILD] Create %ZIP_NAME% ...
 powershell -NoProfile -Command "Compress-Archive -Path 'RestoreSafe.exe','assets\ykman.exe','config-SAMPLE.yaml' -DestinationPath '%ZIP_NAME%' -Force"
 if errorlevel 1 (
-    echo [ERROR] Failed to create ZIP archive
+    echo [ERROR] Failed to create %ZIP_NAME%
     exit /b 1
 )
 
-echo [BUILD] Extract ZIP archive to test directory...
+echo [BUILD] Extract %ZIP_NAME% to test directory...
 if not exist test\ (
     mkdir test
 )
 powershell -NoProfile -Command "Expand-Archive -Path '%ZIP_NAME%' -DestinationPath 'test' -Force"
 if errorlevel 1 (
-    echo [ERROR] Failed to extract ZIP archive to test directory
+    echo [ERROR] Failed to extract %ZIP_NAME% to test directory
     exit /b 1
 )
 
