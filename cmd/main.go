@@ -159,8 +159,8 @@ func exitWithError(message string, err error) {
 func waitForKeyPress() {
 	fmt.Println()
 	fmt.Println("Press Enter to exit.")
-	buf := make([]byte, 1)
-	_, err := os.Stdin.Read(buf)
+	reader := bufio.NewReader(os.Stdin)
+	_, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		fmt.Fprintf(os.Stderr, "Error reading key press: %v\n", err)
 	}

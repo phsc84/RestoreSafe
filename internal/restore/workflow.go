@@ -191,11 +191,12 @@ func printRestorePreflightWithYubiKeyCheck(
 	var issues []string
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "-----------------------------------------")
+	fmt.Fprintln(w, "Restore preflight")
+	fmt.Fprintln(w, "-----------------")
 
 	// Backup selection
 	fmt.Fprintln(w, "Backup selection:")
-	fmt.Fprintf(w, "  Source directory: %s\n", filepath.ToSlash(targetDir))
+	fmt.Fprintf(w, "  Path: %s\n", filepath.ToSlash(targetDir))
 	for _, item := range items {
 		if item.Err != nil {
 			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)

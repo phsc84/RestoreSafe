@@ -18,7 +18,8 @@ func printBackupPreflightWithYubiKeyCheck(
 	checkYubiKeyConnected func() error,
 ) {
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "-----------------------------------------")
+	fmt.Fprintln(w, "Backup preflight")
+	fmt.Fprintln(w, "----------------")
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
