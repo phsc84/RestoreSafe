@@ -114,14 +114,21 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	items = append(items, checkYubiKeyHealth(cfg)...)
 	items = append(items, checkBackupInventoryHealth(targetDir)...)
 
-	firstValidSource := ""
+	// Prefer a source that shares the target volume so staging is detected when
+	// only some sources are on the same drive as the target (mirrors backup/workflow.go).
+	stagingSourceDir := ""
 	for _, src := range sourceStatuses {
 		if src.Err == nil && !src.Skip {
-			firstValidSource = src.Resolved
-			break
+			if stagingSourceDir == "" {
+				stagingSourceDir = src.Resolved
+			}
+			if util.SameVolume(src.Resolved, targetDir) {
+				stagingSourceDir = src.Resolved
+				break
+			}
 		}
 	}
-	stagingPlan := operation.PlanLocalStaging(firstValidSource, targetDir, os.TempDir())
+	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, targetDir, os.TempDir())
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
 			isNote: true,

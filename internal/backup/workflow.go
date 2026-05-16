@@ -145,7 +145,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 	if staging.Dir != "" {
-		log.Info("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(staging.Dir), filepath.ToSlash(targetDir))
+		log.InfoLogOnly("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(staging.Dir), filepath.ToSlash(targetDir))
 	}
 	workingDir := staging.ActiveDir(targetDir)
 	defer staging.Cleanup()

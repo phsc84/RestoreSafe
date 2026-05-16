@@ -89,7 +89,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	if stagingPlan.Enabled {
-		log.Info("Local staging enabled: selected backup parts will be copied to temp storage at %s before restore", filepath.ToSlash(stagingPlan.ResolvedTempDir))
+		log.InfoLogOnly("Local staging enabled: selected backup parts will be copied to temp storage at %s before restore", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 	}
 
 	// Collect password (with retry).
