@@ -132,8 +132,13 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 	}
 
-	fmt.Println("Backup started.")
-	log.Info("Backup started - %d source directories", runnableSourceCount(sources))
+	fmt.Println()
+	n := runnableSourceCount(sources)
+	dirWord := "directories"
+	if n == 1 {
+		dirWord = "directory"
+	}
+	log.Info("Backup started - %d source %s", n, dirWord)
 	warningCount := 0
 	totalPartsCreated := 0
 	processedDirectories := make([]string, 0)
@@ -199,7 +204,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	// Copy results from staging to target if needed.
 	if staging.Dir != "" {
 		if err := copyBackupResults(workingDir, targetDir, processedDirectories, directorySourcePaths, log); err != nil {
-			return fmt.Errorf("Failed to copy staged backup to target: %w. Remedy: Check target directory write permissions and free disk space.", err)
+			return fmt.Errorf("Failed to copy staged backup to target: %w", err)
 		}
 	}
 

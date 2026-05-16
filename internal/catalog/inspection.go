@@ -31,7 +31,7 @@ func InspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, e
 
 		info, err := dirEntry.Info()
 		if err != nil {
-			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check file/directory permissions.", dirEntry.Name(), err)
+			return len(parts), 0, fmt.Errorf("Failed to inspect part file %q: %w", dirEntry.Name(), err)
 		}
 		parts = append(parts, partInfo{seq: seq, size: info.Size()})
 	}

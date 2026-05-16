@@ -57,7 +57,7 @@ func TestCopyFileOverwritesDestination(t *testing.T) {
 	}
 }
 
-func TestCopyFileMissingSourceReturnsRemedy(t *testing.T) {
+func TestCopyFileMissingSourceReturnsError(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
@@ -68,16 +68,12 @@ func TestCopyFileMissingSourceReturnsRemedy(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing source, got nil")
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "Failed to open source file") {
-		t.Fatalf("expected source-open error message, got: %q", msg)
-	}
-	if !strings.Contains(msg, "Remedy:") {
-		t.Fatalf("expected remedy text, got: %q", msg)
+	if !strings.Contains(err.Error(), "Failed to open source file") {
+		t.Fatalf("expected source-open error message, got: %q", err.Error())
 	}
 }
 
-func TestCopyFileInvalidDestinationReturnsRemedy(t *testing.T) {
+func TestCopyFileInvalidDestinationReturnsError(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
@@ -92,11 +88,7 @@ func TestCopyFileInvalidDestinationReturnsRemedy(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected destination creation error, got nil")
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "Failed to create destination file") {
-		t.Fatalf("expected destination-create error message, got: %q", msg)
-	}
-	if !strings.Contains(msg, "Remedy:") {
-		t.Fatalf("expected remedy text, got: %q", msg)
+	if !strings.Contains(err.Error(), "Failed to create destination file") {
+		t.Fatalf("expected destination-create error message, got: %q", err.Error())
 	}
 }

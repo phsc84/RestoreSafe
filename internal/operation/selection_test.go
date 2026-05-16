@@ -49,9 +49,6 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 	if !errors.Is(err, ErrSelectionCancelled) {
 		t.Fatalf("expected ErrSelectionCancelled, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "Start verify again") {
-		t.Fatalf("expected verify-specific remedy text, got %q", err.Error())
-	}
 }
 
 func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) {

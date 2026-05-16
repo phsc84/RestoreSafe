@@ -124,7 +124,7 @@ func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 	if !strings.Contains(logContent, "Copy: [alpha]_2026-03-21_AB12CD-002.enc") {
 		t.Fatalf("expected pre-copy log for part 2, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, `Copied: 2 part file(s) - "alpha" successfully copied`) {
+	if !strings.Contains(logContent, `Copied: 2 part file(s) - [alpha] successfully copied`) {
 		t.Fatalf("expected copied summary for alpha, got: %q", logContent)
 	}
 	if strings.Contains(logContent, "alpha_2026_AAA111.challenge") {
@@ -185,16 +185,16 @@ func TestCopyBackupResultsLogsPerDirectoryHeaderAndSummary(t *testing.T) {
 	if !strings.Contains(logContent, "Copying backup files of source directory: /data/10_Daten") {
 		t.Fatalf("expected directory header for 10_Daten, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`) {
+	if !strings.Contains(logContent, `Copied: 2 part file(s) - [00_Gemeinsam] successfully copied`) {
 		t.Fatalf("expected completion message for 00_Gemeinsam, got: %q", logContent)
 	}
-	if !strings.Contains(logContent, `Copied: 1 part file(s) - "10_Daten" successfully copied`) {
+	if !strings.Contains(logContent, `Copied: 1 part file(s) - [10_Daten] successfully copied`) {
 		t.Fatalf("expected completion message for 10_Daten, got: %q", logContent)
 	}
 
 	// "Copied:" summary must appear after the last "Copy:" of its directory.
 	part2Idx := strings.Index(logContent, "Copy: [00_Gemeinsam]_2026-03-21_AB12CD-002.enc")
-	finishedIdx := strings.Index(logContent, `Copied: 2 part file(s) - "00_Gemeinsam" successfully copied`)
+	finishedIdx := strings.Index(logContent, `Copied: 2 part file(s) - [00_Gemeinsam] successfully copied`)
 	if part2Idx < 0 || finishedIdx < 0 {
 		t.Fatalf("expected part 2 copy line and completion line in log, got: %q", logContent)
 	}

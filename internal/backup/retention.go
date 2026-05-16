@@ -36,7 +36,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 
 	index, err := catalog.ScanBackups(targetDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backups for retention: %w. Remedy: Check target-directory readability and path configuration.", err)
+		return fmt.Errorf("Failed to scan backups for retention: %w", err)
 	}
 
 	type datedEntry struct {

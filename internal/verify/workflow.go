@@ -66,6 +66,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer func() { security.ZeroBytes(password) }()
 
+	fmt.Println()
 	fmt.Println("Verification started.")
 	log.Info("Verifying %d selected item(s)", len(selected))
 	if err := verifySelectedEntries(selected, targetDir, password, log); err != nil {

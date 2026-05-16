@@ -42,7 +42,7 @@ func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
 func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 	des, err := os.ReadDir(targetDir)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read backup directory %q: %w. Remedy: Check that target_directory exists and is readable.", targetDir, err)
+		return nil, fmt.Errorf("Failed to read backup directory %q: %w", targetDir, err)
 	}
 
 	type seqPath struct {

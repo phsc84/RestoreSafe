@@ -20,7 +20,7 @@ func BackupRunSummaries(targetDir string, index []util.BackupEntry) ([]BackupRun
 	for _, entry := range index {
 		newestTime, err := NewestPartModTime(targetDir, entry)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to inspect backup sets: %w. Remedy: Check whether all part files are readable.", err)
+			return nil, fmt.Errorf("Failed to inspect backup sets: %w", err)
 		}
 
 		key := entry.RunKey()
@@ -88,7 +88,7 @@ func ResolveSelection(input string, index []util.BackupEntry) ([]util.BackupEntr
 		}
 	}
 
-	return nil, fmt.Errorf("Backup %q not found. Remedy: Use a valid option.", input)
+	return nil, fmt.Errorf("Backup %q not found.", input)
 }
 
 func ResolveSelectionForIDNewestDate(id string, index []util.BackupEntry) ([]util.BackupEntry, string, []string, bool) {

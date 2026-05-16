@@ -14,7 +14,7 @@ import (
 func QueryFreeSpaceBytes(path string) (uint64, error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to encode path: %w. Remedy: Check the path format and use a valid Windows path.", err)
+		return 0, fmt.Errorf("Failed to encode path: %w", err)
 	}
 
 	var freeBytesAvailable uint64

@@ -100,6 +100,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer func() { security.ZeroBytes(password) }()
 
+	fmt.Println()
 	fmt.Println("Restore started.")
 	log.Info("Restore destination: %s", restorePath)
 
@@ -253,7 +254,7 @@ func printRestorePreflightWithYubiKeyCheck(
 		tempFreeBytes, tempFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 		if tempFreeErr != nil {
 			fmt.Fprintf(w, "  [ERROR] %s\n", tempDir)
-			issues = append(issues, fmt.Sprintf("Cannot query free space for temp directory: %v. Remedy: Check that the temp directory exists and is accessible.", tempFreeErr))
+			issues = append(issues, fmt.Sprintf("Cannot query free space for temp directory: %v", tempFreeErr))
 		} else {
 			fmt.Fprintf(w, "  [OK] %s\n", tempDir)
 			fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(tempFreeBytes))

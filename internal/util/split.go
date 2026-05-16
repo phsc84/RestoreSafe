@@ -86,7 +86,7 @@ func (s *Writer) Write(p []byte) (int, error) {
 		p = p[written:]
 
 		if err != nil {
-			return total, fmt.Errorf("Failed to write to part file: %w. Remedy: Check target-directory write permissions and free disk space.", err)
+			return total, fmt.Errorf("Failed to write to part file: %w", err)
 		}
 
 		if s.written >= s.maxBytes {
@@ -123,12 +123,12 @@ func (s *Writer) openNext() error {
 	path := filepath.Clean(s.nameFunc(s.seq))
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("Failed to create target directory: %w. Remedy: Check path validity and write permissions.", err)
+		return fmt.Errorf("Failed to create target directory: %w", err)
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("Failed to create part file %q: %w. Remedy: Check target-directory write permissions and free disk space.", path, err)
+		return fmt.Errorf("Failed to create part file %q: %w", path, err)
 	}
 
 	s.current = f
@@ -192,7 +192,7 @@ func (r *SequentialReader) Read(p []byte) (int, error) {
 		if err == io.EOF {
 			if closeErr := r.current.Close(); closeErr != nil {
 				r.current = nil
-				return n, fmt.Errorf("Failed to close part file: %w. Remedy: Retry the operation; if it persists, check file-system health.", closeErr)
+				return n, fmt.Errorf("Failed to close part file: %w", closeErr)
 			}
 			r.current = nil
 			if n > 0 {

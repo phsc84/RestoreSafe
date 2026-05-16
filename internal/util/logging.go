@@ -93,7 +93,7 @@ func (l *Logger) Close() {
 
 	if l.file != nil {
 		if err := l.file.Sync(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Syncing log file before close failed: %v. Remedy: Retry; if it persists, check file-system health.\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Syncing log file before close failed: %v\n", err)
 		}
 		l.file.Close()
 		l.file = nil
@@ -174,7 +174,7 @@ func (l *Logger) writeLine(severity string, stdout bool, format string, args ...
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Writing to log file failed: %v. Remedy: Check write permissions and free disk space.\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: Writing to log file failed: %v\n", err)
 			return
 		}
 	}

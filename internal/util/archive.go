@@ -35,7 +35,7 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("Failed to scan source directory at %q: %w. Remedy: Check source-directory readability and permissions.", path, err)
+			return fmt.Errorf("Failed to scan source directory at %q: %w", path, err)
 		}
 
 		for _, ex := range exs {
@@ -50,18 +50,18 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 		rel, err := filepath.Rel(srcDir, path)
 		if err != nil {
-			return fmt.Errorf("Failed to compute relative path: %w. Remedy: Verify source path accessibility and path validity.", err)
+			return fmt.Errorf("Failed to compute relative path: %w", err)
 		}
 		rel = filepath.ToSlash(rel)
 
 		hdr, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			return fmt.Errorf("Failed to create TAR header for %q: %w. Remedy: Check file metadata accessibility.", path, err)
+			return fmt.Errorf("Failed to create TAR header for %q: %w", path, err)
 		}
 		hdr.Name = rel
 
 		if err := tw.WriteHeader(hdr); err != nil {
-			return fmt.Errorf("Failed to write TAR header for %q: %w. Remedy: Check destination write permissions and free disk space.", path, err)
+			return fmt.Errorf("Failed to write TAR header for %q: %w", path, err)
 		}
 
 		if info.IsDir() || !info.Mode().IsRegular() {
@@ -70,16 +70,16 @@ func WriteTar(w io.Writer, srcDir string, excludeDirs ...string) error {
 
 		f, err := os.Open(path)
 		if err != nil {
-			return fmt.Errorf("Failed to open file %q: %w. Remedy: Check file readability and permissions.", path, err)
+			return fmt.Errorf("Failed to open file %q: %w", path, err)
 		}
 
 		if _, err := io.Copy(tw, f); err != nil {
 			f.Close() //nolint:errcheck
-			return fmt.Errorf("Failed to copy file content %q: %w. Remedy: Check file readability and destination write permissions.", path, err)
+			return fmt.Errorf("Failed to copy file content %q: %w", path, err)
 		}
 
 		if err := f.Close(); err != nil {
-			return fmt.Errorf("Failed to close file %q: %w. Remedy: Retry; if it persists, check file-system health.", path, err)
+			return fmt.Errorf("Failed to close file %q: %w", path, err)
 		}
 
 		return nil
@@ -161,7 +161,7 @@ func writeArchiveFile(target string, r io.Reader) error {
 	defer f.Close()
 
 	if _, err := io.Copy(f, r); err != nil {
-		return fmt.Errorf("Failed to write file content %q: %w. Remedy: Check free disk space and write permissions.", target, err)
+		return fmt.Errorf("Failed to write file content %q: %w", target, err)
 	}
 	return nil
 }

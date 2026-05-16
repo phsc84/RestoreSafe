@@ -87,7 +87,6 @@ var DefaultArgon2Params = Argon2Params{
 var magic = magicPrefix + string([]byte{formatVersion, 0x00})
 
 // ErrWrongPassword is returned when decryption authentication fails.
-// No trailing period — callers append ". Remedy: …" themselves.
 var ErrWrongPassword = errors.New("Wrong password or corrupted file")
 
 // deriveKey derives a 256-bit AES key from the password and salt using Argon2id.
@@ -102,18 +101,18 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 	// Generate a random salt.
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("Failed to generate salt: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
+		return fmt.Errorf("Failed to generate salt: %w", err)
 	}
 
 	key := deriveKey(password, salt, params)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("Failed to create AES cipher: %w. Remedy: Verify the runtime environment and restart the application.", err)
+		return fmt.Errorf("Failed to create AES cipher: %w", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w. Remedy: Verify the runtime environment and restart the application.", err)
+		return fmt.Errorf("Failed to create GCM: %w", err)
 	}
 
 	// Write file header.
@@ -131,7 +130,7 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 			break
 		}
 		if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) && !errors.Is(readErr, io.EOF) {
-			return fmt.Errorf("Failed to read plaintext: %w. Remedy: Check source-file readability and permissions.", readErr)
+			return fmt.Errorf("Failed to read plaintext: %w", readErr)
 		}
 
 		nonce := chunkNonce(chunkIndex)
@@ -140,10 +139,10 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 		// Write 4-byte length prefix + ciphertext.
 		length := uint32(len(encrypted))
 		if err := binary.Write(dst, binary.BigEndian, length); err != nil {
-			return fmt.Errorf("Failed to write chunk length: %w. Remedy: Check destination write permissions and free disk space.", err)
+			return fmt.Errorf("Failed to write chunk length: %w", err)
 		}
 		if _, err := dst.Write(encrypted); err != nil {
-			return fmt.Errorf("Failed to write chunk data: %w. Remedy: Check destination write permissions and free disk space.", err)
+			return fmt.Errorf("Failed to write chunk data: %w", err)
 		}
 
 		chunkIndex++
@@ -168,11 +167,11 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("Failed to create AES cipher: %w. Remedy: Verify the runtime environment and restart the application.", err)
+		return fmt.Errorf("Failed to create AES cipher: %w", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w. Remedy: Verify the runtime environment and restart the application.", err)
+		return fmt.Errorf("Failed to create GCM: %w", err)
 	}
 
 	var chunkIndex uint64
@@ -201,7 +200,7 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 		}
 
 		if _, err := dst.Write(plaintext); err != nil {
-			return fmt.Errorf("Failed to write decrypted data: %w. Remedy: Check destination write permissions and free disk space.", err)
+			return fmt.Errorf("Failed to write decrypted data: %w", err)
 		}
 
 		chunkIndex++
@@ -213,25 +212,25 @@ func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
 // writeHeader writes the v2 file header to w.
 func writeHeader(w io.Writer, salt []byte, params Argon2Params) error {
 	if _, err := io.WriteString(w, magic); err != nil {
-		return fmt.Errorf("Failed to write magic: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write magic: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, uint32(saltLen)); err != nil {
-		return fmt.Errorf("Failed to write salt length: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write salt length: %w", err)
 	}
 	if _, err := w.Write(salt); err != nil {
-		return fmt.Errorf("Failed to write salt: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write salt: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, uint32(chunkSize)); err != nil {
-		return fmt.Errorf("Failed to write chunk size: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write chunk size: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, params.Time); err != nil {
-		return fmt.Errorf("Failed to write Argon2 time: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write Argon2 time: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, params.MemoryKB); err != nil {
-		return fmt.Errorf("Failed to write Argon2 memory: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write Argon2 memory: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, uint32(params.Threads)); err != nil {
-		return fmt.Errorf("Failed to write Argon2 threads: %w. Remedy: Check destination write permissions and free disk space.", err)
+		return fmt.Errorf("Failed to write Argon2 threads: %w", err)
 	}
 	return nil
 }

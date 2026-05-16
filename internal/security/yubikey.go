@@ -163,7 +163,7 @@ func uniqueStrings(values []string) []string {
 func CombineWithPassword(password []byte) (combined []byte, challengeHex string, err error) {
 	challenge := make([]byte, challengeLen)
 	if _, err := rand.Read(challenge); err != nil {
-		return nil, "", fmt.Errorf("Failed to generate challenge: %w. Remedy: Retry the operation and ensure the OS cryptographic provider is available.", err)
+		return nil, "", fmt.Errorf("Failed to generate challenge: %w", err)
 	}
 
 	response, err := queryYubikey(challenge)

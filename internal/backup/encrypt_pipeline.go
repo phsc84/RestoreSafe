@@ -54,10 +54,10 @@ func runEncryptStage(log *util.Logger, bw *bufio.Writer, pr *io.PipeReader, pass
 
 func closeSplitOutput(bw *bufio.Writer, sw *util.Writer) error {
 	if err := bw.Flush(); err != nil {
-		return fmt.Errorf("Flushing split buffer failed: %w. Remedy: Check free disk space and write permissions in target_directory.", err)
+		return fmt.Errorf("Flushing split buffer failed: %w", err)
 	}
 	if err := sw.Close(); err != nil {
-		return fmt.Errorf("Closing split-writer failed: %w. Remedy: Check free disk space and write permissions in target_directory.", err)
+		return fmt.Errorf("Closing split-writer failed: %w", err)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func logPartSummary(sw *util.Writer, directoryName string, ioDiagnostics bool, c
 		size := fi.Size()
 		log.Debug("  Part %03d size: %.2f MB", i+1, float64(size)/(1024*1024))
 	}
-	log.Info("  Created: %d part file(s) - %q successfully backed up", len(parts), directoryName)
+	log.Info("  Created: %d part file(s) - [%s] successfully backed up", len(parts), directoryName)
 }
 
 type stagedFile struct{ name, src, dst string }
@@ -181,7 +181,7 @@ func copyDirectoryFiles(log *util.Logger, directoryName string, files []stagedFi
 	}
 
 	if log != nil {
-		log.Info("  Copied: %d part file(s) - %q successfully copied", len(files), directoryName)
+		log.Info("  Copied: %d part file(s) - [%s] successfully copied", len(files), directoryName)
 	}
 	return nil
 }
@@ -190,13 +190,13 @@ func copyDirectoryFiles(log *util.Logger, directoryName string, files []stagedFi
 func copyFileWithCounters(src, dst string, inBytes, outBytes, outWriteCalls *atomic.Int64) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("Failed to open source file %q: %w. Remedy: Check drive/network availability and read permissions.", src, err)
+		return fmt.Errorf("Failed to open source file %q: %w", src, err)
 	}
 	defer srcFile.Close()
 
 	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("Failed to create destination file %q: %w. Remedy: Check write permissions and free disk space.", dst, err)
+		return fmt.Errorf("Failed to create destination file %q: %w", dst, err)
 	}
 	defer dstFile.Close()
 
@@ -204,10 +204,10 @@ func copyFileWithCounters(src, dst string, inBytes, outBytes, outWriteCalls *ato
 	cw := &operation.CountingWriter{W: dstFile, Total: outBytes, Calls: outWriteCalls}
 
 	if _, err := io.Copy(cw, cr); err != nil {
-		return fmt.Errorf("Failed to copy %q: %w. Remedy: Check drive/network availability, free space, and write permissions.", src, err)
+		return fmt.Errorf("Failed to copy %q: %w", src, err)
 	}
 	if err := dstFile.Sync(); err != nil {
-		return fmt.Errorf("Failed to sync %q to disk: %w. Remedy: Check disk space and write permissions.", dst, err)
+		return fmt.Errorf("Failed to sync %q to disk: %w", dst, err)
 	}
 	return nil
 }

@@ -167,7 +167,7 @@ func ReadPasswordWithRetry(
 func verifyPassword(partPath string, password []byte) error {
 	f, err := os.Open(partPath)
 	if err != nil {
-		return fmt.Errorf("Failed to open file: %w. Remedy: Check that the file exists and is readable.", err)
+		return fmt.Errorf("Failed to open file: %w", err)
 	}
 	defer f.Close()
 

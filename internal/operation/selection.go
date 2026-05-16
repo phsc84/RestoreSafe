@@ -35,7 +35,7 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 
 		switch strings.ToLower(selection) {
 		case "q":
-			return nil, "", fmt.Errorf("%w. Remedy: Start %s again and enter a valid selection.", ErrSelectionCancelled, action)
+			return nil, "", ErrSelectionCancelled
 		case ".":
 			selected, label, err := catalog.ResolveNewestBackupRunSelection(targetDir, index)
 			if err != nil {

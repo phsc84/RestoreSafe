@@ -10,18 +10,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - Target directory locking: backup and restore now acquire an exclusive lock on the target directory at startup, preventing concurrent runs from corrupting the same backup set.
+- Password prompt now echoes `*` characters as the user types.
 - Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
 - Backup pre-flight now validates available staging space before starting, not just target space.
 
 ### Changed
+- Updated Go toolchain to 1.26.3 and refreshed all dependencies.
 - Duplicate source-directory basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
 - Improved error messages across backup, restore, and verify flows with more concrete remediation guidance.
 - Consolidated YubiKey connectivity checks into a shared helper used consistently by backup, restore, and verify preflights.
 - Internal refactoring of the decrypt pipeline and progress-tracking helpers for simpler, more testable code.
-- Updated Go toolchain to 1.26.3 and refreshed all dependencies.
+- Local staging log lines during backup and restore are now written to the log file only, not printed to the console.
+- Trimmed "Remedy:" guidance from generic I/O error messages; kept only where the fix is non-obvious (format version mismatches, missing challenge files, config field values, TEMP/TMP redirection).
+- Backup log summary lines now use bracket notation for directory names and correct singular/plural for source count.
+- Removed redundant "Backup started." console line; added a blank line before the started log entry in backup, restore, and verify.
 
 ### Fixed
 - Challenge file validation in restore and verify now rejects empty, non-hex, and wrong-length content with a clear error rather than a cryptic decryption failure.
+- Health check errors now block the selected operation at the menu with a clear message instead of failing mid-run; no log file or started-ID line is written.
+- Startup health check now correctly detects local staging when only some source directories share the drive with the backup directory.
 
 ## [2.2.0] - 2026-04-25
 
