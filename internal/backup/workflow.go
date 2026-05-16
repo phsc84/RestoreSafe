@@ -83,7 +83,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 	if !confirmed {
-		log.Info("Backup cancelled by user before start")
+		log.InfoLogOnly("Backup cancelled by user before start")
 		fmt.Println("Backup cancelled.")
 		return nil
 	}

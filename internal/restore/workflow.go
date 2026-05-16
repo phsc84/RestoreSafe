@@ -83,7 +83,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 	if !confirmed {
-		log.Info("Restore cancelled by user before start")
+		log.InfoLogOnly("Restore cancelled by user before start")
 		fmt.Println("Restore cancelled.")
 		return nil
 	}

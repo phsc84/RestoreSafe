@@ -138,6 +138,11 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write("WARN ", format, args...)
 }
 
+// InfoLogOnly logs an informational message without mirroring it to stdout.
+func (l *Logger) InfoLogOnly(format string, args ...any) {
+	l.writeLogOnly("INFO ", format, args...)
+}
+
 // WarnLogOnly logs a warning without mirroring it to stdout.
 func (l *Logger) WarnLogOnly(format string, args ...any) {
 	l.writeLogOnly("WARN ", format, args...)

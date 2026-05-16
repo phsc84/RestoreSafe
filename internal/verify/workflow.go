@@ -55,7 +55,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 	if !confirmed {
-		log.Info("Verification cancelled by user before start")
+		log.InfoLogOnly("Verification cancelled by user before start")
 		fmt.Println("Verification cancelled.")
 		return nil
 	}
