@@ -260,7 +260,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	localStagingLine := "Local staging enabled, because source and target directories share the same drive/share"
+	localStagingLine := "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive"
 	tempDirLine := "Temp directory:"
 	localStagingIdx := strings.Index(output, localStagingLine)
 	tempDirIdx := strings.Index(output, tempDirLine)

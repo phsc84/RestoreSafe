@@ -81,7 +81,7 @@ func printBackupPreflightWithYubiKeyCheck(
 
 	if stagingPlan.Enabled {
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Local staging enabled, because source and target directories share the same drive/share (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Fprintf(w, "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).\n", util.VolumeDisplay(targetDir))
 		fmt.Fprintln(w, "Temp directory:")
 		fmt.Fprintf(w, "  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)

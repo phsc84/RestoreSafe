@@ -139,7 +139,7 @@ func TestBuildBackupInventoryIssueItemsDetectsOrphanChallengeFile(t *testing.T) 
 func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
 	t.Parallel()
 	items := []healthItem{
-		{isNote: true, Detail: "Local staging enabled."},
+		{isNote: true, Detail: "Local staging via temp directory enabled."},
 		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
 	}
 
@@ -147,7 +147,7 @@ func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
 	printStartupHealthCheck(&sb, items)
 	output := sb.String()
 
-	if !strings.Contains(output, "Local staging enabled.") {
+	if !strings.Contains(output, "Local staging via temp directory enabled.") {
 		t.Fatalf("expected note text in output, got: %q", output)
 	}
 	if !strings.Contains(output, "Temp directory:") {

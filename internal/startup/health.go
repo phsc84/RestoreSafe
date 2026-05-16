@@ -93,7 +93,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
 			isNote: true,
-			Detail: fmt.Sprintf("Local staging enabled, because source and target directories share the same drive/share (%s).", util.VolumeDisplay(targetDir)),
+			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", util.VolumeDisplay(targetDir)),
 		})
 		items = append(items, checkTempDirHealth()...)
 	}
