@@ -6,7 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [3.0.0] - 2026-05-15
+## [3.0.0] - 2026-05-17
 
 ### Breaking Changes
 - The config key `target_directory` has been renamed to `backup_directory`. Existing `config.yaml` files must be updated before upgrading.

@@ -1,9 +1,15 @@
 # RestoreSafe
 
+[![Latest Release](https://img.shields.io/github/v/release/phsc84/RestoreSafe)](https://github.com/phsc84/RestoreSafe/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%2064--bit-blue)](https://github.com/phsc84/RestoreSafe/releases)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
+[![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go)](https://go.dev/dl/)
+
 RestoreSafe is a standalone Windows 64-bit backup tool that backs up your directories into encrypted, split archive files, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
 
 ## Table of Contents
 
+- [Screenshot](#screenshot)
 - [Features](#features)
 - [Installation & Configuration](#installation--configuration)
 - [Usage](#usage)
@@ -11,13 +17,17 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 - [YubiKey setup](#yubikey-setup)
 - [Building from source](#building-from-source)
 
+## Screenshot
+
+<img src="assets/Screenshot_v3.0.0.png" alt="RestoreSafe main menu">
+
 ## Features
 
 ### Core
 - Backs up one or more source directories into split, encrypted `.enc` archive files
 - Restores selected backup sets to a chosen destination
 - Verifies backup integrity (decryption + archive readability) without restoring
-- Retention policy: automatically keeps only the newest N backup sets per source directory
+- Retention policy: automatically keeps only the newest N backup sets per source directory (configured via `retention_keep` in `config.yaml`)
 
 ### Security
 - AES-256-GCM encryption (content and metadata/file names)
@@ -57,7 +67,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
    For any other parameters you may keep the default values or adjust them according to your needs.
 
-   Authentication mode comparison
+   #### Authentication mode comparison
 
    | Setting | Password prompt | Second factor | Description |
    |---|---|---|---|
@@ -71,7 +81,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
 ### Updating
 
-[Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and replace the existing version on your computer.
+[Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and replace the existing version on your computer. See [CHANGELOG.md](CHANGELOG.md) for a summary of changes between versions.
 
 If updating to a new major version (v1.x.x → v2.x.x), please also download `config-SAMPLE.yaml`, rename it to `config.yaml` and set the parameters according to your previous `config.yaml`.
 
@@ -84,6 +94,8 @@ Double-click RestoreSafe.exe, choose **Backup** from the menu, confirm the prefl
 
 ### Restore a backup
 Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination directory, then enter your password (and touch the YubiKey if enabled).
+
+The restore destination must not already exist — RestoreSafe creates it during restore and will abort if the path is already present.
 
 ### Verify a backup
 Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive - without writing any files to disk.
@@ -112,7 +124,7 @@ Samples:
 [Pictures]_2026-01-15_ABC123-001.enc
 ```
 
-### `.challenge` files
+### Challenge files (.challenge)
 
 only created if YubiKey is enabled → `authentication_mode: 2` and `authentication_mode: 3`
 

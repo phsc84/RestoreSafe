@@ -7,5 +7,6 @@ cmd/resource.syso
 
 assets/**
 !assets/RestoreSafe.ico
+!assets/Screenshot_v3.0.0.png
 
 /test/
