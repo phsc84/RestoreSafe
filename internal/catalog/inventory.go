@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-// ScanBackups walks targetDir and builds an index of all backup entries.
-func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
-	entries, err := os.ReadDir(targetDir)
+// ScanBackups walks backupDir and builds an index of all backup entries.
+func ScanBackups(backupDir string) ([]util.BackupEntry, error) {
+	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return nil, err
 	}
@@ -39,10 +39,10 @@ func ScanBackups(targetDir string) ([]util.BackupEntry, error) {
 }
 
 // CollectParts returns the sorted part file paths for an entry.
-func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
-	des, err := os.ReadDir(targetDir)
+func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
+	des, err := os.ReadDir(backupDir)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read backup directory %q: %w", targetDir, err)
+		return nil, fmt.Errorf("Failed to read backup directory %q: %w", backupDir, err)
 	}
 
 	type seqPath struct {
@@ -59,7 +59,7 @@ func CollectParts(targetDir string, entry util.BackupEntry) ([]string, error) {
 		if e != entry {
 			continue
 		}
-		parts = append(parts, seqPath{seq, filepath.Join(targetDir, de.Name())})
+		parts = append(parts, seqPath{seq, filepath.Join(backupDir, de.Name())})
 	}
 
 	sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
@@ -87,8 +87,8 @@ func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
 // BackupRunUsesYubiKey checks whether a backup run has a matching challenge file.
 // Returns (usesYubiKey, yubiKeyOnly, error).
 // yubiKeyOnly is true when the backup was created without a password (YubiKey-only mode).
-func BackupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, bool, error) {
-	path, found, err := FindChallengeFileForRun(targetDir, entry.Date, entry.ID)
+func BackupRunUsesYubiKey(backupDir string, entry util.BackupEntry) (bool, bool, error) {
+	path, found, err := FindChallengeFileForRun(backupDir, entry.Date, entry.ID)
 	if err != nil || !found {
 		return found, false, err
 	}
@@ -97,8 +97,8 @@ func BackupRunUsesYubiKey(targetDir string, entry util.BackupEntry) (bool, bool,
 }
 
 // FindChallengeFileForRun returns the .challenge file path for date+ID if present.
-func FindChallengeFileForRun(targetDir, date string, id util.BackupID) (string, bool, error) {
-	entries, err := os.ReadDir(targetDir)
+func FindChallengeFileForRun(backupDir, date string, id util.BackupID) (string, bool, error) {
+	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return "", false, err
 	}
@@ -109,7 +109,7 @@ func FindChallengeFileForRun(targetDir, date string, id util.BackupID) (string, 
 			continue
 		}
 		if strings.HasSuffix(entry.Name(), suffix) {
-			return filepath.Join(targetDir, entry.Name()), true, nil
+			return filepath.Join(backupDir, entry.Name()), true, nil
 		}
 	}
 
@@ -127,13 +127,13 @@ func IsChallengeFileYubiKeyOnly(path string) bool {
 }
 
 // NewestPartModTime returns the newest modification time among all part files.
-func NewestPartModTime(targetDir string, entry util.BackupEntry) (time.Time, error) {
-	parts, err := CollectParts(targetDir, entry)
+func NewestPartModTime(backupDir string, entry util.BackupEntry) (time.Time, error) {
+	parts, err := CollectParts(backupDir, entry)
 	if err != nil {
 		return time.Time{}, err
 	}
 	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in target_directory.")
+		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in the backup directory.")
 	}
 
 	var newest time.Time

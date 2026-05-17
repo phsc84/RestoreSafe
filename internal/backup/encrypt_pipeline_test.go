@@ -48,7 +48,7 @@ func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 	t.Parallel()
 
 	stagingDir := t.TempDir()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 
 	files := map[string]string{
 		"[alpha]_2026-03-21_AB12CD-001.enc": "enc-part",
@@ -61,17 +61,17 @@ func TestCopyBackupResultsCopiesOnlyEncryptedAndChallengeFiles(t *testing.T) {
 		}
 	}
 
-	if err := copyBackupResults(stagingDir, targetDir, nil, nil, nil); err != nil {
+	if err := copyBackupResults(stagingDir, backupDir, nil, nil, nil); err != nil {
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(targetDir, "[alpha]_2026-03-21_AB12CD-001.enc")); err != nil {
+	if _, err := os.Stat(filepath.Join(backupDir, "[alpha]_2026-03-21_AB12CD-001.enc")); err != nil {
 		t.Fatalf("expected .enc file to be copied: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(targetDir, "alpha_2026_AAA111.challenge")); err != nil {
+	if _, err := os.Stat(filepath.Join(backupDir, "alpha_2026_AAA111.challenge")); err != nil {
 		t.Fatalf("expected .challenge file to be copied: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(targetDir, "notes.txt")); err == nil {
+	if _, err := os.Stat(filepath.Join(backupDir, "notes.txt")); err == nil {
 		t.Fatal("did not expect non-backup file to be copied")
 	}
 }
@@ -87,7 +87,7 @@ func TestCopyBackupResultsFailsWhenStagingDirMissing(t *testing.T) {
 
 func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 	stagingDir := t.TempDir()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 
 	files := map[string]string{
 		"[alpha]_2026-03-21_AB12CD-001.enc": "enc-part-1",
@@ -100,13 +100,13 @@ func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 		}
 	}
 
-	logPath := filepath.Join(targetDir, fmt.Sprintf("copy-log-%d.log", time.Now().UnixNano()))
+	logPath := filepath.Join(backupDir, fmt.Sprintf("copy-log-%d.log", time.Now().UnixNano()))
 	logger, err := util.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
-	if err := copyBackupResults(stagingDir, targetDir, nil, nil, logger); err != nil {
+	if err := copyBackupResults(stagingDir, backupDir, nil, nil, logger); err != nil {
 		logger.Close()
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestCopyBackupResultsLogsCopyBeforeAndSummaryAfter(t *testing.T) {
 
 func TestCopyBackupResultsLogsPerDirectoryHeaderAndSummary(t *testing.T) {
 	stagingDir := t.TempDir()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 
 	files := map[string]string{
 		"[00_Gemeinsam]_2026-03-21_AB12CD-001.enc": "part-1",
@@ -157,7 +157,7 @@ func TestCopyBackupResultsLogsPerDirectoryHeaderAndSummary(t *testing.T) {
 		}
 	}
 
-	logPath := filepath.Join(targetDir, fmt.Sprintf("copy-log-finished-%d.log", time.Now().UnixNano()))
+	logPath := filepath.Join(backupDir, fmt.Sprintf("copy-log-finished-%d.log", time.Now().UnixNano()))
 	logger, err := util.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
@@ -167,7 +167,7 @@ func TestCopyBackupResultsLogsPerDirectoryHeaderAndSummary(t *testing.T) {
 		"00_Gemeinsam": "/data/00_Gemeinsam",
 		"10_Daten":     "/data/10_Daten",
 	}
-	if err := copyBackupResults(stagingDir, targetDir, nil, directorySourcePaths, logger); err != nil {
+	if err := copyBackupResults(stagingDir, backupDir, nil, directorySourcePaths, logger); err != nil {
 		logger.Close()
 		t.Fatalf("copyBackupResults returned error: %v", err)
 	}

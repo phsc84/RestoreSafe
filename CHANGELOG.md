@@ -8,6 +8,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [3.0.0] - 2026-05-15
 
+### Breaking Changes
+- The config key `target_directory` has been renamed to `backup_directory`. Existing `config.yaml` files must be updated before upgrading.
+- Encrypted file format bumped to header version 2: the Argon2id parameters (time, memory, threads) are now stored in each file header so decryption always uses the exact parameters from encryption, enabling per-backup tuning without loss of restorability. Version 1 backup files are no longer compatible and must be restored with an older RestoreSafe build.
+
 ### Added
 - Configurable Argon2id parameters (`argon2.time`, `argon2.memory_mb`, `argon2.threads`) in `config.yaml`, with updated defaults aligned with current security recommendations.
 - Target directory locking: backup and restore now acquire an exclusive lock on the target directory at startup, preventing concurrent runs from corrupting the same backup set.
@@ -15,7 +19,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backup pre-flight now validates available staging space before starting, not just target space.
 
 ### Changed
-- Encrypted file format bumped to header version 2: the Argon2id parameters (time, memory, threads) are now stored in each file header so decryption always uses the exact parameters from encryption, enabling per-backup tuning without loss of restorability. Version 1 backup files are no longer compatible and must be restored with an older RestoreSafe build.
 - Duplicate source-directory basename aliases now encode every non-alphanumeric character as UTF-8 hex (`~XX~`), making aliases unambiguous across characters such as `-`, `_`, space, `.`, and `~`.
 - Improved error messages across backup, restore, and verify flows with more concrete remediation guidance.
 - Consolidated YubiKey connectivity checks into a shared helper used consistently by backup, restore, and verify preflights.

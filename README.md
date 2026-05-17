@@ -53,7 +53,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
    pause
    ```
-3. In `config.yaml` edit at least parameters `source_directories` and `target_directory`.
+3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs.
 

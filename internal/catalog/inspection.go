@@ -8,8 +8,8 @@ import (
 )
 
 // InspectBackupParts validates split-part continuity and returns part count and total size.
-func InspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, error) {
-	entries, err := os.ReadDir(targetDir)
+func InspectBackupParts(backupDir string, entry util.BackupEntry) (int, int64, error) {
+	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -37,7 +37,7 @@ func InspectBackupParts(targetDir string, entry util.BackupEntry) (int, int64, e
 	}
 
 	if len(parts) == 0 {
-		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in target_directory.")
+		return 0, 0, fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in the backup directory.")
 	}
 
 	sort.Slice(parts, func(i, j int) bool {

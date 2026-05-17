@@ -26,7 +26,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 	}
 
 	// Step 2: Restore.
-	partCount, err := restoreEntry(fx.Entry, fx.TargetDir, fx.RestoreRoot, password, nil)
+	partCount, err := restoreEntry(fx.Entry, fx.BackupDir, fx.RestoreRoot, password, nil)
 	if err != nil {
 		t.Fatalf("restoreEntry failed: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestBackupRestoreVerifyRoundTrip(t *testing.T) {
 	// Step 3b: Verify the original backup archives are intact (the verify workflow).
 	// This calls the same decrypt+TAR-validate pipeline used by verify.Run, confirming
 	// the encrypted parts remain readable after the restore has consumed them.
-	parts, err := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	parts, err := catalog.CollectParts(fx.BackupDir, fx.Entry)
 	if err != nil {
 		t.Fatalf("CollectParts failed during verify step: %v", err)
 	}

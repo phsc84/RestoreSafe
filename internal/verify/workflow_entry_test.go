@@ -11,10 +11,10 @@ import (
 
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
 
-	err := verifyEntry(entry, targetDir, []byte("pw"), nil)
+	err := verifyEntry(entry, backupDir, []byte("pw"), nil)
 	if err == nil {
 		t.Fatal("expected error when no parts found, got nil")
 	}
@@ -26,7 +26,7 @@ func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 func TestVerifyEntryRoundTrip(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-correct-pass"))
 
-	if err := verifyEntry(fx.Entry, fx.TargetDir, fx.Password, nil); err != nil {
+	if err := verifyEntry(fx.Entry, fx.BackupDir, fx.Password, nil); err != nil {
 		t.Fatalf("verifyEntry failed for correct password: %v", err)
 	}
 }
@@ -34,7 +34,7 @@ func TestVerifyEntryRoundTrip(t *testing.T) {
 func TestVerifyEntryRejectsWrongPassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
 
-	err := verifyEntry(fx.Entry, fx.TargetDir, []byte("wrong-pass"), nil)
+	err := verifyEntry(fx.Entry, fx.BackupDir, []byte("wrong-pass"), nil)
 	if err == nil {
 		t.Fatal("expected verifyEntry to fail with wrong password")
 	}

@@ -15,18 +15,18 @@ import (
 
 // Run verifies selected backup sets without restoring them to disk.
 func Run(cfg *util.Config, exeDir string) error {
-	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
+	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
-	index, err := catalog.ScanBackups(targetDir)
+	index, err := catalog.ScanBackups(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan target directory %q: %w. Remedy: Check the target_directory path in config.yaml and ensure the directory is readable.", targetDir, err)
+		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
 	}
 	if len(index) == 0 {
-		fmt.Println("No backups found in target directory. Remedy: Check whether .enc files are in target_directory and whether the correct directory is selected.")
+		fmt.Println("No backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
 		return nil
 	}
 
-	selected, selection, err := resolveVerifySelection(targetDir, index)
+	selected, selection, err := resolveVerifySelection(backupDir, index)
 	if err != nil {
 		if errors.Is(err, operation.ErrSelectionCancelled) {
 			fmt.Println("Verification cancelled.")
@@ -35,15 +35,15 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(targetDir, selected[0])
+	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(backupDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup directory and existing .challenge files.", err)
 	}
 
-	log := operation.OpenLogger(cfg, targetDir, selected[0])
+	log := operation.OpenLogger(cfg, backupDir, selected[0])
 	defer log.Close()
-	preflight := buildVerifyPreflight(selected, targetDir)
-	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
+	preflight := buildVerifyPreflight(selected, backupDir)
+	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	password, err := operation.ReadPasswordWithRetry(targetDir, selected[0], "Enter verification password: ", log)
+	password, err := operation.ReadPasswordWithRetry(backupDir, selected[0], "Enter verification password: ", log)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	fmt.Println()
 	log.Info("Verification started - ID: %s, date: %s, selection: %q", string(selected[0].ID), selected[0].Date, selection)
 	log.Info("Verifying %d selected item(s)", len(selected))
-	if err := verifySelectedEntries(selected, targetDir, password, log); err != nil {
+	if err := verifySelectedEntries(selected, backupDir, password, log); err != nil {
 		return err
 	}
 
@@ -75,8 +75,8 @@ func Run(cfg *util.Config, exeDir string) error {
 	return nil
 }
 
-func resolveVerifySelection(targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	return operation.PromptBackupSelection("verify", targetDir, index)
+func resolveVerifySelection(backupDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
+	return operation.PromptBackupSelection("verify", backupDir, index)
 }
 
 type verifyPreflightItem struct {
@@ -86,10 +86,10 @@ type verifyPreflightItem struct {
 	Err            error
 }
 
-func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verifyPreflightItem {
+func buildVerifyPreflight(selected []util.BackupEntry, backupDir string) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
 	for _, entry := range selected {
-		partCount, totalSizeBytes, err := catalog.InspectBackupParts(targetDir, entry)
+		partCount, totalSizeBytes, err := catalog.InspectBackupParts(backupDir, entry)
 		items = append(items, verifyPreflightItem{
 			Entry:          entry,
 			PartCount:      partCount,
@@ -103,7 +103,7 @@ func buildVerifyPreflight(selected []util.BackupEntry, targetDir string) []verif
 func printVerifyPreflightWithYubiKeyCheck(
 	w io.Writer,
 	cfg *util.Config,
-	targetDir string,
+	backupDir string,
 	items []verifyPreflightItem,
 	requiresYubiKey, yubiKeyOnly bool,
 	checkYubiKeyConnected func() error,
@@ -116,7 +116,7 @@ func printVerifyPreflightWithYubiKeyCheck(
 
 	// Backup selection
 	fmt.Fprintln(w, "Backup selection:")
-	fmt.Fprintf(w, "  Path: %s\n", filepath.ToSlash(targetDir))
+	fmt.Fprintf(w, "  Path: %s\n", filepath.ToSlash(backupDir))
 	for _, item := range items {
 		if item.Err != nil {
 			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
@@ -164,9 +164,9 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	)
 }
 
-func verifySelectedEntries(selected []util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
+func verifySelectedEntries(selected []util.BackupEntry, backupDir string, password []byte, log *util.Logger) error {
 	for _, entry := range selected {
-		if err := verifyEntry(entry, targetDir, password, log); err != nil {
+		if err := verifyEntry(entry, backupDir, password, log); err != nil {
 			return fmt.Errorf("Failed to verify directory %q: %w", entry.String(), err)
 		}
 		log.Info("Directory %q successfully verified", entry.DirectoryName)
@@ -174,13 +174,13 @@ func verifySelectedEntries(selected []util.BackupEntry, targetDir string, passwo
 	return nil
 }
 
-func verifyEntry(entry util.BackupEntry, targetDir string, password []byte, log *util.Logger) error {
-	parts, err := catalog.CollectParts(targetDir, entry)
+func verifyEntry(entry util.BackupEntry, backupDir string, password []byte, log *util.Logger) error {
+	parts, err := catalog.CollectParts(backupDir, entry)
 	if err != nil {
 		return err
 	}
 	if len(parts) == 0 {
-		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same target_directory.", entry.String())
+		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
 	}
 
 	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())

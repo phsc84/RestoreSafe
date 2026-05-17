@@ -12,7 +12,7 @@ import (
 func printBackupPreflightWithYubiKeyCheck(
 	w io.Writer,
 	cfg *util.Config,
-	targetDir string,
+	backupDir string,
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
@@ -21,8 +21,8 @@ func printBackupPreflightWithYubiKeyCheck(
 	fmt.Fprintln(w, "Backup preflight")
 	fmt.Fprintln(w, "----------------")
 	estimatedBytes, estimateWarnings := estimateSelectedSourceBytes(sources)
-	freeBytes, freeErr := util.QueryFreeSpaceBytes(targetDir)
-	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(targetDir)
+	freeBytes, freeErr := util.QueryFreeSpaceBytes(backupDir)
+	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(backupDir)
 
 	fmt.Fprintln(w, "Source directory(s):")
 	for _, src := range sources {
@@ -53,8 +53,8 @@ func printBackupPreflightWithYubiKeyCheck(
 			}
 		}
 
-		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, targetDir) {
-			fmt.Fprintf(w, "          → Source and target directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different target drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(targetDir))
+		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, backupDir) {
+			fmt.Fprintf(w, "          → Source and backup directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different backup drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(backupDir))
 		}
 	}
 	for _, warning := range estimateWarnings {
@@ -66,7 +66,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	fmt.Fprintf(w, "  Needed disk space (total): %s\n", util.FormatBytesBinary(uint64(estimatedBytes)))
 
 	fmt.Fprintln(w, "Backup directory:")
-	fmt.Fprintf(w, "  [OK] %s\n", targetDir)
+	fmt.Fprintf(w, "  [OK] %s\n", backupDir)
 	if freeErr != nil {
 		fmt.Fprintf(w, "  Free disk space: unknown (%v)\n", freeErr)
 	} else {
@@ -82,7 +82,7 @@ func printBackupPreflightWithYubiKeyCheck(
 
 	if stagingPlan.Enabled {
 		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).\n", util.VolumeDisplay(targetDir))
+		fmt.Fprintf(w, "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).\n", util.VolumeDisplay(backupDir))
 		fmt.Fprintln(w, "Temp directory:")
 		fmt.Fprintf(w, "  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
@@ -102,13 +102,13 @@ func validateSourceDirectories(sources []backupSource) error {
 	)
 }
 
-func validateTargetSpaceForBackup(targetDir string, sources []backupSource) error {
+func validateTargetSpaceForBackup(backupDir string, sources []backupSource) error {
 	estimatedBytes, _ := estimateSelectedSourceBytes(sources)
 	if estimatedBytes <= 0 {
 		return nil
 	}
 
-	freeBytes, err := util.QueryFreeSpaceBytes(targetDir)
+	freeBytes, err := util.QueryFreeSpaceBytes(backupDir)
 	if err != nil {
 		return nil
 	}

@@ -49,26 +49,26 @@ func DateString() string {
 
 // PartFileName returns the path for a backup part file.
 //
-//	{targetDir}/[directoryName]_YYYY-MM-DD_{id}-{seq:03d}.enc
-func PartFileName(targetDir, directoryName, date string, id BackupID, seq int) string {
+//	{dir}/[directoryName]_YYYY-MM-DD_{id}-{seq:03d}.enc
+func PartFileName(dir, directoryName, date string, id BackupID, seq int) string {
 	name := fmt.Sprintf("[%s]_%s_%s-%03d.enc", directoryName, date, string(id), seq)
-	return filepath.Join(targetDir, name)
+	return filepath.Join(dir, name)
 }
 
 // LogFileName returns the path for the log file of a backup run.
 //
-//	{targetDir}/YYYY-MM-DD_{id}.log
-func LogFileName(targetDir, date string, id BackupID) string {
+//	{dir}/YYYY-MM-DD_{id}.log
+func LogFileName(dir, date string, id BackupID) string {
 	name := fmt.Sprintf("%s_%s.log", date, string(id))
-	return filepath.Join(targetDir, name)
+	return filepath.Join(dir, name)
 }
 
 // ChallengeFileName returns the path for the YubiKey challenge file.
 //
-//	{targetDir}/[directoryName]_YYYY-MM-DD_{id}.challenge
-func ChallengeFileName(targetDir, directoryName, date string, id BackupID) string {
+//	{dir}/[directoryName]_YYYY-MM-DD_{id}.challenge
+func ChallengeFileName(dir, directoryName, date string, id BackupID) string {
 	name := fmt.Sprintf("[%s]_%s_%s.challenge", directoryName, date, string(id))
-	return filepath.Join(targetDir, name)
+	return filepath.Join(dir, name)
 }
 
 // BackupEntry represents one logical backup (all parts of one source directory).

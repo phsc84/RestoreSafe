@@ -11,13 +11,13 @@ func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
 	password := []byte("integration-test-password")
 	fx := testutil.NewRestoreFixture(t, password)
 
-	stagedDir, err := stageBackupEntryLocally(fx.TargetDir, fx.Entry, t.TempDir(), nil)
+	stagedDir, err := stageBackupEntryLocally(fx.BackupDir, fx.Entry, t.TempDir(), nil)
 	if err != nil {
 		t.Fatalf("stageBackupEntryLocally returned error: %v", err)
 	}
 	defer os.RemoveAll(stagedDir)
 
-	originalParts, err := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	originalParts, err := catalog.CollectParts(fx.BackupDir, fx.Entry)
 	if err != nil {
 		t.Fatalf("failed to collect original parts: %v", err)
 	}

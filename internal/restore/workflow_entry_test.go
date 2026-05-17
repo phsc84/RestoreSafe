@@ -16,7 +16,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 		t.Fatalf("expected multiple split parts, got %d", fx.Parts)
 	}
 
-	if _, err := restoreEntry(fx.Entry, fx.TargetDir, fx.RestoreRoot, password, nil); err != nil {
+	if _, err := restoreEntry(fx.Entry, fx.BackupDir, fx.RestoreRoot, password, nil); err != nil {
 		t.Fatalf("restoreEntry returned error: %v", err)
 	}
 
@@ -28,7 +28,7 @@ func TestBackupAndRestoreEntryRoundTrip(t *testing.T) {
 func TestRestoreEntryRejectsWrongPassword(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("correct-password"))
 
-	_, err := restoreEntry(fx.Entry, fx.TargetDir, fx.RestoreRoot, []byte("wrong-password"), nil)
+	_, err := restoreEntry(fx.Entry, fx.BackupDir, fx.RestoreRoot, []byte("wrong-password"), nil)
 	if err == nil {
 		t.Fatal("expected restoreEntry to fail for wrong password")
 	}

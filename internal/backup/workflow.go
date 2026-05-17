@@ -17,13 +17,13 @@ import (
 
 // Run executes the full backup workflow.
 func Run(cfg *util.Config, exeDir string) error {
-	// Resolve target directory (may be relative to exe dir).
-	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
-		return fmt.Errorf("Failed to create target directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
+	// Resolve backup directory (may be relative to exe dir).
+	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		return fmt.Errorf("Failed to create backup directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
 
-	lock, err := util.AcquireTargetLock(targetDir)
+	lock, err := util.AcquireBackupLock(backupDir)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	date := util.DateString()
 
 	// Set up logger.
-	logPath := util.LogFileName(targetDir, date, id)
+	logPath := util.LogFileName(backupDir, date, id)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
 		return err
@@ -51,24 +51,24 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	// Plan local staging to mitigate same-volume read+write contention.
-	// Prefer a source that shares the target volume so the plan correctly detects contention
-	// when only some sources are on the same drive as the target.
+	// Prefer a source that shares the backup volume so the plan correctly detects contention
+	// when only some sources are on the same drive as the backup directory.
 	stagingSourceDir := ""
 	for _, src := range sources {
 		if src.Err == nil && !src.Skip {
 			if stagingSourceDir == "" {
 				stagingSourceDir = src.Resolved
 			}
-			if util.SameVolume(src.Resolved, targetDir) {
+			if util.SameVolume(src.Resolved, backupDir) {
 				stagingSourceDir = src.Resolved
 				break
 			}
 		}
 	}
-	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, targetDir, os.TempDir())
+	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, backupDir, os.TempDir())
 
-	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, targetDir, sources, stagingPlan, security.CheckYubiKeyConnected)
-	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
+	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, security.CheckYubiKeyConnected)
+	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
 			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
@@ -142,15 +142,15 @@ func Run(cfg *util.Config, exeDir string) error {
 	processedDirectories := make([]string, 0)
 	directorySourcePaths := make(map[string]string)
 
-	// Determine actual working directory (staging or target).
+	// Determine actual working directory (staging or backup directory).
 	staging, err := operation.NewStagingScope(stagingPlan, "restoresafe-backup-stage-*", log)
 	if err != nil {
 		return err
 	}
 	if staging.Dir != "" {
-		log.InfoLogOnly("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(staging.Dir), filepath.ToSlash(targetDir))
+		log.InfoLogOnly("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(staging.Dir), filepath.ToSlash(backupDir))
 	}
-	workingDir := staging.ActiveDir(targetDir)
+	workingDir := staging.ActiveDir(backupDir)
 	defer staging.Cleanup()
 
 	// Back up each source directory.
@@ -193,7 +193,7 @@ func Run(cfg *util.Config, exeDir string) error {
 			}
 			challengePath := util.ChallengeFileName(workingDir, directoryName, date, id)
 			if err := os.WriteFile(challengePath, []byte(challengeContent), 0o600); err != nil {
-				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the target directory; for YubiKey backups, the .challenge file must be in the same directory as the .enc files.", err)
+				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the backup directory; for YubiKey backups, the .challenge file must be in the same directory as the .enc files.", err)
 			}
 			log.Debug("Challenge file written: %s", challengePath)
 		}
@@ -201,12 +201,12 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	// Copy results from staging to target if needed.
 	if staging.Dir != "" {
-		if err := copyBackupResults(workingDir, targetDir, processedDirectories, directorySourcePaths, log); err != nil {
-			return fmt.Errorf("Failed to copy staged backup to target: %w", err)
+		if err := copyBackupResults(workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
+			return fmt.Errorf("Failed to copy staged backup to backup directory: %w", err)
 		}
 	}
 
-	if err := applyRetentionPolicy(targetDir, cfg.RetentionKeep, sources, log); err != nil {
+	if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, sources, log); err != nil {
 		log.Warn("Retention cleanup failed: %v", err)
 		warningCount++
 	}
@@ -219,14 +219,14 @@ func Run(cfg *util.Config, exeDir string) error {
 
 // backupDirectory streams directory → TAR → encrypt → split-writer.
 func backupDirectory(
-	srcDir, directoryName, targetDir, date string,
+	srcDir, directoryName, backupDir, date string,
 	id util.BackupID,
 	password []byte,
 	params security.Argon2Params,
 	cfg *util.Config,
 	log *util.Logger,
 ) (int, error) {
-	sw, bw := newSplitOutput(targetDir, directoryName, date, id, cfg.SplitSizeMB)
+	sw, bw := newSplitOutput(backupDir, directoryName, date, id, cfg.SplitSizeMB)
 	sw.SetPartOpenedHook(func(seq int, path string) {
 		log.Info("  Part %03d: %s", seq, filepath.Base(path))
 	})
@@ -240,7 +240,7 @@ func backupDirectory(
 	stopProgress := operation.StartProgressTracking(progressLog, directoryName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls)
 	defer stopProgress()
 
-	tarErrCh := startTarProducer(log, srcDir, targetDir, pw)
+	tarErrCh := startTarProducer(log, srcDir, backupDir, pw)
 	encErr := runEncryptStage(log, bw, pr, password, params, counters)
 	tarErr := <-tarErrCh
 	closeErr := closeSplitOutput(bw, sw)

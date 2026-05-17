@@ -12,7 +12,7 @@ import (
 )
 
 func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	originalStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -34,7 +34,7 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 		Date:       "2026-03-14",
 		ID:         util.BackupID("ABC123"),
 	}}
-	part := util.PartFileName(targetDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1)
+	part := util.PartFileName(backupDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 		t.Fatalf("failed to create part file: %v", err)
 	}
 
-	_, _, err = PromptBackupSelection("verify", targetDir, index)
+	_, _, err = PromptBackupSelection("verify", backupDir, index)
 	if err == nil {
 		t.Fatal("expected cancel error, got nil")
 	}
@@ -52,7 +52,7 @@ func TestPromptBackupSelectionCancelReturnsTypedError(t *testing.T) {
 }
 
 func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	index := []util.BackupEntry{
 		{DirectoryName: "SourceDirectory1", Date: "2026-03-18", ID: util.BackupID("ABC125")},
 		{DirectoryName: "SourceDirectory2", Date: "2026-03-18", ID: util.BackupID("ABC125")},
@@ -60,9 +60,9 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 	}
 
 	partPaths := []string{
-		util.PartFileName(targetDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1),
-		util.PartFileName(targetDir, index[1].DirectoryName, index[1].Date, index[1].ID, 1),
-		util.PartFileName(targetDir, index[2].DirectoryName, index[2].Date, index[2].ID, 1),
+		util.PartFileName(backupDir, index[0].DirectoryName, index[0].Date, index[0].ID, 1),
+		util.PartFileName(backupDir, index[1].DirectoryName, index[1].Date, index[1].ID, 1),
+		util.PartFileName(backupDir, index[2].DirectoryName, index[2].Date, index[2].ID, 1),
 	}
 	for _, part := range partPaths {
 		if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
@@ -86,7 +86,7 @@ func TestPrintBackupSelectionPromptGroupsByRunAndSortsNewestFirst(t *testing.T) 
 	}
 
 	output := testutil.CaptureStdout(t, func() {
-		if err := printBackupSelectionPrompt("restore", targetDir, index); err != nil {
+		if err := printBackupSelectionPrompt("restore", backupDir, index); err != nil {
 			t.Fatalf("printBackupSelectionPrompt returned error: %v", err)
 		}
 	})
@@ -144,9 +144,9 @@ func pipeSelectionInput(t *testing.T, lines string) {
 	})
 }
 
-func createPartFile(t *testing.T, targetDir string, entry util.BackupEntry) {
+func createPartFile(t *testing.T, backupDir string, entry util.BackupEntry) {
 	t.Helper()
-	part := util.PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -156,9 +156,9 @@ func createPartFile(t *testing.T, targetDir string, entry util.BackupEntry) {
 }
 
 func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	createPartFile(t, targetDir, entry)
+	createPartFile(t, backupDir, entry)
 	index := []util.BackupEntry{entry}
 
 	pipeSelectionInput(t, ".\n")
@@ -167,7 +167,7 @@ func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
 	var label string
 	testutil.CaptureStdout(t, func() {
 		var err error
-		selected, label, err = PromptBackupSelection("verify", targetDir, index)
+		selected, label, err = PromptBackupSelection("verify", backupDir, index)
 		if err != nil {
 			t.Fatalf("expected no error for newest selection, got: %v", err)
 		}
@@ -181,9 +181,9 @@ func TestPromptBackupSelectionNewestSelectsLatestRun(t *testing.T) {
 }
 
 func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	createPartFile(t, targetDir, entry)
+	createPartFile(t, backupDir, entry)
 	index := []util.BackupEntry{entry}
 
 	pipeSelectionInput(t, "Docs_2026-03-14_ABC123\n")
@@ -191,7 +191,7 @@ func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
 	var selected []util.BackupEntry
 	testutil.CaptureStdout(t, func() {
 		var err error
-		selected, _, err = PromptBackupSelection("verify", targetDir, index)
+		selected, _, err = PromptBackupSelection("verify", backupDir, index)
 		if err != nil {
 			t.Fatalf("expected no error for name selection, got: %v", err)
 		}
@@ -202,9 +202,9 @@ func TestPromptBackupSelectionByNameSelectsMatchingEntry(t *testing.T) {
 }
 
 func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	createPartFile(t, targetDir, entry)
+	createPartFile(t, backupDir, entry)
 	index := []util.BackupEntry{entry}
 
 	pipeSelectionInput(t, "ABC123\n")
@@ -212,7 +212,7 @@ func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
 	var selected []util.BackupEntry
 	testutil.CaptureStdout(t, func() {
 		var err error
-		selected, _, err = PromptBackupSelection("verify", targetDir, index)
+		selected, _, err = PromptBackupSelection("verify", backupDir, index)
 		if err != nil {
 			t.Fatalf("expected no error for ID selection, got: %v", err)
 		}
@@ -223,16 +223,16 @@ func TestPromptBackupSelectionByIDSelectsMatchingEntries(t *testing.T) {
 }
 
 func TestPromptBackupSelectionEmptyInputPrintsRetryMessage(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	createPartFile(t, targetDir, entry)
+	createPartFile(t, backupDir, entry)
 	index := []util.BackupEntry{entry}
 
 	// Empty line causes the "must not be empty" message, then bufio re-reads EOF.
 	pipeSelectionInput(t, "\n")
 
 	output := testutil.CaptureStdout(t, func() {
-		_, _, _ = PromptBackupSelection("verify", targetDir, index)
+		_, _, _ = PromptBackupSelection("verify", backupDir, index)
 	})
 	if !strings.Contains(output, "Selection must not be empty.") {
 		t.Fatalf("expected empty-selection message in output, got: %q", output)
@@ -240,16 +240,16 @@ func TestPromptBackupSelectionEmptyInputPrintsRetryMessage(t *testing.T) {
 }
 
 func TestPromptBackupSelectionUnknownNamePrintsError(t *testing.T) {
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	createPartFile(t, targetDir, entry)
+	createPartFile(t, backupDir, entry)
 	index := []util.BackupEntry{entry}
 
 	// Unknown name causes error output, then bufio re-reads EOF.
 	pipeSelectionInput(t, "unknown-backup-name\n")
 
 	output := testutil.CaptureStdout(t, func() {
-		_, _, _ = PromptBackupSelection("verify", targetDir, index)
+		_, _, _ = PromptBackupSelection("verify", backupDir, index)
 	})
 	// Output should contain either an error about the unknown name or selection info.
 	if len(output) == 0 {

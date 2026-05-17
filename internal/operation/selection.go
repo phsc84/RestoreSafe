@@ -13,9 +13,9 @@ import (
 var ErrSelectionCancelled = errors.New("selection cancelled")
 
 // PromptBackupSelection asks the user to choose one or more backup entries.
-func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
+func PromptBackupSelection(action, backupDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
 	for {
-		if err := printBackupSelectionPrompt(action, targetDir, index); err != nil {
+		if err := printBackupSelectionPrompt(action, backupDir, index); err != nil {
 			return nil, "", err
 		}
 
@@ -37,7 +37,7 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 		case "q":
 			return nil, "", ErrSelectionCancelled
 		case ".":
-			selected, label, err := catalog.ResolveNewestBackupRunSelection(targetDir, index)
+			selected, label, err := catalog.ResolveNewestBackupRunSelection(backupDir, index)
 			if err != nil {
 				return nil, "", err
 			}
@@ -68,9 +68,9 @@ func PromptBackupSelection(action, targetDir string, index []util.BackupEntry) (
 	}
 }
 
-func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEntry) error {
+func printBackupSelectionPrompt(action, backupDir string, index []util.BackupEntry) error {
 	fmt.Println("Available backups:")
-	runs, err := catalog.BackupRunSummaries(targetDir, index)
+	runs, err := catalog.BackupRunSummaries(backupDir, index)
 	if err != nil {
 		return err
 	}

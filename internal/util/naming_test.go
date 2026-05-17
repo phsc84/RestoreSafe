@@ -53,14 +53,14 @@ func TestBackupEntryString(t *testing.T) {
 func TestPartFileNameAndParsePartFileNameRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := BackupEntry{
 		DirectoryName: "Docs",
 		Date:       "2026-03-15",
 		ID:         BackupID("ABC123"),
 	}
 
-	fullPath := PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 7)
+	fullPath := PartFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID, 7)
 	if !strings.HasSuffix(fullPath, "[Docs]_2026-03-15_ABC123-007.enc") {
 		t.Fatalf("unexpected part filename: %s", fullPath)
 	}
@@ -102,15 +102,15 @@ func TestParsePartFileNameRejectsInvalidName(t *testing.T) {
 func TestLogAndChallengeFileName(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	id := BackupID("ZX9Q1P")
 
-	logPath := LogFileName(targetDir, "2026-03-15", id)
+	logPath := LogFileName(backupDir, "2026-03-15", id)
 	if !strings.HasSuffix(logPath, "2026-03-15_ZX9Q1P.log") {
 		t.Fatalf("unexpected log filename: %s", logPath)
 	}
 
-	challengePath := ChallengeFileName(targetDir, "Photos", "2026-03-15", id)
+	challengePath := ChallengeFileName(backupDir, "Photos", "2026-03-15", id)
 	if !strings.HasSuffix(challengePath, "[Photos]_2026-03-15_ZX9Q1P.challenge") {
 		t.Fatalf("unexpected challenge filename: %s", challengePath)
 	}

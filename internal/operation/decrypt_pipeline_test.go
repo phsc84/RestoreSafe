@@ -15,7 +15,7 @@ func TestRunDecryptPipelineConsumeErrorWrapsMessage(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
-	parts, err := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	parts, err := catalog.CollectParts(fx.BackupDir, fx.Entry)
 	if err != nil {
 		t.Fatalf("failed to collect parts: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestRunDecryptPipelineSuccess(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
-	parts, err := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	parts, err := catalog.CollectParts(fx.BackupDir, fx.Entry)
 	if err != nil {
 		t.Fatalf("failed to collect parts: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRunDecryptPipelineWrongPassword(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("correct-pass"))
-	parts, err := catalog.CollectParts(fx.TargetDir, fx.Entry)
+	parts, err := catalog.CollectParts(fx.BackupDir, fx.Entry)
 	if err != nil {
 		t.Fatalf("failed to collect parts: %v", err)
 	}

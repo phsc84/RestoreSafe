@@ -11,14 +11,14 @@ import (
 func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	oldEntry := util.BackupEntry{DirectoryName: "Old", Date: "2026-03-15", ID: util.BackupID("ZZZ999")}
 	newDocs := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: util.BackupID("AAA111")}
 	newPics := util.BackupEntry{DirectoryName: "Pics", Date: "2026-03-15", ID: util.BackupID("AAA111")}
 
-	oldPart := util.PartFileName(targetDir, oldEntry.DirectoryName, oldEntry.Date, oldEntry.ID, 1)
-	newDocsPart := util.PartFileName(targetDir, newDocs.DirectoryName, newDocs.Date, newDocs.ID, 1)
-	newPicsPart := util.PartFileName(targetDir, newPics.DirectoryName, newPics.Date, newPics.ID, 1)
+	oldPart := util.PartFileName(backupDir, oldEntry.DirectoryName, oldEntry.Date, oldEntry.ID, 1)
+	newDocsPart := util.PartFileName(backupDir, newDocs.DirectoryName, newDocs.Date, newDocs.ID, 1)
+	newPicsPart := util.PartFileName(backupDir, newPics.DirectoryName, newPics.Date, newPics.ID, 1)
 
 	for _, part := range []string{oldPart, newDocsPart, newPicsPart} {
 		if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
@@ -41,7 +41,7 @@ func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
 		t.Fatalf("failed to set new pics part time: %v", err)
 	}
 
-	selected, label, err := ResolveNewestBackupRunSelection(targetDir, []util.BackupEntry{oldEntry, newDocs, newPics})
+	selected, label, err := ResolveNewestBackupRunSelection(backupDir, []util.BackupEntry{oldEntry, newDocs, newPics})
 	if err != nil {
 		t.Fatalf("ResolveNewestBackupRunSelection returned error: %v", err)
 	}
@@ -61,16 +61,16 @@ func TestResolveNewestBackupRunSelectionUsesNewestModTime(t *testing.T) {
 func TestBackupRunSummariesSortByNewestPartAcrossRun(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	olderRun := []util.BackupEntry{{DirectoryName: "OldDocs", Date: "2026-03-18", ID: util.BackupID("OLD111")}}
 	newerRun := []util.BackupEntry{
 		{DirectoryName: "Docs", Date: "2026-03-18", ID: util.BackupID("NEW222")},
 		{DirectoryName: "Pics", Date: "2026-03-18", ID: util.BackupID("NEW222")},
 	}
 
-	oldPart := util.PartFileName(targetDir, olderRun[0].DirectoryName, olderRun[0].Date, olderRun[0].ID, 1)
-	newDocsPart := util.PartFileName(targetDir, newerRun[0].DirectoryName, newerRun[0].Date, newerRun[0].ID, 1)
-	newPicsPart := util.PartFileName(targetDir, newerRun[1].DirectoryName, newerRun[1].Date, newerRun[1].ID, 1)
+	oldPart := util.PartFileName(backupDir, olderRun[0].DirectoryName, olderRun[0].Date, olderRun[0].ID, 1)
+	newDocsPart := util.PartFileName(backupDir, newerRun[0].DirectoryName, newerRun[0].Date, newerRun[0].ID, 1)
+	newPicsPart := util.PartFileName(backupDir, newerRun[1].DirectoryName, newerRun[1].Date, newerRun[1].ID, 1)
 
 	for _, part := range []string{oldPart, newDocsPart, newPicsPart} {
 		if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
@@ -94,7 +94,7 @@ func TestBackupRunSummariesSortByNewestPartAcrossRun(t *testing.T) {
 		t.Fatalf("failed to set new pics part time: %v", err)
 	}
 
-	runs, err := BackupRunSummaries(targetDir, []util.BackupEntry{olderRun[0], newerRun[0], newerRun[1]})
+	runs, err := BackupRunSummaries(backupDir, []util.BackupEntry{olderRun[0], newerRun[0], newerRun[1]})
 	if err != nil {
 		t.Fatalf("BackupRunSummaries returned error: %v", err)
 	}

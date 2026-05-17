@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-func TestAcquireTargetLockExclusive(t *testing.T) {
+func TestAcquireBackupLockExclusive(t *testing.T) {
 	dir := t.TempDir()
 
-	lock1, err := AcquireTargetLock(dir)
+	lock1, err := AcquireBackupLock(dir)
 	if err != nil {
 		t.Fatalf("first lock acquisition failed: %v", err)
 	}
 
-	_, err = AcquireTargetLock(dir)
+	_, err = AcquireBackupLock(dir)
 	if err == nil {
 		lock1.Release()
 		t.Fatal("expected second lock acquisition to fail while first is held")
@@ -22,17 +22,17 @@ func TestAcquireTargetLockExclusive(t *testing.T) {
 
 	lock1.Release()
 
-	lock2, err := AcquireTargetLock(dir)
+	lock2, err := AcquireBackupLock(dir)
 	if err != nil {
 		t.Fatalf("lock acquisition after release failed: %v", err)
 	}
 	lock2.Release()
 }
 
-func TestTargetLockReleaseIsIdempotent(t *testing.T) {
+func TestBackupLockReleaseIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 
-	lock, err := AcquireTargetLock(dir)
+	lock, err := AcquireBackupLock(dir)
 	if err != nil {
 		t.Fatalf("lock acquisition failed: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestTargetLockReleaseIsIdempotent(t *testing.T) {
 	lock.Release() // second call must not panic or error
 }
 
-func TestNilTargetLockReleaseIsSafe(t *testing.T) {
-	var l *TargetLock
+func TestNilBackupLockReleaseIsSafe(t *testing.T) {
+	var l *BackupLock
 	l.Release() // must not panic
 }

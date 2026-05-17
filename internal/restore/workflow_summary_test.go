@@ -108,10 +108,10 @@ func TestRestoreSelectionWarningCountZeroForNonIDSelection(t *testing.T) {
 
 func TestStageBackupEntryLocallyReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
 
-	_, err := stageBackupEntryLocally(targetDir, entry, t.TempDir(), nil)
+	_, err := stageBackupEntryLocally(backupDir, entry, t.TempDir(), nil)
 	if err == nil {
 		t.Fatal("expected error when no parts found, got nil")
 	}
@@ -122,10 +122,10 @@ func TestStageBackupEntryLocallyReturnsErrorWhenNoPartsFound(t *testing.T) {
 
 func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Ghost", Date: "2026-03-14", ID: util.BackupID("GHO001")}
 
-	_, err := restoreEntry(entry, targetDir, t.TempDir(), []byte("pw"), nil)
+	_, err := restoreEntry(entry, backupDir, t.TempDir(), []byte("pw"), nil)
 	if err == nil {
 		t.Fatal("expected error when no parts found, got nil")
 	}

@@ -43,11 +43,11 @@ func TestPrintBackupCompletionSummaryNoWarnings(t *testing.T) {
 func TestBackupDirectoryLogsTarBeforeEncryption(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
 		t.Fatalf("failed to create source dir: %v", err)
 	}
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 
@@ -55,14 +55,14 @@ func TestBackupDirectoryLogsTarBeforeEncryption(t *testing.T) {
 		t.Fatalf("failed to write sample file: %v", err)
 	}
 
-	logPath := filepath.Join(targetDir, fmt.Sprintf("order-%d.log", time.Now().UnixNano()))
+	logPath := filepath.Join(backupDir, fmt.Sprintf("order-%d.log", time.Now().UnixNano()))
 	logger, err := util.NewLogger(logPath, "debug")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), backupDir, "2026-03-18", util.BackupID("ORD123"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupDirectory failed: %v", backupErr)
@@ -92,25 +92,25 @@ func TestBackupDirectoryLogsTarBeforeEncryption(t *testing.T) {
 func TestBackupDirectoryLogsIODiagnosticsWhenEnabled(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
 		t.Fatalf("failed to create source dir: %v", err)
 	}
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceDir, "data.bin"), []byte("hello world"), 0o600); err != nil {
 		t.Fatalf("failed to write sample file: %v", err)
 	}
 
-	logPath := filepath.Join(targetDir, fmt.Sprintf("diag-%d.log", time.Now().UnixNano()))
+	logPath := filepath.Join(backupDir, fmt.Sprintf("diag-%d.log", time.Now().UnixNano()))
 	logger, err := util.NewLogger(logPath, "debug")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: true}
-	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("DIA999"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), backupDir, "2026-03-18", util.BackupID("DIA999"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupDirectory failed: %v", backupErr)
@@ -130,7 +130,7 @@ func TestBackupDirectoryLogsIODiagnosticsWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestRunReturnsErrorWhenTargetDirCannotBeCreated(t *testing.T) {
+func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 	t.Parallel()
 	// Use an existing file as the target path so MkdirAll fails.
 	base := t.TempDir()
@@ -139,22 +139,22 @@ func TestRunReturnsErrorWhenTargetDirCannotBeCreated(t *testing.T) {
 		t.Fatalf("failed to create file: %v", err)
 	}
 	// Append a subdir to the file path — MkdirAll will fail.
-	cfg := &util.Config{TargetDirectory: filepath.Join(filePath, "sub")}
+	cfg := &util.Config{BackupDirectory: filepath.Join(filePath, "sub")}
 	err := Run(cfg, "")
 	if err == nil {
 		t.Fatal("expected error when target dir cannot be created, got nil")
 	}
-	if !strings.Contains(err.Error(), "Failed to create target directory") {
+	if !strings.Contains(err.Error(), "Failed to create backup directory") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	cfg := &util.Config{
-		TargetDirectory:  targetDir,
-		SourceDirectories: []string{filepath.Join(targetDir, "nonexistent-source")},
+		BackupDirectory:  backupDir,
+		SourceDirectories: []string{filepath.Join(backupDir, "nonexistent-source")},
 	}
 	err := Run(cfg, "")
 	if err == nil {
@@ -168,7 +168,7 @@ func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	// NOT parallel — modifies os.Stdin.
 	sourceDir := t.TempDir()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(sourceDir, "f.txt"), []byte("data"), 0o600); err != nil {
 		t.Fatalf("failed to create source file: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	t.Cleanup(func() { os.Stdin = origStdin; r.Close() })
 
 	cfg := &util.Config{
-		TargetDirectory:  targetDir,
+		BackupDirectory:  backupDir,
 		SourceDirectories: []string{sourceDir},
 	}
 	var runErr error
@@ -202,11 +202,11 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
 		t.Fatalf("failed to create source dir: %v", err)
 	}
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 
@@ -214,14 +214,14 @@ func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
 		t.Fatalf("failed to write sample file: %v", err)
 	}
 
-	logPath := filepath.Join(targetDir, fmt.Sprintf("order-%d.log", time.Now().UnixNano()))
+	logPath := filepath.Join(backupDir, fmt.Sprintf("order-%d.log", time.Now().UnixNano()))
 	logger, err := util.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: false}
-	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), targetDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
+	_, backupErr := backupDirectory(sourceDir, filepath.Base(sourceDir), backupDir, "2026-03-18", util.BackupID("ORD124"), []byte("pw"), security.DefaultArgon2Params, cfg, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupDirectory failed: %v", backupErr)

@@ -16,7 +16,7 @@ func TestRestoreSelectedEntriesRoundTrip(t *testing.T) {
 
 	total, err := restoreSelectedEntries(
 		[]util.BackupEntry{fx.Entry},
-		fx.TargetDir,
+		fx.BackupDir,
 		fx.RestoreRoot,
 		password,
 		nil,
@@ -41,7 +41,7 @@ func TestRestoreSelectedEntriesWrongPasswordFails(t *testing.T) {
 
 	_, err := restoreSelectedEntries(
 		[]util.BackupEntry{fx.Entry},
-		fx.TargetDir,
+		fx.BackupDir,
 		fx.RestoreRoot,
 		[]byte("wrong-password"),
 		nil,
@@ -61,7 +61,7 @@ func TestRestoreSelectedEntriesWithStagingRoundTrip(t *testing.T) {
 
 	total, err := restoreSelectedEntries(
 		[]util.BackupEntry{fx.Entry},
-		fx.TargetDir,
+		fx.BackupDir,
 		fx.RestoreRoot,
 		password,
 		nil,

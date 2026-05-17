@@ -11,7 +11,7 @@ import (
 func TestVerifySelectedEntriesSucceeds(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-selected-pass"))
 
-	if err := verifySelectedEntries([]util.BackupEntry{fx.Entry}, fx.TargetDir, fx.Password, nil); err != nil {
+	if err := verifySelectedEntries([]util.BackupEntry{fx.Entry}, fx.BackupDir, fx.Password, nil); err != nil {
 		t.Fatalf("verifySelectedEntries failed: %v", err)
 	}
 }
@@ -21,7 +21,7 @@ func TestVerifySelectedEntriesRejectsWrongPassword(t *testing.T) {
 
 	err := verifySelectedEntries(
 		[]util.BackupEntry{fx.Entry},
-		fx.TargetDir,
+		fx.BackupDir,
 		[]byte("wrong-password"),
 		nil,
 	)
@@ -40,11 +40,11 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	// Create a second independent backup in the same target dir.
 	password2 := []byte("multi-verify-pass")
 	entry2 := util.BackupEntry{DirectoryName: fx1.Entry.DirectoryName + "2", Date: "2026-04-01", ID: util.BackupID("VER002")}
-	testutil.CreateBackupInDir(t, fx1.TargetDir, entry2, password2)
+	testutil.CreateBackupInDir(t, fx1.BackupDir, entry2, password2)
 
 	err := verifySelectedEntries(
 		[]util.BackupEntry{fx1.Entry, entry2},
-		fx1.TargetDir,
+		fx1.BackupDir,
 		password,
 		nil,
 	)

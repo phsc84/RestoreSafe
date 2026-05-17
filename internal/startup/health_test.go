@@ -226,12 +226,12 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 		t.Fatalf("failed to create shared source: %v", err)
 	}
 	if err := os.MkdirAll(target, 0o750); err != nil {
-		t.Fatalf("failed to create target directory: %v", err)
+		t.Fatalf("failed to create backup directory: %v", err)
 	}
 
 	cfg := &util.Config{
 		SourceDirectories: []string{shared, shared},
-		TargetDirectory:  target,
+		BackupDirectory:  target,
 		SplitSizeMB:   64,
 		LogLevel:      "info",
 	}
@@ -277,12 +277,12 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 		t.Fatalf("failed to create fifth source: %v", err)
 	}
 	if err := os.MkdirAll(target, 0o750); err != nil {
-		t.Fatalf("failed to create target directory: %v", err)
+		t.Fatalf("failed to create backup directory: %v", err)
 	}
 
 	cfg := &util.Config{
 		SourceDirectories: []string{first, second, third, fourth, fifth},
-		TargetDirectory:  target,
+		BackupDirectory:  target,
 		SplitSizeMB:   64,
 		LogLevel:      "info",
 	}

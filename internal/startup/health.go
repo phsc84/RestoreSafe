@@ -24,7 +24,7 @@ const (
 const (
 	healthScopeConfig          = "Config"
 	healthScopeSourceDirectory    = "Source directory(s)"
-	healthScopeTargetDirectory    = "Backup directory"
+	healthScopeBackupDirectory    = "Backup directory"
 	healthScopeTempDirectory   = "Temp directory"
 	healthScopeYubiKey         = "YubiKey"
 	healthScopeBackupInventory = "Backup inventory"
@@ -48,7 +48,7 @@ type HealthCheckResult struct {
 func (r HealthCheckResult) BlocksBackup() bool {
 	return r.errorScopes[healthScopeConfig] ||
 		r.errorScopes[healthScopeSourceDirectory] ||
-		r.errorScopes[healthScopeTargetDirectory] ||
+		r.errorScopes[healthScopeBackupDirectory] ||
 		r.errorScopes[healthScopeYubiKey] ||
 		r.errorScopes[healthScopeTempDirectory]
 }
@@ -56,7 +56,7 @@ func (r HealthCheckResult) BlocksBackup() bool {
 // BlocksRestoreOrVerify reports whether any health check error prevents restore or verify.
 func (r HealthCheckResult) BlocksRestoreOrVerify() bool {
 	return r.errorScopes[healthScopeConfig] ||
-		r.errorScopes[healthScopeTargetDirectory] ||
+		r.errorScopes[healthScopeBackupDirectory] ||
 		r.errorScopes[healthScopeYubiKey]
 }
 
@@ -79,7 +79,7 @@ func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) HealthCh
 }
 
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
-	targetDir := util.ResolveDir(cfg.TargetDirectory, exeDir)
+	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
 	items := make([]healthItem, 0)
 
@@ -110,9 +110,9 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 		}
 	}
 
-	items = append(items, checkTargetDirectoryHealth(targetDir)...)
+	items = append(items, checkBackupDirectoryHealth(backupDir)...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
-	items = append(items, checkBackupInventoryHealth(targetDir)...)
+	items = append(items, checkBackupInventoryHealth(backupDir)...)
 
 	// Prefer a source that shares the target volume so staging is detected when
 	// only some sources are on the same drive as the target (mirrors backup/workflow.go).
@@ -122,17 +122,17 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 			if stagingSourceDir == "" {
 				stagingSourceDir = src.Resolved
 			}
-			if util.SameVolume(src.Resolved, targetDir) {
+			if util.SameVolume(src.Resolved, backupDir) {
 				stagingSourceDir = src.Resolved
 				break
 			}
 		}
 	}
-	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, targetDir, os.TempDir())
+	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, backupDir, os.TempDir())
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
 			isNote: true,
-			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", util.VolumeDisplay(targetDir)),
+			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", util.VolumeDisplay(backupDir)),
 		})
 		items = append(items, checkTempDirHealth()...)
 	}
@@ -155,36 +155,36 @@ func checkConfigFileHealth(configPathDisplay string) []healthItem {
 	}}
 }
 
-func checkTargetDirectoryHealth(targetDir string) []healthItem {
-	info, err := os.Stat(targetDir)
+func checkBackupDirectoryHealth(backupDir string) []healthItem {
+	info, err := os.Stat(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []healthItem{{
 				Severity: healthWarn,
-				Scope:    healthScopeTargetDirectory,
-				Detail:   fmt.Sprintf("%s does not exist yet and will be created during backup", targetDir),
+				Scope:    healthScopeBackupDirectory,
+				Detail:   fmt.Sprintf("%s does not exist yet and will be created during backup", backupDir),
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    healthScopeTargetDirectory,
-			Detail:   fmt.Sprintf("%s → %v. Remedy: Check target_directory in config.yaml and ensure read access.", targetDir, err),
+			Scope:    healthScopeBackupDirectory,
+			Detail:   fmt.Sprintf("%s → %v. Remedy: Check backup_directory in config.yaml and ensure read access.", backupDir, err),
 		}}
 	}
 
 	if !info.IsDir() {
 		return []healthItem{{
 			Severity: healthError,
-			Scope:    healthScopeTargetDirectory,
-			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a directory path, not a file path.", targetDir),
+			Scope:    healthScopeBackupDirectory,
+			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a directory path, not a file path.", backupDir),
 		}}
 	}
 
 	return probeWriteAccess(
-		targetDir,
-		healthScopeTargetDirectory,
-		"Adjust write permissions or choose a different target_directory.",
-		"Check delete permissions in target_directory.",
+		backupDir,
+		healthScopeBackupDirectory,
+		"Adjust write permissions or choose a different backup_directory.",
+		"Check delete permissions in backup_directory.",
 	)
 }
 
@@ -251,20 +251,20 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 	}}
 }
 
-func checkBackupInventoryHealth(targetDir string) []healthItem {
-	index, err := catalog.ScanBackups(targetDir)
+func checkBackupInventoryHealth(backupDir string) []healthItem {
+	index, err := catalog.ScanBackups(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []healthItem{{
 				Severity: healthWarn,
 				Scope:    healthScopeBackupInventory,
-				Detail:   "Target directory does not exist yet, no backups to inspect",
+				Detail:   "Backup directory does not exist yet, no backups to inspect",
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in target_directory.", err),
+			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in backup directory.", err),
 		}}
 	}
 
@@ -272,7 +272,7 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    healthScopeBackupInventory,
-			Detail:   "No backup sets found. Remedy: Check target_directory or create a new backup run.",
+			Detail:   "No backup sets found. Remedy: Check backup directory or create a new backup run.",
 		}}
 	}
 
@@ -282,20 +282,20 @@ func checkBackupInventoryHealth(targetDir string) []healthItem {
 		Detail:   fmt.Sprintf("Found %d backup set(s)", len(index)),
 	}}
 
-	for _, item := range buildBackupInventoryIssueItems(targetDir, index) {
+	for _, item := range buildBackupInventoryIssueItems(backupDir, index) {
 		items = append(items, item)
 	}
 
 	return items
 }
 
-func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) []healthItem {
-	challengeFiles, err := listChallengeFiles(targetDir)
+func buildBackupInventoryIssueItems(backupDir string, index []util.BackupEntry) []healthItem {
+	challengeFiles, err := listChallengeFiles(backupDir)
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in target_directory.", err),
+			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in backup directory.", err),
 		}}
 	}
 
@@ -307,7 +307,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	structuralIssues := 0
 
 	for _, entry := range sorted {
-		_, _, err := catalog.InspectBackupParts(targetDir, entry)
+		_, _, err := catalog.InspectBackupParts(backupDir, entry)
 		entryLabel := entry.String()
 		if err != nil {
 			structuralIssues++
@@ -318,7 +318,7 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 			})
 		}
 
-		challengeBase := filepath.Base(util.ChallengeFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID))
+		challengeBase := filepath.Base(util.ChallengeFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID))
 		hasChallenge := challengeFiles[challengeBase]
 		entryHasChallenge[entryLabel] = hasChallenge
 		expectedChallengeFiles[challengeBase] = true
@@ -355,8 +355,8 @@ func buildBackupInventoryIssueItems(targetDir string, index []util.BackupEntry) 
 	return items
 }
 
-func listChallengeFiles(targetDir string) (map[string]bool, error) {
-	entries, err := os.ReadDir(targetDir)
+func listChallengeFiles(backupDir string) (map[string]bool, error) {
+	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return nil, err
 	}

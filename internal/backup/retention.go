@@ -13,7 +13,7 @@ import (
 
 var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
-func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupSource, log *util.Logger) error {
+func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupSource, log *util.Logger) error {
 	if retentionKeep <= 0 {
 		log.Info("Retention cleanup disabled (retention_keep=%d)", retentionKeep)
 		return nil
@@ -34,7 +34,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		return nil
 	}
 
-	index, err := catalog.ScanBackups(targetDir)
+	index, err := catalog.ScanBackups(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backups for retention: %w", err)
 	}
@@ -49,7 +49,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		if !directorySet[entry.DirectoryName] {
 			continue
 		}
-		newestTime, err := catalog.NewestPartModTime(targetDir, entry)
+		newestTime, err := catalog.NewestPartModTime(backupDir, entry)
 		if err != nil {
 			log.Warn("Retention cleanup skipped: failed to inspect backup set %s (%v)", entry.String(), err)
 			log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
@@ -79,9 +79,9 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 
 		toDelete := entries[retentionKeep:]
 		for _, candidate := range toDelete {
-			removed, err := deleteBackupEntryFiles(targetDir, candidate.entry)
+			removed, err := deleteBackupEntryFiles(backupDir, candidate.entry)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the target directory.", candidate.entry.String(), err)
+				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", candidate.entry.String(), err)
 			}
 			deletedSets++
 			deletedFiles += removed
@@ -90,7 +90,7 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 		log.Info("Retention [%s]: deleted %d old backup set(s), keep=%d", directoryName, len(toDelete), retentionKeep)
 	}
 
-	deletedLogs, err := deleteOrphanLogFiles(targetDir)
+	deletedLogs, err := deleteOrphanLogFiles(backupDir)
 	if err != nil {
 		log.Warn("Retention log cleanup failed: %v", err)
 	}
@@ -99,9 +99,9 @@ func applyRetentionPolicy(targetDir string, retentionKeep int, sources []backupS
 	return nil
 }
 
-func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, error) {
+func deleteBackupEntryFiles(backupDir string, entry util.BackupEntry) (int, error) {
 	removed := 0
-	parts, err := catalog.CollectParts(targetDir, entry)
+	parts, err := catalog.CollectParts(backupDir, entry)
 	if err != nil {
 		return removed, err
 	}
@@ -116,7 +116,7 @@ func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, erro
 		removed++
 	}
 
-	challengePath := util.ChallengeFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID)
+	challengePath := util.ChallengeFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID)
 	if err := os.Remove(challengePath); err == nil {
 		removed++
 	} else if !os.IsNotExist(err) {
@@ -126,8 +126,8 @@ func deleteBackupEntryFiles(targetDir string, entry util.BackupEntry) (int, erro
 	return removed, nil
 }
 
-func deleteOrphanLogFiles(targetDir string) (int, error) {
-	index, err := catalog.ScanBackups(targetDir)
+func deleteOrphanLogFiles(backupDir string) (int, error) {
+	index, err := catalog.ScanBackups(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil
@@ -140,7 +140,7 @@ func deleteOrphanLogFiles(targetDir string) (int, error) {
 		activeRuns[entry.RunKey()] = true
 	}
 
-	des, err := os.ReadDir(targetDir)
+	des, err := os.ReadDir(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return 0, nil
@@ -164,7 +164,7 @@ func deleteOrphanLogFiles(targetDir string) (int, error) {
 			continue
 		}
 
-		logPath := filepath.Join(targetDir, de.Name())
+		logPath := filepath.Join(backupDir, de.Name())
 		err := os.Remove(logPath)
 		if err != nil {
 			if os.IsNotExist(err) {

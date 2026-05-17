@@ -90,16 +90,16 @@ func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
 
 func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "info"}
 	sources := []backupSource{
-		{Resolved: filepath.Join(targetDir, "Docs"), BackupName: "CustomDocs", Err: errors.New("access denied")},
-		{Resolved: filepath.Join(targetDir, "Photos"), Warning: "Large source"},
+		{Resolved: filepath.Join(backupDir, "Docs"), BackupName: "CustomDocs", Err: errors.New("access denied")},
+		{Resolved: filepath.Join(backupDir, "Photos"), Warning: "Large source"},
 	}
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -122,9 +122,9 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -136,10 +136,10 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	warnLinePrefix := "→ Source and target directories are on the same drive/share"
+	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
 	if strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
 	}
@@ -148,15 +148,15 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
 	t.Parallel()
 	cfg := &util.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: util.AuthModePassword, LogLevel: "debug"}
-	targetDir := `\\server\share\target`
+	backupDir := `\\server\share\target`
 	sources := []backupSource{{Resolved: `\\server\share\source`}}
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
-	warnLinePrefix := "→ Source and target directories are on the same drive/share"
+	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
 	if !strings.Contains(output, warnLinePrefix) {
 		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
 	}
@@ -165,9 +165,9 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -179,7 +179,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -202,9 +202,9 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -216,7 +216,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return errors.New("no YubiKey detected") })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -239,10 +239,10 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
 	localStagingDir := filepath.Join(tempRoot, "local-staging")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -257,7 +257,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
 	localStagingLine := "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive"
@@ -279,9 +279,9 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -293,7 +293,7 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
 	if strings.Contains(output, "Temp directory:") {
@@ -371,11 +371,11 @@ func TestValidateTargetSpacePassesWhenSpaceIsSufficient(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source")
-	targetDir := filepath.Join(root, "target")
+	backupDir := filepath.Join(root, "target")
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
 		t.Fatalf("failed to create source dir: %v", err)
 	}
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(sourceDir, "small.bin"), []byte("x"), 0o600); err != nil {
@@ -383,7 +383,7 @@ func TestValidateTargetSpacePassesWhenSpaceIsSufficient(t *testing.T) {
 	}
 
 	sources := []backupSource{{Resolved: sourceDir}}
-	if err := validateTargetSpaceForBackup(targetDir, sources); err != nil {
+	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
 		t.Fatalf("expected no error when target space is sufficient, got: %v", err)
 	}
 }
@@ -423,9 +423,9 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	t.Parallel()
 
 	tempRoot := t.TempDir()
-	targetDir := filepath.Join(tempRoot, "target")
+	backupDir := filepath.Join(tempRoot, "target")
 	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(targetDir, 0o750); err != nil {
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		t.Fatalf("failed to create target dir: %v", err)
 	}
 	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
@@ -441,16 +441,16 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesSourceSizeInSource
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, targetDir, sources, stagingPlan, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil })
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
 	targetIdx := strings.Index(output, "Backup directory:")
 	if sourceIdx < 0 || targetIdx < 0 {
-		t.Fatalf("expected Source directory(s) and Target directory sections, got: %q", output)
+		t.Fatalf("expected Source directory(s) and Backup directory sections, got: %q", output)
 	}
 	if sourceIdx > targetIdx {
-		t.Fatalf("expected Source directory(s) section before Target directory section, got: %q", output)
+		t.Fatalf("expected Source directory(s) section before Backup directory section, got: %q", output)
 	}
 	if !strings.Contains(output, "Needed disk space (total):") {
 		t.Fatalf("expected needed disk space line in Source directory(s) section, got: %q", output)

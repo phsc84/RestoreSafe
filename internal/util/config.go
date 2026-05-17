@@ -48,7 +48,7 @@ type Argon2Config struct {
 // Config holds all application configuration.
 type Config struct {
 	SourceDirectories      []string     `yaml:"source_directories"`
-	TargetDirectory       string       `yaml:"target_directory"`
+	BackupDirectory       string       `yaml:"backup_directory"`
 	SplitSizeMB        int64        `yaml:"split_size_mb"`
 	RetentionKeep      int          `yaml:"retention_keep"`
 	LogLevel           string       `yaml:"log_level"`
@@ -118,8 +118,8 @@ func (c *Config) validate() error {
 	if len(c.SourceDirectories) == 0 {
 		return fmt.Errorf("No 'source_directories' specified in config file. Remedy: Add at least one source directory under 'source_directories', e.g. ['C:/Users/Name/Documents'].")
 	}
-	if c.TargetDirectory == "" {
-		return fmt.Errorf("No 'target_directory' specified in config file. Remedy: Set a target directory, e.g. 'C:/Backups'.")
+	if c.BackupDirectory == "" {
+		return fmt.Errorf("No 'backup_directory' specified in config file. Remedy: Set a backup directory, e.g. 'C:/Backups'.")
 	}
 	switch c.LogLevel {
 	case "debug", "info":

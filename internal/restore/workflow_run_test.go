@@ -13,7 +13,7 @@ import (
 func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 	t.Parallel()
 	emptyDir := t.TempDir()
-	cfg := &util.Config{TargetDirectory: emptyDir}
+	cfg := &util.Config{BackupDirectory: emptyDir}
 
 	output := testutil.CaptureStdout(t, func() {
 		if err := Run(cfg, ""); err != nil {
@@ -26,16 +26,16 @@ func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 	}
 }
 
-func TestRunReturnsErrorWhenTargetDirNotFound(t *testing.T) {
+func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
 	t.Parallel()
 	nonExistent := filepath.Join(t.TempDir(), "does-not-exist")
-	cfg := &util.Config{TargetDirectory: nonExistent}
+	cfg := &util.Config{BackupDirectory: nonExistent}
 
 	err := Run(cfg, "")
 	if err == nil {
 		t.Fatal("expected error for non-existent target dir, got nil")
 	}
-	if !strings.Contains(err.Error(), "Failed to scan target directory") {
+	if !strings.Contains(err.Error(), "Failed to scan backup directory") {
 		t.Fatalf("expected scan-error message, got: %v", err)
 	}
 }
@@ -59,7 +59,7 @@ func TestRunCancelsSelectionWhenUserEntersQ(t *testing.T) {
 		r.Close()
 	})
 
-	cfg := &util.Config{TargetDirectory: fx.TargetDir}
+	cfg := &util.Config{BackupDirectory: fx.BackupDir}
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
 		runErr = Run(cfg, "")
@@ -94,7 +94,7 @@ func TestRunReturnsErrorWhenDestinationPromptClosed(t *testing.T) {
 		r.Close()
 	})
 
-	cfg := &util.Config{TargetDirectory: fx.TargetDir}
+	cfg := &util.Config{BackupDirectory: fx.BackupDir}
 	var runErr error
 	testutil.CaptureStdout(t, func() {
 		runErr = Run(cfg, "")

@@ -14,11 +14,11 @@ const maxPasswordAttempts = 3
 
 var readLineFn = security.ReadLine
 
-func OpenLogger(cfg *util.Config, targetDir string, rep util.BackupEntry) *util.Logger {
-	logPath := util.LogFileName(targetDir, rep.Date, rep.ID)
+func OpenLogger(cfg *util.Config, backupDir string, rep util.BackupEntry) *util.Logger {
+	logPath := util.LogFileName(backupDir, rep.Date, rep.ID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to open log file: %v. Remedy: Check write permissions in target_directory; operation continues without a log file.\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to open log file: %v. Remedy: Check write permissions in backup directory; operation continues without a log file.\n", err)
 		return util.NewConsoleLogger(cfg.LogLevel)
 	}
 	return log
@@ -70,12 +70,12 @@ func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {
 // In YubiKey-only mode (no password factor), the retry loop runs at most once since
 // there is no password that can be corrected between attempts.
 func ReadPasswordWithRetry(
-	targetDir string,
+	backupDir string,
 	rep util.BackupEntry,
 	passwordPrompt string,
 	log *util.Logger,
 ) ([]byte, error) {
-	challengePath, requiresYubiKey, err := catalog.FindChallengeFileForRun(targetDir, rep.Date, rep.ID)
+	challengePath, requiresYubiKey, err := catalog.FindChallengeFileForRun(backupDir, rep.Date, rep.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func ReadPasswordWithRetry(
 		}
 
 		// Verify password by attempting a trial decrypt.
-		parts, err := catalog.CollectParts(targetDir, rep)
+		parts, err := catalog.CollectParts(backupDir, rep)
 		if err != nil {
 			security.ZeroBytes(password)
 			return nil, err

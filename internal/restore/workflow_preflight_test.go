@@ -14,13 +14,13 @@ import (
 func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 
 	entryWithParts := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 	entryWithoutParts := util.BackupEntry{DirectoryName: "Missing", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part := util.PartFileName(targetDir, entryWithParts.DirectoryName, entryWithParts.Date, entryWithParts.ID, 1)
+	part := util.PartFileName(backupDir, entryWithParts.DirectoryName, entryWithParts.Date, entryWithParts.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 		t.Fatalf("failed to create restore output dir: %v", err)
 	}
 
-	items := buildRestorePreflight([]util.BackupEntry{entryWithParts, entryWithoutParts}, targetDir, restorePath)
+	items := buildRestorePreflight([]util.BackupEntry{entryWithParts, entryWithoutParts}, backupDir, restorePath)
 	if len(items) != 2 {
 		t.Fatalf("expected 2 preflight items, got %d", len(items))
 	}
@@ -48,7 +48,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 
 func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 	outputDir := filepath.Join(restorePath, "Docs")
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}
@@ -56,11 +56,11 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 		Entry:        entry,
 		PartCount:    4,
 		OutputDir:    outputDir,
-		OutputDirErr: errors.New("Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."),
+		OutputDirErr: errors.New("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory."),
 	}}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
 	output := sb.String()
 
 	if strings.Contains(output, "Restore target :") {
@@ -68,7 +68,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}
 	selectionLine := "  [OK] " + entry.String() + " (parts: 4)"
 	directoryLine := "  [ERROR] " + filepath.ToSlash(outputDir)
-	errorText := "Target directory already exists. Remedy: Choose a different restore destination or rename/delete the existing target directory."
+	errorText := "Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory."
 	if !strings.Contains(output, selectionLine) {
 		t.Fatalf("expected backup selection to remain an OK archive entry, got: %q", output)
 	}
@@ -85,12 +85,12 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 
 func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, backupDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return nil })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -112,12 +112,12 @@ func TestPrintRestorePreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 
 func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	t.Parallel()
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{Entry: util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")}, PartCount: 1}}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, backupDir, restorePath, items, true, false, operation.LocalStagingPlan{}, func() error { return errors.New("no YubiKey detected") })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -140,11 +140,11 @@ func TestPrintRestorePreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) 
 func TestBuildRestorePreflightIncludesTotalSizeBytes(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
 
-	part := util.PartFileName(targetDir, entry.DirectoryName, entry.Date, entry.ID, 1)
+	part := util.PartFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID, 1)
 	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestBuildRestorePreflightIncludesTotalSizeBytes(t *testing.T) {
 		t.Fatalf("failed to create part file: %v", err)
 	}
 
-	items := buildRestorePreflight([]util.BackupEntry{entry}, targetDir, restorePath)
+	items := buildRestorePreflight([]util.BackupEntry{entry}, backupDir, restorePath)
 	if len(items) != 1 {
 		t.Fatalf("expected one preflight item, got %d", len(items))
 	}
@@ -167,7 +167,7 @@ func TestBuildRestorePreflightIncludesTotalSizeBytes(t *testing.T) {
 func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	t.Parallel()
 
-	targetDir := t.TempDir()
+	backupDir := t.TempDir()
 	restorePath := t.TempDir()
 	items := []restorePreflightItem{{
 		Entry:          util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-20", ID: util.BackupID("ABC123")},
@@ -176,7 +176,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 	}}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, targetDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil })
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR] Insufficient free space for restore:") {

@@ -19,21 +19,21 @@ type backupCounters struct {
 	outWriteCalls atomic.Int64
 }
 
-func newSplitOutput(targetDir, directoryName, date string, id util.BackupID, splitSizeMB int64) (*util.Writer, *bufio.Writer) {
+func newSplitOutput(backupDir, directoryName, date string, id util.BackupID, splitSizeMB int64) (*util.Writer, *bufio.Writer) {
 	splitSizeBytes := splitSizeMB * 1024 * 1024
 	nameFunc := func(seq int) string {
-		return util.PartFileName(targetDir, directoryName, date, id, seq)
+		return util.PartFileName(backupDir, directoryName, date, id, seq)
 	}
 	sw := util.NewWriter(nameFunc, splitSizeBytes)
 	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
 	return sw, bw
 }
 
-func startTarProducer(log *util.Logger, srcDir, targetDir string, pw *io.PipeWriter) <-chan error {
+func startTarProducer(log *util.Logger, srcDir, backupDir string, pw *io.PipeWriter) <-chan error {
 	tarErrCh := make(chan error, 1)
 	log.Debug("Starting TAR creation for: %s", srcDir)
 	go func() {
-		err := util.WriteTar(pw, srcDir, targetDir)
+		err := util.WriteTar(pw, srcDir, backupDir)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
 	}()
@@ -96,10 +96,10 @@ func logPartSummary(sw *util.Writer, directoryName string, ioDiagnostics bool, c
 
 type stagedFile struct{ name, src, dst string }
 
-// copyBackupResults copies all encrypted part files and challenge files from staging directory to target directory.
+// copyBackupResults copies all encrypted part files and challenge files from staging directory to backup directory.
 // directoryOrder specifies the directory names in processing order; if nil, directories are sorted alphabetically.
 // directorySourcePaths maps directory name to original source path for display in log output.
-func copyBackupResults(stagingDir, targetDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
+func copyBackupResults(stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
@@ -113,7 +113,7 @@ func copyBackupResults(stagingDir, targetDir string, directoryOrder []string, di
 		}
 		name := entry.Name()
 		srcPath := filepath.Join(stagingDir, name)
-		dstPath := filepath.Join(targetDir, name)
+		dstPath := filepath.Join(backupDir, name)
 		switch filepath.Ext(name) {
 		case ".enc":
 			if backupEntry, _, ok := util.ParsePartFileName(name); ok {

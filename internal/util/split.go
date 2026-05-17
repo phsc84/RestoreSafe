@@ -123,7 +123,7 @@ func (s *Writer) openNext() error {
 	path := filepath.Clean(s.nameFunc(s.seq))
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return fmt.Errorf("Failed to create target directory: %w", err)
+		return fmt.Errorf("Failed to create output directory: %w", err)
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
