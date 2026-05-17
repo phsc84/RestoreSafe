@@ -199,10 +199,10 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 	}
 
-	// Copy results from staging to target if needed.
+	// Move results from staging to backup directory if needed.
 	if staging.Dir != "" {
-		if err := copyBackupResults(workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
-			return fmt.Errorf("Failed to copy staged backup to backup directory: %w", err)
+		if err := moveBackupResults(workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
+			return fmt.Errorf("Failed to move staged backup to backup directory: %w", err)
 		}
 	}
 

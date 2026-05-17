@@ -6,7 +6,6 @@ import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -112,20 +111,5 @@ func TestRestoreSelectionWarningCountMultipleDatesWarns(t *testing.T) {
 	}
 	if got := restoreSelectionWarningCount("ABC123", index); got != 1 {
 		t.Fatalf("expected 1 warning for multi-date backup ID, got %d", got)
-	}
-}
-
-func TestSummarizeNames(t *testing.T) {
-	t.Parallel()
-
-	if got := summarizeNames(nil); got != "none" {
-		t.Fatalf("expected 'none' for empty names, got %q", got)
-	}
-	if got := summarizeNames([]string{"A", "B"}); got != "A, B" {
-		t.Fatalf("unexpected summary for 2 names: %q", got)
-	}
-	got := summarizeNames([]string{"A", "B", "C", "D", "E"})
-	if !strings.Contains(got, "+2 more") {
-		t.Fatalf("expected '+2 more' for 5 names, got %q", got)
 	}
 }

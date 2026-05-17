@@ -137,10 +137,9 @@ func reportOperationError(action string, err error) {
 }
 
 func printStartupBanner(version string) {
-	fmt.Println("========================================")
-	fmt.Printf("RestoreSafe v%s\n", version)
-	fmt.Println("Secure backup application")
-	fmt.Println("========================================")
+	fmt.Println("======================================================")
+	fmt.Printf("RestoreSafe v%s - Secure backup application\n", version)
+	fmt.Println("======================================================")
 	fmt.Println()
 }
 

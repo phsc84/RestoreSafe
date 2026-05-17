@@ -96,10 +96,10 @@ func logPartSummary(sw *util.Writer, directoryName string, ioDiagnostics bool, c
 
 type stagedFile struct{ name, src, dst string }
 
-// copyBackupResults copies all encrypted part files and challenge files from staging directory to backup directory.
+// moveBackupResults moves all encrypted part files and challenge files from staging directory to backup directory.
 // directoryOrder specifies the directory names in processing order; if nil, directories are sorted alphabetically.
 // directorySourcePaths maps directory name to original source path for display in log output.
-func copyBackupResults(stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
+func moveBackupResults(stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
@@ -133,6 +133,12 @@ func copyBackupResults(stagingDir, backupDir string, directoryOrder []string, di
 		sort.Strings(order)
 	}
 
+	if log != nil {
+		log.Info("Move staged files to final backup directory.")
+		log.Info("  From: %s", filepath.ToSlash(stagingDir))
+		log.Info("  To: %s", filepath.ToSlash(backupDir))
+	}
+
 	for _, directoryName := range order {
 		files := filesByDirectory[directoryName]
 		if len(files) == 0 {
@@ -144,36 +150,36 @@ func copyBackupResults(stagingDir, backupDir string, directoryOrder []string, di
 			if srcPath == "" {
 				srcPath = directoryName
 			}
-			log.Info("Copying backup files of source directory: %s", filepath.ToSlash(srcPath))
+			log.Info("Moving backup files of source directory: %s", filepath.ToSlash(srcPath))
 		}
 
-		if err := copyDirectoryFiles(log, directoryName, files); err != nil {
+		if err := moveDirectoryFiles(log, directoryName, files); err != nil {
 			return err
 		}
 	}
 
 	for _, f := range challengeFiles {
 		if err := util.CopyFile(f.src, f.dst); err != nil {
-			return fmt.Errorf("Failed to copy %s to target: %w", f.name, err)
+			return fmt.Errorf("Failed to move %s to backup directory: %w", f.name, err)
 		}
 		if log != nil {
-			log.Debug("Copied challenge file to target: %s", f.name)
+			log.Debug("Moved challenge file to backup directory: %s", f.name)
 		}
 	}
 
 	return nil
 }
 
-// copyDirectoryFiles copies a single directory's staged part files to the target,
+// moveDirectoryFiles moves a single directory's staged part files to the backup directory,
 // logging progress with a deferred stop so the goroutine is always cleaned up.
-func copyDirectoryFiles(log *util.Logger, directoryName string, files []stagedFile) error {
+func moveDirectoryFiles(log *util.Logger, directoryName string, files []stagedFile) error {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	stopProgress := operation.StartProgressTracking(log, directoryName, "copied", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
 	for _, f := range files {
 		if log != nil {
-			log.Info("  Copy: %s", f.name)
+			log.Info("  Move: %s", f.name)
 		}
 		if err := copyFileWithCounters(f.src, f.dst, &inBytes, &outBytes, &outWriteCalls); err != nil {
 			return err
@@ -181,7 +187,7 @@ func copyDirectoryFiles(log *util.Logger, directoryName string, files []stagedFi
 	}
 
 	if log != nil {
-		log.Info("  Copied: %d part file(s) - [%s] successfully copied", len(files), directoryName)
+		log.Info("  Moved: %d part file(s) - [%s] successfully moved", len(files), directoryName)
 	}
 	return nil
 }

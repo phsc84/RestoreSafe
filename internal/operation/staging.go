@@ -48,8 +48,12 @@ func CleanupStagingDir(stagingDir string, log *util.Logger) {
 	if stagingDir == "" {
 		return
 	}
-	if err := os.RemoveAll(stagingDir); err != nil && log != nil {
-		log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagingDir), err)
+	if err := os.RemoveAll(stagingDir); err != nil {
+		if log != nil {
+			log.Warn("Failed to remove staging directory %s: %v", filepath.ToSlash(stagingDir), err)
+		}
+	} else if log != nil {
+		log.Info("Removed staging directory: %s", filepath.ToSlash(stagingDir))
 	}
 }
 

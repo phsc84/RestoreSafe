@@ -34,14 +34,20 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 		return err
 	}
+	warningCount := verifySelectionWarningCount(selection, index)
 
 	requiresYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(backupDir, selected[0])
 	if err != nil {
 		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup directory and existing .challenge files.", err)
 	}
 
+	logPath := util.LogFileName(backupDir, selected[0].Date, selected[0].ID)
 	log := operation.OpenLogger(cfg, backupDir, selected[0])
+	if log.IsConsoleOnly() {
+		warningCount++
+	}
 	defer log.Close()
+
 	preflight := buildVerifyPreflight(selected, backupDir)
 	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, requiresYubiKey, yubiKeyOnly, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
@@ -65,13 +71,22 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println()
-	log.Info("Verification started - ID: %s, date: %s, selection: %q", string(selected[0].ID), selected[0].Date, selection)
-	log.Info("Verifying %d selected item(s)", len(selected))
-	if err := verifySelectedEntries(selected, backupDir, password, log); err != nil {
+	log.Info("Verification started - ID: %s, date: %s", string(selected[0].ID), selected[0].Date)
+	log.Info("Verification selection:")
+	for _, entry := range selected {
+		log.Info("  %s", entry.String())
+	}
+
+	_, err = verifySelectedEntries(selected, backupDir, password, log)
+	if err != nil {
 		return err
 	}
 
 	log.Info("Verification completed successfully.")
+	fmt.Printf("\nLog file: %s\n", logPath)
+	if warningCount > 0 {
+		fmt.Printf("Warnings: %d\n", warningCount)
+	}
 	return nil
 }
 
@@ -111,8 +126,8 @@ func printVerifyPreflightWithYubiKeyCheck(
 	var issues []string
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Verify preflight")
-	fmt.Fprintln(w, "----------------")
+	fmt.Fprintln(w, "Verification preflight")
+	fmt.Fprintln(w, "----------------------")
 
 	// Backup selection
 	fmt.Fprintln(w, "Backup selection:")
@@ -160,30 +175,33 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	return operation.ValidatePreflightItems(
 		items,
 		func(item verifyPreflightItem) bool { return item.Err != nil },
-		"Verify preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verify again.",
+		"Verification preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verification again.",
 	)
 }
 
-func verifySelectedEntries(selected []util.BackupEntry, backupDir string, password []byte, log *util.Logger) error {
+func verifySelectedEntries(selected []util.BackupEntry, backupDir string, password []byte, log *util.Logger) (int, error) {
+	totalPartsProcessed := 0
 	for _, entry := range selected {
-		if err := verifyEntry(entry, backupDir, password, log); err != nil {
-			return fmt.Errorf("Failed to verify directory %q: %w", entry.String(), err)
+		partCount, err := verifyEntry(entry, backupDir, password, log)
+		if err != nil {
+			return 0, fmt.Errorf("Failed to verify directory %q: %w", entry.String(), err)
 		}
-		log.Info("Directory %q successfully verified", entry.DirectoryName)
+		totalPartsProcessed += partCount
+		log.Info("  Verified: %d part file(s) - [%s] successfully verified", partCount, entry.DirectoryName)
 	}
-	return nil
+	return totalPartsProcessed, nil
 }
 
-func verifyEntry(entry util.BackupEntry, backupDir string, password []byte, log *util.Logger) error {
+func verifyEntry(entry util.BackupEntry, backupDir string, password []byte, log *util.Logger) (int, error) {
 	parts, err := catalog.CollectParts(backupDir, entry)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(parts) == 0 {
-		return fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
+		return 0, fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
 	}
 
-	log.Info("Processing %d part file(s) for %s", len(parts), entry.String())
+	log.Info("Processing backup directory: %s", entry.DirectoryName)
 
 	err = operation.RunDecryptPipeline(
 		parts,
@@ -193,13 +211,27 @@ func verifyEntry(entry util.BackupEntry, backupDir string, password []byte, log 
 		"verified",
 		"Archive validation",
 		util.ValidateTar,
-		func(partIndex, partCount int) {
-			fmt.Printf("  Verifying part %d/%d...\n", partIndex, partCount)
-		},
+		nil,
 	)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return len(parts), nil
+}
+
+
+func verifySelectionWarningCount(selection string, index []util.BackupEntry) int {
+	normalized := strings.ToUpper(strings.TrimSpace(selection))
+	if !catalog.IsRawBackupID(normalized) {
+		return 0
+	}
+	_, _, allDates, found := catalog.ResolveSelectionForIDNewestDate(normalized, index)
+	if !found {
+		return 0
+	}
+	if len(allDates) > 1 {
+		return 1
+	}
+	return 0
 }

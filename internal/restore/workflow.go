@@ -99,17 +99,22 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer func() { security.ZeroBytes(password) }()
 
 	fmt.Println()
-	log.Info("Restore started - ID: %s, date: %s, selection: %q", string(selected[0].ID), selected[0].Date, selection)
-	log.Info("Restore destination: %s", restorePath)
+	log.Info("Restore started - ID: %s, date: %s", string(selected[0].ID), selected[0].Date)
+	log.Info("Restore selection:")
+	for _, entry := range selected {
+		log.Info("  %s", entry.String())
+	}
 
-	totalPartsProcessed, err := restoreSelectedEntries(selected, backupDir, restorePath, password, log, stagingPlan)
+	_, err = restoreSelectedEntries(selected, backupDir, restorePath, password, log, stagingPlan)
 	if err != nil {
 		return err
 	}
 
 	log.Info("Restore completed successfully.")
-	printRestoreCompletionSummary(os.Stdout, selected, totalPartsProcessed, logPath, warningCount)
-	fmt.Println("\nRestore completed successfully.")
+	fmt.Printf("\nLog file: %s\n", logPath)
+	if warningCount > 0 {
+		fmt.Printf("Warnings: %d\n", warningCount)
+	}
 	return nil
 }
 
@@ -377,12 +382,13 @@ func restoreSelectedEntries(selected []util.BackupEntry, backupDir, restorePath 
 		}
 
 		partCount, err := restoreEntry(entry, scope.ActiveDir(backupDir), restorePath, password, log)
-		scope.Cleanup()
 		if err != nil {
+			scope.Cleanup()
 			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
 		}
 		totalPartsProcessed += partCount
 		log.Info("  Extracted: %d part file(s) - [%s] successfully restored", partCount, entry.DirectoryName)
+		scope.Cleanup()
 	}
 	return totalPartsProcessed, nil
 }
@@ -401,6 +407,9 @@ func stageBackupEntryLocally(backupDir string, entry util.BackupEntry, tempDir s
 		return "", err
 	}
 
+	log.Info("Copy backup files to local staging directory.")
+	log.Info("  From: %s", filepath.ToSlash(backupDir))
+	log.Info("  To: %s", filepath.ToSlash(stageDir))
 	log.Info("Copying backup files of directory: %s", entry.DirectoryName)
 
 	for _, partPath := range parts {
@@ -468,32 +477,3 @@ func restoreSelectionWarningCount(selection string, index []util.BackupEntry) in
 	return 0
 }
 
-func printRestoreCompletionSummary(w io.Writer, selected []util.BackupEntry, totalPartsProcessed int, logPath string, warningCount int) {
-	directoryNames := make([]string, 0, len(selected))
-	for _, entry := range selected {
-		directoryNames = append(directoryNames, entry.DirectoryName)
-	}
-
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Restore summary")
-	fmt.Fprintln(w, "---------------")
-	const w21 = 21
-	operation.PrintField(w, w21, "Processed directories", fmt.Sprintf("%d (%s)", len(selected), summarizeNames(directoryNames)))
-	operation.PrintField(w, w21, "Parts processed", fmt.Sprintf("%d", totalPartsProcessed))
-	operation.PrintField(w, w21, "Log file", logPath)
-	if warningCount > 0 {
-		operation.PrintField(w, w21, "Warnings", fmt.Sprintf("%d", warningCount))
-	} else {
-		operation.PrintField(w, w21, "Warnings", "none")
-	}
-}
-
-func summarizeNames(names []string) string {
-	if len(names) == 0 {
-		return "none"
-	}
-	if len(names) <= 3 {
-		return strings.Join(names, ", ")
-	}
-	return fmt.Sprintf("%s, %s, %s, +%d more", names[0], names[1], names[2], len(names)-3)
-}

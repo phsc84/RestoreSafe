@@ -87,7 +87,6 @@ func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupS
 			deletedFiles += removed
 		}
 
-		log.Info("Retention [%s]: deleted %d old backup set(s), keep=%d", directoryName, len(toDelete), retentionKeep)
 	}
 
 	deletedLogs, err := deleteOrphanLogFiles(backupDir)
@@ -95,7 +94,7 @@ func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupS
 		log.Warn("Retention log cleanup failed: %v", err)
 	}
 
-	log.Info("Retention cleanup finished: deleted %d backup set(s), %d backup file(s), %d orphan log file(s)", deletedSets, deletedFiles, deletedLogs)
+	log.Info("Retention cleanup finished: deleted %d backup set(s), %d backup file(s), %d log file(s)", deletedSets, deletedFiles, deletedLogs)
 	return nil
 }
 
