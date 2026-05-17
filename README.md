@@ -66,8 +66,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs.
-
-   #### Authentication mode comparison
+4. Authentication mode comparison
 
    | Setting | Password prompt | Second factor | Description |
    |---|---|---|---|
@@ -95,7 +94,7 @@ Double-click RestoreSafe.exe, choose **Backup** from the menu, confirm the prefl
 ### Restore a backup
 Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination directory, then enter your password (and touch the YubiKey if enabled).
 
-The restore destination must not already exist — RestoreSafe creates it during restore and will abort if the path is already present.
+The restore destination must not already exist - RestoreSafe creates it during restore and will abort if the path is already present.
 
 ### Verify a backup
 Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive - without writing any files to disk.
