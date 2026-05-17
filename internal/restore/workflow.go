@@ -119,11 +119,10 @@ func resolveRestoreSelection(targetDir string, index []util.BackupEntry) ([]util
 
 func promptRestoreDestination(targetDir string) (string, error) {
 	for {
-		fmt.Println()
-		fmt.Println("Enter restore destination:")
-		fmt.Println("  - Enter a dot (.) → restore in the backup directory itself")
-		fmt.Println("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory")
-		fmt.Println("  - Enter q → cancel")
+		fmt.Printf("Enter restore destination:\n")
+		fmt.Printf("  - Enter a dot (.) → restore in the backup directory itself [%s]\n", targetDir)
+		fmt.Printf("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory\n")
+		fmt.Printf("  - Enter q → cancel\n")
 		fmt.Println()
 
 		restorePath, err := security.ReadLine("Restore destination: ")

@@ -84,7 +84,7 @@ func printBackupSelectionPrompt(action, targetDir string, index []util.BackupEnt
 
 	completedAction := completedActionLabel(action)
 	fmt.Printf("Select backup(s) to %s:\n", action)
-	fmt.Printf("  - Enter a dot (.) → newest backup set (all directories of the most recent run)\n")
+	fmt.Printf("  - Enter a dot (.) → newest backup set [backup ID %s]\n", runs[0].ID)
 	fmt.Printf("  - Enter backup ID only (e.g. ABC123) → all directories with this ID will be %s\n", completedAction)
 	fmt.Printf("  - Enter specific backup (e.g. MyDirectory_2024-01-15_ABC123) → only this directory will be %s\n", completedAction)
 	fmt.Printf("  - Enter q → cancel\n")
