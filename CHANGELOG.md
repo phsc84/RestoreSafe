@@ -6,6 +6,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- Backup completion summary now matches the restore and verify output format (log file and warnings only; removed the summary header block).
+
 ## [3.0.0] - 2026-05-17
 
 ### Breaking Changes

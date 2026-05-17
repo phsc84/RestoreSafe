@@ -212,8 +212,10 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	log.Info("Backup completed successfully")
-	printBackupCompletionSummary(os.Stdout, processedDirectories, totalPartsCreated, logPath, warningCount)
-	fmt.Println("\nBackup completed.")
+	fmt.Printf("\nLog file: %s\n", logPath)
+	if warningCount > 0 {
+		fmt.Printf("Warnings: %d\n", warningCount)
+	}
 	return nil
 }
 
@@ -257,19 +259,4 @@ func backupDirectory(
 
 	logPartSummary(sw, directoryName, cfg.IODiagnostics, counters, log)
 	return len(sw.Paths()), nil
-}
-
-func printBackupCompletionSummary(w io.Writer, processedDirectories []string, totalPartsCreated int, logPath string, warningCount int) {
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Backup summary")
-	fmt.Fprintln(w, "--------------")
-	const w21 = 21
-	operation.PrintField(w, w21, "Processed directories", fmt.Sprintf("%d", len(processedDirectories)))
-	operation.PrintField(w, w21, "Parts created", fmt.Sprintf("%d", totalPartsCreated))
-	operation.PrintField(w, w21, "Log file", logPath)
-	if warningCount > 0 {
-		operation.PrintField(w, w21, "Warnings", fmt.Sprintf("%d", warningCount))
-	} else {
-		operation.PrintField(w, w21, "Warnings", "none")
-	}
 }
