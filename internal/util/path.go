@@ -1,0 +1,54 @@
+package util
+
+import (
+	"path/filepath"
+	"strings"
+)
+
+// ResolveDir returns path unchanged if it is absolute, otherwise joins it with base.
+func ResolveDir(path, base string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(base, path)
+}
+
+// VolumeKey returns a normalized drive/share identifier for absolute paths.
+// Examples on Windows: "c:", "m:", "\\server\share".
+func VolumeKey(path string) string {
+	cleaned := filepath.Clean(path)
+	volume := filepath.VolumeName(cleaned)
+	if volume == "" {
+		return ""
+	}
+	return strings.ToLower(volume)
+}
+
+// VolumeDisplay returns the drive/share part in a normalized display form.
+func VolumeDisplay(path string) string {
+	volume := filepath.VolumeName(filepath.Clean(path))
+	if volume == "" {
+		return ""
+	}
+	return filepath.ToSlash(volume)
+}
+
+// SameVolume reports whether both paths resolve to the same drive/share root.
+func SameVolume(pathA, pathB string) bool {
+	keyA := VolumeKey(pathA)
+	keyB := VolumeKey(pathB)
+	return keyA != "" && keyA == keyB
+}
+
+// SourceDuplicateWarningFmt is the warning shown when a source directory
+// resolves to the same normalized path as an earlier entry. The single %s is
+// the resolved path of the first (kept) occurrence.
+const SourceDuplicateWarningFmt = "identical duplicate of %s; this entry will be skipped"
+
+// NormalizePathKey returns a canonical lowercase key for path deduplication.
+// Cleans the path, normalises separators to backslash, and lowercases the result.
+func NormalizePathKey(path string) string {
+	cleaned := filepath.Clean(path)
+	cleaned = strings.ReplaceAll(cleaned, "/", `\`)
+	return strings.ToLower(cleaned)
+}

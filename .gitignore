@@ -1,0 +1,12 @@
+.gitconfig
+*.log
+*.exe
+*.zip
+cmd/resource.syso
+dev_setup.txt
+
+assets/**
+!assets/RestoreSafe.ico
+!assets/Screenshot_v*.png
+
+/test/

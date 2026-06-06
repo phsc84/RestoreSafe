@@ -1,0 +1,155 @@
+package catalog
+
+import (
+	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/util"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+// ScanBackups walks backupDir and builds an index of all backup entries.
+func ScanBackups(backupDir string) ([]util.BackupEntry, error) {
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	var result []util.BackupEntry
+
+	for _, de := range entries {
+		if de.IsDir() {
+			continue
+		}
+		entry, _, ok := util.ParsePartFileName(de.Name())
+		if !ok {
+			continue
+		}
+		key := entry.String()
+		if !seen[key] {
+			seen[key] = true
+			result = append(result, entry)
+		}
+	}
+
+	return result, nil
+}
+
+// CollectParts returns the sorted part file paths for an entry.
+func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
+	des, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read backup directory %q: %w", backupDir, err)
+	}
+
+	type seqPath struct {
+		seq  int
+		path string
+	}
+	var parts []seqPath
+
+	for _, de := range des {
+		e, seq, ok := util.ParsePartFileName(de.Name())
+		if !ok {
+			continue
+		}
+		if e != entry {
+			continue
+		}
+		parts = append(parts, seqPath{seq, filepath.Join(backupDir, de.Name())})
+	}
+
+	sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
+
+	paths := make([]string, len(parts))
+	for i, p := range parts {
+		paths[i] = p.path
+	}
+	return paths, nil
+}
+
+// SortedEntries returns entries sorted by date desc, then directory name.
+func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
+	sorted := make([]util.BackupEntry, len(index))
+	copy(sorted, index)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Date != sorted[j].Date {
+			return sorted[i].Date > sorted[j].Date
+		}
+		return sorted[i].DirectoryName < sorted[j].DirectoryName
+	})
+	return sorted
+}
+
+// BackupRunUsesYubiKey checks whether a backup run has a matching challenge file.
+// Returns (usesYubiKey, yubiKeyOnly, error).
+// yubiKeyOnly is true when the backup was created without a password (YubiKey-only mode).
+func BackupRunUsesYubiKey(backupDir string, entry util.BackupEntry) (bool, bool, error) {
+	path, found, err := FindChallengeFileForRun(backupDir, entry.Date, entry.ID)
+	if err != nil || !found {
+		return found, false, err
+	}
+	yubiKeyOnly, err := IsChallengeFileYubiKeyOnly(path)
+	if err != nil {
+		return true, false, err
+	}
+	return true, yubiKeyOnly, nil
+}
+
+// FindChallengeFileForRun returns the .challenge file path for date+ID if present.
+func FindChallengeFileForRun(backupDir, date string, id util.BackupID) (string, bool, error) {
+	entries, err := os.ReadDir(backupDir)
+	if err != nil {
+		return "", false, err
+	}
+
+	suffix := fmt.Sprintf("_%s_%s.challenge", date, string(id))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(entry.Name(), suffix) {
+			return filepath.Join(backupDir, entry.Name()), true, nil
+		}
+	}
+
+	return "", false, nil
+}
+
+// IsChallengeFileYubiKeyOnly reports whether the challenge file was written
+// for a YubiKey-only (no-password) backup.
+func IsChallengeFileYubiKeyOnly(path string) (bool, error) {
+	cd, err := security.ParseChallengeFile(path)
+	if err != nil {
+		return false, err
+	}
+	return cd.NoPassword, nil
+}
+
+// NewestPartModTime returns the newest modification time among all part files.
+func NewestPartModTime(backupDir string, entry util.BackupEntry) (time.Time, error) {
+	parts, err := CollectParts(backupDir, entry)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if len(parts) == 0 {
+		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in the backup directory.")
+	}
+
+	var newest time.Time
+	for _, part := range parts {
+		fi, err := os.Stat(part)
+		if err != nil {
+			return newest, err
+		}
+		if fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+
+	return newest, nil
+}
