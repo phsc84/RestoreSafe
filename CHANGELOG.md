@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Print backup staging cleanup before the success message, leaving the log file path as the final line.
+
 ## [1.0.0] - 2026-06-06
 
 ### Added

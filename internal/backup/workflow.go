@@ -255,11 +255,12 @@ func runBackupOperation(
 		warningCount++
 	}
 
+	staging.Cleanup()
 	log.Info("Backup completed successfully")
-	fmt.Printf("\nLog file: %s\n", logPath)
 	if warningCount > 0 {
 		fmt.Printf("Warnings: %d\n", warningCount)
 	}
+	fmt.Printf("\nLog file: %s\n", logPath)
 	return nil
 }
 

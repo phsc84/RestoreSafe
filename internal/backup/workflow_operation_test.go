@@ -108,6 +108,64 @@ func TestRunBackupOperationVerifiesAfterBackup(t *testing.T) {
 	}
 }
 
+func TestRunBackupOperationCleansStagingBeforeSuccessAndPrintsLogFileLast(t *testing.T) {
+	tempRoot := t.TempDir()
+	srcDir := filepath.Join(tempRoot, "source")
+	backupDir := filepath.Join(tempRoot, "target")
+	stagingTempDir := filepath.Join(tempRoot, "temp")
+	if err := os.MkdirAll(srcDir, 0o750); err != nil {
+		t.Fatalf("failed to create source dir: %v", err)
+	}
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		t.Fatalf("failed to create target dir: %v", err)
+	}
+	if err := os.MkdirAll(stagingTempDir, 0o750); err != nil {
+		t.Fatalf("failed to create staging temp dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "sample.txt"), []byte("staged payload"), 0o600); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	sources := resolveBackupSources([]string{srcDir}, "")
+	logPath := filepath.Join(backupDir, "operation.log")
+	logger, err := util.NewLogger(logPath, "info")
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	cfg := &util.Config{SplitSizeMB: 1}
+	cfg.Argon2 = util.Argon2Config{Time: util.Argon2MinTime, MemoryMB: util.Argon2MinMemoryMB, Threads: util.Argon2MinThreads}
+	stagingPlan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingTempDir}
+
+	var runErr error
+	output := testutil.CaptureStdout(t, func() {
+		runErr = runBackupOperation(cfg, logger, logPath, backupDir, sources, stagingPlan, "2026-05-31", util.BackupID("OPS004"), []byte("op-pw"), "")
+	})
+	logger.Close()
+	if runErr != nil {
+		t.Fatalf("runBackupOperation failed: %v", runErr)
+	}
+
+	cleanupIndex := strings.Index(output, "Removed staging directory:")
+	successIndex := strings.Index(output, "Backup completed successfully")
+	logFileIndex := strings.LastIndex(output, "Log file:")
+	if cleanupIndex == -1 {
+		t.Fatalf("expected staging cleanup message in output, got: %q", output)
+	}
+	if successIndex == -1 {
+		t.Fatalf("expected completion message in output, got: %q", output)
+	}
+	if logFileIndex == -1 {
+		t.Fatalf("expected log file message in output, got: %q", output)
+	}
+	if !(cleanupIndex < successIndex && successIndex < logFileIndex) {
+		t.Fatalf("expected cleanup before success and success before log file, got: %q", output)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+logPath) {
+		t.Fatalf("expected log file line to be last, got: %q", output)
+	}
+}
+
 // TestVerifyBackupAfterWriteReportsCorruptPart confirms a corrupted part is
 // reported as a verification failure and the backup files are left in place.
 func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {

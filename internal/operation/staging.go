@@ -103,8 +103,10 @@ func (s *StagingScope) ActiveDir(fallback string) string {
 
 // Cleanup removes the staging directory. Safe to call on a nil receiver or when staging is inactive.
 func (s *StagingScope) Cleanup() {
-	if s == nil {
+	if s == nil || s.Dir == "" {
 		return
 	}
-	CleanupStagingDir(s.Dir, s.log)
+	dir := s.Dir
+	s.Dir = ""
+	CleanupStagingDir(dir, s.log)
 }
