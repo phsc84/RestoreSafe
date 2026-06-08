@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM  RestoreSafe Build Script (simple)
-REM  Creates RestoreSafe.exe for Windows 64-bit
+REM  Creates RestoreSafe ZIP and test executable
 REM  Version is managed manually in versioninfo.json
 REM ============================================================
 
@@ -29,12 +29,18 @@ if not defined VERSION (
 )
 echo [BUILD] Version: %VERSION%
 
+echo [BUILD] Prepare build directory...
+set TEST_DIR=test
+if not exist %TEST_DIR%\ (
+    mkdir %TEST_DIR%
+)
+
 echo [BUILD] Compile RestoreSafe.exe...
 set GOOS=windows
 set GOARCH=amd64
 set CGO_ENABLED=0
 
-go build -trimpath -ldflags="-s -w -X main.Version=%VERSION%" -o RestoreSafe.exe ./cmd
+go build -trimpath -ldflags="-s -w -X main.Version=%VERSION%" -o "%TEST_DIR%\RestoreSafe.exe" ./cmd
 if errorlevel 1 (
     echo [ERROR] Compilation failed
     exit /b 1
@@ -51,25 +57,15 @@ for %%f in (RestoreSafe-*.zip) do (
 )
 
 echo [BUILD] Create %ZIP_NAME% ...
-powershell -NoProfile -Command "Compress-Archive -Path 'RestoreSafe.exe','config-SAMPLE.yaml' -DestinationPath '%ZIP_NAME%' -Force"
+powershell -NoProfile -Command "Compress-Archive -Path '%TEST_DIR%\RestoreSafe.exe','config-SAMPLE.yaml' -DestinationPath '%ZIP_NAME%' -Force"
 if errorlevel 1 (
     echo [ERROR] Failed to create %ZIP_NAME%
     exit /b 1
 )
 
-echo [BUILD] Extract %ZIP_NAME% to test directory...
-if not exist test\ (
-    mkdir test
-)
-powershell -NoProfile -Command "Expand-Archive -Path '%ZIP_NAME%' -DestinationPath 'test' -Force"
-if errorlevel 1 (
-    echo [ERROR] Failed to extract %ZIP_NAME% to test directory
-    exit /b 1
-)
-
 echo.
-echo [OK] RestoreSafe.exe successfully compiled.
-echo [OK] %ZIP_NAME% successfully created and extracted to test directory.
+echo [OK] Successfully compiled: %CD%\%TEST_DIR%\RestoreSafe.exe
+echo [OK] Successfully created: %CD%\%ZIP_NAME%
 echo.
 
 endlocal
