@@ -81,7 +81,7 @@ func assignNamesByGroup(sources []backupSource, grouped map[string][]int) {
 		aliasOwners := make(map[string]int)
 		for _, index := range indices {
 			pathAlias := sourceAliasFromFullPath(sources[index].Resolved)
-			backupName := fmt.Sprintf("%s__%s", baseName, pathAlias)
+			backupName := fmt.Sprintf("%s__from__%s", baseName, pathAlias)
 			sources[index].BackupName = backupName
 
 			if ownerIndex, exists := aliasOwners[backupName]; exists {
@@ -147,14 +147,14 @@ func pathHintParts(path string) []string {
 	}
 
 	parts := make([]string, 0, len(rawSegments)+1)
+	if normalized := sanitizeAliasPart(volume); normalized != "" {
+		parts = append(parts, normalized)
+	}
+
 	for _, segment := range rawSegments {
 		if normalized := sanitizeAliasPart(segment); normalized != "" {
 			parts = append(parts, normalized)
 		}
-	}
-
-	if normalized := sanitizeAliasPart(volume); normalized != "" {
-		parts = append(parts, normalized)
 	}
 
 	if len(parts) == 0 {
@@ -165,7 +165,7 @@ func pathHintParts(path string) []string {
 }
 
 func aliasFromParts(parts []string) string {
-	alias := strings.Join(parts, "-")
+	alias := strings.Join(parts, "_")
 	if alias == "" {
 		return "source"
 	}

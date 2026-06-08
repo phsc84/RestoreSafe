@@ -156,18 +156,18 @@ In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8
 Examples **without** special characters in that added alias part:
 
 ```text
-C:\RootA\Documents → [Documents__RootA-C]_2026-01-15_ABC123-001.enc
-D:\RootB\Documents → [Documents__RootB-D]_2026-01-15_ABC123-001.enc
+C:\RootA\Documents → [Documents__from__C_RootA]_2026-01-15_ABC123-001.enc
+D:\RootB\Documents → [Documents__from__D_RootB]_2026-01-15_ABC123-001.enc
 ```
 
 Examples **with** special characters in that added alias part:
 
 ```text
-C:\Root A\Documents → [Documents__Root~20~A-C]_2026-01-15_ABC123-001.enc
-C:\Root-A\Documents → [Documents__Root~2D~A-C]_2026-01-15_ABC123-001.enc
-C:\Root_A\Documents → [Documents__Root~5F~A-C]_2026-01-15_ABC123-001.enc
-C:\Root.A\Documents → [Documents__Root~2E~A-C]_2026-01-15_ABC123-001.enc
-C:\Root~A\Documents → [Documents__Root~7E~A-C]_2026-01-15_ABC123-001.enc
+C:\Root A\Documents → [Documents__from__C_Root~20~A]_2026-01-15_ABC123-001.enc
+C:\Root-A\Documents → [Documents__from__C_Root~2D~A]_2026-01-15_ABC123-001.enc
+C:\Root_A\Documents → [Documents__from__C_Root~5F~A]_2026-01-15_ABC123-001.enc
+C:\Root.A\Documents → [Documents__from__C_Root~2E~A]_2026-01-15_ABC123-001.enc
+C:\Root~A\Documents → [Documents__from__C_Root~7E~A]_2026-01-15_ABC123-001.enc
 ```
 
 **Result:** Backup file names remain deterministic and distinct across special characters.

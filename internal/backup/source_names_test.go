@@ -113,8 +113,8 @@ func TestPlanBackupSourcesAssignsAliasForDuplicateBasename(t *testing.T) {
 	if !strings.Contains(joined, "root~2d~a") || !strings.Contains(joined, "root~2d~b") {
 		t.Fatalf("expected aliases containing encoded root~2d~a/root~2d~b, got %q and %q", plans[0].BackupName, plans[1].BackupName)
 	}
-	if !strings.Contains(joined, "-c") {
-		t.Fatalf("expected aliases to include drive letter hint (e.g. -C), got %q and %q", plans[0].BackupName, plans[1].BackupName)
+	if !strings.Contains(joined, "documents__from__c_") {
+		t.Fatalf("expected aliases to use __from__ and put drive letter before path segments, got %q and %q", plans[0].BackupName, plans[1].BackupName)
 	}
 }
 
@@ -183,11 +183,11 @@ func TestPlanBackupSourcesDistinguishesHyphenAndUnderscoreAliases(t *testing.T) 
 	}
 	firstLower := strings.ToLower(firstName)
 	secondLower := strings.ToLower(secondName)
-	if !(strings.Contains(firstLower, "root~2d~a-c") || strings.Contains(secondLower, "root~2d~a-c")) {
-		t.Fatalf("expected one alias to include root~2d~a-c, got %q / %q", firstName, secondName)
+	if !(strings.Contains(firstLower, "_root~2d~a") || strings.Contains(secondLower, "_root~2d~a")) {
+		t.Fatalf("expected one alias to include _root~2d~a, got %q / %q", firstName, secondName)
 	}
-	if !(strings.Contains(firstLower, "root~5f~a-c") || strings.Contains(secondLower, "root~5f~a-c")) {
-		t.Fatalf("expected one alias to include root~5f~a-c, got %q / %q", firstName, secondName)
+	if !(strings.Contains(firstLower, "_root~5f~a") || strings.Contains(secondLower, "_root~5f~a")) {
+		t.Fatalf("expected one alias to include _root~5f~a, got %q / %q", firstName, secondName)
 	}
 }
 
@@ -223,14 +223,14 @@ func TestPlanBackupSourcesDistinguishesSpaceFromHyphenAndUnderscoreAliases(t *te
 	}
 
 	joined := strings.ToLower(plans[0].BackupName + "|" + plans[1].BackupName + "|" + plans[2].BackupName)
-	if !strings.Contains(joined, "root~2d~a-c") {
-		t.Fatalf("expected alias for root-a to contain root~2d~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~2d~a") {
+		t.Fatalf("expected alias for root-a to contain _root~2d~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~5f~a-c") {
-		t.Fatalf("expected alias for root_a to contain root~5f~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~5f~a") {
+		t.Fatalf("expected alias for root_a to contain _root~5f~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~20~a-c") {
-		t.Fatalf("expected alias for root a to contain root~20~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~20~a") {
+		t.Fatalf("expected alias for root a to contain _root~20~a, got %q", joined)
 	}
 }
 
@@ -274,20 +274,30 @@ func TestPlanBackupSourcesEncodesSpecialCharactersUniquely(t *testing.T) {
 	}
 
 	joined := strings.ToLower(plans[0].BackupName + "|" + plans[1].BackupName + "|" + plans[2].BackupName + "|" + plans[3].BackupName + "|" + plans[4].BackupName)
-	if !strings.Contains(joined, "root~2d~a-c") {
-		t.Fatalf("expected encoded alias fragment root~2d~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~2d~a") {
+		t.Fatalf("expected encoded alias fragment _root~2d~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~5f~a-c") {
-		t.Fatalf("expected encoded alias fragment root~5f~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~5f~a") {
+		t.Fatalf("expected encoded alias fragment _root~5f~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~20~a-c") {
-		t.Fatalf("expected encoded alias fragment root~20~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~20~a") {
+		t.Fatalf("expected encoded alias fragment _root~20~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~2e~a-c") {
-		t.Fatalf("expected encoded alias fragment root~2e~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~2e~a") {
+		t.Fatalf("expected encoded alias fragment _root~2e~a, got %q", joined)
 	}
-	if !strings.Contains(joined, "root~7e~a-c") {
-		t.Fatalf("expected encoded alias fragment root~7e~a-c, got %q", joined)
+	if !strings.Contains(joined, "_root~7e~a") {
+		t.Fatalf("expected encoded alias fragment _root~7e~a, got %q", joined)
+	}
+}
+
+func TestSourceAliasFromFullPathPutsDriveFirstAndUsesSingleUnderscoreSeparator(t *testing.T) {
+	t.Parallel()
+
+	got := sourceAliasFromFullPath(`C:\Root-A\Documents`)
+	want := "C_Root~2D~A"
+	if got != want {
+		t.Fatalf("expected alias %q, got %q", want, got)
 	}
 }
 
