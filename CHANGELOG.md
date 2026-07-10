@@ -4,10 +4,11 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] - 2026-07-10
 
 ### Changed
 - Improved duplicate source directory backup names to read as `SourceDirectory__from__Drive_Parent`, with the drive letter first and single underscores between path segments.
+- Update Go to 1.26.5
 
 ### Fixed
 - Print backup staging cleanup before the success message, leaving the log file path as the final line.
