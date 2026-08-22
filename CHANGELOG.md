@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-08-22
+
+### Changed
+- Simplified Windows file and product version metadata by removing the unused build component from `versioninfo.json`.
+- Update Go to 1.26.7
+
 ## [1.0.1] - 2026-07-10
 
 ### Changed

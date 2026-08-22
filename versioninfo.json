@@ -3,25 +3,23 @@
                           "FileVersion":  {
                                               "Major":  1,
                                               "Minor":  0,
-                                              "Patch":  1,
-                                              "Build":  0
+                                              "Patch":  2
                                           },
                           "ProductVersion":  {
                                                  "Major":  1,
                                                  "Minor":  0,
-                                                 "Patch":  1,
-                                                 "Build":  0
+                                                 "Patch":  2
                                              }
                       },
     "StringFileInfo":  {
                            "CompanyName":  "phsc84",
                            "FileDescription":  "RestoreSafe",
-                           "FileVersion":  "1.0.1.0",
+                           "FileVersion":  "1.0.2",
                            "InternalName":  "RestoreSafe",
                            "LegalCopyright":  "Copyright (c) 2026 phsc84 and contributors",
                            "OriginalFilename":  "RestoreSafe.exe",
                            "ProductName":  "RestoreSafe",
-                           "ProductVersion":  "1.0.1.0"
+                           "ProductVersion":  "1.0.2"
                        },
     "VarFileInfo":  {
                         "Translation":  {
