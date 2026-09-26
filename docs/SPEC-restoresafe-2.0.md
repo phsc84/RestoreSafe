@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented on branch `v2` (phases 1-7); hardware test of the YubiKey paths pending |
+| Status | Implemented on branch `v2` (phases 1-7; phases 8-10 prepared the workflows for a graphical frontend); hardware test of the YubiKey paths pending |
 | Target release | RestoreSafe 2.0.0 |
 | Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
 
@@ -13,6 +13,7 @@ Main topics:
 - Key sets: spare YubiKey and recovery code (section 4.4).
 - Restore of timestamps and attributes (section 7.6).
 - Exclude patterns, unreadable-file policy, and a password minimum (sections 6.4-6.6).
+- Graphical user interface replacing the console menu: specified separately in [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md).
 
 ## 1. Goals and non-goals
 
