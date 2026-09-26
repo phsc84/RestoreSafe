@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,11 +38,11 @@ func TestProcessRestorePointRestoresAndVerifies(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	set := openSet(t, fx.BackupDir, fx.Entry)
 
-	if _, err := ProcessRestorePoint(set, nil, fx.Master, "", true, nil); err != nil {
+	if _, err := ProcessRestorePoint(context.Background(), set, nil, fx.Master, "", true, nil, nil); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
 	dest := newDest(t)
-	m, err := ProcessRestorePoint(set, nil, fx.Master, dest, false, nil)
+	m, err := ProcessRestorePoint(context.Background(), set, nil, fx.Master, dest, false, nil, nil)
 	if err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestProcessRestorePointDetectsCorruptedPart(t *testing.T) {
 	}
 
 	set := openSet(t, fx.BackupDir, fx.Entry)
-	_, err = ProcessRestorePoint(set, nil, fx.Master, "", true, nil)
+	_, err = ProcessRestorePoint(context.Background(), set, nil, fx.Master, "", true, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected corruption error, got %v", err)
 	}
@@ -102,7 +103,7 @@ func TestProcessRestorePointRestoresDifferential(t *testing.T) {
 	base := openSet(t, fx.BackupDir, fx.Entry)
 	dest := newDest(t)
 
-	m, err := ProcessRestorePoint(set, base, fx.Master, dest, false, nil)
+	m, err := ProcessRestorePoint(context.Background(), set, base, fx.Master, dest, false, nil, nil)
 	if err != nil {
 		t.Fatalf("restore differential: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestProcessRestorePointRestoresDifferential(t *testing.T) {
 
 	// The full backup alone still restores the original state.
 	fullDest := newDest(t)
-	if _, err := ProcessRestorePoint(base, nil, fx.Master, fullDest, false, nil); err != nil {
+	if _, err := ProcessRestorePoint(context.Background(), base, nil, fx.Master, fullDest, false, nil, nil); err != nil {
 		t.Fatalf("restore full: %v", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(fullDest, "nested", "small.txt")); string(got) != "hello restoresafe" {
@@ -136,14 +137,14 @@ func TestProcessRestorePointRejectsWrongOrMissingBase(t *testing.T) {
 	fx, diff := diffFixture(t)
 	set := openSet(t, fx.BackupDir, diff)
 
-	if _, err := ProcessRestorePoint(set, nil, fx.Master, "", true, nil); err == nil || !strings.Contains(err.Error(), "is required") {
+	if _, err := ProcessRestorePoint(context.Background(), set, nil, fx.Master, "", true, nil, nil); err == nil || !strings.Contains(err.Error(), "is required") {
 		t.Fatalf("expected missing-base error, got %v", err)
 	}
 
 	other := util.BackupEntry{DirectoryName: "Other", ChainID: "OTH001", Date: "2026-03-14"}
 	fx.CreateBackupInDir(t, other)
 	wrong := openSet(t, fx.BackupDir, other)
-	if _, err := ProcessRestorePoint(set, wrong, fx.Master, "", true, nil); err == nil || !strings.Contains(err.Error(), "does not belong to differential") {
+	if _, err := ProcessRestorePoint(context.Background(), set, wrong, fx.Master, "", true, nil, nil); err == nil || !strings.Contains(err.Error(), "does not belong to differential") {
 		t.Fatalf("expected base mismatch error, got %v", err)
 	}
 }
@@ -164,7 +165,7 @@ func TestProcessRestorePointDetectsReplacedBase(t *testing.T) {
 
 	set := openSet(t, fx.BackupDir, diff)
 	base := openSet(t, fx.BackupDir, fx.Entry)
-	_, err := ProcessRestorePoint(set, base, fx.Master, "", true, nil)
+	_, err := ProcessRestorePoint(context.Background(), set, base, fx.Master, "", true, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "manifest checksum mismatch") {
 		t.Fatalf("expected manifest checksum error, got %v", err)
 	}

@@ -5,8 +5,10 @@ import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/manifest"
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 )
 
 // ProcessRestorePoint restores the restore point of set into destDir, or, with
@@ -14,8 +16,10 @@ import (
 // its full backup: the differential's manifest is the target state, files
 // unchanged since the full backup come from base, and new or changed files
 // from the differential. Every file is checked against its manifest hash. It
-// returns the target manifest so the caller can report skipped files.
-func ProcessRestorePoint(set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *util.Logger) (*manifest.Manifest, error) {
+// returns the target manifest so the caller can report skipped files. It
+// stops when ctx is cancelled and adds the decrypted bytes to done (may be
+// nil).
+func ProcessRestorePoint(ctx context.Context, set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *util.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
 	if set.Header.IsDiff() && base == nil {
 		return nil, fmt.Errorf("The full backup of chain %s is required to restore %s_%s. Remedy: Put the FULL files of %s into the backup directory.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date, set.Header.ChainID)
 	}
@@ -57,7 +61,7 @@ func ProcessRestorePoint(set, base *container.Set, master []byte, destDir string
 	}
 	if set.Header.IsDiff() {
 		log.Info("  Reading unchanged files from the full backup (%s)", base.Header.Date)
-		err = RunSectionPipeline(base, baseKeys, log, set.Header.DirectoryName, verb, prefix, func(tarStream io.Reader) error {
+		err = RunSectionPipeline(ctx, base, baseKeys, log, set.Header.DirectoryName, verb, prefix, done, func(tarStream io.Reader) error {
 			return r.ExtractSection(tarStream, archive.DecideFromBase(m))
 		})
 		if err != nil {
@@ -65,7 +69,7 @@ func ProcessRestorePoint(set, base *container.Set, master []byte, destDir string
 		}
 		log.Info("  Reading new and changed files from differential %03d (%s)", set.Header.DiffNumber, set.Header.Date)
 	}
-	err = RunSectionPipeline(set, keys, log, set.Header.DirectoryName, verb, prefix, func(tarStream io.Reader) error {
+	err = RunSectionPipeline(ctx, set, keys, log, set.Header.DirectoryName, verb, prefix, done, func(tarStream io.Reader) error {
 		return r.ExtractSection(tarStream, archive.DecideOwn(m))
 	})
 	if err != nil {
@@ -99,8 +103,9 @@ func checkBaseLink(diff, base *container.Header, baseManifestSHA256 string) erro
 // VerifyOwnData checks a set's own data section against its manifest: every
 // file stored in the set is decrypted and hashed. For a differential this
 // covers the new and changed files without reading the full backup, which is
-// what verify_after_backup needs right after writing it.
-func VerifyOwnData(set *container.Set, master []byte, log *util.Logger) (*manifest.Manifest, error) {
+// what verify_after_backup needs right after writing it. ctx and done work as
+// in ProcessRestorePoint.
+func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *util.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
 	keys, err := set.SectionKeys(master)
 	if err != nil {
 		return nil, err
@@ -112,7 +117,7 @@ func VerifyOwnData(set *container.Set, master []byte, log *util.Logger) (*manife
 	}
 	r := archive.NewRestorer(m, "", true)
 	r.ExpectOwnContentOnly()
-	err = RunSectionPipeline(set, keys, log, set.Header.DirectoryName, "verified", "Verification", func(tarStream io.Reader) error {
+	err = RunSectionPipeline(ctx, set, keys, log, set.Header.DirectoryName, "verified", "Verification", done, func(tarStream io.Reader) error {
 		return r.ExtractSection(tarStream, archive.DecideOwn(m))
 	})
 	if err != nil {
@@ -136,4 +141,15 @@ func ReportSkippedFiles(m *manifest.Manifest, directoryName string, log *util.Lo
 		log.Warn("    %s", p)
 	}
 	return len(skipped)
+}
+
+// SectionSize is the Progress total of processing set: the length of its
+// data section and, for a differential, of its full backup's (base may be
+// nil).
+func SectionSize(set, base *container.Set) int64 {
+	total := set.Trailer.DataLength
+	if base != nil {
+		total += base.Trailer.DataLength
+	}
+	return total
 }

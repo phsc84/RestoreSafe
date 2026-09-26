@@ -3,6 +3,7 @@ package operation
 import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
 	"io"
 	"sync/atomic"
@@ -24,19 +25,22 @@ func (r *recordingWriter) Write(p []byte) (int, error) {
 }
 
 // RunSectionPipeline decrypts the data section of set and streams the
-// plaintext (a TAR stream) to consume.
+// plaintext (a TAR stream) to consume. It stops when ctx is cancelled, and
+// adds the plaintext bytes to done (may be nil).
 //
 // consume is expected to read the stream to EOF. The read end of the pipe is
 // always closed once consume returns, so the decrypt goroutine can never block
 // forever writing to a consumer that has stopped reading. When both sides
 // fail, the error of the side that failed first is reported.
 func RunSectionPipeline(
+	ctx context.Context,
 	set *container.Set,
 	keys *container.SectionKeys,
 	log *util.Logger,
 	directoryName string,
 	progressVerb string,
 	consumeFailurePrefix string,
+	done *atomic.Int64,
 	consume func(io.Reader) error,
 ) error {
 	var outBytes atomic.Int64
@@ -48,7 +52,8 @@ func RunSectionPipeline(
 	rw := &recordingWriter{w: pw}
 	decErrCh := make(chan error, 1)
 	go func() {
-		err := set.DecryptData(keys, &util.CountingWriter{W: rw, Total: &outBytes, Calls: &outWriteCalls})
+		dst := &util.ContextWriter{Ctx: ctx, W: &util.CountingWriter{W: &util.CountingWriter{W: rw, Total: done}, Total: &outBytes, Calls: &outWriteCalls}}
+		err := set.DecryptData(keys, dst)
 		pw.CloseWithError(err) //nolint:errcheck
 		decErrCh <- err
 	}()

@@ -3,7 +3,9 @@ package backup
 import (
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/setio"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -40,7 +42,7 @@ type stagedFile struct{ name, src, dst string }
 // directoryOrder specifies the directory names in processing order; if nil,
 // directories are sorted alphabetically. directorySourcePaths maps directory
 // name to original source path for display in log output.
-func moveBackupResults(stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
+func moveBackupResults(ctx context.Context, rep ui.ProgressReporter, stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
@@ -87,7 +89,7 @@ func moveBackupResults(stagingDir, backupDir string, directoryOrder []string, di
 			log.Info("Moving backup files of source directory: %s", filepath.ToSlash(srcPath))
 		}
 
-		if err := moveDirectoryFiles(log, directoryName, files); err != nil {
+		if err := moveDirectoryFiles(ctx, rep, log, directoryName, files); err != nil {
 			return err
 		}
 	}
@@ -98,10 +100,18 @@ func moveBackupResults(stagingDir, backupDir string, directoryOrder []string, di
 // moveDirectoryFiles copies a single directory's staged part files to the
 // backup directory under the temporary suffix, then finalizes them. Progress
 // is logged with a deferred stop so the goroutine is always cleaned up.
-func moveDirectoryFiles(log *util.Logger, directoryName string, files []stagedFile) error {
+func moveDirectoryFiles(ctx context.Context, rep ui.ProgressReporter, log *util.Logger, directoryName string, files []stagedFile) error {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	stopProgress := operation.StartProgressTracking(log, directoryName, "copied", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
+	var total int64
+	for _, f := range files {
+		if fi, err := os.Stat(f.src); err == nil {
+			total += fi.Size()
+		}
+	}
+	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Moving to backup directory", Item: directoryName, Total: total}, &outBytes)
+	defer stopReport()
 
 	temps := make([]string, 0, len(files))
 	for _, f := range files {
@@ -109,7 +119,7 @@ func moveDirectoryFiles(log *util.Logger, directoryName string, files []stagedFi
 			log.Info("  Move: %s", f.name)
 		}
 		tmp := f.dst + util.TempSuffix
-		if err := copyFileWithCounters(f.src, tmp, &inBytes, &outBytes, &outWriteCalls); err != nil {
+		if err := copyFileWithCounters(ctx, f.src, tmp, &inBytes, &outBytes, &outWriteCalls); err != nil {
 			for _, t := range append(temps, tmp) {
 				_ = os.Remove(t)
 			}
@@ -127,8 +137,9 @@ func moveDirectoryFiles(log *util.Logger, directoryName string, files []stagedFi
 	return nil
 }
 
-// copyFileWithCounters copies src to dst while updating atomic counters for stall detection.
-func copyFileWithCounters(src, dst string, inBytes, outBytes, outWriteCalls *atomic.Int64) error {
+// copyFileWithCounters copies src to dst while updating atomic counters for
+// progress and stall detection. It stops when ctx is cancelled.
+func copyFileWithCounters(ctx context.Context, src, dst string, inBytes, outBytes, outWriteCalls *atomic.Int64) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("Failed to open source file %q: %w", src, err)
@@ -144,7 +155,7 @@ func copyFileWithCounters(src, dst string, inBytes, outBytes, outWriteCalls *ato
 	cr := &util.CountingReader{R: srcFile, Total: inBytes}
 	cw := &util.CountingWriter{W: dstFile, Total: outBytes, Calls: outWriteCalls}
 
-	if _, err := io.Copy(cw, cr); err != nil {
+	if _, err := io.Copy(&util.ContextWriter{Ctx: ctx, W: cw}, cr); err != nil {
 		return fmt.Errorf("Failed to copy %q: %w", src, err)
 	}
 	if err := dstFile.Sync(); err != nil {

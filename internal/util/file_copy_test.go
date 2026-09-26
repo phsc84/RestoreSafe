@@ -1,9 +1,12 @@
 package util
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -18,7 +21,7 @@ func TestCopyFileCopiesContent(t *testing.T) {
 		t.Fatalf("failed to write source file: %v", err)
 	}
 
-	if err := CopyFile(srcPath, dstPath); err != nil {
+	if err := CopyFile(context.Background(), srcPath, dstPath, nil); err != nil {
 		t.Fatalf("CopyFile returned error: %v", err)
 	}
 
@@ -44,7 +47,7 @@ func TestCopyFileOverwritesDestination(t *testing.T) {
 		t.Fatalf("failed to write destination file: %v", err)
 	}
 
-	if err := CopyFile(srcPath, dstPath); err != nil {
+	if err := CopyFile(context.Background(), srcPath, dstPath, nil); err != nil {
 		t.Fatalf("CopyFile returned error: %v", err)
 	}
 
@@ -64,7 +67,7 @@ func TestCopyFileMissingSourceReturnsError(t *testing.T) {
 	srcPath := filepath.Join(tempDir, "missing.txt")
 	dstPath := filepath.Join(tempDir, "dst.txt")
 
-	err := CopyFile(srcPath, dstPath)
+	err := CopyFile(context.Background(), srcPath, dstPath, nil)
 	if err == nil {
 		t.Fatal("expected error for missing source, got nil")
 	}
@@ -84,11 +87,28 @@ func TestCopyFileInvalidDestinationReturnsError(t *testing.T) {
 
 	// Destination parent does not exist, so opening destination must fail.
 	dstPath := filepath.Join(tempDir, "missing-parent", "dst.txt")
-	err := CopyFile(srcPath, dstPath)
+	err := CopyFile(context.Background(), srcPath, dstPath, nil)
 	if err == nil {
 		t.Fatal("expected destination creation error, got nil")
 	}
 	if !strings.Contains(err.Error(), "Failed to create destination file") {
 		t.Fatalf("expected destination-create error message, got: %q", err.Error())
+	}
+}
+
+func TestCopyFileCountsBytesAndStopsWhenCancelled(t *testing.T) {
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "src.bin")
+	if err := os.WriteFile(srcPath, make([]byte, 1000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var done atomic.Int64
+	if err := CopyFile(context.Background(), srcPath, filepath.Join(dir, "a.bin"), &done); err != nil || done.Load() != 1000 {
+		t.Fatalf("copy: err=%v done=%d", err, done.Load())
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := CopyFile(ctx, srcPath, filepath.Join(dir, "b.bin"), nil); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }

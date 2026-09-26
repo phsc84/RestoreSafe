@@ -5,9 +5,11 @@ import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
+	"context"
 	"errors"
 	"io"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -31,7 +33,7 @@ func TestRunSectionPipelineSuccess(t *testing.T) {
 
 	fx, set, keys := openFixtureSet(t)
 	var n int64
-	err := RunSectionPipeline(set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", func(r io.Reader) error {
+	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		var err error
 		n, err = io.Copy(io.Discard, r)
 		return err
@@ -49,7 +51,7 @@ func TestRunSectionPipelineConsumeErrorWrapsMessage(t *testing.T) {
 
 	fx, set, keys := openFixtureSet(t)
 	consumeErr := errors.New("validation failed")
-	err := RunSectionPipeline(set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", func(r io.Reader) error {
+	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		io.Copy(io.Discard, r) //nolint:errcheck
 		return consumeErr
 	})
@@ -65,7 +67,7 @@ func TestRunSectionPipelineReportsEarlyConsumerFailure(t *testing.T) {
 
 	fx, set, keys := openFixtureSet(t)
 	consumeErr := errors.New("checksum mismatch")
-	err := RunSectionPipeline(set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", func(r io.Reader) error {
+	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		_, _ = io.ReadFull(r, make([]byte, 10))
 		return consumeErr
 	})
@@ -80,7 +82,7 @@ func TestRunSectionPipelineWrongKeyReportsCorruption(t *testing.T) {
 	fx, set, _ := openFixtureSet(t)
 	wrong, _ := security.RandomBytes(security.KeyLen)
 	keys, _ := set.SectionKeys(wrong)
-	err := RunSectionPipeline(set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", func(r io.Reader) error {
+	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	})
@@ -98,8 +100,37 @@ func TestRunSectionPipelineConsumerStopsEarly(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
-	_ = RunSectionPipeline(set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", func(r io.Reader) error {
+	_ = RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		_, _ = io.ReadFull(r, make([]byte, 1))
 		return nil
 	})
+}
+
+func TestRunSectionPipelineCountsDoneAndStopsWhenCancelled(t *testing.T) {
+	t.Parallel()
+
+	fx, set, keys := openFixtureSet(t)
+	var done atomic.Int64
+	var n int64
+	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", &done, func(r io.Reader) error {
+		var err error
+		n, err = io.Copy(io.Discard, r)
+		return err
+	})
+	if err != nil || done.Load() != n || n == 0 {
+		t.Fatalf("expected done=%d plaintext bytes, got done=%d err=%v", n, done.Load(), err)
+	}
+	if size := SectionSize(set, nil); size < n {
+		t.Fatalf("SectionSize %d must cover the %d plaintext bytes", size, n)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err = RunSectionPipeline(ctx, set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+		_, err := io.Copy(io.Discard, r)
+		return err
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
 }

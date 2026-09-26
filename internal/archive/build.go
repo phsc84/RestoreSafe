@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/manifest"
 	"RestoreSafe/internal/util"
 	"archive/tar"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"golang.org/x/sys/windows"
 )
@@ -39,6 +41,12 @@ type BuildOptions struct {
 	// last-write time, and change time) are recorded without being read,
 	// and only new and changed files go into the TAR.
 	Base *manifest.Manifest
+	// Context stops the build with its error when it is cancelled; nil means
+	// no cancellation.
+	Context context.Context
+	// Progress receives the bytes of source files handled so far: read into
+	// the TAR, or unchanged since the full backup; may be nil.
+	Progress *atomic.Int64
 }
 
 // BuildStats counts entries by how they were handled.
@@ -82,7 +90,11 @@ func (e *unreadableError) Unwrap() error { return e.err }
 // The TAR contains only regular files; directories and all metadata live in
 // the manifest. Symlinks, junctions, and other special entries are skipped.
 func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
-	cw := &countingWriter{w: w}
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cw := &countingWriter{w: &util.ContextWriter{Ctx: ctx, W: w}}
 	tw := tar.NewWriter(cw)
 	stats := opts.Stats
 	if stats == nil {
@@ -125,6 +137,9 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	}
 
 	walkErr := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if path == srcDir {
 			if err != nil {
 				return fmt.Errorf("Failed to scan source directory %q: %w", path, err)
@@ -204,11 +219,12 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			if meta, err := statBasic(path); err == nil && unchanged(base, info.Size(), meta) {
 				mb.Add(fromBase(base, false, false))
 				stats.Unchanged++
+				addProgress(opts.Progress, info.Size())
 				return nil
 			}
 		}
 
-		entry, err := writeFile(tw, cw, path, rel, origin)
+		entry, err := writeFile(tw, cw, path, rel, origin, opts.Progress)
 		var unreadable *unreadableError
 		if errors.As(err, &unreadable) {
 			if errors.Is(unreadable.err, fs.ErrNotExist) && !unreadable.headerWritten {
@@ -284,7 +300,7 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 // file are returned as *unreadableError; when the TAR header was already
 // written, the entry is completed with zeros so the stream stays valid, and
 // the caller marks it void.
-func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string) (manifest.Entry, error) {
+func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64) (manifest.Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return manifest.Entry{}, &unreadableError{path: path, err: err}
@@ -313,7 +329,7 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string) (ma
 	}
 
 	hasher := sha256.New()
-	src := &sourceReader{r: f}
+	src := &sourceReader{r: &util.CountingReader{R: f, Total: progress}}
 	copied, err := io.CopyN(io.MultiWriter(tw, hasher), src, size)
 	if err != nil {
 		readFailed := src.err != nil || errors.Is(err, io.EOF)
@@ -383,4 +399,39 @@ func isExcluded(path string, excludes []string) bool {
 		}
 	}
 	return false
+}
+
+func addProgress(progress *atomic.Int64, n int64) {
+	if progress != nil {
+		progress.Add(n)
+	}
+}
+
+// SourceSize estimates the bytes BuildTar handles for opts: the size of the
+// regular files it would back up, following the same exclude rules. Entries
+// that cannot be read are left out. It is the total for Progress.
+func SourceSize(opts BuildOptions) int64 {
+	srcDir := filepath.Clean(opts.SourceDir)
+	excludes := normalizeExcludes(srcDir, opts.ExcludeDirs)
+	var total int64
+	_ = filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || path == srcDir {
+			return nil
+		}
+		rel, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return nil
+		}
+		if isExcluded(path, excludes) || opts.Exclude.Match(filepath.ToSlash(rel), d.IsDir()) {
+			return skipDirOrNil(d)
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if info, err := d.Info(); err == nil && isRegularOrDir(info) {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }

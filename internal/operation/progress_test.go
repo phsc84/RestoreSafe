@@ -1,10 +1,12 @@
 package operation
 
 import (
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -99,4 +101,40 @@ func TestStartProgressTrackingStopsCleanly(t *testing.T) {
 
 	stop := StartProgressTracking(nil, "Docs", "encrypted", &inBytes, &outBytes, &outWriteCalls)
 	stop() // must not deadlock
+}
+
+type progressRecorder struct {
+	mu      sync.Mutex
+	reports []ui.Progress
+}
+
+func (r *progressRecorder) Progress(p ui.Progress) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reports = append(r.reports, p)
+}
+
+func TestTrackProgressReportsStartAndFinalValue(t *testing.T) {
+	t.Parallel()
+	var done atomic.Int64
+	rec := &progressRecorder{}
+	stop := TrackProgress(rec, ui.Progress{Step: "Backing up", Item: "Docs", Total: 100}, &done)
+	done.Store(100)
+	stop()
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.reports) < 2 {
+		t.Fatalf("expected at least a start and a final report, got %+v", rec.reports)
+	}
+	first, last := rec.reports[0], rec.reports[len(rec.reports)-1]
+	if first.Done != 0 || last.Done != 100 || last.Total != 100 || last.Step != "Backing up" || last.Item != "Docs" {
+		t.Fatalf("unexpected reports: first %+v, last %+v", first, last)
+	}
+}
+
+func TestTrackProgressWithoutReporterDoesNothing(t *testing.T) {
+	t.Parallel()
+	var done atomic.Int64
+	TrackProgress(nil, ui.Progress{}, &done)()
 }

@@ -1,6 +1,7 @@
 package operation
 
 import (
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"sync/atomic"
 	"time"
@@ -92,5 +93,42 @@ func LogProgressUntilDone(log *util.Logger, directoryName, processedLabel string
 				stallWarned = true
 			}
 		}
+	}
+}
+
+// progressReportInterval is how often TrackProgress reports to the user.
+const progressReportInterval = 250 * time.Millisecond
+
+// TrackProgress reports p to rep with Done read from done every
+// progressReportInterval, until the returned stop function is called; stop
+// reports the final value. A nil rep reports nothing.
+func TrackProgress(rep ui.ProgressReporter, p ui.Progress, done *atomic.Int64) (stop func()) {
+	if rep == nil {
+		return func() {}
+	}
+	report := func() {
+		p.Done = done.Load()
+		rep.Progress(p)
+	}
+	report()
+	quit := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(progressReportInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-quit:
+				return
+			case <-ticker.C:
+				report()
+			}
+		}
+	}()
+	return func() {
+		close(quit)
+		<-stopped
+		report()
 	}
 }

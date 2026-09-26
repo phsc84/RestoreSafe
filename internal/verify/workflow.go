@@ -7,17 +7,20 @@ import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // Run verifies selected backup sets without restoring them to disk: every
 // part is decrypted and every file is checked against its manifest hash. u is
-// asked for decisions and credentials.
-func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+// asked for decisions and credentials and receives the progress. Cancelling
+// ctx stops the verification; the returned error then matches
+// context.Canceled.
+func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	out := u.Output()
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
@@ -74,14 +77,16 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 	}
 	defer masters.Zero()
 
-	return runVerifyOperation(out, selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
+	return runVerifyOperation(ctx, u, selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
 }
 
 // runVerifyOperation performs the verification using already-unlocked keys.
 // It takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys. inventory is used to find the full
-// backup of each selected differential.
-func runVerifyOperation(out io.Writer, selected, inventory []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
+// directly by supplying the master keys; u receives the progress and the
+// summary. inventory is used to find the full backup of each selected
+// differential.
+func runVerifyOperation(ctx context.Context, u ui.UI, selected, inventory []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
+	out := u.Output()
 	fmt.Fprintln(out)
 	first := selected[0].Header
 	log.Info("Verification started - ID: %s, date: %s", first.RunID, first.Date)
@@ -90,8 +95,12 @@ func runVerifyOperation(out io.Writer, selected, inventory []catalog.SetInfo, ba
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := verifySelectedEntries(selected, inventory, backupDir, masters, log)
+	skipped, err := verifySelectedEntries(ctx, u, selected, inventory, backupDir, masters, log)
 	if err != nil {
+		if ctx.Err() != nil {
+			log.Warn("Verification cancelled.")
+			return operation.Cancelled("Verification")
+		}
 		return err
 	}
 	if skipped > 0 {
@@ -195,7 +204,7 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 // verifySelectedEntries verifies each selected set and returns the number of
 // files missing from the restore points because they could not be read
 // during backup.
-func verifySelectedEntries(selected, inventory []catalog.SetInfo, backupDir string, masters operation.MasterKeys, log *util.Logger) (int, error) {
+func verifySelectedEntries(ctx context.Context, rep ui.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir string, masters operation.MasterKeys, log *util.Logger) (int, error) {
 	skipped := 0
 	for _, info := range selected {
 		var base *util.BackupEntry
@@ -206,7 +215,7 @@ func verifySelectedEntries(selected, inventory []catalog.SetInfo, backupDir stri
 			}
 			base = &baseInfo.Entry
 		}
-		n, err := verifyEntry(info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
+		n, err := verifyEntry(ctx, rep, info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
 			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
@@ -217,7 +226,7 @@ func verifySelectedEntries(selected, inventory []catalog.SetInfo, backupDir stri
 
 // verifyEntry verifies one restore point: a full backup, or a differential
 // together with its full backup base.
-func verifyEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir string, master []byte, log *util.Logger) (int, error) {
+func verifyEntry(ctx context.Context, rep ui.ProgressReporter, entry util.BackupEntry, base *util.BackupEntry, backupDir string, master []byte, log *util.Logger) (int, error) {
 	set, err := catalog.OpenSet(backupDir, entry)
 	if err != nil {
 		return 0, err
@@ -235,7 +244,10 @@ func verifyEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir strin
 	}
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
-	m, err := operation.ProcessRestorePoint(set, baseSet, master, "", true, log)
+	var done atomic.Int64
+	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: operation.SectionSize(set, baseSet)}, &done)
+	m, err := operation.ProcessRestorePoint(ctx, set, baseSet, master, "", true, log, &done)
+	stopReport()
 	if err != nil {
 		return 0, err
 	}

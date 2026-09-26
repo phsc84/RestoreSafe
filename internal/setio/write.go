@@ -10,6 +10,7 @@ import (
 	"RestoreSafe/internal/manifest"
 	"RestoreSafe/internal/util"
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -52,16 +53,22 @@ type SetParams struct {
 	Entry util.BackupEntry
 	// Base makes the set a differential of that full backup; nil writes a
 	// full backup.
-	Base *Base
-	RunID     util.BackupID
-	KeySet    container.KeySet
-	Master    []byte
+	Base   *Base
+	RunID  util.BackupID
+	KeySet container.KeySet
+	Master []byte
 	// SplitSizeBytes is the maximum part size.
 	SplitSizeBytes int64
 	// SyncParts flushes each part to disk before it is closed.
 	SyncParts    bool
 	OnPartOpened func(seq int, path string)
 	Counters     Counters
+	// Context cancels the write; nil means no cancellation. A cancelled
+	// write removes its parts and returns an error matching the context's.
+	Context context.Context
+	// Progress receives the source bytes handled so far (see
+	// archive.BuildOptions.Progress); may be nil.
+	Progress *atomic.Int64
 }
 
 // Result describes a written set.
@@ -133,6 +140,8 @@ func WriteSet(p SetParams) (*Result, error) {
 			OnSkip:         p.OnSkip,
 			Stats:          &stats,
 			Base:           baseManifest,
+			Context:        p.Context,
+			Progress:       p.Progress,
 		}, mb)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err

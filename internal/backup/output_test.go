@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 func TestCopyFileWithCountersReturnsErrorForMissingSource(t *testing.T) {
 	t.Parallel()
 	var in, out, calls atomic.Int64
-	err := copyFileWithCounters(filepath.Join(t.TempDir(), "missing"), filepath.Join(t.TempDir(), "dst"), &in, &out, &calls)
+	err := copyFileWithCounters(context.Background(), filepath.Join(t.TempDir(), "missing"), filepath.Join(t.TempDir(), "dst"), &in, &out, &calls)
 	if err == nil || !strings.Contains(err.Error(), "Failed to open source file") {
 		t.Fatalf("expected open error, got %v", err)
 	}
@@ -25,7 +26,7 @@ func TestCopyFileWithCountersReturnsErrorForBadDestination(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "src")
 	createFile(t, src, "data")
 	var in, out, calls atomic.Int64
-	err := copyFileWithCounters(src, filepath.Join(t.TempDir(), "missing-dir", "dst"), &in, &out, &calls)
+	err := copyFileWithCounters(context.Background(), src, filepath.Join(t.TempDir(), "missing-dir", "dst"), &in, &out, &calls)
 	if err == nil || !strings.Contains(err.Error(), "Failed to create destination file") {
 		t.Fatalf("expected create error, got %v", err)
 	}
@@ -38,7 +39,7 @@ func TestMoveBackupResultsMovesOnlyPartsAndFinalizesThem(t *testing.T) {
 	createFile(t, filepath.Join(staging, "unrelated.txt"), "not a part")
 
 	output := testutil.CaptureStdout(t, func() {
-		if err := moveBackupResults(staging, target, nil, nil, util.NewConsoleLogger("info", nil)); err != nil {
+		if err := moveBackupResults(context.Background(), nil, staging, target, nil, nil, util.NewConsoleLogger("info", nil)); err != nil {
 			t.Fatalf("moveBackupResults: %v", err)
 		}
 	})
@@ -61,7 +62,7 @@ func TestMoveBackupResultsMovesOnlyPartsAndFinalizesThem(t *testing.T) {
 
 func TestMoveBackupResultsFailsWhenStagingDirMissing(t *testing.T) {
 	t.Parallel()
-	err := moveBackupResults(filepath.Join(t.TempDir(), "missing"), t.TempDir(), nil, nil, nil)
+	err := moveBackupResults(context.Background(), nil, filepath.Join(t.TempDir(), "missing"), t.TempDir(), nil, nil, nil)
 	if err == nil || !strings.Contains(err.Error(), "Failed to list staging directory") {
 		t.Fatalf("expected listing error, got %v", err)
 	}

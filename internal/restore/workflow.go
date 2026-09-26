@@ -12,16 +12,19 @@ import (
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
-// Run executes the full restore workflow, asking u for decisions and credentials.
-func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+// Run executes the full restore workflow, asking u for decisions and
+// credentials and reporting progress to it. Cancelling ctx stops the restore;
+// the returned error then matches context.Canceled.
+func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	out := u.Output()
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
@@ -98,7 +101,7 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(out, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
+	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
 }
 
 func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
@@ -108,9 +111,11 @@ func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
 
 // runRestoreOperation performs the restore using already-unlocked keys. It
 // takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys. inventory is used to find the full
-// backup of each selected differential.
-func runRestoreOperation(out io.Writer, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+// directly by supplying the master keys; u receives the progress and the
+// summary. inventory is used to find the full backup of each selected
+// differential.
+func runRestoreOperation(ctx context.Context, u ui.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+	out := u.Output()
 	fmt.Fprintln(out)
 	first := selected[0].Header
 	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
@@ -119,8 +124,12 @@ func runRestoreOperation(out io.Writer, selected, inventory []catalog.SetInfo, b
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := restoreSelectedEntries(selected, inventory, backupDir, restorePath, masters, log, stagingPlan)
+	skipped, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log, stagingPlan)
 	if err != nil {
+		if ctx.Err() != nil {
+			log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
+			return operation.Cancelled("Restore")
+		}
 		return err
 	}
 	if skipped > 0 {
@@ -359,8 +368,9 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 
 // restoreSelectedEntries restores each selected set and returns the number of
 // files that are missing from the restore points because they could not be
-// read during backup.
-func restoreSelectedEntries(selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
+// read during backup. It stops when ctx is cancelled and reports its
+// progress to rep.
+func restoreSelectedEntries(ctx context.Context, rep ui.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
 	skipped := 0
 	for _, info := range selected {
 		entry := info.Entry
@@ -379,7 +389,7 @@ func restoreSelectedEntries(selected, inventory []catalog.SetInfo, backupDir, re
 			if base != nil {
 				toStage = append(toStage, *base)
 			}
-			stagedDir, err := stageBackupEntriesLocally(backupDir, toStage, stagingPlan.ResolvedTempDir, log)
+			stagedDir, err := stageBackupEntriesLocally(ctx, rep, backupDir, toStage, stagingPlan.ResolvedTempDir, log)
 			if err != nil {
 				return 0, fmt.Errorf("Local staging failed for %q: %w", entry.String(), err)
 			}
@@ -387,7 +397,7 @@ func restoreSelectedEntries(selected, inventory []catalog.SetInfo, backupDir, re
 		}
 
 		master := masters[info.Header.KeySet.ID]
-		n, err := restoreEntry(entry, base, scope.ActiveDir(backupDir), restorePath, master, log)
+		n, err := restoreEntry(ctx, rep, entry, base, scope.ActiveDir(backupDir), restorePath, master, log)
 		scope.Cleanup()
 		if err != nil {
 			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
@@ -398,8 +408,9 @@ func restoreSelectedEntries(selected, inventory []catalog.SetInfo, backupDir, re
 }
 
 // stageBackupEntriesLocally copies the parts of entries (a set and, for a
-// differential, its full backup) into one new staging directory.
-func stageBackupEntriesLocally(backupDir string, entries []util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
+// differential, its full backup) into one new staging directory. It stops
+// when ctx is cancelled and reports its progress to rep.
+func stageBackupEntriesLocally(ctx context.Context, rep ui.ProgressReporter, backupDir string, entries []util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
 	stageDir, err := operation.CreateStagingDir(tempDir, "restoresafe-restore-stage-*")
 	if err != nil {
 		return "", err
@@ -409,7 +420,9 @@ func stageBackupEntriesLocally(backupDir string, entries []util.BackupEntry, tem
 	log.Info("  From: %s", filepath.ToSlash(backupDir))
 	log.Info("  To: %s", filepath.ToSlash(stageDir))
 
-	for _, entry := range entries {
+	partsByEntry := make([][]string, len(entries))
+	var total int64
+	for i, entry := range entries {
 		parts, err := catalog.CollectParts(backupDir, entry)
 		if err == nil && len(parts) == 0 {
 			err = fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
@@ -418,11 +431,24 @@ func stageBackupEntriesLocally(backupDir string, entries []util.BackupEntry, tem
 			operation.CleanupStagingDirDuring(stageDir, "error recovery", log)
 			return "", err
 		}
+		partsByEntry[i] = parts
+		for _, p := range parts {
+			if fi, err := os.Stat(p); err == nil {
+				total += fi.Size()
+			}
+		}
+	}
+
+	var done atomic.Int64
+	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Copying to local staging", Item: entries[0].DirectoryName, Total: total}, &done)
+	defer stopReport()
+	for i, entry := range entries {
+		parts := partsByEntry[i]
 		log.Info("Copying backup files of %s", entry.String())
 		for _, partPath := range parts {
 			log.Info("  Copy: %s", filepath.Base(partPath))
 			destinationPath := filepath.Join(stageDir, filepath.Base(partPath))
-			if err := util.CopyFile(partPath, destinationPath); err != nil {
+			if err := util.CopyFile(ctx, partPath, destinationPath, &done); err != nil {
 				operation.CleanupStagingDirDuring(stageDir, "error recovery", log)
 				return "", err
 			}
@@ -437,7 +463,7 @@ func stageBackupEntriesLocally(backupDir string, entries []util.BackupEntry, tem
 // full backup base) and extracts it to destDir, checking every file against
 // its manifest hash. It returns the number of files that are not in the
 // restore point because they could not be read during backup.
-func restoreEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
+func restoreEntry(ctx context.Context, rep ui.ProgressReporter, entry util.BackupEntry, base *util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
 	if err := util.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
@@ -473,7 +499,10 @@ func restoreEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir, des
 		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
 	}
 
-	m, err := operation.ProcessRestorePoint(set, baseSet, master, outDir, false, log)
+	var done atomic.Int64
+	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: operation.SectionSize(set, baseSet)}, &done)
+	m, err := operation.ProcessRestorePoint(ctx, set, baseSet, master, outDir, false, log, &done)
+	stopReport()
 	if err != nil {
 		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err

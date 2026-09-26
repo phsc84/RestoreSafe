@@ -2,6 +2,7 @@ package operation
 
 import (
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
 	"io"
 )
@@ -28,4 +29,19 @@ func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {
 	default:
 		return "Wrong password."
 	}
+}
+
+// cancelledError reports an operation the user cancelled while it ran.
+type cancelledError struct{ message string }
+
+func (e cancelledError) Error() string { return e.message }
+
+// Is makes a cancelled operation match context.Canceled.
+func (e cancelledError) Is(target error) bool { return target == context.Canceled }
+
+// Cancelled returns the error of an operation the user cancelled, e.g.
+// Cancelled("Backup") reports "Backup cancelled.". It matches
+// context.Canceled, so frontends can tell it from a failure.
+func Cancelled(action string) error {
+	return cancelledError{message: action + " cancelled."}
 }

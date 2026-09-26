@@ -7,6 +7,7 @@
 package backup
 
 import (
+	"RestoreSafe/internal/archive"
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
@@ -14,16 +15,19 @@ import (
 	"RestoreSafe/internal/setio"
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
 )
 
-// Run executes the full backup workflow, asking u for decisions and credentials.
-func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+// Run executes the full backup workflow, asking u for decisions and credentials
+// and reporting progress to it. Cancelling ctx stops the backup: sets
+// completed before are kept, the interrupted one is removed, and the returned
+// error matches context.Canceled.
+func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	out := u.Output()
 	// Resolve backup directory (may be relative to exe dir).
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
@@ -114,7 +118,7 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 	}
 	defer security.ZeroBytes(master)
 
-	return runBackupOperation(out, cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
+	return runBackupOperation(ctx, u, cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in
@@ -159,11 +163,12 @@ func removeLeftoverTempParts(backupDir string, log *util.Logger) {
 
 // runBackupOperation performs the backup using an already-unlocked key set.
 // It takes no further input from the user, so it can be driven directly in
-// tests and automated flows by supplying the key set and master key; out
-// receives the summary. plans decides full or differential per directory;
-// directories without a plan (or a nil map) get a full backup.
+// tests and automated flows by supplying the key set and master key; u
+// receives the progress and the summary. plans decides full or differential
+// per directory; directories without a plan (or a nil map) get a full backup.
 func runBackupOperation(
-	out io.Writer,
+	ctx context.Context,
+	u ui.UI,
 	cfg *util.Config,
 	log *util.Logger,
 	logPath, backupDir string,
@@ -175,6 +180,7 @@ func runBackupOperation(
 	master []byte,
 	plans map[string]*dirPlan,
 ) error {
+	out := u.Output()
 	fmt.Fprintln(out)
 	n := runnableSourceCount(sources)
 	dirWord := "directories"
@@ -235,9 +241,9 @@ func runBackupOperation(
 		} else if plan != nil {
 			log.Info("  Backup type: full (%s)", plan.Reason)
 		}
-		skipped, err := backupDirectory(srcAbs, entry, runID, base, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log)
+		skipped, err := backupDirectory(ctx, u, srcAbs, entry, runID, base, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log)
 		if err != nil {
-			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
+			return backupFailed(ctx, log, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
 		if skipped > 0 {
 			warningCount++
@@ -250,19 +256,27 @@ func runBackupOperation(
 
 	// Move results from staging to backup directory if needed.
 	if staging.Dir != "" {
-		if err := moveBackupResults(workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
-			return fmt.Errorf("Failed to move staged backup to backup directory: %w", err)
+		if err := moveBackupResults(ctx, u, workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
+			return backupFailed(ctx, log, fmt.Errorf("Failed to move staged backup to backup directory: %w", err))
 		}
 	}
 
 	// Optionally verify the freshly written sets before pruning old backups.
 	verifyFailed := false
 	if cfg.VerifyAfterBackup && len(written) > 0 {
-		failed := verifyBackupAfterWrite(backupDir, written, master, log)
+		failed, err := verifyBackupAfterWrite(ctx, u, backupDir, written, master, log)
+		if err != nil {
+			return backupFailed(ctx, log, err)
+		}
 		if failed > 0 {
 			verifyFailed = true
 			warningCount += failed
 		}
+	}
+
+	// A cancelled run leaves the older backups alone.
+	if err := ctx.Err(); err != nil {
+		return backupFailed(ctx, log, err)
 	}
 
 	// Retention is skipped when verification failed so a verified older backup
@@ -287,6 +301,16 @@ func runBackupOperation(
 	return nil
 }
 
+// backupFailed returns err, or, when the user cancelled the backup, logs what
+// was kept and returns the cancellation.
+func backupFailed(ctx context.Context, log *util.Logger, err error) error {
+	if ctx.Err() == nil {
+		return err
+	}
+	log.Warn("Backup cancelled. Backup sets completed before cancelling were kept, an interrupted one was removed, and old backups were not cleaned up.")
+	return operation.Cancelled("Backup")
+}
+
 // verifyKeptRemedy is appended to each post-backup verification failure so the
 // reason and the "files kept / try a manual restore" guidance live on one line.
 const verifyKeptRemedy = " The backup files were kept; try a manual restore/verify."
@@ -296,8 +320,8 @@ const verifyKeptRemedy = " The backup files were kept; try a manual restore/veri
 // key, so it needs no additional password prompt or YubiKey touch. Failures
 // are logged as warnings and the backup files are left in place; the number of
 // sets that failed is returned so the caller can flag the run and skip
-// retention.
-func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master []byte, log *util.Logger) int {
+// retention. When ctx is cancelled, it stops with the context's error.
+func verifyBackupAfterWrite(ctx context.Context, rep ui.ProgressReporter, backupDir string, entries []util.BackupEntry, master []byte, log *util.Logger) (int, error) {
 	log.Info("Verifying backup integrity")
 
 	failures := 0
@@ -310,9 +334,15 @@ func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master
 		}
 		// A differential's own data is checked; its full backup was
 		// verified when it was written.
-		m, err := operation.VerifyOwnData(set, master, log)
+		var done atomic.Int64
+		stop := operation.TrackProgress(rep, ui.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: operation.SectionSize(set, nil)}, &done)
+		m, err := operation.VerifyOwnData(ctx, set, master, log, &done)
+		stop()
 		parts := len(set.Paths)
 		set.Close() //nolint:errcheck
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return failures, ctxErr
+		}
 		if err != nil {
 			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
@@ -324,7 +354,7 @@ func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master
 	if failures == 0 {
 		log.Info("  Post-backup verification successful")
 	}
-	return failures
+	return failures, nil
 }
 
 // loadBase opens the full backup a differential is based on and decrypts and
@@ -354,6 +384,8 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 // differential of base, or a full backup when base is nil. It returns the
 // number of files and directories skipped as unreadable.
 func backupDirectory(
+	ctx context.Context,
+	rep ui.ProgressReporter,
 	srcDir string,
 	entry util.BackupEntry,
 	runID util.BackupID,
@@ -373,10 +405,19 @@ func backupDirectory(
 	stopProgress := operation.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
+	excludeDirs := []string{backupDir, workingDir}
+	var done atomic.Int64
+	var total int64
+	if rep != nil {
+		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: cfg.ExcludeMatcher})
+	}
+	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}, &done)
+	defer stopReport()
+
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
 	res, err := setio.WriteSet(setio.SetParams{
 		SourceDir:      srcDir,
-		ExcludeDirs:    []string{backupDir, workingDir},
+		ExcludeDirs:    excludeDirs,
 		OutputDir:      workingDir,
 		Entry:          entry,
 		Base:           base,
@@ -398,6 +439,8 @@ func backupDirectory(
 			log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
 		Counters: setio.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
+		Context:  ctx,
+		Progress: &done,
 	})
 	if err != nil {
 		return 0, err

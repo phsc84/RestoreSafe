@@ -7,7 +7,10 @@
 // The workflows call a UI from the goroutine that runs the operation, and each
 // question method blocks until the user has answered. A graphical
 // implementation therefore runs the operation on a worker goroutine and
-// forwards questions to its UI thread.
+// forwards questions to its UI thread. Progress arrives from a background
+// goroutine while a step runs. To stop a running operation, the frontend
+// cancels the context it passed to the workflow; a question is cancelled by
+// returning ErrCancelled.
 package ui
 
 import (
@@ -46,6 +49,8 @@ type BackupStartOptions struct {
 // UI is what the workflows need from the user. Secrets are returned as byte
 // slices that the caller zeroes after use.
 type UI interface {
+	ProgressReporter
+
 	// Output receives the text the user should see besides reports and
 	// questions: log lines, notices, and results.
 	Output() io.Writer

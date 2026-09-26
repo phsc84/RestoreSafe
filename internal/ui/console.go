@@ -283,3 +283,6 @@ func (c *Console) WaitForSpareYubiKey() (bool, error) {
 func (c *Console) ShowReport(r Report) {
 	WriteReport(c.Output(), r)
 }
+
+// Progress is ignored: the console shows the log lines of each step instead.
+func (c *Console) Progress(Progress) {}

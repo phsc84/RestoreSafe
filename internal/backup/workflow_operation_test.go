@@ -4,7 +4,9 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +49,7 @@ func (env *operationEnv) run(t *testing.T, plan operation.LocalStagingPlan, id u
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(os.Stdout, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
+		runErr = runBackupOperation(context.Background(), &ui.Console{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
 	})
 	env.logger.Close()
 	if runErr != nil {
@@ -134,7 +136,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 
 	var failures int
 	testutil.CaptureStdout(t, func() {
-		failures = verifyBackupAfterWrite(fx.BackupDir, []util.BackupEntry{fx.Entry}, fx.Master, util.NewConsoleLogger("info", nil))
+		failures, _ = verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []util.BackupEntry{fx.Entry}, fx.Master, util.NewConsoleLogger("info", nil))
 	})
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)

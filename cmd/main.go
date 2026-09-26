@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -67,6 +68,8 @@ func main() {
 	}
 
 	printStartupBanner(Version)
+	// The console cannot cancel a running operation; Ctrl+C ends the program.
+	ctx := context.Background()
 	console := &ui.Console{}
 	health := startup.RunStartupHealthCheck(console.Output(), cfg, exeDir, configPath)
 
@@ -81,7 +84,7 @@ func main() {
 			if health.BlocksBackup() {
 				reportHealthCheckBlocking("Backup")
 				waitForKeyPress()
-			} else if err := backup.Run(console, cfg, exeDir); err != nil {
+			} else if err := backup.Run(ctx, console, cfg, exeDir); err != nil {
 				reportOperationError("Backup", err)
 				waitForKeyPress()
 			}
@@ -90,7 +93,7 @@ func main() {
 			if health.BlocksRestoreOrVerify() {
 				reportHealthCheckBlocking("Restore")
 				waitForKeyPress()
-			} else if err := restore.Run(console, cfg, exeDir); err != nil {
+			} else if err := restore.Run(ctx, console, cfg, exeDir); err != nil {
 				reportOperationError("Restore", err)
 				waitForKeyPress()
 			}
@@ -99,7 +102,7 @@ func main() {
 			if health.BlocksRestoreOrVerify() {
 				reportHealthCheckBlocking("Verification")
 				waitForKeyPress()
-			} else if err := verify.Run(console, cfg, exeDir); err != nil {
+			} else if err := verify.Run(ctx, console, cfg, exeDir); err != nil {
 				reportOperationError("Verification", err)
 				waitForKeyPress()
 			}

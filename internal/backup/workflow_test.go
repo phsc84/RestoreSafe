@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
 	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: ioDiagnostics}
 	entry := util.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
-	_, backupErr := backupDirectory(sourceDir, entry, "ORD123", nil, backupDir, backupDir, ks, master, cfg, true, logger)
+	_, backupErr := backupDirectory(context.Background(), nil, sourceDir, entry, "ORD123", nil, backupDir, backupDir, ks, master, cfg, true, logger)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupDirectory failed: %v", backupErr)
@@ -98,7 +99,7 @@ func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 	}
 	// Append a subdir to the file path — MkdirAll will fail.
 	cfg := &util.Config{BackupDirectory: filepath.Join(filePath, "sub")}
-	err := Run(&ui.Console{}, cfg, "")
+	err := Run(context.Background(), &ui.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when target dir cannot be created, got nil")
 	}
@@ -114,7 +115,7 @@ func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 		BackupDirectory:   backupDir,
 		SourceDirectories: []string{filepath.Join(backupDir, "nonexistent-source")},
 	}
-	err := Run(&ui.Console{}, cfg, "")
+	err := Run(context.Background(), &ui.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when all sources fail, got nil")
 	}
@@ -147,7 +148,7 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	}
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = Run(&ui.Console{}, cfg, "")
+		runErr = Run(context.Background(), &ui.Console{}, cfg, "")
 	})
 	if runErr != nil {
 		t.Fatalf("expected nil error on cancel, got: %v", runErr)
