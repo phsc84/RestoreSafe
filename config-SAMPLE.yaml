@@ -37,6 +37,11 @@ differential:
   # each one contains all changes since the full backup).
   # Default: 50  |  Minimum: 1  |  Maximum: 100
   max_size_percent: 50
+  # Number of differential backups kept per chain; older ones are deleted first.
+  # Each differential needs only its full backup, so deleting older ones never
+  # affects newer ones. The newest differential is always kept.
+  # 0 = keep all differentials (default)
+  retention_keep_differentials: 0
 
 # Files and directories to leave out of every backup (case-insensitive).
 #   "*.tmp"           name pattern: matches at any depth

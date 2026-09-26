@@ -333,7 +333,7 @@ func runBackupOperation(
 	// set is never pruned in favour of an unverified new one.
 	if verifyFailed {
 		log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
-	} else if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, sources, retentionHold, log); err != nil {
+	} else if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, log); err != nil {
 		log.Warn("  Cleanup old data failed: %v", err)
 		warningCount++
 	}

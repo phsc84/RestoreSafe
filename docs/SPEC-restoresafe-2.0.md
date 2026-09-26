@@ -497,7 +497,7 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 - `retention_keep` = number of **chains** to keep per directory (0 = keep all). Chains are ordered by their full's `created_utc`.
 - Deleting a chain deletes its full and all its differentials.
 - A log file is deleted when no remaining set has its run ID as `run_id` (header).
-- `differential.retention_keep_differentials` (0 = keep all) limits differentials within **each** kept chain; the oldest are deleted first. The newest differential is always kept.
+- `differential.retention_keep_differentials` (0 = keep all) limits differentials within **each** kept chain; the oldest (lowest numbers) are deleted first. The newest differential is always kept, so differential numbers are never reused. The two settings are independent: either one alone enables cleanup.
 - Incomplete sets (no valid trailer) older than the newest complete set of the same directory are deleted and logged. Incomplete sets newer than that are kept and reported (possibly a crash that should be investigated).
 - Retention never deletes files that do not match the 2.0 naming pattern.
 - Unchanged: retention is skipped when post-backup verification failed or when any set's metadata cannot be read.

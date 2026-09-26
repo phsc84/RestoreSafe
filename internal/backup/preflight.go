@@ -106,7 +106,7 @@ func printBackupPreflightWithYubiKeyCheck(
 			fmt.Fprintf(w, "  [WARN] %s\n", advisory)
 		}
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Retention keep", fmt.Sprintf("%d", cfg.RetentionKeep))
+	operation.PrintField(w, backupPreflightLabelWidth, "Retention", retentionSummary(cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials))
 	verifyAfter := "disabled"
 	if cfg.VerifyAfterBackup {
 		verifyAfter = "enabled"
