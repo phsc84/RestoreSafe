@@ -2,6 +2,7 @@ package restore
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/util"
 	"errors"
@@ -19,18 +20,22 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 
 	restorePath := t.TempDir()
 	missing := util.BackupEntry{DirectoryName: "Missing", ChainID: "ABC123", Date: "2026-03-14"}
-	diff := util.BackupEntry{DirectoryName: "Diff", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}
+	orphan := util.BackupEntry{DirectoryName: "Orphan", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}
+	diff := util.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-20", DiffNumber: 2}
+	full := catalog.SetInfo{Entry: util.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-01"}, Parts: []string{"a", "b"}, SizeBytes: 100, Header: &container.Header{}}
 	if err := os.MkdirAll(filepath.Join(restorePath, docsEntry.DirectoryName), 0o750); err != nil {
 		t.Fatal(err)
 	}
-
-	items := buildRestorePreflight([]catalog.SetInfo{
+	selected := []catalog.SetInfo{
 		{Entry: docsEntry, Parts: []string{"p1"}, SizeBytes: 7},
 		{Entry: missing, Err: errors.New("No part files found.")},
-		{Entry: diff, Parts: []string{"p1"}},
-	}, restorePath)
-	if len(items) != 3 {
-		t.Fatalf("expected 3 preflight items, got %d", len(items))
+		{Entry: orphan, Parts: []string{"p1"}},
+		{Entry: diff, Parts: []string{"p1"}, SizeBytes: 5},
+	}
+
+	items := buildRestorePreflight(selected, append(selected, full), restorePath)
+	if len(items) != 4 {
+		t.Fatalf("expected 4 preflight items, got %d", len(items))
 	}
 	if items[0].OutputDirErr == nil || items[0].TotalSizeBytes != 7 || items[0].PartCount != 1 {
 		t.Fatalf("unexpected first item: %+v", items[0])
@@ -38,8 +43,17 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	if items[1].Err == nil {
 		t.Fatal("expected Err for missing part files")
 	}
-	if items[2].Err == nil || !strings.Contains(items[2].Err.Error(), "not supported yet") {
-		t.Fatalf("expected differential to be rejected for now, got %v", items[2].Err)
+	if items[2].Err == nil || !strings.Contains(items[2].Err.Error(), "is missing") {
+		t.Fatalf("expected missing-base error for orphan differential, got %v", items[2].Err)
+	}
+	if items[3].Err != nil || items[3].Base == nil || items[3].TotalSizeBytes != 105 {
+		t.Fatalf("differential must include its full backup: %+v", items[3])
+	}
+
+	var sb strings.Builder
+	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, t.TempDir(), restorePath, items[3:], false, false, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return nil })
+	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
+		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
 }
 

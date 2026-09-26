@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -129,7 +130,8 @@ func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry
 func WriteDiffSet(t testing.TB, srcDir, backupDir string, base util.BackupEntry, diffNumber int, date string, ks *container.KeySet, master []byte) util.BackupEntry {
 	t.Helper()
 
-	parts, err := filepath.Glob(filepath.Join(backupDir, "["+base.DirectoryName+"]_"+string(base.ChainID)+"_"+base.Date+"_FULL-*.enc"))
+	escape := strings.NewReplacer("[", "[[]", "*", "[*]", "?", "[?]")
+	parts, err := filepath.Glob(filepath.Join(backupDir, escape.Replace("["+base.DirectoryName+"]_"+string(base.ChainID)+"_"+base.Date+"_FULL-")+"*.enc"))
 	if err != nil || len(parts) == 0 {
 		t.Fatalf("base parts not found: %v", err)
 	}

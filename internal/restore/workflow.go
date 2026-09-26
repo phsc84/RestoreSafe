@@ -7,6 +7,7 @@ package restore
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
@@ -62,7 +63,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	stagingPlan := operation.PlanLocalStaging(backupDir, restorePath, os.TempDir())
-	preflight := buildRestorePreflight(selectedInfos, restorePath)
+	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
 	printRestorePreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
@@ -95,7 +96,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(selectedInfos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
+	return runRestoreOperation(selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
 }
 
 func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
@@ -105,8 +106,9 @@ func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
 
 // runRestoreOperation performs the restore using already-unlocked keys. It
 // takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys.
-func runRestoreOperation(selected []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+// directly by supplying the master keys. inventory is used to find the full
+// backup of each selected differential.
+func runRestoreOperation(selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
 	fmt.Println()
 	first := selected[0].Header
 	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
@@ -115,7 +117,7 @@ func runRestoreOperation(selected []catalog.SetInfo, backupDir, restorePath, log
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := restoreSelectedEntries(selected, backupDir, restorePath, masters, log, stagingPlan)
+	skipped, err := restoreSelectedEntries(selected, inventory, backupDir, restorePath, masters, log, stagingPlan)
 	if err != nil {
 		return err
 	}
@@ -163,11 +165,16 @@ type restorePreflightItem struct {
 	PartCount      int
 	TotalSizeBytes int64
 	OutputDir      string
-	Err            error // set-level error (incomplete, unsupported)
-	OutputDirErr   error // output directory error (already exists)
+	// Base is the full backup a differential needs.
+	Base         *catalog.SetInfo
+	Err          error // set-level error (incomplete, missing base)
+	OutputDirErr error // output directory error (already exists)
 }
 
-func buildRestorePreflight(selected []catalog.SetInfo, restorePath string) []restorePreflightItem {
+// buildRestorePreflight checks the selected sets. A differential also needs
+// its chain's full backup (looked up in inventory); the size estimate covers
+// both, because restore reads both.
+func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath string) []restorePreflightItem {
 	items := make([]restorePreflightItem, 0, len(selected))
 	for _, info := range selected {
 		entry := info.Entry
@@ -179,7 +186,13 @@ func buildRestorePreflight(selected []catalog.SetInfo, restorePath string) []res
 			Err:            info.Err,
 		}
 		if item.Err == nil && entry.IsDiff() {
-			item.Err = fmt.Errorf("%s: restoring differential backups is not supported yet.", entry.String())
+			base, err := catalog.BaseOf(inventory, entry)
+			if err != nil {
+				item.Err = err
+			} else {
+				item.Base = base
+				item.TotalSizeBytes += base.SizeBytes
+			}
 		}
 		if nameErr := util.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr = nameErr
@@ -220,6 +233,9 @@ func printRestorePreflightWithYubiKeyCheck(
 			issues = append(issues, item.Err.Error())
 		} else {
 			fmt.Fprintf(w, "  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+		}
+		if item.Base != nil {
+			fmt.Fprintf(w, "          → with full backup %s (parts: %d)\n", item.Base.Entry.String(), len(item.Base.Parts))
 		}
 	}
 
@@ -378,13 +394,26 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 // restoreSelectedEntries restores each selected set and returns the number of
 // files that are missing from the restore points because they could not be
 // read during backup.
-func restoreSelectedEntries(selected []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
+func restoreSelectedEntries(selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
 	skipped := 0
 	for _, info := range selected {
 		entry := info.Entry
+		var base *util.BackupEntry
+		if entry.IsDiff() {
+			baseInfo, err := catalog.BaseOf(inventory, entry)
+			if err != nil {
+				return 0, err
+			}
+			base = &baseInfo.Entry
+		}
+
 		var scope *operation.StagingScope
 		if stagingPlan.Enabled {
-			stagedDir, err := stageBackupEntryLocally(backupDir, entry, stagingPlan.ResolvedTempDir, log)
+			toStage := []util.BackupEntry{entry}
+			if base != nil {
+				toStage = append(toStage, *base)
+			}
+			stagedDir, err := stageBackupEntriesLocally(backupDir, toStage, stagingPlan.ResolvedTempDir, log)
 			if err != nil {
 				return 0, fmt.Errorf("Local staging failed for %q: %w", entry.String(), err)
 			}
@@ -392,7 +421,7 @@ func restoreSelectedEntries(selected []catalog.SetInfo, backupDir, restorePath s
 		}
 
 		master := masters[info.Header.KeySet.ID]
-		n, err := restoreEntry(entry, scope.ActiveDir(backupDir), restorePath, master, log)
+		n, err := restoreEntry(entry, base, scope.ActiveDir(backupDir), restorePath, master, log)
 		scope.Cleanup()
 		if err != nil {
 			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
@@ -402,15 +431,9 @@ func restoreSelectedEntries(selected []catalog.SetInfo, backupDir, restorePath s
 	return skipped, nil
 }
 
-func stageBackupEntryLocally(backupDir string, entry util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
-	parts, err := catalog.CollectParts(backupDir, entry)
-	if err != nil {
-		return "", err
-	}
-	if len(parts) == 0 {
-		return "", fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
-	}
-
+// stageBackupEntriesLocally copies the parts of entries (a set and, for a
+// differential, its full backup) into one new staging directory.
+func stageBackupEntriesLocally(backupDir string, entries []util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
 	stageDir, err := operation.CreateStagingDir(tempDir, "restoresafe-restore-stage-*")
 	if err != nil {
 		return "", err
@@ -419,26 +442,36 @@ func stageBackupEntryLocally(backupDir string, entry util.BackupEntry, tempDir s
 	log.Info("Copy backup files to local staging directory.")
 	log.Info("  From: %s", filepath.ToSlash(backupDir))
 	log.Info("  To: %s", filepath.ToSlash(stageDir))
-	log.Info("Copying backup files of directory: %s", entry.DirectoryName)
 
-	for _, partPath := range parts {
-		log.Info("  Copy: %s", filepath.Base(partPath))
-		destinationPath := filepath.Join(stageDir, filepath.Base(partPath))
-		if err := util.CopyFile(partPath, destinationPath); err != nil {
+	for _, entry := range entries {
+		parts, err := catalog.CollectParts(backupDir, entry)
+		if err == nil && len(parts) == 0 {
+			err = fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
+		}
+		if err != nil {
 			operation.CleanupStagingDirDuring(stageDir, "error recovery", log)
 			return "", err
 		}
+		log.Info("Copying backup files of %s", entry.String())
+		for _, partPath := range parts {
+			log.Info("  Copy: %s", filepath.Base(partPath))
+			destinationPath := filepath.Join(stageDir, filepath.Base(partPath))
+			if err := util.CopyFile(partPath, destinationPath); err != nil {
+				operation.CleanupStagingDirDuring(stageDir, "error recovery", log)
+				return "", err
+			}
+		}
+		log.Info("  Copied: %d part file(s) - [%s] successfully copied", len(parts), entry.DirectoryName)
 	}
-
-	log.Info("  Copied: %d part file(s) - [%s] successfully copied", len(parts), entry.DirectoryName)
 
 	return stageDir, nil
 }
 
-// restoreEntry decrypts one backup set and extracts it to destDir, checking
-// every file against its manifest hash. It returns the number of files that
-// are not in the restore point because they could not be read during backup.
-func restoreEntry(entry util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
+// restoreEntry decrypts one backup set (for a differential together with its
+// full backup base) and extracts it to destDir, checking every file against
+// its manifest hash. It returns the number of files that are not in the
+// restore point because they could not be read during backup.
+func restoreEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
 	if err := util.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
@@ -447,6 +480,14 @@ func restoreEntry(entry util.BackupEntry, backupDir, destDir string, master []by
 		return 0, err
 	}
 	defer set.Close()
+	var baseSet *container.Set
+	if base != nil {
+		baseSet, err = catalog.OpenSet(backupDir, *base)
+		if err != nil {
+			return 0, fmt.Errorf("Full backup %s: %w", base.String(), err)
+		}
+		defer baseSet.Close()
+	}
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
 
@@ -466,11 +507,18 @@ func restoreEntry(entry util.BackupEntry, backupDir, destDir string, master []by
 		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
 	}
 
-	m, err := operation.ProcessRestorePoint(set, master, outDir, false, log)
+	m, err := operation.ProcessRestorePoint(set, baseSet, master, outDir, false, log)
 	if err != nil {
 		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
-	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, len(set.Paths), entry.DirectoryName)
+	parts := len(set.Paths)
+	if baseSet != nil {
+		parts += len(baseSet.Paths)
+	}
+	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
+	if n := m.Footer.Stale; n > 0 {
+		log.Warn("  [%s] %d file(s) are restored in the older version of the full backup, because they could not be read when this differential was created.", entry.DirectoryName, n)
+	}
 	return operation.ReportSkippedFiles(m, entry.DirectoryName, log), nil
 }

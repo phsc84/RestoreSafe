@@ -25,14 +25,40 @@ func fixtureInfos(t *testing.T, fx *testutil.BackupFixture) []catalog.SetInfo {
 
 func TestBuildVerifyPreflightUsesInventory(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-preflight-pass"))
-	items := buildVerifyPreflight(fixtureInfos(t, fx))
+	infos := fixtureInfos(t, fx)
+	items := buildVerifyPreflight(infos, infos)
 	if len(items) != 1 || items[0].Err != nil || items[0].PartCount != fx.Parts || items[0].TotalSizeBytes <= 0 {
 		t.Fatalf("unexpected preflight item: %+v", items)
 	}
 
-	diff := catalog.SetInfo{Entry: util.BackupEntry{DirectoryName: "D", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}}
-	if items := buildVerifyPreflight([]catalog.SetInfo{diff}); items[0].Err == nil {
-		t.Fatal("expected differential to be rejected for now")
+	orphan := catalog.SetInfo{Entry: util.BackupEntry{DirectoryName: "D", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}}
+	if items := buildVerifyPreflight([]catalog.SetInfo{orphan}, infos); items[0].Err == nil || !strings.Contains(items[0].Err.Error(), "is missing") {
+		t.Fatalf("expected missing-base error, got %+v", items[0])
+	}
+}
+
+func TestVerifyDifferentialRestorePoint(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("changed content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
+	infos := fixtureInfos(t, fx)
+	selected := catalog.SelectInfos(infos, []util.BackupEntry{diff})
+
+	items := buildVerifyPreflight(selected, infos)
+	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
+		t.Fatalf("differential must find its full backup: %+v", items[0])
+	}
+	var err error
+	out := testutil.CaptureStdout(t, func() {
+		_, err = verifySelectedEntries(selected, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, util.NewConsoleLogger("info"))
+	})
+	if err != nil {
+		t.Fatalf("verify differential: %v", err)
+	}
+	if !strings.Contains(out, "2 file(s), 1 directory(s)") || !strings.Contains(out, "Reading unchanged files from the full backup") {
+		t.Fatalf("expected the complete restore point to be verified: %q", out)
 	}
 }
 
@@ -79,7 +105,8 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		err = runVerifyOperation(fixtureInfos(t, fx), fx.BackupDir, logPath, operation.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
+		infos := fixtureInfos(t, fx)
+		err = runVerifyOperation(infos, infos, fx.BackupDir, logPath, operation.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
 	})
 	log.Close()
 	if err != nil {
@@ -94,7 +121,7 @@ func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("right"))
 	wrong, _ := security.RandomBytes(security.KeyLen)
 	var err error
-	testutil.CaptureStdout(t, func() { _, err = verifyEntry(fx.Entry, fx.BackupDir, wrong, util.NewConsoleLogger("info")) })
+	testutil.CaptureStdout(t, func() { _, err = verifyEntry(fx.Entry, nil, fx.BackupDir, wrong, util.NewConsoleLogger("info")) })
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -109,7 +136,7 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	}
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		_, err = verifySelectedEntries(infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, util.NewConsoleLogger("info"))
+		_, err = verifySelectedEntries(infos, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, util.NewConsoleLogger("info"))
 	})
 	if err != nil || strings.Count(output, "successfully verified") != 2 {
 		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
@@ -119,7 +146,7 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	entry := util.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
-	_, err := verifyEntry(entry, t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info"))
+	_, err := verifyEntry(entry, nil, t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info"))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}

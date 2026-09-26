@@ -174,6 +174,22 @@ func SelectInfos(infos []SetInfo, selected []util.BackupEntry) []SetInfo {
 	return out
 }
 
+// BaseOf returns the full backup of a differential's chain, or an error that
+// explains why it cannot be used. infos is the inventory.
+func BaseOf(infos []SetInfo, diff util.BackupEntry) (*SetInfo, error) {
+	for i := range infos {
+		info := &infos[i]
+		if info.Entry.IsDiff() || info.Entry.DirectoryName != diff.DirectoryName || info.Entry.ChainID != diff.ChainID {
+			continue
+		}
+		if !info.Complete() {
+			return nil, fmt.Errorf("The full backup %s of %s is incomplete: %v", info.Entry.String(), diff.String(), info.Err)
+		}
+		return info, nil
+	}
+	return nil, fmt.Errorf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing. Remedy: Put the FULL files of %s into the backup directory.", diff.String(), diff.DirectoryName, diff.ChainID, diff.ChainID, diff.ChainID)
+}
+
 // KeySetMismatch returns why ks no longer matches the configuration (so the
 // next backup must create new keys), or "" when it matches.
 func KeySetMismatch(cfg *util.Config, ks *container.KeySet) string {

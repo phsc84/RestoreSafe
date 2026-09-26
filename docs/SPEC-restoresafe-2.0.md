@@ -437,20 +437,24 @@ As today (walk -> TAR -> encrypt -> split), plus:
 
 ### 7.1 Selection
 
-Restore points are grouped by directory and chain, newest first:
+Restore points are listed per backup run, newest run first, as in 1.x; every complete set is a restore point. Differentials are marked:
 
 ```text
-[Documents]
-  1) 2026-09-26  ABC123  Differential 002  (full 2026-09-01 + changes)   32.1 GB, 15,234 entries
-  2) 2026-09-12  ABC123  Differential 001  (full 2026-09-01 + changes)   31.8 GB, 15,101 entries
-  3) 2026-09-01  ABC123  Full                                            31.5 GB, 15,002 entries
+Available backups:
+  - Backup ID: XYZ789 / Timestamp (local): 2026-09-26 18:02:11 CEST
+    - Documents_ABC123_2026-09-26_DIFF002 (differential: full backup ABC123 + changes)
+    - Pictures_XYZ789_2026-09-26_FULL
+  - Backup ID: ABC123 / Timestamp (local): 2026-09-01 17:45:03 CEST
+    - Documents_ABC123_2026-09-01_FULL
 ```
 
-Sizes and entry counts need the password and are shown when available (after authentication); before that, part sizes are shown. Incomplete sets and differentials whose base is missing or incomplete are listed as not restorable with the reason, and cannot be selected. Restore points with skipped or stale files are marked, e.g. `(1 file skipped)`.
+The selection accepts `.` (newest run), a run ID (every set of that run), or a set name. Incomplete sets are not listed. A differential whose full backup is missing or incomplete is rejected in the preflight with the reason.
+
+Possible later improvement: a per-directory view with restore sizes and entry counts (needs the password to read the manifests) and markers for restore points with skipped or stale files.
 
 ### 7.2 Preflight
 
-Lists every set required (for a differential: the differential and its base) with part count and completeness status; checks free space against the manifest `total_bytes`. The destination must not exist (unchanged). If the selection uses a key set other than the current one, the preflight says so ("uses keys created on 2026-06-01").
+Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. The destination must not exist (unchanged). Staging copies the differential and its full backup into one staging directory.
 
 ### 7.3 Credentials
 

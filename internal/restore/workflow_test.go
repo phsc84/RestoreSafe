@@ -63,7 +63,7 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		err = runRestoreOperation(infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, operation.LocalStagingPlan{}, 0)
+		err = runRestoreOperation(infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, operation.LocalStagingPlan{}, 0)
 	})
 	log.Close()
 	if err != nil {
@@ -82,7 +82,7 @@ func TestRestoreSelectedEntriesWithStagingRoundTrip(t *testing.T) {
 
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), util.NewConsoleLogger("info"), plan)
+		_, err = restoreSelectedEntries(infos, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), util.NewConsoleLogger("info"), plan)
 	})
 	if err != nil {
 		t.Fatalf("restore with staging: %v", err)
@@ -93,13 +93,36 @@ func TestRestoreSelectedEntriesWithStagingRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRestoreDifferentialWithStaging(t *testing.T) {
+	fx := testutil.NewRestoreFixture(t, []byte("pw"))
+	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("edited"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
+	infos := fixtureInfos(t, fx.BackupFixture)
+	selected := catalog.SelectInfos(infos, []util.BackupEntry{diff})
+	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
+
+	var err error
+	out := testutil.CaptureStdout(t, func() {
+		_, err = restoreSelectedEntries(selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), util.NewConsoleLogger("info"), plan)
+	})
+	if err != nil {
+		t.Fatalf("restore differential with staging: %v", err)
+	}
+	if !strings.Contains(out, "Copying backup files of "+diff.String()) || !strings.Contains(out, "Copying backup files of "+fx.Entry.String()) {
+		t.Fatalf("expected differential and full backup to be staged: %q", out)
+	}
+	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
+}
+
 func TestRestoreEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("right"))
 	wrong, _ := security.RandomBytes(security.KeyLen)
 
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(fx.Entry, fx.BackupDir, fx.RestoreRoot, wrong, util.NewConsoleLogger("info"))
+		_, err = restoreEntry(fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, util.NewConsoleLogger("info"))
 	})
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
@@ -113,7 +136,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 	}
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(fx.Entry, fx.BackupDir, fx.RestoreRoot, fx.Master, util.NewConsoleLogger("info"))
+		_, err = restoreEntry(fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, util.NewConsoleLogger("info"))
 	})
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("expected existing-destination error, got %v", err)
@@ -123,7 +146,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	entry := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}
-	_, err := restoreEntry(entry, t.TempDir(), t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info"))
+	_, err := restoreEntry(entry, nil, t.TempDir(), t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info"))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}
@@ -134,7 +157,7 @@ func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
 	var stageDir string
 	var err error
 	testutil.CaptureStdout(t, func() {
-		stageDir, err = stageBackupEntryLocally(fx.BackupDir, fx.Entry, t.TempDir(), util.NewConsoleLogger("info"))
+		stageDir, err = stageBackupEntriesLocally(fx.BackupDir, []util.BackupEntry{fx.Entry}, t.TempDir(), util.NewConsoleLogger("info"))
 	})
 	if err != nil {
 		t.Fatal(err)

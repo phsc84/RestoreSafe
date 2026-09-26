@@ -149,11 +149,10 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		LogLevel:           "info",
 		VerifyAfterBackup:  true,
 		AuthenticationMode: util.AuthModePassword,
-		Differential:       fullBackupsOnly,
 		Argon2:             testutil.FastArgon2Config,
 	}
 
-	// Run 1: new keys (password entered twice).
+	// Run 1: new keys (password entered twice), full backup.
 	s := useScript(t, []string{"y"}, password, password)
 	out := testutil.CaptureStdout(t, func() {
 		if err := backup.Run(cfg, ""); err != nil {
@@ -174,9 +173,11 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 	firstKeySet := infos[0].Header.KeySet.ID
 
-	// Runs 2 and 3: existing keys (password entered once), source changes.
+	// Runs 2 and 3: existing keys (password entered once), source changes,
+	// differential backups.
 	for run := 2; run <= 3; run++ {
 		writeFile(t, filepath.Join(docs, fmt.Sprintf("new-%d.txt", run)), "added in run "+fmt.Sprint(run))
+		writeFile(t, filepath.Join(docs, "letter.txt"), fmt.Sprintf("Dear RestoreSafe, version %d", run))
 		s := useScript(t, []string{"y"}, password)
 		out := testutil.CaptureStdout(t, func() {
 			if err := backup.Run(cfg, ""); err != nil {
@@ -184,14 +185,14 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 			}
 		})
 		s.done()
-		if !strings.Contains(out, "existing keys") {
-			t.Fatalf("run %d did not reuse keys: %q", run, out)
+		if !strings.Contains(out, "existing keys") || !strings.Contains(out, fmt.Sprintf("DIFF%03d", run-1)) {
+			t.Fatalf("run %d must reuse keys and write a differential: %q", run, out)
 		}
 	}
 
 	infos, _ = catalog.Inventory(backupDir)
-	if len(infos) != 2 {
-		t.Fatalf("retention_keep=2 must leave 2 sets, got %d", len(infos))
+	if len(infos) != 3 {
+		t.Fatalf("expected full + 2 differentials in one chain, got %d sets", len(infos))
 	}
 	for _, info := range infos {
 		if !info.Complete() || info.Header.KeySet.ID != firstKeySet {
@@ -202,8 +203,8 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		t.Fatal("1.x backup file must never be touched")
 	}
 	logs, _ := filepath.Glob(filepath.Join(backupDir, "*.log"))
-	if len(logs) != 2 {
-		t.Fatalf("expected the 2 logs of the kept runs, got %v", logs)
+	if len(logs) != 3 {
+		t.Fatalf("expected the 3 logs of the kept runs, got %v", logs)
 	}
 
 	// Verify the newest backup.
@@ -214,8 +215,8 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		}
 	})
 	s.done()
-	if !strings.Contains(out, "Verification completed successfully.") {
-		t.Fatalf("unexpected verify output: %q", out)
+	if !strings.Contains(out, "Verification completed successfully.") || !strings.Contains(out, "→ with full backup") {
+		t.Fatalf("expected the newest differential to be verified with its full backup: %q", out)
 	}
 
 	// A wrong password three times ends the restore without writing anything.
@@ -239,10 +240,26 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		}
 	})
 	s.done()
-	if !strings.Contains(out, "Restore completed successfully.") {
+	if !strings.Contains(out, "Restore completed successfully.") || !strings.Contains(out, "Reading unchanged files from the full backup") {
 		t.Fatalf("unexpected restore output: %q", out)
 	}
 	assertTreesEqual(t, docs, filepath.Join(dest, "Documents"))
+
+	// The full backup still restores the state of run 1.
+	fullDest := filepath.Join(root, "RestoreFull")
+	s = useScript(t, []string{string(infos[len(infos)-1].Header.RunID), fullDest, "y"}, password)
+	testutil.CaptureStdout(t, func() {
+		if err := restore.Run(cfg, ""); err != nil {
+			t.Fatalf("restore full: %v", err)
+		}
+	})
+	s.done()
+	if data, _ := os.ReadFile(filepath.Join(fullDest, "Documents", "letter.txt")); string(data) != "Dear RestoreSafe" {
+		t.Fatalf("full backup restored %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(fullDest, "Documents", "new-2.txt")); !os.IsNotExist(err) {
+		t.Fatal("files added after the full backup must not be in its restore")
+	}
 }
 
 // TestExcludeAndUnreadableFiles backs up a source with excluded files and a

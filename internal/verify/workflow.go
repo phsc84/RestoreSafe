@@ -2,6 +2,7 @@ package verify
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/util"
@@ -47,7 +48,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer log.Close()
 
-	preflight := buildVerifyPreflight(selectedInfos)
+	preflight := buildVerifyPreflight(selectedInfos, infos)
 	mode := util.AuthMode(first.KeySet.AuthMode)
 	usesYubiKey := mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey
 	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
@@ -71,13 +72,14 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer masters.Zero()
 
-	return runVerifyOperation(selectedInfos, backupDir, logPath, masters, log, warningCount)
+	return runVerifyOperation(selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
 }
 
 // runVerifyOperation performs the verification using already-unlocked keys.
 // It takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys.
-func runVerifyOperation(selected []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
+// directly by supplying the master keys. inventory is used to find the full
+// backup of each selected differential.
+func runVerifyOperation(selected, inventory []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
 	fmt.Println()
 	first := selected[0].Header
 	log.Info("Verification started - ID: %s, date: %s", first.RunID, first.Date)
@@ -86,7 +88,7 @@ func runVerifyOperation(selected []catalog.SetInfo, backupDir, logPath string, m
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := verifySelectedEntries(selected, backupDir, masters, log)
+	skipped, err := verifySelectedEntries(selected, inventory, backupDir, masters, log)
 	if err != nil {
 		return err
 	}
@@ -106,10 +108,14 @@ type verifyPreflightItem struct {
 	Entry          util.BackupEntry
 	PartCount      int
 	TotalSizeBytes int64
-	Err            error
+	// Base is the full backup a differential needs.
+	Base *catalog.SetInfo
+	Err  error
 }
 
-func buildVerifyPreflight(selected []catalog.SetInfo) []verifyPreflightItem {
+// buildVerifyPreflight checks the selected sets. Verifying a differential
+// verifies the complete restore point, so its full backup is needed too.
+func buildVerifyPreflight(selected, inventory []catalog.SetInfo) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
 	for _, info := range selected {
 		item := verifyPreflightItem{
@@ -119,7 +125,13 @@ func buildVerifyPreflight(selected []catalog.SetInfo) []verifyPreflightItem {
 			Err:            info.Err,
 		}
 		if item.Err == nil && info.Entry.IsDiff() {
-			item.Err = fmt.Errorf("%s: verifying differential backups is not supported yet.", info.Entry.String())
+			base, err := catalog.BaseOf(inventory, info.Entry)
+			if err != nil {
+				item.Err = err
+			} else {
+				item.Base = base
+				item.TotalSizeBytes += base.SizeBytes
+			}
 		}
 		items = append(items, item)
 	}
@@ -150,6 +162,9 @@ func printVerifyPreflightWithYubiKeyCheck(
 			issues = append(issues, item.Err.Error())
 		} else {
 			fmt.Fprintf(w, "  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+		}
+		if item.Base != nil {
+			fmt.Fprintf(w, "          → with full backup %s (parts: %d)\n", item.Base.Entry.String(), len(item.Base.Parts))
 		}
 	}
 	totalBytes := estimateVerifyBytes(items)
@@ -189,10 +204,18 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 // verifySelectedEntries verifies each selected set and returns the number of
 // files missing from the restore points because they could not be read
 // during backup.
-func verifySelectedEntries(selected []catalog.SetInfo, backupDir string, masters operation.MasterKeys, log *util.Logger) (int, error) {
+func verifySelectedEntries(selected, inventory []catalog.SetInfo, backupDir string, masters operation.MasterKeys, log *util.Logger) (int, error) {
 	skipped := 0
 	for _, info := range selected {
-		n, err := verifyEntry(info.Entry, backupDir, masters[info.Header.KeySet.ID], log)
+		var base *util.BackupEntry
+		if info.Entry.IsDiff() {
+			baseInfo, err := catalog.BaseOf(inventory, info.Entry)
+			if err != nil {
+				return 0, err
+			}
+			base = &baseInfo.Entry
+		}
+		n, err := verifyEntry(info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
 			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
@@ -201,18 +224,30 @@ func verifySelectedEntries(selected []catalog.SetInfo, backupDir string, masters
 	return skipped, nil
 }
 
-func verifyEntry(entry util.BackupEntry, backupDir string, master []byte, log *util.Logger) (int, error) {
+// verifyEntry verifies one restore point: a full backup, or a differential
+// together with its full backup base.
+func verifyEntry(entry util.BackupEntry, base *util.BackupEntry, backupDir string, master []byte, log *util.Logger) (int, error) {
 	set, err := catalog.OpenSet(backupDir, entry)
 	if err != nil {
 		return 0, err
 	}
 	defer set.Close()
+	parts := len(set.Paths)
+	var baseSet *container.Set
+	if base != nil {
+		baseSet, err = catalog.OpenSet(backupDir, *base)
+		if err != nil {
+			return 0, fmt.Errorf("Full backup %s: %w", base.String(), err)
+		}
+		defer baseSet.Close()
+		parts += len(baseSet.Paths)
+	}
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
-	m, err := operation.ProcessRestorePoint(set, master, "", true, log)
+	m, err := operation.ProcessRestorePoint(set, baseSet, master, "", true, log)
 	if err != nil {
 		return 0, err
 	}
-	log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, len(set.Paths), entry.DirectoryName)
+	log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
 	return operation.ReportSkippedFiles(m, entry.DirectoryName, log), nil
 }

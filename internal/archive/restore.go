@@ -227,6 +227,24 @@ func SkippedFiles(m *manifest.Manifest) []string {
 	return out
 }
 
+// DecideFromBase returns the Decide function for the full backup's data
+// section when restoring a differential: only files the target takes from the
+// full backup (origin "F", including stale files) are extracted and checked
+// against the target's hash; superseded, deleted, and void entries are read
+// past without being written.
+func DecideFromBase(target *manifest.Manifest) Decide {
+	byPath := make(map[string]*manifest.Entry, len(target.Entries))
+	for i := range target.Entries {
+		byPath[target.Entries[i].Path] = &target.Entries[i]
+	}
+	return func(name string) (*manifest.Entry, Action, error) {
+		if e, ok := byPath[name]; ok && e.Type == manifest.TypeFile && e.Origin == manifest.OriginFull {
+			return e, ActionExtract, nil
+		}
+		return nil, ActionSkip, nil
+	}
+}
+
 // DecideOwn returns the Decide function for a set's own data section: every
 // file whose content is in the set (all files of a full backup, the new and
 // changed files of a differential) is extracted, void entries are skipped,

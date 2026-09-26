@@ -51,6 +51,10 @@ func printBackupSelectionPrompt(action string, runs []catalog.BackupRunSummary) 
 	for _, run := range runs {
 		fmt.Printf("  - Backup ID: %s / Timestamp (local): %s\n", run.RunID, formatBackupRunTimestamp(run.Created))
 		for _, entry := range run.Entries {
+			if entry.IsDiff() {
+				fmt.Printf("    - %s (differential: full backup %s + changes)\n", entry.String(), entry.ChainID)
+				continue
+			}
 			fmt.Printf("    - %s\n", entry.String())
 		}
 	}
