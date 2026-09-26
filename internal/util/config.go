@@ -99,9 +99,10 @@ type Config struct {
 	YubiKeySpare       bool         `yaml:"yubikey_spare"`
 	RecoveryCode       bool         `yaml:"recovery_code"`
 	PasswordMinLength  int          `yaml:"password_min_length"`
-	Exclude            []string     `yaml:"exclude"`
-	OnUnreadableFile   string       `yaml:"on_unreadable_file"`
-	Argon2             Argon2Config `yaml:"argon2"`
+	Exclude            []string           `yaml:"exclude"`
+	OnUnreadableFile   string             `yaml:"on_unreadable_file"`
+	Differential       DifferentialConfig `yaml:"differential"`
+	Argon2             Argon2Config       `yaml:"argon2"`
 
 	// ExcludeMatcher is the parsed form of Exclude, set by Load. A nil
 	// matcher excludes nothing.
@@ -121,6 +122,42 @@ func (c *Config) UseYubiKey() bool {
 // IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).
 func (c *Config) IsYubiKeyOnly() bool {
 	return c.AuthenticationMode == AuthModeYubiKey
+}
+
+// DifferentialConfig holds the settings of differential backups. Zero values
+// mean "use the default"; use the accessor methods.
+type DifferentialConfig struct {
+	Enabled                    *bool `yaml:"enabled"`
+	FullBackupIntervalDays     int   `yaml:"full_backup_interval_days"`
+	MaxSizePercent             int   `yaml:"max_size_percent"`
+	RetentionKeepDifferentials int   `yaml:"retention_keep_differentials"`
+}
+
+// Differential backup defaults and bounds.
+const (
+	DefaultFullBackupIntervalDays = 30
+	MaxFullBackupIntervalDays     = 365
+	DefaultMaxSizePercent         = 50
+)
+
+// IsEnabled reports whether differential backups are enabled (default true).
+func (d DifferentialConfig) IsEnabled() bool { return d.Enabled == nil || *d.Enabled }
+
+// IntervalDays returns the maximum age of a full backup used as base.
+func (d DifferentialConfig) IntervalDays() int {
+	if d.FullBackupIntervalDays <= 0 {
+		return DefaultFullBackupIntervalDays
+	}
+	return d.FullBackupIntervalDays
+}
+
+// SizePercent returns the differential size, in percent of the full backup,
+// at which a new full backup is created.
+func (d DifferentialConfig) SizePercent() int {
+	if d.MaxSizePercent <= 0 {
+		return DefaultMaxSizePercent
+	}
+	return d.MaxSizePercent
 }
 
 // on_unreadable_file values.
@@ -243,6 +280,16 @@ func (c *Config) validate() error {
 	case OnUnreadableFail, OnUnreadableSkip:
 	default:
 		return fmt.Errorf("Invalid 'on_unreadable_file': %q (allowed: fail, skip). Remedy: Set 'on_unreadable_file' to \"fail\" or \"skip\".", c.OnUnreadableFile)
+	}
+	d := c.Differential
+	if d.FullBackupIntervalDays < 0 || d.FullBackupIntervalDays > MaxFullBackupIntervalDays {
+		return fmt.Errorf("Invalid 'differential.full_backup_interval_days': %d (allowed 1-%d). Remedy: Set it to the maximum age in days of a full backup; the default is %d.", d.FullBackupIntervalDays, MaxFullBackupIntervalDays, DefaultFullBackupIntervalDays)
+	}
+	if d.MaxSizePercent < 0 || d.MaxSizePercent > 100 {
+		return fmt.Errorf("Invalid 'differential.max_size_percent': %d (allowed 1-100). Remedy: Set it to a percentage of the full backup size; the default is %d.", d.MaxSizePercent, DefaultMaxSizePercent)
+	}
+	if d.RetentionKeepDifferentials < 0 {
+		return fmt.Errorf("Invalid 'differential.retention_keep_differentials': %d (must be >= 0). Remedy: Use 0 (keep all) or a positive number.", d.RetentionKeepDifferentials)
 	}
 	matcher, err := NewExcludeMatcher(c.Exclude)
 	if err != nil {

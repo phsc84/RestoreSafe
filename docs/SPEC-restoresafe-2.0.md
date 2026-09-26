@@ -332,20 +332,25 @@ Then, per directory, a differential is chosen when **all** of the following hold
 
 All checks need no password, so the complete plan is known and shown in the preflight before anything is written.
 
+The size check compares the encrypted data section lengths from the trailers, which include TAR and encryption overhead; for real data this is negligible, for tiny test sources it is not. Differential numbers count every differential of the chain, complete or incomplete, so a number is never reused.
+
+After the credentials are entered, the base is opened and its manifest is decrypted and validated (5.2). If that fails, the directory gets a full backup instead, and the run shows a warning naming the base and the reason; a differential is never written on top of a base that cannot be read.
+
 ### 6.2 Preflight and override
 
 ```text
-Backup plan:
-  C:/Users/phs/Documents  ->  Differential  (base: full 2026-09-01 ABC123, 25 days old)
-  C:/Users/phs/Pictures   ->  Full          (reason: full backup is 31 days old, limit 30)
+Source directory(s):
+  [OK] C:/Users/phs/Documents
+          → Differential backup (base: full 2026-09-01 ABC123, 25 days old)
+  [OK] C:/Users/phs/Pictures
+          → Full backup (reason: full backup is 31 days old (limit 30))
+...
+Keys          : existing keys, created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code
 
-Keys: existing key set from 2026-09-01 (password + YubiKey, 2 YubiKeys, recovery code)
-      You will enter your password once and touch one YubiKey.
-
-Start backup? [Y] yes / [F] full backup for all directories / [K] new keys + full backup / [N] cancel:
+Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] cancel:
 ```
 
-- `F` forces a full backup for every directory with the current key set (e.g. to start fresh chains).
+- `F` forces a full backup for every directory with the current key set (e.g. to start fresh chains). It is offered only when at least one differential is planned.
 - `K` creates a new key set (enrollment, 6.3) and forces a full backup for every directory. Use it to change the password, replace a lost YubiKey, or get a new recovery code. Creating new keys needs no old credentials; older chains keep their old key set and remain restorable with the old credentials.
 - There is no "force differential": when the automatic rules choose full, a differential would violate a configured limit or has no valid base.
 
@@ -425,7 +430,7 @@ As today (walk -> TAR -> encrypt -> split), plus:
 
 ### 6.9 Post-backup verification and retention
 
-- `verify_after_backup: true` verifies each new set per section 8 (a differential: only its own data section plus manifest cross-checks; the base is not re-read).
+- `verify_after_backup: true` verifies each new set per section 8. For a differential, only its own data section is checked (every new or changed file against its hash); the base was verified when it was written and is not re-read.
 - Unchanged rule: if verification fails, retention is skipped.
 
 ## 7. Restore workflow

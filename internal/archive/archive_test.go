@@ -47,7 +47,7 @@ func restore(t *testing.T, m *manifest.Manifest, tarData []byte, dest string, ve
 	if err := r.CreateDirectories(); err != nil {
 		return err
 	}
-	if err := r.ExtractSection(bytes.NewReader(tarData), DecideFull(m)); err != nil {
+	if err := r.ExtractSection(bytes.NewReader(tarData), DecideOwn(m)); err != nil {
 		return err
 	}
 	return r.Finish()

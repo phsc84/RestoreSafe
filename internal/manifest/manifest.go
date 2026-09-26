@@ -158,6 +158,9 @@ func (b *Builder) SkipLastDirectory(p, reason string) bool {
 	return true
 }
 
+// Footer returns the totals of the entries collected so far.
+func (b *Builder) Footer() Footer { return computeFooter(b.entries) }
+
 // Entries returns the entries collected so far.
 func (b *Builder) Entries() []Entry {
 	return b.entries

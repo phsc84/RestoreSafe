@@ -29,17 +29,26 @@ type BuildOptions struct {
 	// SkipUnreadable records files that cannot be read as skipped instead of
 	// aborting (on_unreadable_file: skip).
 	SkipUnreadable bool
-	// OnSkip is called for every skipped file or directory.
-	OnSkip func(rel, reason string)
+	// OnSkip is called for every skipped file or directory. stale is true
+	// when a differential keeps the older version from the full backup.
+	OnSkip func(rel, reason string, stale bool)
 	// Stats receives counts; may be nil.
 	Stats *BuildStats
+	// Base is the manifest of the chain's full backup. When set, BuildTar
+	// writes a differential: files unchanged since the base (same size,
+	// last-write time, and change time) are recorded without being read,
+	// and only new and changed files go into the TAR.
+	Base *manifest.Manifest
 }
 
-// BuildStats counts entries left out of the backup.
+// BuildStats counts entries by how they were handled.
 type BuildStats struct {
-	Excluded int // matched an exclude pattern
-	Skipped  int // unreadable (on_unreadable_file: skip)
-	Vanished int // deleted while the backup was running
+	Excluded  int // matched an exclude pattern
+	Skipped   int // unreadable (on_unreadable_file: skip)
+	Stale     int // unreadable in a differential; older version kept
+	Vanished  int // deleted while the backup was running
+	Unchanged int // differential: unchanged since the full backup
+	Stored    int // files whose content is in this set's TAR
 }
 
 type countingWriter struct {
@@ -83,11 +92,36 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	srcDir := filepath.Clean(opts.SourceDir)
 	excludes := normalizeExcludes(srcDir, opts.ExcludeDirs)
 
+	origin := manifest.OriginFull
+	baseFiles := make(map[string]*manifest.Entry)
+	if opts.Base != nil {
+		origin = manifest.OriginDiff
+		for i := range opts.Base.Entries {
+			if e := &opts.Base.Entries[i]; e.Type == manifest.TypeFile {
+				baseFiles[e.Path] = e
+			}
+		}
+	}
+
 	skip := func(rel string, err error) {
 		stats.Skipped++
 		if opts.OnSkip != nil {
-			opts.OnSkip(rel, err.Error())
+			opts.OnSkip(rel, err.Error(), false)
 		}
+	}
+	// skipFile records an unreadable file: in a differential, a file that
+	// exists in the full backup keeps that older version (stale).
+	skipFile := func(rel string, err error, headerWritten bool) {
+		if base := baseFiles[rel]; base != nil {
+			mb.Add(fromBase(base, true, headerWritten))
+			stats.Stale++
+			if opts.OnSkip != nil {
+				opts.OnSkip(rel, err.Error(), true)
+			}
+			return
+		}
+		mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error(), Void: headerWritten})
+		skip(rel, err)
 	}
 
 	walkErr := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
@@ -137,9 +171,13 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			if !opts.SkipUnreadable {
 				return &unreadableError{path: path, err: err}
 			}
-			mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
-			skip(rel, err)
-			return skipDirOrNil(d)
+			if d.IsDir() {
+				mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
+				skip(rel, err)
+				return filepath.SkipDir
+			}
+			skipFile(rel, err, false)
+			return nil
 		}
 		if !isRegularOrDir(info) {
 			return nil
@@ -162,7 +200,15 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			return nil
 		}
 
-		entry, err := writeFile(tw, cw, path, rel)
+		if base := baseFiles[rel]; base != nil {
+			if meta, err := statBasic(path); err == nil && unchanged(base, info.Size(), meta) {
+				mb.Add(fromBase(base, false, false))
+				stats.Unchanged++
+				return nil
+			}
+		}
+
+		entry, err := writeFile(tw, cw, path, rel, origin)
 		var unreadable *unreadableError
 		if errors.As(err, &unreadable) {
 			if errors.Is(unreadable.err, fs.ErrNotExist) && !unreadable.headerWritten {
@@ -172,14 +218,14 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			if !opts.SkipUnreadable {
 				return err
 			}
-			mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: unreadable.err.Error(), Void: unreadable.headerWritten})
-			skip(rel, unreadable.err)
+			skipFile(rel, unreadable.err, unreadable.headerWritten)
 			return nil
 		}
 		if err != nil {
 			return err
 		}
 		mb.Add(entry)
+		stats.Stored++
 		return nil
 	})
 	if walkErr != nil {
@@ -189,6 +235,26 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 		return fmt.Errorf("Failed to finish TAR stream: %w", err)
 	}
 	return nil
+}
+
+// unchanged reports whether a file still matches its base entry. Equality
+// (not "newer than") makes the check immune to clock changes; the NTFS change
+// time is updated on every write and attribute change and cannot be reset by
+// ordinary programs, so a tool that restores the last-write time is caught.
+func unchanged(base *manifest.Entry, size int64, meta basicInfo) bool {
+	return base.Size == size && base.ModTime == meta.ModTime && base.ChangeTime == meta.ChangeTime
+}
+
+// fromBase returns a differential entry that refers to the full backup's
+// content of base. stale marks a file that could not be read in this run;
+// void marks a started TAR entry in this set that restore must skip.
+func fromBase(base *manifest.Entry, stale, void bool) manifest.Entry {
+	e := *base
+	e.Origin = manifest.OriginFull
+	e.Offset = nil
+	e.Stale = stale
+	e.Void = void
+	return e
 }
 
 func skipDirOrNil(d fs.DirEntry) error {
@@ -218,7 +284,7 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 // file are returned as *unreadableError; when the TAR header was already
 // written, the entry is completed with zeros so the stream stays valid, and
 // the caller marks it void.
-func writeFile(tw *tar.Writer, cw *countingWriter, path, rel string) (manifest.Entry, error) {
+func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string) (manifest.Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return manifest.Entry{}, &unreadableError{path: path, err: err}
@@ -277,7 +343,7 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel string) (manifest.E
 		CreationTime: meta.CreationTime,
 		Attributes:   meta.Attributes,
 		Hash:         hex.EncodeToString(hasher.Sum(nil)),
-		Origin:       manifest.OriginFull,
+		Origin:       origin,
 		Offset:       &offset,
 	}, nil
 }

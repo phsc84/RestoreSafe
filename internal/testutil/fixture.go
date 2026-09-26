@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 )
 
@@ -107,7 +108,7 @@ func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry util.BackupEntry) 
 func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
-	res, err := setio.WriteFullSet(setio.FullSetParams{
+	res, err := setio.WriteSet(setio.SetParams{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
@@ -121,6 +122,49 @@ func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry
 		t.Fatalf("WriteFullSet: %v", err)
 	}
 	return len(res.Parts)
+}
+
+// WriteDiffSet writes differential diffNumber of the full backup base (in
+// backupDir) for srcDir, dated date, and returns its entry.
+func WriteDiffSet(t testing.TB, srcDir, backupDir string, base util.BackupEntry, diffNumber int, date string, ks *container.KeySet, master []byte) util.BackupEntry {
+	t.Helper()
+
+	parts, err := filepath.Glob(filepath.Join(backupDir, "["+base.DirectoryName+"]_"+string(base.ChainID)+"_"+base.Date+"_FULL-*.enc"))
+	if err != nil || len(parts) == 0 {
+		t.Fatalf("base parts not found: %v", err)
+	}
+	sort.Strings(parts)
+	set, err := container.Open(parts)
+	if err != nil {
+		t.Fatalf("open base: %v", err)
+	}
+	defer set.Close()
+	keys, err := set.SectionKeys(master)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, sum, err := set.ReadManifest(keys)
+	if err != nil {
+		t.Fatalf("read base manifest: %v", err)
+	}
+
+	entry := util.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
+	runID, _ := util.NewBackupID()
+	_, err = setio.WriteSet(setio.SetParams{
+		SourceDir:      srcDir,
+		ExcludeDirs:    []string{backupDir},
+		OutputDir:      backupDir,
+		Entry:          entry,
+		Base:           &setio.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum},
+		RunID:          runID,
+		KeySet:         *ks,
+		Master:         master,
+		SplitSizeBytes: defaultSplitSizeMB * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("WriteSet (differential): %v", err)
+	}
+	return entry
 }
 
 func mustMkdirAll(t testing.TB, path string, perm os.FileMode) {

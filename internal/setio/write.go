@@ -26,20 +26,33 @@ type Counters struct {
 	Calls *atomic.Int64
 }
 
-// FullSetParams describes one full backup set to write.
-type FullSetParams struct {
+// Base describes the full backup a differential is based on.
+type Base struct {
+	Header         *container.Header
+	Manifest       *manifest.Manifest
+	ManifestSHA256 string
+}
+
+// SetParams describes one backup set to write.
+type SetParams struct {
 	SourceDir   string
 	ExcludeDirs []string
 	// Exclude holds the configured exclude patterns; nil excludes nothing.
 	Exclude *util.ExcludeMatcher
 	// SkipUnreadable skips unreadable files instead of aborting.
 	SkipUnreadable bool
-	// OnSkip is called for every skipped file or directory.
-	OnSkip func(rel, reason string)
+	// OnSkip is called for every skipped file or directory; stale marks a
+	// differential entry that keeps the full backup's older version.
+	OnSkip func(rel, reason string, stale bool)
 	// OutputDir receives the part files (the backup directory or a staging
 	// directory).
 	OutputDir string
-	Entry     util.BackupEntry
+	// Entry names the set. For a differential, Entry.ChainID is the base's
+	// chain ID and Entry.DiffNumber the new differential number.
+	Entry util.BackupEntry
+	// Base makes the set a differential of that full backup; nil writes a
+	// full backup.
+	Base *Base
 	RunID     util.BackupID
 	KeySet    container.KeySet
 	Master    []byte
@@ -60,14 +73,32 @@ type Result struct {
 	Stats    archive.BuildStats
 }
 
-// WriteFullSet writes a full backup of p.SourceDir. Parts are written with the
-// temporary suffix and renamed to their final names only after the trailer is
-// on disk, so an interrupted backup never looks like a complete set. On error,
-// all parts written so far are removed.
-func WriteFullSet(p FullSetParams) (*Result, error) {
-	h, err := container.NewHeader(manifest.SetTypeFull, string(p.Entry.ChainID), string(p.RunID), p.Entry.DirectoryName, p.Entry.Date, p.KeySet)
+// WriteSet writes a full backup of p.SourceDir, or a differential when p.Base
+// is set. Parts are written with the temporary suffix and renamed to their
+// final names only after the trailer is on disk, so an interrupted backup
+// never looks like a complete set. On error, all parts written so far are
+// removed.
+func WriteSet(p SetParams) (*Result, error) {
+	setType := manifest.SetTypeFull
+	var baseManifest *manifest.Manifest
+	if p.Base != nil {
+		setType = manifest.SetTypeDiff
+		baseManifest = p.Base.Manifest
+		if p.Entry.DiffNumber < 1 || p.Base.Header.ChainID != string(p.Entry.ChainID) || p.Base.Header.DirectoryName != p.Entry.DirectoryName {
+			return nil, fmt.Errorf("Internal error: differential %s does not match its base %s_%s.", p.Entry.String(), p.Base.Header.DirectoryName, p.Base.Header.ChainID)
+		}
+	} else if p.Entry.DiffNumber != 0 {
+		return nil, fmt.Errorf("Internal error: differential %s has no base.", p.Entry.String())
+	}
+
+	h, err := container.NewHeader(setType, string(p.Entry.ChainID), string(p.RunID), p.Entry.DirectoryName, p.Entry.Date, p.KeySet)
 	if err != nil {
 		return nil, err
+	}
+	if p.Base != nil {
+		h.DiffNumber = p.Entry.DiffNumber
+		h.BaseDate = p.Base.Header.Date
+		h.BaseManifestSHA256 = p.Base.ManifestSHA256
 	}
 
 	sw := util.NewWriter(func(seq int) string {
@@ -82,8 +113,9 @@ func WriteFullSet(p FullSetParams) (*Result, error) {
 	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
 
 	mb := manifest.NewBuilder(manifest.Header{
-		SetType:       manifest.SetTypeFull,
+		SetType:       setType,
 		ChainID:       string(p.Entry.ChainID),
+		DiffNumber:    p.Entry.DiffNumber,
 		DirectoryName: p.Entry.DirectoryName,
 		SourcePath:    toSlash(p.SourceDir),
 		Exclude:       p.Exclude.Patterns(),
@@ -100,6 +132,7 @@ func WriteFullSet(p FullSetParams) (*Result, error) {
 			SkipUnreadable: p.SkipUnreadable,
 			OnSkip:         p.OnSkip,
 			Stats:          &stats,
+			Base:           baseManifest,
 		}, mb)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
@@ -149,8 +182,7 @@ func WriteFullSet(p FullSetParams) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	footer := manifestFooter(mb)
-	return &Result{Parts: finalParts, Write: res, Manifest: footer, Stats: stats}, nil
+	return &Result{Parts: finalParts, Write: res, Manifest: mb.Footer(), Stats: stats}, nil
 }
 
 // FinalizeParts renames temporary parts to their final names in ascending
@@ -172,23 +204,6 @@ func FinalizeParts(tempParts []string) ([]string, error) {
 		final[i] = dst
 	}
 	return final, nil
-}
-
-func manifestFooter(mb *manifest.Builder) manifest.Footer {
-	var f manifest.Footer
-	for _, e := range mb.Entries() {
-		switch e.Type {
-		case manifest.TypeFile:
-			f.Files++
-			f.TotalBytes += e.Size
-		case manifest.TypeDir:
-			f.Dirs++
-		case manifest.TypeSkipped:
-			f.Skipped++
-		}
-	}
-	f.Entries = len(mb.Entries())
-	return f
 }
 
 func firstError(errs ...error) error {

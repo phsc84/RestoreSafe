@@ -107,6 +107,38 @@ func TestLoadBackupOptions(t *testing.T) {
 	}
 }
 
+func TestLoadDifferentialOptions(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadConfigText(t, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	d := cfg.Differential
+	if !d.IsEnabled() || d.IntervalDays() != 30 || d.SizePercent() != 50 || d.RetentionKeepDifferentials != 0 {
+		t.Fatalf("unexpected defaults: %+v", d)
+	}
+
+	cfg, err = loadConfigText(t, "differential:\n  enabled: false\n  full_backup_interval_days: 7\n  max_size_percent: 25\n  retention_keep_differentials: 5\n")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	d = cfg.Differential
+	if d.IsEnabled() || d.IntervalDays() != 7 || d.SizePercent() != 25 || d.RetentionKeepDifferentials != 5 {
+		t.Fatalf("options not parsed: %+v", d)
+	}
+
+	for _, extra := range []string{
+		"differential:\n  full_backup_interval_days: 366\n",
+		"differential:\n  max_size_percent: 101\n",
+		"differential:\n  retention_keep_differentials: -1\n",
+	} {
+		if _, err := loadConfigText(t, extra); err == nil || !strings.Contains(err.Error(), "differential.") {
+			t.Fatalf("%q: expected differential error, got %v", extra, err)
+		}
+	}
+}
+
 func TestLoadRejectsNegativeRetentionKeep(t *testing.T) {
 	t.Parallel()
 

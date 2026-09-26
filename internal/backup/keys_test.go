@@ -224,21 +224,32 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 	}
 }
 
-func TestPromptBackupStartOffersNewKeys(t *testing.T) {
+func TestPromptBackupStartChoices(t *testing.T) {
 	ks, _ := testutil.NewPasswordKeySet(t, []byte("pw"))
 	prev := readLineFn
 	t.Cleanup(func() { readLineFn = prev })
-	answers := []string{"maybe", "k"}
-	readLineFn = func(string) (string, error) { a := answers[0]; answers = answers[1:]; return a, nil }
 
-	var ok bool
-	var plan keyPlan
-	var err error
-	out := testutil.CaptureStdout(t, func() { ok, plan, err = promptBackupStart(keyPlan{Existing: ks}) })
-	if err != nil || !ok || plan.Existing != nil || plan.NewKeysReason != "New keys requested" {
-		t.Fatalf("expected new keys to be chosen, got ok=%v plan=%+v err=%v", ok, plan, err)
-	}
-	if !strings.Contains(out, "Please enter y (yes), k (new keys), or n (no).") {
-		t.Fatalf("expected retry hint, got %q", out)
+	for _, tc := range []struct {
+		anyDiff bool
+		answers []string
+		want    startChoice
+		hint    string
+	}{
+		{false, []string{"maybe", "k"}, startNewKeys, "Please enter y (yes), k (new keys), or n (no)."},
+		{false, []string{"f", "y"}, startAsPlanned, "Please enter y (yes), k (new keys), or n (no)."},
+		{true, []string{"f"}, startFull, ""},
+		{true, []string{"x", "n"}, startCancel, "Please enter y (yes), f (full backup), k (new keys), or n (no)."},
+	} {
+		answers := tc.answers
+		readLineFn = func(string) (string, error) { a := answers[0]; answers = answers[1:]; return a, nil }
+		var got startChoice
+		var err error
+		out := testutil.CaptureStdout(t, func() { got, err = promptBackupStart(keyPlan{Existing: ks}, tc.anyDiff) })
+		if err != nil || got != tc.want {
+			t.Fatalf("answers %v: got %v (err %v), want %v", tc.answers, got, err, tc.want)
+		}
+		if tc.hint != "" && !strings.Contains(out, tc.hint) {
+			t.Fatalf("answers %v: expected hint %q, got %q", tc.answers, tc.hint, out)
+		}
 	}
 }

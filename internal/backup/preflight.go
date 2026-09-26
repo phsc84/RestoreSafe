@@ -20,6 +20,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	keys keyPlan,
+	plans map[string]*dirPlan,
 	checkYubiKeyAvailability func() error,
 	checkYubiKeyConnected func() error,
 ) {
@@ -65,6 +66,14 @@ func printBackupPreflightWithYubiKeyCheck(
 			if backupName != baseName {
 				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
 			}
+		}
+
+		if plan := plans[backupName]; plan != nil && !src.Skip {
+			reasonLabel := "reason: "
+			if plan.IsDiff() {
+				reasonLabel = ""
+			}
+			fmt.Fprintf(w, "          → %s backup (%s%s)\n", plan.Label(), reasonLabel, plan.Reason)
 		}
 
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, backupDir) {

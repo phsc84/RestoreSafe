@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -39,13 +40,13 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 	entry := util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}
 
 	var opened []string
-	res, err := WriteFullSet(FullSetParams{
+	res, err := WriteSet(SetParams{
 		SourceDir: src, OutputDir: backupDir, Entry: entry, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
 		OnPartOpened: func(seq int, path string) { opened = append(opened, filepath.Base(path)) },
 	})
 	if err != nil {
-		t.Fatalf("WriteFullSet: %v", err)
+		t.Fatalf("WriteSet: %v", err)
 	}
 	if len(res.Parts) < 3 || len(opened) != len(res.Parts) || opened[0] != "[src]_ABC123_2026-09-26_FULL-001.enc" {
 		t.Fatalf("unexpected parts: %v (opened %v)", res.Parts, opened)
@@ -72,7 +73,7 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 	r := archive.NewRestorer(m, t.TempDir(), true)
 	pr, pw := io.Pipe()
 	go func() { pw.CloseWithError(set.DecryptData(keys, pw)) }()
-	if err := r.ExtractSection(pr, archive.DecideFull(m)); err != nil {
+	if err := r.ExtractSection(pr, archive.DecideOwn(m)); err != nil {
 		t.Fatalf("ExtractSection: %v", err)
 	}
 	if err := r.Finish(); err != nil {
@@ -85,7 +86,7 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 
 	backupDir := t.TempDir()
 	ks, master := newKeySet(t)
-	_, err := WriteFullSet(FullSetParams{
+	_, err := WriteSet(SetParams{
 		SourceDir: filepath.Join(t.TempDir(), "does-not-exist"), OutputDir: backupDir,
 		Entry: util.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
@@ -96,6 +97,26 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 	entries, _ := os.ReadDir(backupDir)
 	if len(entries) != 0 {
 		t.Fatalf("expected no files after failed backup, found %d", len(entries))
+	}
+}
+
+func TestWriteSetRejectsInconsistentDifferentialParams(t *testing.T) {
+	t.Parallel()
+
+	ks, master := newKeySet(t)
+	base := &Base{Header: &container.Header{ChainID: "ABC123", DirectoryName: "src"}}
+	for _, tc := range []struct {
+		entry util.BackupEntry
+		base  *Base
+	}{
+		{util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26", DiffNumber: 1}, nil},
+		{util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}, base},
+		{util.BackupEntry{DirectoryName: "src", ChainID: "XYZ999", Date: "2026-09-26", DiffNumber: 1}, base},
+	} {
+		_, err := WriteSet(SetParams{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
+		if err == nil || !strings.Contains(err.Error(), "Internal error") {
+			t.Fatalf("%+v: expected internal error, got %v", tc.entry, err)
+		}
 	}
 }
 

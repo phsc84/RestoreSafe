@@ -38,7 +38,7 @@ func ProcessRestorePoint(set *container.Set, master []byte, destDir string, veri
 		verb, prefix = "verified", "Verification"
 	}
 	err = RunSectionPipeline(set, keys, log, set.Header.DirectoryName, verb, prefix, func(tarStream io.Reader) error {
-		return r.ExtractSection(tarStream, archive.DecideFull(m))
+		return r.ExtractSection(tarStream, archive.DecideOwn(m))
 	})
 	if err != nil {
 		return nil, err
@@ -47,6 +47,34 @@ func ProcessRestorePoint(set *container.Set, master []byte, destDir string, veri
 		for _, p := range r.MissingFiles() {
 			log.WarnLogOnly("  Missing in backup data: %s", p)
 		}
+		return nil, err
+	}
+	return m, nil
+}
+
+// VerifyOwnData checks a set's own data section against its manifest: every
+// file stored in the set is decrypted and hashed. For a differential this
+// covers the new and changed files without reading the full backup, which is
+// what verify_after_backup needs right after writing it.
+func VerifyOwnData(set *container.Set, master []byte, log *util.Logger) (*manifest.Manifest, error) {
+	keys, err := set.SectionKeys(master)
+	if err != nil {
+		return nil, err
+	}
+	defer keys.Zero()
+	m, _, err := set.ReadManifest(keys)
+	if err != nil {
+		return nil, err
+	}
+	r := archive.NewRestorer(m, "", true)
+	r.ExpectOwnContentOnly()
+	err = RunSectionPipeline(set, keys, log, set.Header.DirectoryName, "verified", "Verification", func(tarStream io.Reader) error {
+		return r.ExtractSection(tarStream, archive.DecideOwn(m))
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := r.Finish(); err != nil {
 		return nil, err
 	}
 	return m, nil

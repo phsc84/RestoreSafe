@@ -47,7 +47,7 @@ func (env *operationEnv) run(t *testing.T, plan operation.LocalStagingPlan, id u
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master)
+		runErr = runBackupOperation(env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
 	})
 	env.logger.Close()
 	if runErr != nil {

@@ -35,10 +35,15 @@ type Decide func(name string) (*manifest.Entry, Action, error)
 type Restorer struct {
 	destDir    string
 	verifyOnly bool
+	ownOnly    bool
 	target     *manifest.Manifest
 	done       map[string]bool
 	failures   []string
 }
+
+// ExpectOwnContentOnly makes Finish require only the files whose content is
+// in this set, e.g. to verify a differential's own data without its base.
+func (r *Restorer) ExpectOwnContentOnly() { r.ownOnly = true }
 
 // NewRestorer prepares a restore of target into destDir. In verify mode
 // (verifyOnly) nothing is written; every file's content is hashed and checked.
@@ -168,7 +173,10 @@ func (r *Restorer) checkHash(e *manifest.Entry, sum []byte) error {
 func (r *Restorer) Finish() error {
 	var missing []string
 	for _, e := range r.target.Entries {
-		if e.Type == manifest.TypeFile && !r.done[e.Path] {
+		if e.Type != manifest.TypeFile || (r.ownOnly && !e.HasContentInSet()) {
+			continue
+		}
+		if !r.done[e.Path] {
 			missing = append(missing, e.Path)
 		}
 	}
@@ -219,10 +227,11 @@ func SkippedFiles(m *manifest.Manifest) []string {
 	return out
 }
 
-// DecideFull returns the Decide function for restoring a full backup: every
-// file with content in the set is extracted, void entries are skipped, and any
-// other TAR entry is an error.
-func DecideFull(m *manifest.Manifest) Decide {
+// DecideOwn returns the Decide function for a set's own data section: every
+// file whose content is in the set (all files of a full backup, the new and
+// changed files of a differential) is extracted, void entries are skipped,
+// and any other TAR entry is an error.
+func DecideOwn(m *manifest.Manifest) Decide {
 	byPath := make(map[string]*manifest.Entry, len(m.Entries))
 	for i := range m.Entries {
 		byPath[m.Entries[i].Path] = &m.Entries[i]

@@ -24,6 +24,11 @@ import (
 
 const password = "correct horse battery"
 
+var disabled = false
+
+// fullBackupsOnly disables differentials for tests about full backups.
+var fullBackupsOnly = util.DifferentialConfig{Enabled: &disabled}
+
 // script feeds console answers to the workflows. Running out of answers fails
 // the test, so every prompt of a workflow is accounted for.
 type script struct {
@@ -144,6 +149,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		LogLevel:           "info",
 		VerifyAfterBackup:  true,
 		AuthenticationMode: util.AuthModePassword,
+		Differential:       fullBackupsOnly,
 		Argon2:             testutil.FastArgon2Config,
 	}
 
@@ -263,6 +269,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 		RetentionKeep:      1,
 		LogLevel:           "info",
 		AuthenticationMode: util.AuthModePassword,
+		Differential:       fullBackupsOnly,
 		Exclude:            []string{"*.tmp", "/Cache"},
 		ExcludeMatcher:     matcher,
 		OnUnreadableFile:   util.OnUnreadableSkip,
@@ -323,6 +330,99 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(restored, missing)); !os.IsNotExist(err) {
 			t.Fatalf("%s must not be restored", missing)
 		}
+	}
+}
+
+func runBackup(t *testing.T, cfg *util.Config, lines []string, passwords ...string) string {
+	t.Helper()
+	s := useScript(t, lines, passwords...)
+	out := testutil.CaptureStdout(t, func() {
+		if err := backup.Run(cfg, ""); err != nil {
+			t.Fatalf("backup: %v", err)
+		}
+	})
+	s.done()
+	return out
+}
+
+// TestDifferentialChain creates a full backup and differentials on top of
+// it, then starts a new chain with [F]; retention then removes the old chain
+// as a whole.
+func TestDifferentialChain(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "Documents")
+	backupDir := filepath.Join(root, "Backups")
+	// A large unchanged file keeps the differentials small relative to the
+	// full backup (max_size_percent compares encrypted data sizes).
+	writeFile(t, filepath.Join(docs, "stable.txt"), strings.Repeat("never changes ", 20000))
+	writeFile(t, filepath.Join(docs, "notes.txt"), "v1")
+	writeFile(t, filepath.Join(docs, "old.txt"), "will be deleted")
+	cfg := &util.Config{
+		SourceDirectories:  []string{docs},
+		BackupDirectory:    backupDir,
+		SplitSizeMB:        1,
+		RetentionKeep:      1,
+		LogLevel:           "info",
+		VerifyAfterBackup:  true,
+		AuthenticationMode: util.AuthModePassword,
+		Argon2:             testutil.FastArgon2Config,
+	}
+
+	out := runBackup(t, cfg, []string{"y"}, password, password)
+	if !strings.Contains(out, "Full backup (reason: new keys)") {
+		t.Fatalf("first backup must be full: %q", out)
+	}
+	infos, _ := catalog.Inventory(backupDir)
+	chain := infos[0].Entry.ChainID
+
+	writeFile(t, filepath.Join(docs, "notes.txt"), "v2 with more text")
+	writeFile(t, filepath.Join(docs, "new.txt"), "added")
+	if err := os.Remove(filepath.Join(docs, "old.txt")); err != nil {
+		t.Fatal(err)
+	}
+	out = runBackup(t, cfg, []string{"y"}, password)
+	for _, want := range []string{"Differential backup (base: full", "DIFF001-001.enc", "2 new or changed file(s) stored", "1 unchanged file(s)", "Post-backup verification successful"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("differential 1: expected %q in output: %q", want, out)
+		}
+	}
+
+	// Nothing changed since differential 1, but a differential holds all
+	// changes since the full backup, so differential 2 stores them again.
+	out = runBackup(t, cfg, []string{"y"}, password)
+	if !strings.Contains(out, "DIFF002-001.enc") || !strings.Contains(out, "2 new or changed file(s) stored") {
+		t.Fatalf("differential 2 must contain all changes since the full backup: %q", out)
+	}
+
+	infos, _ = catalog.Inventory(backupDir)
+	if len(infos) != 3 {
+		t.Fatalf("expected full + 2 differentials, got %d sets", len(infos))
+	}
+	for _, info := range infos {
+		if !info.Complete() || info.Entry.ChainID != chain {
+			t.Fatalf("all sets must be complete and in chain %s: %+v", chain, info.Entry)
+		}
+	}
+	for _, name := range []string{"DIFF001", "DIFF002"} {
+		matches, _ := filepath.Glob(filepath.Join(backupDir, "[[]Documents]_"+string(chain)+"_*_"+name+"-001.enc"))
+		if len(matches) != 1 {
+			t.Fatalf("expected one %s part of chain %s, got %v", name, chain, matches)
+		}
+	}
+
+	// [F] starts a new chain; retention (keep 1) deletes the old chain with
+	// its differentials and their logs.
+	out = runBackup(t, cfg, []string{"f"}, password)
+	if !strings.Contains(out, "Backup type: full (full backup requested)") {
+		t.Fatalf("expected forced full backup: %q", out)
+	}
+	infos, _ = catalog.Inventory(backupDir)
+	if len(infos) != 1 || infos[0].Entry.IsDiff() || infos[0].Entry.ChainID == chain {
+		t.Fatalf("expected only the new full backup to remain, got %+v", infos)
+	}
+	logs, _ := filepath.Glob(filepath.Join(backupDir, "*.log"))
+	if len(logs) != 1 {
+		t.Fatalf("expected only the log of the new chain, got %v", logs)
 	}
 }
 

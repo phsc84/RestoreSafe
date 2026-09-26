@@ -16,11 +16,27 @@ backup_directory: "C:/Backup"
 # Default: 4096 MB (= 4 GB)
 split_size_mb: 4096
 
-# Retention: number of backup sets to keep per source directory.
-# Just the N newest backups and log files are kept; any older backup and log files are
-# deleted automatically.
+# Retention: number of backup chains to keep per source directory. A chain is a
+# full backup plus the differential backups based on it; it is always deleted as a
+# whole, so a full backup is never deleted while a kept differential needs it.
 # 0 = keep all backups (no automatic cleanup)
 retention_keep: 3
+
+# Differential backups store only the files that are new or changed since the
+# last full backup. RestoreSafe decides automatically between full and
+# differential and shows the decision before the backup starts; press [F] there
+# to force a full backup.
+differential:
+  # false = every backup is a full backup. Default: true
+  enabled: true
+  # Create a new full backup when the latest full backup is this many days old.
+  # Default: 30  |  Minimum: 1  |  Maximum: 365
+  full_backup_interval_days: 30
+  # Create a new full backup when the latest differential has reached this
+  # percentage of the full backup's size (differentials grow over time, because
+  # each one contains all changes since the full backup).
+  # Default: 50  |  Minimum: 1  |  Maximum: 100
+  max_size_percent: 50
 
 # Files and directories to leave out of every backup (case-insensitive).
 #   "*.tmp"           name pattern: matches at any depth

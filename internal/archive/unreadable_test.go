@@ -111,7 +111,7 @@ func TestBuildTarSkipsLockedFileWhenConfigured(t *testing.T) {
 	var stats BuildStats
 	m, tarData, err := buildWith(t, BuildOptions{
 		SourceDir: src, SkipUnreadable: true, Stats: &stats,
-		OnSkip: func(rel, reason string) { skipped = append(skipped, rel) },
+		OnSkip: func(rel, reason string, stale bool) { skipped = append(skipped, rel) },
 	})
 	if err != nil {
 		t.Fatalf("BuildTar: %v", err)

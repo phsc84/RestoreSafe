@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // Run executes the full backup workflow.
@@ -79,8 +80,9 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, backupDir, os.TempDir())
 	keys := planKeys(cfg, infos)
+	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
-	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, keys, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
@@ -101,14 +103,20 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, keys, err := promptBackupStart(keys)
+	choice, err := promptBackupStart(keys, anyDifferential(plans))
 	if err != nil {
 		return err
 	}
-	if !confirmed {
+	switch choice {
+	case startCancel:
 		log.InfoLogOnly("Backup cancelled by user before start")
 		fmt.Println("Backup cancelled.")
 		return nil
+	case startFull:
+		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
+	case startNewKeys:
+		keys = keyPlan{NewKeysReason: "New keys requested"}
+		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
 	}
 
 	keySet, master, err := obtainKeys(cfg, keys, log)
@@ -117,36 +125,60 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	defer security.ZeroBytes(master)
 
-	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master)
+	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
 }
 
-// promptBackupStart asks whether to start the backup. When existing keys
-// would be reused, the user can choose [K] to create new keys instead (to
-// change the password, replace a lost YubiKey, or get a new recovery code).
-// It returns the key plan to use.
-func promptBackupStart(keys keyPlan) (bool, keyPlan, error) {
+type startChoice int
+
+const (
+	startCancel startChoice = iota
+	startAsPlanned
+	startFull
+	startNewKeys
+)
+
+// promptBackupStart asks whether to start the backup. [F] makes every
+// directory a full backup (offered when a differential is planned); [K]
+// creates new keys (offered when existing keys would be reused), to change
+// the password, replace a lost YubiKey, or get a new recovery code.
+func promptBackupStart(keys keyPlan, anyDiff bool) (startChoice, error) {
 	if keys.Existing == nil {
 		ok, err := operation.PromptStartAction("backup")
-		return ok, keys, err
+		if !ok || err != nil {
+			return startCancel, err
+		}
+		return startAsPlanned, nil
 	}
+	options := "[Y] yes"
+	valid := "y (yes)"
+	if anyDiff {
+		options += " / [F] full backup"
+		valid += ", f (full backup)"
+	}
+	options += " / [K] new keys + full backup / [N] cancel"
+	valid += ", k (new keys), or n (no)"
 	for {
 		fmt.Println()
-		answer, err := readLineFn("Start backup now? [Y] yes / [K] new keys + full backup / [N] cancel: ")
+		answer, err := readLineFn("Start backup now? " + options + ": ")
 		fmt.Println()
 		if err != nil {
-			return false, keys, err
+			return startCancel, err
 		}
 		switch strings.ToLower(strings.TrimSpace(answer)) {
 		case "", "y", "yes":
-			return true, keys, nil
+			return startAsPlanned, nil
+		case "f":
+			if anyDiff {
+				fmt.Println("Every source directory gets a full backup with the current keys.")
+				return startFull, nil
+			}
 		case "k":
-			fmt.Println("New keys will be created. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
-			return true, keyPlan{NewKeysReason: "New keys requested"}, nil
+			fmt.Println("New keys will be created and every source directory gets a full backup. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
+			return startNewKeys, nil
 		case "n", "no":
-			return false, keys, nil
-		default:
-			fmt.Println("Please enter y (yes), k (new keys), or n (no).")
+			return startCancel, nil
 		}
+		fmt.Printf("Please enter %s.\n", valid)
 	}
 }
 
@@ -192,7 +224,9 @@ func removeLeftoverTempParts(backupDir string, log *util.Logger) {
 
 // runBackupOperation performs the backup using an already-unlocked key set.
 // It takes no further input from the user, so it can be driven directly in
-// tests and automated flows by supplying the key set and master key.
+// tests and automated flows by supplying the key set and master key. plans
+// decides full or differential per directory; directories without a plan
+// (or a nil map) get a full backup.
 func runBackupOperation(
 	cfg *util.Config,
 	log *util.Logger,
@@ -203,6 +237,7 @@ func runBackupOperation(
 	runID util.BackupID,
 	keySet *container.KeySet,
 	master []byte,
+	plans map[string]*dirPlan,
 ) error {
 	fmt.Println()
 	n := runnableSourceCount(sources)
@@ -250,7 +285,21 @@ func runBackupOperation(
 		log.Debug("Directory name in archive: %s", directoryName)
 
 		entry := util.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
-		skipped, err := backupDirectory(srcAbs, entry, runID, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log)
+		var base *setio.Base
+		if plan := plans[directoryName]; plan.IsDiff() {
+			loaded, err := loadBase(backupDir, plan.Base, keySet, master)
+			if err != nil {
+				log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", plan.Base.Entry.String(), err)
+				warningCount++
+			} else {
+				base = loaded
+				entry = util.BackupEntry{DirectoryName: directoryName, ChainID: plan.Base.Entry.ChainID, Date: date, DiffNumber: plan.DiffNumber}
+				log.Info("  Backup type: differential %03d of chain %s (%s)", plan.DiffNumber, plan.Base.Entry.ChainID, plan.Reason)
+			}
+		} else if plan != nil {
+			log.Info("  Backup type: full (%s)", plan.Reason)
+		}
+		skipped, err := backupDirectory(srcAbs, entry, runID, base, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log)
 		if err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
@@ -323,7 +372,9 @@ func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master
 			failures++
 			continue
 		}
-		m, err := operation.ProcessRestorePoint(set, master, "", true, log)
+		// A differential's own data is checked; its full backup was
+		// verified when it was written.
+		m, err := operation.VerifyOwnData(set, master, log)
 		parts := len(set.Paths)
 		set.Close() //nolint:errcheck
 		if err != nil {
@@ -340,12 +391,37 @@ func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master
 	return failures
 }
 
-// backupDirectory writes one full backup set of srcDir into workingDir and
-// returns the number of files and directories skipped as unreadable.
+// loadBase opens the full backup a differential is based on and decrypts and
+// validates its manifest. The base must use the unlocked key set.
+func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet, master []byte) (*setio.Base, error) {
+	if info.Header.KeySet.ID != keySet.ID {
+		return nil, fmt.Errorf("it uses different keys")
+	}
+	set, err := catalog.OpenSet(backupDir, info.Entry)
+	if err != nil {
+		return nil, err
+	}
+	defer set.Close()
+	keys, err := set.SectionKeys(master)
+	if err != nil {
+		return nil, err
+	}
+	defer keys.Zero()
+	m, sum, err := set.ReadManifest(keys)
+	if err != nil {
+		return nil, err
+	}
+	return &setio.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
+}
+
+// backupDirectory writes one backup set of srcDir into workingDir: a
+// differential of base, or a full backup when base is nil. It returns the
+// number of files and directories skipped as unreadable.
 func backupDirectory(
 	srcDir string,
 	entry util.BackupEntry,
 	runID util.BackupID,
+	base *setio.Base,
 	workingDir, backupDir string,
 	keySet *container.KeySet,
 	master []byte,
@@ -362,11 +438,12 @@ func backupDirectory(
 	defer stopProgress()
 
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
-	res, err := setio.WriteFullSet(setio.FullSetParams{
+	res, err := setio.WriteSet(setio.SetParams{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir, workingDir},
 		OutputDir:      workingDir,
 		Entry:          entry,
+		Base:           base,
 		RunID:          runID,
 		KeySet:         *keySet,
 		Master:         master,
@@ -374,7 +451,11 @@ func backupDirectory(
 		SyncParts:      syncParts,
 		Exclude:        cfg.ExcludeMatcher,
 		SkipUnreadable: cfg.SkipUnreadableFiles(),
-		OnSkip: func(rel, reason string) {
+		OnSkip: func(rel, reason string, stale bool) {
+			if stale {
+				log.Warn("  Older version kept (could not be read): %s → %s", rel, reason)
+				return
+			}
 			log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
 		},
 		OnPartOpened: func(seq int, path string) {
@@ -388,6 +469,9 @@ func backupDirectory(
 
 	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
 	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, util.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
+	if base != nil {
+		log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, util.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
+	}
 	if n := res.Stats.Excluded; n > 0 {
 		log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)
 	}
@@ -397,5 +481,8 @@ func backupDirectory(
 	if n := res.Stats.Skipped; n > 0 {
 		log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
 	}
-	return res.Stats.Skipped, nil
+	if n := res.Stats.Stale; n > 0 {
+		log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
+	}
+	return res.Stats.Skipped + res.Stats.Stale, nil
 }
