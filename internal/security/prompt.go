@@ -4,6 +4,7 @@ package security
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -137,6 +138,13 @@ func readPasswordFromTerminal(prompt string) ([]byte, error) {
 	}
 }
 
+// Errors of ReadPasswordConfirmedWithPrompts that the user can correct by
+// entering the password again.
+var (
+	ErrPasswordEmpty    = errors.New("Password must not be empty.")
+	ErrPasswordMismatch = errors.New("Passwords do not match.")
+)
+
 // ReadPasswordConfirmedWithPrompts asks the user to enter and confirm a
 // password using custom prompt texts.
 func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte, error) {
@@ -146,7 +154,7 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 	}
 	if len(pw1) == 0 {
 		ZeroBytes(pw1)
-		return nil, fmt.Errorf("Password must not be empty.")
+		return nil, ErrPasswordEmpty
 	}
 
 	pw2, err := ReadPassword(confirmPrompt)
@@ -158,7 +166,7 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 
 	if !bytes.Equal(pw1, pw2) {
 		ZeroBytes(pw1)
-		return nil, fmt.Errorf("Passwords do not match.")
+		return nil, ErrPasswordMismatch
 	}
 
 	return pw1, nil

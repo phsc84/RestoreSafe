@@ -101,7 +101,7 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := operation.PromptStartAction("backup")
+	confirmed, keys, err := promptBackupStart(keys)
 	if err != nil {
 		return err
 	}
@@ -118,6 +118,36 @@ func Run(cfg *util.Config, exeDir string) error {
 	defer security.ZeroBytes(master)
 
 	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master)
+}
+
+// promptBackupStart asks whether to start the backup. When existing keys
+// would be reused, the user can choose [K] to create new keys instead (to
+// change the password, replace a lost YubiKey, or get a new recovery code).
+// It returns the key plan to use.
+func promptBackupStart(keys keyPlan) (bool, keyPlan, error) {
+	if keys.Existing == nil {
+		ok, err := operation.PromptStartAction("backup")
+		return ok, keys, err
+	}
+	for {
+		fmt.Println()
+		answer, err := readLineFn("Start backup now? [Y] yes / [K] new keys + full backup / [N] cancel: ")
+		fmt.Println()
+		if err != nil {
+			return false, keys, err
+		}
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return true, keys, nil
+		case "k":
+			fmt.Println("New keys will be created. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
+			return true, keyPlan{NewKeysReason: "New keys requested"}, nil
+		case "n", "no":
+			return false, keys, nil
+		default:
+			fmt.Println("Please enter y (yes), k (new keys), or n (no).")
+		}
+	}
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in

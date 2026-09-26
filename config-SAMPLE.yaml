@@ -45,6 +45,22 @@ verify_after_backup: false
 #     The YubiKey must support FIDO2 hmac-secret and have a FIDO2 PIN configured.
 authentication_mode: 1
 
+# Modes 2 and 3: register a second YubiKey as spare when new keys are created.
+# Either YubiKey can then restore every backup made with those keys. The spare
+# YubiKey is only needed once, when the keys are created.
+# Default: false
+yubikey_spare: false
+
+# Create a recovery code when new keys are created. The code alone restores
+# every backup made with those keys, even without password or YubiKey (also in
+# mode 2). Write it down and store it offline, never next to your backups.
+# Default: false
+recovery_code: false
+
+# Minimum password length (in characters) when new keys are created.
+# Default: 12  |  Minimum: 8  |  Maximum: 256
+password_min_length: 12
+
 # Argon2id key-derivation parameters.
 #
 # RestoreSafe uses Argon2id (RFC 9106) to derive the AES-256 encryption key from

@@ -376,12 +376,12 @@ func checkKeyHealth(cfg *util.Config, infos []catalog.SetInfo) []healthItem {
 			Detail:   "No keys yet; the next backup creates new keys",
 		}}
 	}
-	detail := fmt.Sprintf("Current keys created %s (%s)", ks.Created().Local().Format("2006-01-02"), util.AuthMode(ks.AuthMode).Label())
-	if ks.AuthMode != int(cfg.AuthenticationMode) {
+	detail := "Current keys " + ks.Summary()
+	if reason := catalog.KeySetMismatch(cfg, ks); reason != "" {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    healthScopeKeys,
-			Detail:   detail + ". authentication_mode in config.yaml differs: the next backup creates new keys and full backups.",
+			Detail:   fmt.Sprintf("%s. %s: the next backup creates new keys and full backups.", detail, reason),
 		}}
 	}
 	return []healthItem{{Severity: healthOK, Scope: healthScopeKeys, Detail: detail}}

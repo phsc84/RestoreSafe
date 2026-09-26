@@ -96,6 +96,9 @@ type Config struct {
 	IODiagnostics      bool         `yaml:"io_diagnostics"`
 	VerifyAfterBackup  bool         `yaml:"verify_after_backup"`
 	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
+	YubiKeySpare       bool         `yaml:"yubikey_spare"`
+	RecoveryCode       bool         `yaml:"recovery_code"`
+	PasswordMinLength  int          `yaml:"password_min_length"`
 	Argon2             Argon2Config `yaml:"argon2"`
 
 	// Argon2Notices holds human-readable notices about argon2 values that were
@@ -116,6 +119,14 @@ func (c *Config) IsYubiKeyOnly() bool {
 
 // DefaultSplitSizeMB is 4 GB expressed in megabytes.
 const DefaultSplitSizeMB int64 = 4096
+
+// Password length bounds (in characters) for new keys. The floor keeps a typo
+// in config.yaml from allowing trivially short passwords.
+const (
+	DefaultPasswordMinLength = 12
+	PasswordMinLengthFloor   = 8
+	PasswordMinLengthMax     = 256
+)
 
 // Load reads and validates the YAML configuration file.
 func Load(path string) (*Config, error) {
@@ -170,6 +181,9 @@ func (c *Config) withDefaults() {
 	if c.AuthenticationMode == 0 {
 		c.AuthenticationMode = AuthModePassword
 	}
+	if c.PasswordMinLength == 0 {
+		c.PasswordMinLength = DefaultPasswordMinLength
+	}
 	if c.Argon2.Time == 0 {
 		c.Argon2.Time = int(security.DefaultArgon2Params.Time)
 	}
@@ -200,6 +214,12 @@ func (c *Config) validate() error {
 	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
 	default:
 		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
+	}
+	if c.YubiKeySpare && !c.UseYubiKey() {
+		return fmt.Errorf("'yubikey_spare: true' requires a YubiKey mode. Remedy: Set 'authentication_mode' to 2 or 3, or set 'yubikey_spare' to false.")
+	}
+	if c.PasswordMinLength < PasswordMinLengthFloor || c.PasswordMinLength > PasswordMinLengthMax {
+		return fmt.Errorf("Invalid 'password_min_length': %d (allowed %d-%d). Remedy: Set 'password_min_length' to at least %d; the recommended value is %d.", c.PasswordMinLength, PasswordMinLengthFloor, PasswordMinLengthMax, PasswordMinLengthFloor, DefaultPasswordMinLength)
 	}
 	if c.Argon2.Time < Argon2MinTime {
 		return fmt.Errorf("Invalid 'argon2.time': %d (minimum %d). Remedy: Set 'argon2.time' to %d or higher; the recommended value is 3.", c.Argon2.Time, Argon2MinTime, Argon2MinTime)

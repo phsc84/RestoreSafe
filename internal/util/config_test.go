@@ -38,6 +38,46 @@ retention_keep: 3
 	}
 }
 
+func loadConfigText(t *testing.T, extra string) (*Config, error) {
+	t.Helper()
+	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+	content := "source_directories:\n  - \"C:/Users/Test/Documents\"\nbackup_directory: \"C:/Backup\"\n" + extra
+	if err := os.WriteFile(cfgPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	return Load(cfgPath)
+}
+
+func TestLoadKeyOptions(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadConfigText(t, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.PasswordMinLength != DefaultPasswordMinLength || cfg.YubiKeySpare || cfg.RecoveryCode {
+		t.Fatalf("unexpected defaults: min=%d spare=%v recovery=%v", cfg.PasswordMinLength, cfg.YubiKeySpare, cfg.RecoveryCode)
+	}
+
+	cfg, err = loadConfigText(t, "authentication_mode: 2\nyubikey_spare: true\nrecovery_code: true\npassword_min_length: 8\n")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.YubiKeySpare || !cfg.RecoveryCode || cfg.PasswordMinLength != 8 {
+		t.Fatalf("options not parsed: %+v", cfg)
+	}
+
+	for _, tc := range []struct{ extra, want string }{
+		{"password_min_length: 7\n", "password_min_length"},
+		{"password_min_length: 257\n", "password_min_length"},
+		{"authentication_mode: 1\nyubikey_spare: true\n", "yubikey_spare"},
+	} {
+		if _, err := loadConfigText(t, tc.extra); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%q: expected error about %s, got %v", tc.extra, tc.want, err)
+		}
+	}
+}
+
 func TestLoadRejectsNegativeRetentionKeep(t *testing.T) {
 	t.Parallel()
 

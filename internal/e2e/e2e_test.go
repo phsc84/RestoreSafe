@@ -237,6 +237,86 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	assertTreesEqual(t, docs, filepath.Join(dest, "Documents"))
 }
 
+// TestNewKeysKeepOldBackupsRestorable chooses [K] to change the password and
+// checks that the old backup still opens with the old password only, while
+// the new backup opens with the new password.
+func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "Documents")
+	backupDir := filepath.Join(root, "Backups")
+	writeFile(t, filepath.Join(docs, "a.txt"), "version 1")
+	cfg := &util.Config{
+		SourceDirectories:  []string{docs},
+		BackupDirectory:    backupDir,
+		SplitSizeMB:        1,
+		LogLevel:           "info",
+		AuthenticationMode: util.AuthModePassword,
+		PasswordMinLength:  12,
+		Argon2:             testutil.FastArgon2Config,
+	}
+	const newPassword = "a brand new password"
+
+	s := useScript(t, []string{"y"}, password, password)
+	testutil.CaptureStdout(t, func() {
+		if err := backup.Run(cfg, ""); err != nil {
+			t.Fatalf("backup 1: %v", err)
+		}
+	})
+	s.done()
+	infos, _ := catalog.Inventory(backupDir)
+	oldRun := infos[0].Header.RunID
+	oldKeys := infos[0].Header.KeySet.ID
+
+	writeFile(t, filepath.Join(docs, "a.txt"), "version 2")
+	s = useScript(t, []string{"k"}, newPassword, newPassword)
+	out := testutil.CaptureStdout(t, func() {
+		if err := backup.Run(cfg, ""); err != nil {
+			t.Fatalf("backup 2: %v", err)
+		}
+	})
+	s.done()
+	if !strings.Contains(out, "New keys created") {
+		t.Fatalf("expected new keys, got %q", out)
+	}
+	infos, _ = catalog.Inventory(backupDir)
+	if len(infos) != 2 || infos[0].Header.KeySet.ID == oldKeys {
+		t.Fatalf("expected a second backup with new keys")
+	}
+
+	// The old backup: the new password is rejected, the old one works.
+	oldDest := filepath.Join(root, "RestoreOld")
+	s = useScript(t, []string{oldRun, oldDest, "y"}, newPassword, newPassword, newPassword)
+	var err error
+	testutil.CaptureStdout(t, func() { err = restore.Run(cfg, "") })
+	s.done()
+	if err == nil {
+		t.Fatal("new password must not open the old backup")
+	}
+	s = useScript(t, []string{oldRun, oldDest, "y"}, password)
+	testutil.CaptureStdout(t, func() {
+		if err := restore.Run(cfg, ""); err != nil {
+			t.Fatalf("restore old: %v", err)
+		}
+	})
+	s.done()
+	if data, _ := os.ReadFile(filepath.Join(oldDest, "Documents", "a.txt")); string(data) != "version 1" {
+		t.Fatalf("old backup restored %q", data)
+	}
+
+	// The newest backup opens with the new password.
+	newDest := filepath.Join(root, "RestoreNew")
+	s = useScript(t, []string{".", newDest, "y"}, newPassword)
+	testutil.CaptureStdout(t, func() {
+		if err := restore.Run(cfg, ""); err != nil {
+			t.Fatalf("restore new: %v", err)
+		}
+	})
+	s.done()
+	if data, _ := os.ReadFile(filepath.Join(newDest, "Documents", "a.txt")); string(data) != "version 2" {
+		t.Fatalf("new backup restored %q", data)
+	}
+}
+
 func TestExistingKeysRejectAnotherPassword(t *testing.T) {
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")

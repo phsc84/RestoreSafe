@@ -2,10 +2,12 @@ package container
 
 import (
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/util"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -239,7 +241,37 @@ func (ks *KeySet) Validate() error {
 	if regular != SlotPassword && regularCount > 2 {
 		return headerErr("at most two YubiKey slots are supported")
 	}
+	// All YubiKeys of a key set share one hmac-secret salt so that restore can
+	// ask for any of them in a single request.
+	salt := ""
+	for _, s := range ks.Slots {
+		if !s.UsesYubiKey() {
+			continue
+		}
+		if salt != "" && s.Challenge.Salt != salt {
+			return headerErr("YubiKey slots use different salts")
+		}
+		salt = s.Challenge.Salt
+	}
 	return nil
+}
+
+// Summary returns a one-line description such as
+// "created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code".
+func (ks *KeySet) Summary() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), util.AuthMode(ks.AuthMode).Label())
+	if n := ks.YubiKeyCount(); n > 0 {
+		fmt.Fprintf(&b, " (%d YubiKey", n)
+		if n > 1 {
+			b.WriteString("s")
+		}
+		b.WriteString(")")
+	}
+	if ks.HasSlotType(SlotRecovery) {
+		b.WriteString(", recovery code")
+	}
+	return b.String()
 }
 
 func validateSlot(s Slot) error {
@@ -272,8 +304,12 @@ func validateSlot(s Slot) error {
 	} else if s.Challenge != nil {
 		return fmt.Errorf("unexpected YubiKey challenge")
 	}
-	if (s.Type == SlotRecovery) != (s.Check != "") {
-		return fmt.Errorf("recovery check field mismatch")
+	if s.Type == SlotRecovery {
+		if !security.ValidRecoveryCheck(s.Check) {
+			return fmt.Errorf("invalid recovery check field")
+		}
+	} else if s.Check != "" {
+		return fmt.Errorf("unexpected recovery check field")
 	}
 	return nil
 }

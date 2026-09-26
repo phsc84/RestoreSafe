@@ -124,7 +124,7 @@ func printBackupPreflightWithYubiKeyCheck(
 // ones, and what that means for the user.
 func printKeyPlan(w io.Writer, keys keyPlan) {
 	if keys.Existing != nil {
-		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "existing keys, "+describeKeySet(keys.Existing))
+		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "existing keys, "+keys.Existing.Summary())
 		return
 	}
 	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "new keys will be created")

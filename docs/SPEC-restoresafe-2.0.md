@@ -214,7 +214,11 @@ man_key   = HKDF-SHA256(V, salt = header_hash, info = "RestoreSafe v2 manifest")
 
 #### 4.4.3 Multiple YubiKey slots
 
-When a key set has two YubiKey slots, RestoreSafe sends one WebAuthn hmac-secret request with both credential IDs in the allow list and a salt per credential (supported by the Windows WebAuthn API version RestoreSafe already requires). The YubiKey that is plugged in answers, and the response identifies which credential was used; RestoreSafe then unwraps that slot. Phase 1 must confirm this behavior on real hardware. If it isn't reliable, the fallback is that the user picks the YubiKey by its slot label ("YubiKey 1" / "YubiKey 2 (spare)") before the touch.
+All YubiKey slots of a key set share one hmac-secret salt: the spare YubiKey is registered with YubiKey 1's salt. This costs no security, because each YubiKey's hmac-secret output is keyed by its own credential secret, so the outputs still differ. Validation rejects key sets whose YubiKey slots use different salts.
+
+To unlock, RestoreSafe sends one WebAuthn hmac-secret request with all YubiKey credential IDs in the allow list and the shared salt. The YubiKey that is plugged in answers, and the response identifies which credential was used; RestoreSafe then unwraps that slot. This behavior must be confirmed on real hardware. If it isn't reliable, the fallback is that the user picks the YubiKey by its slot label ("YubiKey 1" / "YubiKey 2 (spare)") before the touch.
+
+Registering the spare passes YubiKey 1's credential ID as exclude list. Windows reports `NTE_EXISTS` (0x8009000F) when the connected YubiKey already holds it, and RestoreSafe asks for the spare again.
 
 ### 4.5 Encrypted sections
 
@@ -396,7 +400,7 @@ A file is unreadable when it cannot be opened (e.g. locked by another process, a
 
 ### 6.6 Password minimum
 
-When a new key set is created in modes 1 and 2, the password must have at least 12 characters. The limit is not configurable. It only applies to enrollment; unlocking an existing key set accepts whatever password was set.
+When a new key set is created in modes 1 and 2, the password must have at least `password_min_length` characters (default 12). The value is configurable but never below 8; lower values are rejected at startup so a typo cannot allow trivially short passwords. Characters are counted, not bytes. The rule only applies to enrollment; unlocking an existing key set accepts whatever password was set.
 
 ### 6.7 Creating a full backup
 
@@ -531,6 +535,10 @@ yubikey_spare: false
 # Default: false
 recovery_code: false
 
+# Minimum password length (in characters) when new keys are created.
+# Default: 12  |  Minimum: 8  |  Maximum: 256
+password_min_length: 12
+
 differential:
   # Create differential backups when a valid full backup exists.
   # false = every run creates a full backup.
@@ -602,7 +610,7 @@ Allow `exclude` per source directory in addition to the global list.
 - Change detection: new, changed size, changed mtime only, changed ctime only (mtime reset via `SetFileTime`), attribute change only, unchanged, deleted file, deleted directory, new empty directory, case-only rename, FAT source (`c = 0`).
 - Exclude patterns: name vs rooted patterns, case-insensitivity, directory subtree, invalid pattern rejected at startup, pattern change between full and differential.
 - Unreadable files: locked file with `fail` and `skip`, failure after TAR header (void entry), stale entry in differential, retention skipped.
-- Password minimum: 11 characters rejected, 12 accepted, only at enrollment.
+- Password minimum: shorter than `password_min_length` rejected, characters counted (not bytes), config values below 8 rejected, only at enrollment.
 - Type selection: every rule in 6.1 including boundary values and key set mismatch.
 - Retention: chains, keep-differentials, incomplete sets, 1.x files untouched, logs kept while any set references their run ID, skipped/stale rule.
 - Naming: parse/format round trip, differential numbers never reused after retention, a DIFF file renamed to another chain ID is rejected (file name/header mismatch), and a DIFF whose header `chain_id` was edited fails authentication.

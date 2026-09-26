@@ -174,6 +174,24 @@ func SelectInfos(infos []SetInfo, selected []util.BackupEntry) []SetInfo {
 	return out
 }
 
+// KeySetMismatch returns why ks no longer matches the configuration (so the
+// next backup must create new keys), or "" when it matches.
+func KeySetMismatch(cfg *util.Config, ks *container.KeySet) string {
+	switch {
+	case ks.AuthMode != int(cfg.AuthenticationMode):
+		return "authentication_mode changed in config.yaml"
+	case cfg.YubiKeySpare && ks.YubiKeyCount() < 2:
+		return "yubikey_spare enabled in config.yaml"
+	case !cfg.YubiKeySpare && ks.YubiKeyCount() > 1:
+		return "yubikey_spare disabled in config.yaml"
+	case cfg.RecoveryCode && !ks.HasSlotType(container.SlotRecovery):
+		return "recovery_code enabled in config.yaml"
+	case !cfg.RecoveryCode && ks.HasSlotType(container.SlotRecovery):
+		return "recovery_code disabled in config.yaml"
+	}
+	return ""
+}
+
 // CurrentKeySet returns the key set of the newest complete set, or nil when
 // the backup directory holds no complete RestoreSafe 2 backup. infos must be
 // sorted newest first (as returned by Inventory).

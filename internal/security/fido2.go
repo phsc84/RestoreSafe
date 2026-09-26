@@ -6,6 +6,7 @@
 package security
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -13,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"unsafe"
 
@@ -338,11 +340,13 @@ func parseChallengeData(s string) (ChallengeData, error) {
 // ── Injectable vars (overridden in tests) ─────────────────────────────────────
 
 // fido2MakeCredFn creates a new FIDO2 credential with the hmac-secret extension
-// enabled and returns the raw credential ID.
+// enabled and returns the raw credential ID. An authenticator that already
+// holds one of the exclude credentials refuses the registration.
 var fido2MakeCredFn = realMakeCredential
 
-// fido2GetHmacFn returns the 32-byte hmac-secret output for the given credential
-// ID and salt.
+// fido2GetHmacFn returns the 32-byte hmac-secret output for salt from
+// whichever of the allowed credentials the connected authenticator holds, and
+// the index of that credential in credIDs.
 var fido2GetHmacFn = realGetHmacSecret
 
 // fido2RuntimeReady returns nil when the platform and authenticator are ready.
@@ -383,17 +387,46 @@ func YubiKeyHIDDevicePaths() ([]string, error) {
 // so that restore can skip the password prompt.
 // Returns the combined key and a JSON challenge string to store alongside the backup.
 func CombineWithPassword(password []byte, noPassword bool) (combined []byte, challengeJSON string, err error) {
-	credID, err := fido2MakeCredFn()
-	if err != nil {
-		return nil, "", fmt.Errorf("FIDO2 credential creation failed: %w", err)
-	}
-
 	salt := make([]byte, fido2SaltSize)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, "", fmt.Errorf("failed to generate hmac-secret salt: %w", err)
 	}
+	return registerWithSalt(password, noPassword, salt, nil)
+}
 
-	secret, err := fido2GetHmacFn(credID, salt)
+// ErrYubiKeyAlreadyRegistered is returned when a spare YubiKey registration is
+// refused because the connected YubiKey already holds the first registration.
+var ErrYubiKeyAlreadyRegistered = errors.New("this YubiKey is already registered for these keys")
+
+// RegisterSpareYubiKey registers a second YubiKey for the same keys as
+// primary. The connected YubiKey must not be the primary one: the primary
+// credential is passed as exclude list, so the primary YubiKey refuses and
+// ErrYubiKeyAlreadyRegistered is returned. The spare uses the primary's
+// hmac-secret salt; its output still differs because hmac-secret is keyed by
+// each credential's own secret, and a shared salt lets restore ask for either
+// YubiKey in one request.
+func RegisterSpareYubiKey(password []byte, primary ChallengeData) (combined []byte, challengeJSON string, err error) {
+	primaryCred, err := base64.StdEncoding.DecodeString(primary.CredID)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid primary YubiKey credential: %w", err)
+	}
+	salt, err := base64.StdEncoding.DecodeString(primary.Salt)
+	if err != nil || len(salt) != fido2SaltSize {
+		return nil, "", fmt.Errorf("invalid primary YubiKey salt")
+	}
+	return registerWithSalt(password, primary.NoPassword, salt, [][]byte{primaryCred})
+}
+
+func registerWithSalt(password []byte, noPassword bool, salt []byte, exclude [][]byte) (combined []byte, challengeJSON string, err error) {
+	credID, err := fido2MakeCredFn(exclude)
+	if err != nil {
+		if errors.Is(err, ErrYubiKeyAlreadyRegistered) {
+			return nil, "", err
+		}
+		return nil, "", fmt.Errorf("FIDO2 credential creation failed: %w", err)
+	}
+
+	_, secret, err := fido2GetHmacFn([][]byte{credID}, salt)
 	if err != nil {
 		return nil, "", fmt.Errorf("FIDO2 hmac-secret failed: %w", err)
 	}
@@ -430,18 +463,50 @@ func DeriveFIDO2SecretForRestore(challengeJSON string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid FIDO2 challenge: %w. Remedy: Ensure the .challenge file is unchanged and belongs to the same backup run as the .enc files.", err)
 	}
 
-	credID, _ := base64.StdEncoding.DecodeString(cd.CredID)
-	salt, _ := base64.StdEncoding.DecodeString(cd.Salt)
+	_, secret, err := DeriveFIDO2SecretAny([]ChallengeData{cd})
+	return secret, err
+}
 
-	secret, err := fido2GetHmacFn(credID, salt)
+// DeriveFIDO2SecretAny asks the connected YubiKey for the hmac-secret of any
+// of the given challenges in one request (one touch) and returns the index of
+// the challenge that answered with its secret. All challenges must share the
+// same hmac-secret salt (see RegisterSpareYubiKey). The caller owns the
+// returned slice and must zero it when done.
+func DeriveFIDO2SecretAny(challenges []ChallengeData) (int, []byte, error) {
+	if len(challenges) == 0 {
+		return 0, nil, fmt.Errorf("no YubiKey challenge given")
+	}
+	credIDs := make([][]byte, len(challenges))
+	var salt []byte
+	for i, cd := range challenges {
+		credID, err := base64.StdEncoding.DecodeString(cd.CredID)
+		if err != nil || len(credID) == 0 {
+			return 0, nil, fmt.Errorf("invalid FIDO2 credential ID in challenge %d", i)
+		}
+		s, err := base64.StdEncoding.DecodeString(cd.Salt)
+		if err != nil || len(s) != fido2SaltSize {
+			return 0, nil, fmt.Errorf("invalid FIDO2 salt in challenge %d", i)
+		}
+		if salt != nil && !bytes.Equal(salt, s) {
+			return 0, nil, fmt.Errorf("registered YubiKeys use different salts. Remedy: Use an unmodified backup created by RestoreSafe.")
+		}
+		salt = s
+		credIDs[i] = credID
+	}
+
+	index, secret, err := fido2GetHmacFn(credIDs, salt)
 	if err != nil {
-		return nil, fmt.Errorf("FIDO2 hmac-secret failed: %w", err)
+		return 0, nil, fmt.Errorf("FIDO2 hmac-secret failed: %w", err)
 	}
 	if err := validateFIDO2Secret(secret); err != nil {
 		ZeroBytes(secret)
-		return nil, err
+		return 0, nil, err
 	}
-	return secret, nil
+	if index < 0 || index >= len(challenges) {
+		ZeroBytes(secret)
+		return 0, nil, fmt.Errorf("YubiKey answered with an unknown credential")
+	}
+	return index, secret, nil
 }
 
 // CombinePasswordWithSecret returns password followed by secret. This is the key
@@ -495,11 +560,35 @@ func webauthnErrorString(hr uintptr) string {
 	return fmt.Sprintf("HRESULT 0x%08X", hr)
 }
 
+// hresultNTEExists is NTE_EXISTS, which Windows returns when the authenticator
+// already holds a credential from the exclude list.
+const hresultNTEExists = 0x8009000F
+
+// credentialList builds a WEBAUTHN_CREDENTIALS list. The returned slices must
+// stay alive until the WebAuthn call returns.
+func credentialList(credIDs [][]byte) (webauthnCredentials, []webauthnCredential) {
+	if len(credIDs) == 0 {
+		return webauthnCredentials{}, nil
+	}
+	credTypeW := windows.StringToUTF16Ptr(webAuthnCredTypePublicKey)
+	creds := make([]webauthnCredential, len(credIDs))
+	for i, id := range credIDs {
+		creds[i] = webauthnCredential{
+			dwVersion:          webauthnCredentialVersion,
+			cbId:               uint32(len(id)),
+			pbId:               &id[0],
+			pwszCredentialType: credTypeW,
+		}
+	}
+	return webauthnCredentials{cCredentials: uint32(len(creds)), pCredentials: &creds[0]}, creds
+}
+
 // realMakeCredential calls WebAuthNAuthenticatorMakeCredential to create a new
 // non-resident FIDO2 credential with the hmac-secret extension enabled.
 // The returned credential ID is an opaque blob that the authenticator uses to
-// derive the hmac-secret on subsequent GetAssertion calls.
-func realMakeCredential() (credID []byte, err error) {
+// derive the hmac-secret on subsequent GetAssertion calls. An authenticator
+// holding one of the exclude credentials refuses the registration.
+func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 	clientDataBytes, err := buildClientData("webauthn.create")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build client data: %w", err)
@@ -559,9 +648,13 @@ func realMakeCredential() (credID []byte, err error) {
 		pExtensions: &ext,
 	}
 
+	excludeList, excludeCreds := credentialList(exclude)
+	defer runtimeKeepAlive(excludeCreds, exclude)
+
 	opts := webauthnMakeCredentialOptions{
 		dwVersion:                         webauthnMakeCredOptVersion,
 		dwTimeoutMilliseconds:             fido2TimeoutMs,
+		CredentialList:                    excludeList,
 		Extensions:                        exts,
 		dwAuthenticatorAttachment:         webauthnAttachmentCrossPlatform,
 		dwUserVerificationRequirement:     webauthnUVRequired,
@@ -578,6 +671,9 @@ func realMakeCredential() (credID []byte, err error) {
 		uintptr(unsafe.Pointer(&opts)),
 		uintptr(unsafe.Pointer(&attestation)),
 	)
+	if hr == hresultNTEExists && len(exclude) > 0 {
+		return nil, ErrYubiKeyAlreadyRegistered
+	}
 	if hr != 0 {
 		return nil, fmt.Errorf("WebAuthNAuthenticatorMakeCredential: %s. Remedy: Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.", webauthnErrorString(hr))
 	}
@@ -593,15 +689,20 @@ func realMakeCredential() (credID []byte, err error) {
 }
 
 // realGetHmacSecret calls WebAuthNAuthenticatorGetAssertion with the hmac-secret
-// extension to derive a 32-byte secret from the given credential ID and salt.
-func realGetHmacSecret(credID, salt []byte) ([]byte, error) {
+// extension to derive a 32-byte secret for salt. credIDs is the allow list:
+// the connected authenticator answers with whichever credential it holds, and
+// the index of that credential is returned.
+func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 	if len(salt) != fido2SaltSize {
-		return nil, fmt.Errorf("hmac-secret salt must be %d bytes, got %d", fido2SaltSize, len(salt))
+		return 0, nil, fmt.Errorf("hmac-secret salt must be %d bytes, got %d", fido2SaltSize, len(salt))
+	}
+	if len(credIDs) == 0 {
+		return 0, nil, fmt.Errorf("no credential to authenticate with")
 	}
 
 	clientDataBytes, err := buildClientData("webauthn.get")
 	if err != nil {
-		return nil, fmt.Errorf("failed to build client data: %w", err)
+		return 0, nil, fmt.Errorf("failed to build client data: %w", err)
 	}
 
 	rpIdW := windows.StringToUTF16Ptr(fido2RPID)
@@ -614,17 +715,8 @@ func realGetHmacSecret(credID, salt []byte) ([]byte, error) {
 		pwszHashAlgId:    hashAlgW,
 	}
 
-	credTypeW := windows.StringToUTF16Ptr(webAuthnCredTypePublicKey)
-	allowedCred := webauthnCredential{
-		dwVersion:          webauthnCredentialVersion,
-		cbId:               uint32(len(credID)),
-		pbId:               &credID[0],
-		pwszCredentialType: credTypeW,
-	}
-	allowedList := webauthnCredentials{
-		cCredentials: 1,
-		pCredentials: &allowedCred,
-	}
+	allowedList, allowedCreds := credentialList(credIDs)
+	defer runtimeKeepAlive(allowedCreds, credIDs)
 
 	hmacSalt := webauthnHmacSecretSalt{
 		cbFirst: uint32(len(salt)),
@@ -653,21 +745,52 @@ func realGetHmacSecret(credID, salt []byte) ([]byte, error) {
 		uintptr(unsafe.Pointer(&assertion)),
 	)
 	if hr != 0 {
-		return nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion: %s. Remedy: Ensure the correct YubiKey is connected (the one used during backup).", webauthnErrorString(hr))
+		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion: %s. Remedy: Ensure a YubiKey registered for this backup is connected.", webauthnErrorString(hr))
 	}
 	if assertion == nil || assertion.pHmacSecret == nil {
-		return nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")
+		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")
 	}
 	defer procWebAuthNFreeAssertion.Call(uintptr(unsafe.Pointer(assertion)))
 	hmacSecret := assertion.pHmacSecret
 	if hmacSecret.cbFirst == 0 {
-		return nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned empty hmac-secret first output")
+		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned empty hmac-secret first output")
 	}
 
+	index, err := answeringCredential(credIDs, assertion.Credential)
+	if err != nil {
+		return 0, nil, err
+	}
 	out := make([]byte, hmacSecret.cbFirst)
 	copy(out, unsafe.Slice(hmacSecret.pbFirst, hmacSecret.cbFirst))
-	fido2Log("hmac-secret output length: %d bytes", len(out))
-	return out, nil
+	fido2Log("hmac-secret output length: %d bytes, credential index %d", len(out), index)
+	return index, out, nil
+}
+
+// answeringCredential returns the index in credIDs of the credential the
+// authenticator used. With a single allowed credential an empty response
+// credential is accepted.
+func answeringCredential(credIDs [][]byte, used webauthnCredential) (int, error) {
+	if used.cbId == 0 || used.pbId == nil {
+		if len(credIDs) == 1 {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("WebAuthNAuthenticatorGetAssertion did not report which YubiKey answered")
+	}
+	usedID := unsafe.Slice(used.pbId, used.cbId)
+	for i, id := range credIDs {
+		if bytes.Equal(id, usedID) {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("YubiKey answered with an unknown credential")
+}
+
+// runtimeKeepAlive keeps Go memory referenced by raw pointers passed to the
+// WebAuthn API alive until the call has returned.
+func runtimeKeepAlive(values ...any) {
+	for _, v := range values {
+		runtime.KeepAlive(v)
+	}
 }
 
 // ── HID presence check (SetupDi) ─────────────────────────────────────────────

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"unsafe"
@@ -189,8 +190,8 @@ func TestCombineWithPasswordWritesChecksum(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2MakeCredFn = prevMake; fido2GetHmacFn = prevGet })
 
-	fido2MakeCredFn = func() ([]byte, error) { return []byte("cred"), nil }
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) { return make([]byte, fido2SaltSize), nil }
+	fido2MakeCredFn = func([][]byte) ([]byte, error) { return []byte("cred"), nil }
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, make([]byte, fido2SaltSize), nil }
 
 	_, chalJSON, err := CombineWithPassword([]byte("pw"), false)
 	if err != nil {
@@ -219,12 +220,12 @@ func TestCombineWithPasswordSucceeds(t *testing.T) {
 	wantSecret := make([]byte, fido2SaltSize)
 	wantSecret[0] = 0xAB
 
-	fido2MakeCredFn = func() ([]byte, error) { return wantCredID, nil }
-	fido2GetHmacFn = func(credID, _ []byte) ([]byte, error) {
-		if !bytes.Equal(credID, wantCredID) {
-			t.Errorf("unexpected credID passed to GetHmac: %x", credID)
+	fido2MakeCredFn = func([][]byte) ([]byte, error) { return wantCredID, nil }
+	fido2GetHmacFn = func(credIDs [][]byte, _ []byte) (int, []byte, error) {
+		if len(credIDs) != 1 || !bytes.Equal(credIDs[0], wantCredID) {
+			t.Errorf("unexpected credIDs passed to GetHmac: %x", credIDs)
 		}
-		return wantSecret, nil
+		return 0, wantSecret, nil
 	}
 
 	password := []byte("backup-pw")
@@ -248,8 +249,8 @@ func TestCombineWithPasswordRejectsWrongSecretLength(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2MakeCredFn = prevMake; fido2GetHmacFn = prevGet })
 
-	fido2MakeCredFn = func() ([]byte, error) { return []byte("cred"), nil }
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) { return make([]byte, fido2SaltSize-1), nil }
+	fido2MakeCredFn = func([][]byte) ([]byte, error) { return []byte("cred"), nil }
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, make([]byte, fido2SaltSize-1), nil }
 
 	_, _, err := CombineWithPassword([]byte("pw"), false)
 	if err == nil {
@@ -262,8 +263,8 @@ func TestCombineWithPasswordSetsNoPWFlag(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2MakeCredFn = prevMake; fido2GetHmacFn = prevGet })
 
-	fido2MakeCredFn = func() ([]byte, error) { return []byte("cred"), nil }
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) { return make([]byte, fido2SaltSize), nil }
+	fido2MakeCredFn = func([][]byte) ([]byte, error) { return []byte("cred"), nil }
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, make([]byte, fido2SaltSize), nil }
 
 	_, chalJSON, err := CombineWithPassword([]byte{}, true)
 	if err != nil {
@@ -281,7 +282,7 @@ func TestCombineWithPasswordSetsNoPWFlag(t *testing.T) {
 func TestDeriveFIDO2SecretForRestoreRejectsWrongSecretLength(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2GetHmacFn = prevGet })
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) { return make([]byte, fido2SaltSize+1), nil }
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, make([]byte, fido2SaltSize+1), nil }
 
 	_, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
 	if err == nil {
@@ -292,7 +293,7 @@ func TestDeriveFIDO2SecretForRestoreRejectsWrongSecretLength(t *testing.T) {
 func TestDeriveFIDO2SecretForRestoreReturnsGetHmacError(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2GetHmacFn = prevGet })
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) { return nil, errors.New("device error") }
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, nil, errors.New("device error") }
 
 	_, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
 	if err == nil {
@@ -317,10 +318,10 @@ func TestDeriveFIDO2SecretForRestoreReturnsSecret(t *testing.T) {
 
 	want := make([]byte, fido2SaltSize)
 	want[0] = 0xCD
-	fido2GetHmacFn = func(_, _ []byte) ([]byte, error) {
+	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) {
 		s := make([]byte, fido2SaltSize)
 		s[0] = 0xCD
-		return s, nil
+		return 0, s, nil
 	}
 
 	secret, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
@@ -405,6 +406,77 @@ func TestBuildClientData(t *testing.T) {
 	}
 	if bytes.Equal(data, other) {
 		t.Fatal("expected a fresh random challenge on each call")
+	}
+}
+
+// stubFIDO2 simulates two YubiKeys: each credential ID maps to a secret, and
+// "connected" selects which one answers. Not safe for parallel use.
+func stubFIDO2(t *testing.T, connected string) map[string][]byte {
+	t.Helper()
+	prevMake, prevGet := fido2MakeCredFn, fido2GetHmacFn
+	t.Cleanup(func() { fido2MakeCredFn, fido2GetHmacFn = prevMake, prevGet })
+	secrets := map[string][]byte{}
+	fido2MakeCredFn = func(exclude [][]byte) ([]byte, error) {
+		for _, ex := range exclude {
+			if strings.HasPrefix(string(ex), connected) {
+				return nil, ErrYubiKeyAlreadyRegistered
+			}
+		}
+		id := []byte(fmt.Sprintf("%s-cred-%d", connected, len(secrets)))
+		secrets[string(id)] = bytes.Repeat([]byte{byte(len(secrets) + 1)}, fido2SaltSize)
+		return id, nil
+	}
+	fido2GetHmacFn = func(credIDs [][]byte, _ []byte) (int, []byte, error) {
+		for i, id := range credIDs {
+			if strings.HasPrefix(string(id), connected) {
+				return i, append([]byte(nil), secrets[string(id)]...), nil
+			}
+		}
+		return 0, nil, errors.New("no matching credential on this YubiKey")
+	}
+	return secrets
+}
+
+func TestRegisterSpareYubiKeySharesSaltAndAnswersIndividually(t *testing.T) {
+	stubFIDO2(t, "keyA")
+	_, primaryJSON, err := CombineWithPassword([]byte("pw"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	primary, _ := ParseChallengeJSON(primaryJSON)
+
+	// Registering the spare with the first YubiKey still connected is refused.
+	if _, _, err := RegisterSpareYubiKey([]byte("pw"), primary); !errors.Is(err, ErrYubiKeyAlreadyRegistered) {
+		t.Fatalf("expected ErrYubiKeyAlreadyRegistered, got %v", err)
+	}
+
+	secrets := stubFIDO2(t, "keyB")
+	_, spareJSON, err := RegisterSpareYubiKey([]byte("pw"), primary)
+	if err != nil {
+		t.Fatalf("RegisterSpareYubiKey: %v", err)
+	}
+	spare, _ := ParseChallengeJSON(spareJSON)
+	if spare.Salt != primary.Salt || spare.CredID == primary.CredID || spare.NoPassword != primary.NoPassword {
+		t.Fatalf("spare challenge must share only the salt: %+v vs %+v", spare, primary)
+	}
+
+	idx, secret, err := DeriveFIDO2SecretAny([]ChallengeData{primary, spare})
+	if err != nil {
+		t.Fatalf("DeriveFIDO2SecretAny: %v", err)
+	}
+	cred, _ := base64.StdEncoding.DecodeString(spare.CredID)
+	if idx != 1 || !bytes.Equal(secret, secrets[string(cred)]) {
+		t.Fatalf("expected the spare (index 1) to answer, got index %d", idx)
+	}
+}
+
+func TestDeriveFIDO2SecretAnyRejectsDifferentSalts(t *testing.T) {
+	t.Parallel()
+	a, _ := ParseChallengeJSON(makeValidChallengeJSON(t))
+	b := a
+	b.Salt = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{9}, fido2SaltSize))
+	if _, _, err := DeriveFIDO2SecretAny([]ChallengeData{a, b}); err == nil || !strings.Contains(err.Error(), "different salts") {
+		t.Fatalf("expected different-salt error, got %v", err)
 	}
 }
 
