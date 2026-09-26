@@ -99,7 +99,13 @@ type Config struct {
 	YubiKeySpare       bool         `yaml:"yubikey_spare"`
 	RecoveryCode       bool         `yaml:"recovery_code"`
 	PasswordMinLength  int          `yaml:"password_min_length"`
+	Exclude            []string     `yaml:"exclude"`
+	OnUnreadableFile   string       `yaml:"on_unreadable_file"`
 	Argon2             Argon2Config `yaml:"argon2"`
+
+	// ExcludeMatcher is the parsed form of Exclude, set by Load. A nil
+	// matcher excludes nothing.
+	ExcludeMatcher *ExcludeMatcher `yaml:"-"`
 
 	// Argon2Notices holds human-readable notices about argon2 values that were
 	// clamped to their enforced maximums during Load. Populated at load time,
@@ -115,6 +121,18 @@ func (c *Config) UseYubiKey() bool {
 // IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).
 func (c *Config) IsYubiKeyOnly() bool {
 	return c.AuthenticationMode == AuthModeYubiKey
+}
+
+// on_unreadable_file values.
+const (
+	OnUnreadableFail = "fail"
+	OnUnreadableSkip = "skip"
+)
+
+// SkipUnreadableFiles reports whether files that cannot be read are skipped
+// (listed as warnings) instead of aborting the backup.
+func (c *Config) SkipUnreadableFiles() bool {
+	return c.OnUnreadableFile == OnUnreadableSkip
 }
 
 // DefaultSplitSizeMB is 4 GB expressed in megabytes.
@@ -184,6 +202,9 @@ func (c *Config) withDefaults() {
 	if c.PasswordMinLength == 0 {
 		c.PasswordMinLength = DefaultPasswordMinLength
 	}
+	if c.OnUnreadableFile == "" {
+		c.OnUnreadableFile = OnUnreadableFail
+	}
 	if c.Argon2.Time == 0 {
 		c.Argon2.Time = int(security.DefaultArgon2Params.Time)
 	}
@@ -218,6 +239,16 @@ func (c *Config) validate() error {
 	if c.YubiKeySpare && !c.UseYubiKey() {
 		return fmt.Errorf("'yubikey_spare: true' requires a YubiKey mode. Remedy: Set 'authentication_mode' to 2 or 3, or set 'yubikey_spare' to false.")
 	}
+	switch c.OnUnreadableFile {
+	case OnUnreadableFail, OnUnreadableSkip:
+	default:
+		return fmt.Errorf("Invalid 'on_unreadable_file': %q (allowed: fail, skip). Remedy: Set 'on_unreadable_file' to \"fail\" or \"skip\".", c.OnUnreadableFile)
+	}
+	matcher, err := NewExcludeMatcher(c.Exclude)
+	if err != nil {
+		return err
+	}
+	c.ExcludeMatcher = matcher
 	if c.PasswordMinLength < PasswordMinLengthFloor || c.PasswordMinLength > PasswordMinLengthMax {
 		return fmt.Errorf("Invalid 'password_min_length': %d (allowed %d-%d). Remedy: Set 'password_min_length' to at least %d; the recommended value is %d.", c.PasswordMinLength, PasswordMinLengthFloor, PasswordMinLengthMax, PasswordMinLengthFloor, DefaultPasswordMinLength)
 	}

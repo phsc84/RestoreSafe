@@ -78,6 +78,35 @@ func TestLoadKeyOptions(t *testing.T) {
 	}
 }
 
+func TestLoadBackupOptions(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := loadConfigText(t, "")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.SkipUnreadableFiles() || cfg.OnUnreadableFile != OnUnreadableFail || !cfg.ExcludeMatcher.Empty() {
+		t.Fatalf("unexpected defaults: %+v", cfg)
+	}
+
+	cfg, err = loadConfigText(t, "on_unreadable_file: skip\nexclude:\n  - \"*.tmp\"\n  - \"/Cache\"\n")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.SkipUnreadableFiles() || !cfg.ExcludeMatcher.Match("x/a.tmp", false) || !cfg.ExcludeMatcher.Match("Cache", true) {
+		t.Fatalf("options not applied: %+v", cfg)
+	}
+
+	for _, tc := range []struct{ extra, want string }{
+		{"on_unreadable_file: ignore\n", "on_unreadable_file"},
+		{"exclude:\n  - \"[abc\"\n", "Invalid exclude pattern"},
+	} {
+		if _, err := loadConfigText(t, tc.extra); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%q: expected error about %s, got %v", tc.extra, tc.want, err)
+		}
+	}
+}
+
 func TestLoadRejectsNegativeRetentionKeep(t *testing.T) {
 	t.Parallel()
 

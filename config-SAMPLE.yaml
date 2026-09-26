@@ -22,6 +22,26 @@ split_size_mb: 4096
 # 0 = keep all backups (no automatic cleanup)
 retention_keep: 3
 
+# Files and directories to leave out of every backup (case-insensitive).
+#   "*.tmp"           name pattern: matches at any depth
+#   "node_modules"    a directory name: skipped with everything inside
+#   "/Cache"          starts with "/" or contains "/": path from the source directory root
+#   "logs/"           trailing "/": directories only
+# Wildcards: * (any characters), ? (one character), [abc] (one of a, b, c).
+# Default: none
+exclude: []
+#exclude:
+#  - "*.tmp"
+#  - "~$*"
+#  - "Thumbs.db"
+#  - "node_modules"
+
+# What to do when a file cannot be read (e.g. locked by another program):
+#   "fail" = abort the backup of that directory (default)
+#   "skip" = continue, list the file as a warning, and keep older backups
+#            of that directory until a backup without skipped files succeeds
+on_unreadable_file: "fail"
+
 # Log level: "info" (default) or "debug" (verbose output)
 log_level: "info"
 

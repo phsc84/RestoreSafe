@@ -77,6 +77,28 @@ func TestRoundTripDiffWithStaleEntry(t *testing.T) {
 	}
 }
 
+func TestSkipLastDirectory(t *testing.T) {
+	t.Parallel()
+
+	b := NewBuilder(fullHeader())
+	b.Add(Entry{Path: "ok", Type: TypeDir})
+	b.Add(Entry{Path: "ok/locked", Type: TypeDir})
+	if b.SkipLastDirectory("ok", "denied") {
+		t.Fatal("only the last entry may be converted")
+	}
+	if !b.SkipLastDirectory("ok/locked", "denied") {
+		t.Fatal("expected the last directory to be converted")
+	}
+	data, err := b.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := Parse(data)
+	if m.Entries[1].Type != TypeSkipped || m.Entries[1].Reason != "denied" || m.Footer.Dirs != 1 || m.Footer.Skipped != 1 {
+		t.Fatalf("unexpected result: %+v %+v", m.Entries[1], m.Footer)
+	}
+}
+
 func TestBuilderRejectsInvalidManifest(t *testing.T) {
 	t.Parallel()
 

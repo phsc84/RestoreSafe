@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -51,7 +52,7 @@ func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	log := util.NewConsoleLogger("info")
-	if err := applyRetentionPolicy(dir, 0, []backupSource{{Resolved: dir}}, log); err != nil {
+	if err := applyRetentionPolicy(dir, 0, []backupSource{{Resolved: dir}}, nil, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
 	}
 }
@@ -60,7 +61,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	sources := []backupSource{{Resolved: dir, Err: errors.New("inaccessible")}}
-	if err := applyRetentionPolicy(dir, 1, sources, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(dir, 1, sources, nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
@@ -68,7 +69,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
 	env := newRetentionEnv(t)
 	entry := env.writeFull(t, "Docs", "ONE001", "2026-03-14")
-	if err := applyRetentionPolicy(env.dir, 2, docsSources(), util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, entry) {
@@ -83,7 +84,7 @@ func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	other := env.writeFull(t, "Pics", "AAA001", "2026-03-13")
 
-	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -126,7 +127,7 @@ func TestApplyRetentionPolicyHandlesIncompleteSets(t *testing.T) {
 	old := env.truncateSet(t, oldEntry, time.Now().Add(-24*time.Hour))
 	recent := env.truncateSet(t, recentEntry, time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 5, docsSources(), util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 5, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatal(err)
 	}
 	assertNotExists(t, old)
@@ -140,7 +141,7 @@ func TestApplyRetentionPolicySkipsWhenASetIsUnreadable(t *testing.T) {
 	foreign := util.PartFileName(env.dir, util.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
 	createFile(t, foreign, "not a RestoreSafe backup")
 
-	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
@@ -159,11 +160,31 @@ func TestApplyRetentionPolicyNeverTouchesLegacyFiles(t *testing.T) {
 		createFile(t, p, "1.x")
 	}
 
-	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
 		assertExists(t, p)
+	}
+}
+
+func TestApplyRetentionPolicyHoldsDirectoriesWithSkippedFiles(t *testing.T) {
+	env := newRetentionEnv(t)
+	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
+	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+
+	var err error
+	out := testutil.CaptureStdout(t, func() {
+		err = applyRetentionPolicy(env.dir, 1, docsSources(), map[string]bool{"Docs": true}, util.NewConsoleLogger("info"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range env.parts(t, older) {
+		assertExists(t, p)
+	}
+	if !strings.Contains(out, "Cleanup old data skipped for [Docs]") {
+		t.Fatalf("expected hold message, got %q", out)
 	}
 }
 

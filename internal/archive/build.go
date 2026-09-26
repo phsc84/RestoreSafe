@@ -2,6 +2,7 @@ package archive
 
 import (
 	"RestoreSafe/internal/manifest"
+	"RestoreSafe/internal/util"
 	"archive/tar"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,6 +24,22 @@ type BuildOptions struct {
 	// ExcludeDirs are absolute directories to skip (e.g. the backup directory
 	// when it lies inside the source).
 	ExcludeDirs []string
+	// Exclude holds the configured exclude patterns; nil excludes nothing.
+	Exclude *util.ExcludeMatcher
+	// SkipUnreadable records files that cannot be read as skipped instead of
+	// aborting (on_unreadable_file: skip).
+	SkipUnreadable bool
+	// OnSkip is called for every skipped file or directory.
+	OnSkip func(rel, reason string)
+	// Stats receives counts; may be nil.
+	Stats *BuildStats
+}
+
+// BuildStats counts entries left out of the backup.
+type BuildStats struct {
+	Excluded int // matched an exclude pattern
+	Skipped  int // unreadable (on_unreadable_file: skip)
+	Vanished int // deleted while the backup was running
 }
 
 type countingWriter struct {
@@ -36,6 +53,21 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// unreadableError marks a problem reading a source file or directory (as
+// opposed to writing the backup). headerWritten tells whether a TAR entry for
+// the file was already started.
+type unreadableError struct {
+	path          string
+	err           error
+	headerWritten bool
+}
+
+func (e *unreadableError) Error() string {
+	return fmt.Sprintf("Cannot read %q: %v. Remedy: Close programs that lock or modify the file and start the backup again, or set 'on_unreadable_file: skip' in config.yaml to back up everything else and list such files as warnings.", e.path, e.err)
+}
+
+func (e *unreadableError) Unwrap() error { return e.err }
+
 // BuildTar walks opts.SourceDir, writes the content of every regular file as a
 // TAR stream to w, and adds one manifest entry per directory and file to mb.
 // The TAR contains only regular files; directories and all metadata live in
@@ -43,36 +75,75 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	cw := &countingWriter{w: w}
 	tw := tar.NewWriter(cw)
+	stats := opts.Stats
+	if stats == nil {
+		stats = &BuildStats{}
+	}
 
 	srcDir := filepath.Clean(opts.SourceDir)
 	excludes := normalizeExcludes(srcDir, opts.ExcludeDirs)
 
+	skip := func(rel string, err error) {
+		stats.Skipped++
+		if opts.OnSkip != nil {
+			opts.OnSkip(rel, err.Error())
+		}
+	}
+
 	walkErr := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("Failed to scan source directory at %q: %w", path, err)
-		}
 		if path == srcDir {
-			return nil
-		}
-		if isExcluded(path, excludes) {
-			if d.IsDir() {
-				return filepath.SkipDir
+			if err != nil {
+				return fmt.Errorf("Failed to scan source directory %q: %w", path, err)
 			}
 			return nil
+		}
+		rel, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return fmt.Errorf("Failed to compute relative path: %w", relErr)
+		}
+		rel = filepath.ToSlash(rel)
+
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				stats.Vanished++
+				return skipDirOrNil(d)
+			}
+			if !opts.SkipUnreadable {
+				return &unreadableError{path: path, err: err}
+			}
+			// WalkDir reports a directory it cannot list after it was
+			// recorded; turn that record into a skipped entry.
+			if !mb.SkipLastDirectory(rel, err.Error()) {
+				mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
+			}
+			skip(rel, err)
+			return skipDirOrNil(d)
+		}
+
+		if isExcluded(path, excludes) {
+			return skipDirOrNil(d)
+		}
+		if opts.Exclude.Match(rel, d.IsDir()) {
+			stats.Excluded++
+			return skipDirOrNil(d)
 		}
 
 		info, err := d.Info()
 		if err != nil {
-			return fmt.Errorf("Failed to inspect %q: %w", path, err)
+			if errors.Is(err, fs.ErrNotExist) {
+				stats.Vanished++
+				return skipDirOrNil(d)
+			}
+			if !opts.SkipUnreadable {
+				return &unreadableError{path: path, err: err}
+			}
+			mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
+			skip(rel, err)
+			return skipDirOrNil(d)
 		}
 		if !isRegularOrDir(info) {
 			return nil
 		}
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return fmt.Errorf("Failed to compute relative path: %w", err)
-		}
-		rel = filepath.ToSlash(rel)
 		if err := manifest.ValidatePath(rel); err != nil {
 			return err
 		}
@@ -80,13 +151,31 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 		if info.IsDir() {
 			meta, err := statBasic(path)
 			if err != nil {
-				return fmt.Errorf("Failed to read metadata of directory %q: %w", path, err)
+				if !opts.SkipUnreadable {
+					return &unreadableError{path: path, err: err}
+				}
+				mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
+				skip(rel, err)
+				return filepath.SkipDir
 			}
 			mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeDir, ModTime: meta.ModTime, CreationTime: meta.CreationTime, Attributes: meta.Attributes})
 			return nil
 		}
 
 		entry, err := writeFile(tw, cw, path, rel)
+		var unreadable *unreadableError
+		if errors.As(err, &unreadable) {
+			if errors.Is(unreadable.err, fs.ErrNotExist) && !unreadable.headerWritten {
+				stats.Vanished++
+				return nil
+			}
+			if !opts.SkipUnreadable {
+				return err
+			}
+			mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: unreadable.err.Error(), Void: unreadable.headerWritten})
+			skip(rel, unreadable.err)
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -102,23 +191,47 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	return nil
 }
 
+func skipDirOrNil(d fs.DirEntry) error {
+	if d != nil && d.IsDir() {
+		return filepath.SkipDir
+	}
+	return nil
+}
+
+// sourceReader records read errors so they can be told apart from errors
+// writing the backup.
+type sourceReader struct {
+	r   io.Reader
+	err error
+}
+
+func (s *sourceReader) Read(p []byte) (int, error) {
+	n, err := s.r.Read(p)
+	if err != nil && err != io.EOF {
+		s.err = err
+	}
+	return n, err
+}
+
 // writeFile copies one file into the TAR stream and returns its manifest
-// entry. The file must keep its size while it is copied; a file that shrinks
-// or grows aborts the backup rather than storing a torn copy.
+// entry. The file must keep its size while it is copied. Problems reading the
+// file are returned as *unreadableError; when the TAR header was already
+// written, the entry is completed with zeros so the stream stays valid, and
+// the caller marks it void.
 func writeFile(tw *tar.Writer, cw *countingWriter, path, rel string) (manifest.Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return manifest.Entry{}, fmt.Errorf("Failed to open file %q: %w. Remedy: Close programs that lock the file and check read permissions.", path, err)
+		return manifest.Entry{}, &unreadableError{path: path, err: err}
 	}
 	defer f.Close()
 
 	meta, err := basicInfoFromHandle(windows.Handle(f.Fd()))
 	if err != nil {
-		return manifest.Entry{}, fmt.Errorf("Failed to read metadata of %q: %w", path, err)
+		return manifest.Entry{}, &unreadableError{path: path, err: err}
 	}
 	fi, err := f.Stat()
 	if err != nil {
-		return manifest.Entry{}, fmt.Errorf("Failed to inspect %q: %w", path, err)
+		return manifest.Entry{}, &unreadableError{path: path, err: err}
 	}
 	size := fi.Size()
 
@@ -134,16 +247,25 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel string) (manifest.E
 	}
 
 	hasher := sha256.New()
-	copied, err := io.CopyN(io.MultiWriter(tw, hasher), f, size)
+	src := &sourceReader{r: f}
+	copied, err := io.CopyN(io.MultiWriter(tw, hasher), src, size)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return manifest.Entry{}, fmt.Errorf("File %q became smaller during backup (%d of %d bytes). Remedy: Close programs that modify the file and start the backup again.", path, copied, size)
+		readFailed := src.err != nil || errors.Is(err, io.EOF)
+		if !readFailed {
+			return manifest.Entry{}, fmt.Errorf("Failed to write %q to the backup: %w", path, err)
 		}
-		return manifest.Entry{}, fmt.Errorf("Failed to read file %q: %w", path, err)
+		if _, padErr := io.CopyN(tw, zeroReader{}, size-copied); padErr != nil {
+			return manifest.Entry{}, fmt.Errorf("Failed to write TAR stream: %w", padErr)
+		}
+		cause := src.err
+		if cause == nil {
+			cause = fmt.Errorf("the file became smaller during backup (%d of %d bytes)", copied, size)
+		}
+		return manifest.Entry{}, &unreadableError{path: path, err: cause, headerWritten: true}
 	}
 	var probe [1]byte
 	if n, _ := f.Read(probe[:]); n > 0 {
-		return manifest.Entry{}, fmt.Errorf("File %q grew during backup. Remedy: Close programs that modify the file and start the backup again.", path)
+		return manifest.Entry{}, &unreadableError{path: path, err: errors.New("the file grew during backup"), headerWritten: true}
 	}
 
 	return manifest.Entry{
@@ -158,6 +280,15 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel string) (manifest.E
 		Origin:       manifest.OriginFull,
 		Offset:       &offset,
 	}, nil
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 0
+	}
+	return len(p), nil
 }
 
 func normalizeExcludes(srcDir string, excludeDirs []string) []string {

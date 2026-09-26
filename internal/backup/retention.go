@@ -27,7 +27,9 @@ type chain struct {
 // differential depends on it. Incomplete sets older than the newest complete
 // set of their directory are deleted too. Files that do not follow the
 // RestoreSafe 2 naming scheme (including 1.x backups) are never touched.
-func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupSource, log *util.Logger) error {
+// Directories in hold are left untouched: their newest backup misses files
+// that could not be read, which older backups may still contain.
+func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupSource, hold map[string]bool, log *util.Logger) error {
 	if retentionKeep <= 0 {
 		log.Info("Cleanup old data disabled (retention_keep=%d)", retentionKeep)
 		return nil
@@ -74,6 +76,10 @@ func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupS
 	}
 
 	for directory := range directorySet {
+		if hold[directory] {
+			log.Warn("Cleanup old data skipped for [%s]: the new backup misses files that could not be read, so older backups are kept.", directory)
+			continue
+		}
 		toDelete := retentionCandidates(directory, infos, retentionKeep)
 		for _, info := range toDelete {
 			deleted, err := deleteSetFiles(info.Parts)

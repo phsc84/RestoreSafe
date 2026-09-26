@@ -377,7 +377,8 @@ exclude:
 ```
 
 - Applies to all source directories. Matching is case-insensitive (Windows semantics) with `path.Match` syntax (`*`, `?`, `[...]`).
-- A pattern without `/` matches a file or directory **name** at any depth. A pattern starting with `/` matches a path relative to the source directory root.
+- A pattern without `/` matches a file or directory **name** at any depth. A pattern containing `/` is anchored at the source directory root; a leading `/` is optional (`/Cache`, `Projects/*/build`).
+- A trailing `/` matches directories only (`logs/`). Backslashes are treated as `/`.
 - A matching directory is skipped including its whole subtree.
 - Excluded entries are not recorded in the manifest. The active pattern list is recorded in the manifest header, and the count of excluded entries is logged per directory.
 - Changing the list does not force a full: newly excluded files disappear from the next differential (like deletions); newly included files appear as new files.
@@ -387,11 +388,13 @@ exclude:
 
 `on_unreadable_file: fail | skip` (default `fail`).
 
-A file is unreadable when it cannot be opened (e.g. locked by another process, access denied), a read fails, or its size changes while it is being copied.
+A file is unreadable when it cannot be opened (e.g. locked by another process, access denied), a read fails, or its size changes while it is being copied. A directory is unreadable when it cannot be listed.
+
+A file or directory deleted while the backup is running is not unreadable: it is simply not part of the backup, like a file deleted before the backup started. The count is logged per directory; this applies to both settings, so temporary files vanishing mid-run never abort a backup.
 
 - `fail`: abort the backup of that directory with a clear message naming the file (1.x behavior). No set is created for that directory.
 - `skip`:
-  - Full backup: record the file as `t:"s"` with the reason.
+  - Full backup: record the file as `t:"s"` with the reason. An unreadable directory is recorded as `t:"s"` and its content is not backed up.
   - Differential backup, file present in the base: keep the base's entry (`o:"F"`) and mark it stale (`x:1`); the restore point contains the older version.
   - Differential backup, file not in the base: record as `t:"s"`.
   - If the failure happens after the file's TAR header was written, the remaining bytes are zero-padded and the entry gets `v:1` so restore skips the void TAR entry.

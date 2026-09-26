@@ -30,6 +30,12 @@ type Counters struct {
 type FullSetParams struct {
 	SourceDir   string
 	ExcludeDirs []string
+	// Exclude holds the configured exclude patterns; nil excludes nothing.
+	Exclude *util.ExcludeMatcher
+	// SkipUnreadable skips unreadable files instead of aborting.
+	SkipUnreadable bool
+	// OnSkip is called for every skipped file or directory.
+	OnSkip func(rel, reason string)
 	// OutputDir receives the part files (the backup directory or a staging
 	// directory).
 	OutputDir string
@@ -51,6 +57,7 @@ type Result struct {
 	Parts    []string
 	Write    *container.WriteResult
 	Manifest manifest.Footer
+	Stats    archive.BuildStats
 }
 
 // WriteFullSet writes a full backup of p.SourceDir. Parts are written with the
@@ -79,12 +86,21 @@ func WriteFullSet(p FullSetParams) (*Result, error) {
 		ChainID:       string(p.Entry.ChainID),
 		DirectoryName: p.Entry.DirectoryName,
 		SourcePath:    toSlash(p.SourceDir),
+		Exclude:       p.Exclude.Patterns(),
 	})
 
+	var stats archive.BuildStats
 	pr, pw := io.Pipe()
 	tarErrCh := make(chan error, 1)
 	go func() {
-		err := archive.BuildTar(pw, archive.BuildOptions{SourceDir: p.SourceDir, ExcludeDirs: p.ExcludeDirs}, mb)
+		err := archive.BuildTar(pw, archive.BuildOptions{
+			SourceDir:      p.SourceDir,
+			ExcludeDirs:    p.ExcludeDirs,
+			Exclude:        p.Exclude,
+			SkipUnreadable: p.SkipUnreadable,
+			OnSkip:         p.OnSkip,
+			Stats:          &stats,
+		}, mb)
 		pw.CloseWithError(err) //nolint:errcheck
 		tarErrCh <- err
 	}()
@@ -134,7 +150,7 @@ func WriteFullSet(p FullSetParams) (*Result, error) {
 		return nil, err
 	}
 	footer := manifestFooter(mb)
-	return &Result{Parts: finalParts, Write: res, Manifest: footer}, nil
+	return &Result{Parts: finalParts, Write: res, Manifest: footer, Stats: stats}, nil
 }
 
 // FinalizeParts renames temporary parts to their final names in ascending

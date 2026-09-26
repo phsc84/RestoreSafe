@@ -142,6 +142,22 @@ func (b *Builder) Add(e Entry) {
 	b.entries = append(b.entries, e)
 }
 
+// SkipLastDirectory turns the most recently added entry into a skipped entry
+// when it is the directory p. The walk records a directory before it lists
+// its content, so a directory that turns out to be unreadable is converted
+// here. It reports whether the entry was converted.
+func (b *Builder) SkipLastDirectory(p, reason string) bool {
+	if len(b.entries) == 0 {
+		return false
+	}
+	last := &b.entries[len(b.entries)-1]
+	if last.Path != p || last.Type != TypeDir {
+		return false
+	}
+	*last = Entry{Path: p, Type: TypeSkipped, Reason: reason}
+	return true
+}
+
 // Entries returns the entries collected so far.
 func (b *Builder) Entries() []Entry {
 	return b.entries

@@ -18,6 +18,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 const password = "correct horse battery"
@@ -235,6 +237,93 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		t.Fatalf("unexpected restore output: %q", out)
 	}
 	assertTreesEqual(t, docs, filepath.Join(dest, "Documents"))
+}
+
+// TestExcludeAndUnreadableFiles backs up a source with excluded files and a
+// locked file (on_unreadable_file: skip): the run completes with warnings,
+// older backups are kept, and restore reports the missing file.
+func TestExcludeAndUnreadableFiles(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "Documents")
+	backupDir := filepath.Join(root, "Backups")
+	writeFile(t, filepath.Join(docs, "report.docx"), "report")
+	writeFile(t, filepath.Join(docs, "scratch.tmp"), "temp")
+	writeFile(t, filepath.Join(docs, "Cache", "big.bin"), "cache")
+	locked := filepath.Join(docs, "Mail", "archive.pst")
+	writeFile(t, locked, "mail")
+
+	matcher, err := util.NewExcludeMatcher([]string{"*.tmp", "/Cache"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &util.Config{
+		SourceDirectories:  []string{docs},
+		BackupDirectory:    backupDir,
+		SplitSizeMB:        1,
+		RetentionKeep:      1,
+		LogLevel:           "info",
+		AuthenticationMode: util.AuthModePassword,
+		Exclude:            []string{"*.tmp", "/Cache"},
+		ExcludeMatcher:     matcher,
+		OnUnreadableFile:   util.OnUnreadableSkip,
+		Argon2:             testutil.FastArgon2Config,
+	}
+
+	// First backup: everything readable.
+	s := useScript(t, []string{"y"}, password, password)
+	testutil.CaptureStdout(t, func() {
+		if err := backup.Run(cfg, ""); err != nil {
+			t.Fatalf("backup 1: %v", err)
+		}
+	})
+	s.done()
+
+	// Second backup: the mail archive is locked by another program.
+	p, _ := windows.UTF16PtrFromString(locked)
+	h, err := windows.CreateFile(p, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = useScript(t, []string{"y"}, password)
+	out := testutil.CaptureStdout(t, func() {
+		if err := backup.Run(cfg, ""); err != nil {
+			t.Fatalf("backup 2: %v", err)
+		}
+	})
+	s.done()
+	windows.CloseHandle(h)
+	for _, want := range []string{"Skipped (could not be read): Mail/archive.pst", "Excluded by pattern: 2", "Cleanup old data skipped for [Documents]", "Backup completed with warnings", "Exclude            : *.tmp, /Cache"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in output: %q", want, out)
+		}
+	}
+	infos, _ := catalog.Inventory(backupDir)
+	if len(infos) != 2 {
+		t.Fatalf("retention must keep the older backup while files are skipped, got %d sets", len(infos))
+	}
+
+	// Restoring the newest backup reports the skipped file; excluded files
+	// were never backed up.
+	dest := filepath.Join(root, "Restore")
+	s = useScript(t, []string{".", dest, "y"}, password)
+	out = testutil.CaptureStdout(t, func() {
+		if err := restore.Run(cfg, ""); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+	})
+	s.done()
+	if !strings.Contains(out, "1 file(s) are not in this backup") || !strings.Contains(out, "Mail/archive.pst") {
+		t.Fatalf("expected restore to report the skipped file: %q", out)
+	}
+	restored := filepath.Join(dest, "Documents")
+	if data, _ := os.ReadFile(filepath.Join(restored, "report.docx")); string(data) != "report" {
+		t.Fatal("report.docx not restored")
+	}
+	for _, missing := range []string{"scratch.tmp", "Cache", filepath.Join("Mail", "archive.pst")} {
+		if _, err := os.Stat(filepath.Join(restored, missing)); !os.IsNotExist(err) {
+			t.Fatalf("%s must not be restored", missing)
+		}
+	}
 }
 
 // TestNewKeysKeepOldBackupsRestorable chooses [K] to change the password and

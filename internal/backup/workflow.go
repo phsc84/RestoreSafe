@@ -213,6 +213,9 @@ func runBackupOperation(
 	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(runID), date, n, dirWord)
 	warningCount := 0
 	var written []util.BackupEntry
+	// retentionHold lists directories whose new backup misses unreadable
+	// files; their older backups are kept because they may still have them.
+	retentionHold := make(map[string]bool)
 	processedDirectories := make([]string, 0)
 	directorySourcePaths := make(map[string]string)
 
@@ -247,8 +250,13 @@ func runBackupOperation(
 		log.Debug("Directory name in archive: %s", directoryName)
 
 		entry := util.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
-		if err := backupDirectory(srcAbs, entry, runID, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log); err != nil {
+		skipped, err := backupDirectory(srcAbs, entry, runID, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log)
+		if err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
+		}
+		if skipped > 0 {
+			warningCount++
+			retentionHold[directoryName] = true
 		}
 		written = append(written, entry)
 		processedDirectories = append(processedDirectories, directoryName)
@@ -276,13 +284,17 @@ func runBackupOperation(
 	// set is never pruned in favour of an unverified new one.
 	if verifyFailed {
 		log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
-	} else if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, sources, log); err != nil {
+	} else if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, sources, retentionHold, log); err != nil {
 		log.Warn("  Cleanup old data failed: %v", err)
 		warningCount++
 	}
 
 	staging.Cleanup()
-	log.Info("Backup completed successfully")
+	if len(retentionHold) > 0 {
+		log.Warn("Backup completed with warnings: some files could not be read and are not in this backup (see the warnings above).")
+	} else {
+		log.Info("Backup completed successfully")
+	}
 	if warningCount > 0 {
 		fmt.Printf("Warnings: %d\n", warningCount)
 	}
@@ -328,7 +340,8 @@ func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master
 	return failures
 }
 
-// backupDirectory writes one full backup set of srcDir into workingDir.
+// backupDirectory writes one full backup set of srcDir into workingDir and
+// returns the number of files and directories skipped as unreadable.
 func backupDirectory(
 	srcDir string,
 	entry util.BackupEntry,
@@ -339,7 +352,7 @@ func backupDirectory(
 	cfg *util.Config,
 	syncParts bool,
 	log *util.Logger,
-) error {
+) (int, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	var progressLog *util.Logger
 	if cfg.IODiagnostics {
@@ -359,16 +372,30 @@ func backupDirectory(
 		Master:         master,
 		SplitSizeBytes: cfg.SplitSizeMB * 1024 * 1024,
 		SyncParts:      syncParts,
+		Exclude:        cfg.ExcludeMatcher,
+		SkipUnreadable: cfg.SkipUnreadableFiles(),
+		OnSkip: func(rel, reason string) {
+			log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
+		},
 		OnPartOpened: func(seq int, path string) {
 			log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
 		Counters: setio.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
 	})
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
 	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, util.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
-	return nil
+	if n := res.Stats.Excluded; n > 0 {
+		log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)
+	}
+	if n := res.Stats.Vanished; n > 0 {
+		log.Info("  Deleted while the backup was running: %d file(s)/directory(s) (not in this backup)", n)
+	}
+	if n := res.Stats.Skipped; n > 0 {
+		log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
+	}
+	return res.Stats.Skipped, nil
 }

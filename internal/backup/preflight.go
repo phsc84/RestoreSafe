@@ -103,7 +103,17 @@ func printBackupPreflightWithYubiKeyCheck(
 		verifyAfter = "enabled"
 	}
 	operation.PrintField(w, backupPreflightLabelWidth, "Verify after backup", verifyAfter)
-	operation.PrintField(w, backupPreflightLabelWidth, "KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
+	excludeInfo := "none"
+	if n := len(cfg.Exclude); n > 0 {
+		excludeInfo = strings.Join(cfg.Exclude, ", ")
+	}
+	operation.PrintField(w, backupPreflightLabelWidth, "Exclude", excludeInfo)
+	unreadable := "abort backup (fail)"
+	if cfg.SkipUnreadableFiles() {
+		unreadable = "skip and warn (skip)"
+	}
+	operation.PrintField(w, backupPreflightLabelWidth, "Unreadable files", unreadable)
+	operation.PrintField(w, backupPreflightLabelWidth, "KDF (Argon2id)",fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
 	operation.PrintField(w, backupPreflightLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
 
 	if stagingPlan.Enabled {
