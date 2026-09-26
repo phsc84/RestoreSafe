@@ -2,31 +2,26 @@ package backup
 
 import (
 	"RestoreSafe/internal/operation"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 )
 
-// backupPreflightLabelWidth is the label column width for the backup preflight
-// summary fields. It is sized to the longest label so every colon lines up.
-const backupPreflightLabelWidth = 19
-
-func printBackupPreflightWithYubiKeyCheck(
-	w io.Writer,
+// backupPreflightReport describes what the backup will do: each source
+// directory with its backup type, the backup directory, the keys, the
+// settings, and local staging. The issues that block the backup are added by
+// backupPreflightIssues.
+func backupPreflightReport(
 	cfg *util.Config,
 	backupDir string,
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	keys keyPlan,
 	plans map[string]*dirPlan,
-	checkYubiKeyAvailability func() error,
 	checkYubiKeyConnected func() error,
-) {
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Backup preflight")
-	fmt.Fprintln(w, "----------------")
+) ui.Report {
 	sourceSizes, estimateWarnings := walkSourceSizes(sources)
 	var estimatedBytes, maxPartCount int64
 	splitSizeBytes := cfg.SplitSizeMB * 1024 * 1024
@@ -39,116 +34,132 @@ func printBackupPreflightWithYubiKeyCheck(
 	freeBytes, freeErr := util.QueryFreeSpaceBytes(backupDir)
 	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && util.IsNetworkVolume(backupDir)
 
-	fmt.Fprintln(w, "Source directory(s):")
+	directories := []ui.Row{ui.Heading("Source directory(s)")}
 	for _, src := range sources {
 		baseName := util.DirectoryBaseName(src.Resolved)
 		backupName := src.BackupName
 		if backupName == "" {
 			backupName = baseName
 		}
+		var details []string
+		if backupName != baseName {
+			details = append(details, "backup name: "+backupName)
+		}
 
 		if src.Err != nil {
-			fmt.Fprintf(w, "  [ERROR] %s\n", src.Resolved)
-			if backupName != baseName {
-				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
-			}
-			fmt.Fprintf(w, "          → %v\n", src.Err)
+			directories = append(directories, ui.Item(ui.StatusError, src.Resolved, append(details, src.Err.Error())...))
 			continue
 		}
+		status := ui.StatusOK
 		if src.Warning != "" {
-			fmt.Fprintf(w, "  [WARN] %s\n", src.Resolved)
-			if backupName != baseName {
-				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
-			}
-			fmt.Fprintf(w, "          → %s\n", src.Warning)
-		} else {
-			fmt.Fprintf(w, "  [OK] %s\n", src.Resolved)
-			if backupName != baseName {
-				fmt.Fprintf(w, "          → backup name: %s\n", backupName)
-			}
+			status = ui.StatusWarn
+			details = append(details, src.Warning)
 		}
-
 		if plan := plans[backupName]; plan != nil && !src.Skip {
 			reasonLabel := "reason: "
 			if plan.IsDiff() {
 				reasonLabel = ""
 			}
-			fmt.Fprintf(w, "          → %s backup (%s%s)\n", plan.Label(), reasonLabel, plan.Reason)
+			details = append(details, fmt.Sprintf("%s backup (%s%s)", plan.Label(), reasonLabel, plan.Reason))
 		}
-
 		if sameVolumeNetworkWarning && !src.Skip && util.SameVolume(src.Resolved, backupDir) {
-			fmt.Fprintf(w, "          → Source and backup directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different backup drive/share or point TEMP/TMP to a local drive.\n", util.VolumeDisplay(backupDir))
+			details = append(details, fmt.Sprintf("Source and backup directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different backup drive/share or point TEMP/TMP to a local drive.", util.VolumeDisplay(backupDir)))
 		}
+		directories = append(directories, ui.Item(status, src.Resolved, details...))
 	}
 	for _, warning := range estimateWarnings {
-		fmt.Fprintf(w, "  [WARN] size estimate: %s\n", warning)
+		directories = append(directories, ui.Item(ui.StatusWarn, "size estimate: "+warning))
 	}
+	directories = append(directories, ui.Heading("Backup directory"), ui.Item(ui.StatusOK, backupDir))
+	directories = append(directories, operation.AuthRows(cfg.AuthenticationMode.Label(), cfg.UseYubiKey(), "backup", checkYubiKeyConnected)...)
+	directories = append(directories, keyPlanRows(keys)...)
 
-	fmt.Fprintln(w, "Backup directory:")
-	fmt.Fprintf(w, "  [OK] %s\n", backupDir)
-
-	operation.PrintAuthStatus(w, cfg.AuthenticationMode.Label(), cfg.UseYubiKey(), "backup", checkYubiKeyAvailability, checkYubiKeyConnected)
-	printKeyPlan(w, keys)
-
-	fmt.Fprintln(w)
 	if estimatedBytes < 0 {
 		estimatedBytes = 0
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Needed space", util.FormatBytesBinary(uint64(estimatedBytes)))
+	settings := []ui.Row{ui.Field("Needed space", util.FormatBytesBinary(uint64(estimatedBytes)))}
 	if freeErr != nil {
-		operation.PrintField(w, backupPreflightLabelWidth, "Free space", fmt.Sprintf("unknown (%v)", freeErr))
+		settings = append(settings, ui.Field("Free space", fmt.Sprintf("unknown (%v)", freeErr)))
 	} else {
-		operation.PrintField(w, backupPreflightLabelWidth, "Free space", util.FormatBytesBinary(freeBytes))
+		settings = append(settings, ui.Field("Free space", util.FormatBytesBinary(freeBytes)))
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB))
+	settings = append(settings, ui.Field("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB)))
 	if len(sourceSizes) > 0 && splitSizeBytes > 0 {
 		if advisory := partCountAdvisory(maxPartCount); advisory != "" {
-			fmt.Fprintf(w, "  [WARN] %s\n", advisory)
+			settings = append(settings, ui.Item(ui.StatusWarn, advisory))
 		}
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Retention", retentionSummary(cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials))
+	settings = append(settings, ui.Field("Retention", retentionSummary(cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials)))
 	verifyAfter := "disabled"
 	if cfg.VerifyAfterBackup {
 		verifyAfter = "enabled"
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Verify after backup", verifyAfter)
+	settings = append(settings, ui.Field("Verify after backup", verifyAfter))
 	excludeInfo := "none"
 	if n := len(cfg.Exclude); n > 0 {
 		excludeInfo = strings.Join(cfg.Exclude, ", ")
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Exclude", excludeInfo)
+	settings = append(settings, ui.Field("Exclude", excludeInfo))
 	unreadable := "abort backup (fail)"
 	if cfg.SkipUnreadableFiles() {
 		unreadable = "skip and warn (skip)"
 	}
-	operation.PrintField(w, backupPreflightLabelWidth, "Unreadable files", unreadable)
-	operation.PrintField(w, backupPreflightLabelWidth, "KDF (Argon2id)",fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads))
-	operation.PrintField(w, backupPreflightLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	settings = append(settings,
+		ui.Field("Unreadable files", unreadable),
+		ui.Field("KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads)),
+		ui.Field("Log level", strings.ToLower(cfg.LogLevel)),
+	)
 
+	report := ui.Report{Title: "Backup preflight", Sections: []ui.Section{{Rows: directories}, {Rows: settings}}}
 	if stagingPlan.Enabled {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).\n", util.VolumeDisplay(backupDir))
-		fmt.Fprintln(w, "Temp directory:")
-		fmt.Fprintf(w, "  [OK] %s\n", filepath.ToSlash(stagingPlan.ResolvedTempDir))
-		localFreeBytes, localFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-		if localFreeErr != nil {
-			fmt.Fprintf(w, "  Free disk space: unknown (%v)\n", localFreeErr)
-		} else {
-			fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(localFreeBytes))
+		staging := []ui.Row{
+			ui.Note(fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", util.VolumeDisplay(backupDir))),
+			ui.Heading("Temp directory"),
+			ui.Item(ui.StatusOK, filepath.ToSlash(stagingPlan.ResolvedTempDir)),
 		}
+		if localFreeBytes, err := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir); err != nil {
+			staging = append(staging, ui.Item(ui.StatusNone, fmt.Sprintf("Free disk space: unknown (%v)", err)))
+		} else {
+			staging = append(staging, ui.Item(ui.StatusNone, "Free disk space: "+util.FormatBytesBinary(localFreeBytes)))
+		}
+		report.Sections = append(report.Sections, ui.Section{Rows: staging})
+	}
+	return report
+}
+
+// keyPlanRows state whether the run reuses the existing keys or creates new
+// ones, and what that means for the user.
+func keyPlanRows(keys keyPlan) []ui.Row {
+	if keys.Existing != nil {
+		return []ui.Row{ui.Field("Keys", "existing keys, "+keys.Existing.Summary())}
+	}
+	return []ui.Row{
+		ui.Field("Keys", "new keys will be created"),
+		ui.Item(ui.StatusInfo, keys.NewKeysReason+": new keys will be created and every source directory gets a full backup."),
+		ui.Item(ui.StatusInfo, "Passwords, YubiKey registrations, and recovery codes of earlier keys do not open the new backups (they still open older backups)."),
 	}
 }
 
-// printKeyPlan states whether the run reuses the existing keys or creates new
-// ones, and what that means for the user.
-func printKeyPlan(w io.Writer, keys keyPlan) {
-	if keys.Existing != nil {
-		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "existing keys, "+keys.Existing.Summary())
-		return
+// backupPreflightIssues runs the checks that block a backup and returns them
+// as report issues, together with the error of the first failed check.
+func backupPreflightIssues(cfg *util.Config, backupDir string, sources []backupSource, stagingPlan operation.LocalStagingPlan) ([]ui.Issue, error) {
+	var issues []ui.Issue
+	var first error
+	for _, err := range []error{
+		validateSourceDirectories(sources),
+		validateTargetSpaceForBackup(backupDir, sources),
+		validateStagingSpaceForBackup(stagingPlan, sources),
+		validateBackupPartCount(cfg, sources),
+	} {
+		if err == nil {
+			continue
+		}
+		if first == nil {
+			first = err
+		}
+		issues = append(issues, ui.Issue{Status: ui.StatusError, Text: strings.TrimPrefix(err.Error(), "Backup preflight failed: ")})
 	}
-	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "new keys will be created")
-	fmt.Fprintf(w, "  [INFO] %s: new keys will be created and every source directory gets a full backup.\n", keys.NewKeysReason)
-	fmt.Fprintln(w, "  [INFO] Passwords, YubiKey registrations, and recovery codes of earlier keys do not open the new backups (they still open older backups).")
+	return issues, first
 }
 
 func validateSourceDirectories(sources []backupSource) error {

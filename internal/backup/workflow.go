@@ -18,7 +18,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -62,10 +61,6 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 
 	removeLeftoverTempParts(backupDir, log)
 
-	if err := validateSourceDirectories(sources); err != nil {
-		return err
-	}
-
 	// Plan local staging to mitigate same-volume read+write contention.
 	// Prefer a source that shares the backup volume so the plan correctly detects contention
 	// when only some sources are on the same drive as the backup directory.
@@ -85,24 +80,11 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 	keys := planKeys(cfg, infos)
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
-	printBackupPreflightWithYubiKeyCheck(out, cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
-	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
-		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
-			fmt.Fprintln(out)
-			fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
-		}
-		return err
-	}
-	if err := validateStagingSpaceForBackup(stagingPlan, sources); err != nil {
-		if strings.Contains(err.Error(), "Insufficient free space in temp directory") {
-			fmt.Fprintln(out)
-			fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
-		}
-		return err
-	}
-	if err := validateBackupPartCount(cfg, sources); err != nil {
-		fmt.Fprintln(out)
-		fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyConnected)
+	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan)
+	report.Issues = issues
+	u.ShowReport(report)
+	if err != nil {
 		return err
 	}
 

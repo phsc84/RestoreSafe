@@ -84,7 +84,7 @@ func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 		{Entry: util.BackupEntry{DirectoryName: "Bad", ChainID: "ABC123", Date: "2026-03-20"}, Err: errors.New("Backup set is incomplete")},
 	}
 	var sb strings.Builder
-	printVerifyPreflightWithYubiKeyCheck(&sb, &util.Config{LogLevel: "info"}, t.TempDir(), items, true, false, func() error { return nil }, func() error { return errors.New("absent") })
+	ui.WriteReport(&sb, verifyPreflightReport(&util.Config{LogLevel: "info"}, t.TempDir(), items, true, false, func() error { return errors.New("absent") }))
 	out := sb.String()
 	for _, want := range []string{
 		"  [OK] Docs_ABC123_2026-03-20_FULL (parts: 2)",

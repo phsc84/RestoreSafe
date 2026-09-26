@@ -1,23 +1,11 @@
 package operation
 
 import (
+	"RestoreSafe/internal/ui"
 	"errors"
 	"strings"
 	"testing"
 )
-
-func TestPrintFieldFormatsAlignedOutput(t *testing.T) {
-	t.Parallel()
-	var sb strings.Builder
-	PrintField(&sb, 14, "Log level", "info")
-	output := sb.String()
-	if !strings.Contains(output, "Log level") {
-		t.Fatalf("expected label in output, got: %q", output)
-	}
-	if !strings.Contains(output, "info") {
-		t.Fatalf("expected value in output, got: %q", output)
-	}
-}
 
 func TestValidatePreflightItems_NoFailures(t *testing.T) {
 	t.Parallel()
@@ -52,37 +40,21 @@ func TestValidatePreflightItems_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestPrintYubiKeyStatusSkipsWhenNotRequired(t *testing.T) {
+func TestAuthRows(t *testing.T) {
 	t.Parallel()
-	var sb strings.Builder
-	PrintYubiKeyStatus(&sb, false, "backup", func() error { return nil }, func() error { return nil })
-	if sb.String() != "" {
-		t.Fatalf("expected no output when YubiKey not required, got: %q", sb.String())
-	}
-}
+	connected := func() error { return nil }
+	disconnected := func() error { return errors.New("not connected") }
 
-func TestPrintYubiKeyStatusPrintsWarnWhenDisconnected(t *testing.T) {
-	t.Parallel()
-	var sb strings.Builder
-	PrintYubiKeyStatus(&sb, true, "backup", func() error { return nil }, func() error { return errors.New("not connected") })
-	out := sb.String()
-	if !strings.Contains(out, "[WARN]") {
-		t.Fatalf("expected [WARN] for disconnected, got: %q", out)
+	rows := AuthRows("password only", false, "backup", disconnected)
+	if len(rows) != 1 || rows[0].Kind != ui.RowField || rows[0].Label != "Authentication" || rows[0].Text != "password only" {
+		t.Fatalf("without YubiKey expected only the field, got %+v", rows)
 	}
-	if strings.Contains(out, "[OK]") {
-		t.Fatalf("expected no [OK] when disconnected, got: %q", out)
+	rows = AuthRows("YubiKey only", true, "backup", disconnected)
+	if len(rows) != 2 || rows[1].Status != ui.StatusWarn || !strings.Contains(rows[1].Text, "before starting backup") {
+		t.Fatalf("disconnected YubiKey expected a warning, got %+v", rows)
 	}
-}
-
-func TestPrintYubiKeyStatusPrintsOKWhenConnected(t *testing.T) {
-	t.Parallel()
-	var sb strings.Builder
-	PrintYubiKeyStatus(&sb, true, "backup", func() error { return nil }, func() error { return nil })
-	out := sb.String()
-	if strings.Contains(out, "[WARN]") {
-		t.Fatalf("expected no [WARN] when connected, got: %q", out)
-	}
-	if !strings.Contains(out, "[OK]") {
-		t.Fatalf("expected [OK] when connected, got: %q", out)
+	rows = AuthRows("YubiKey only", true, "restore", connected)
+	if len(rows) != 2 || rows[1].Status != ui.StatusOK || !strings.Contains(rows[1].Text, "before starting restore") {
+		t.Fatalf("connected YubiKey expected OK, got %+v", rows)
 	}
 }

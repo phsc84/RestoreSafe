@@ -278,3 +278,8 @@ func (c *Console) WaitForSpareYubiKey() (bool, error) {
 	}
 	return !strings.EqualFold(strings.TrimSpace(answer), "q"), nil
 }
+
+// ShowReport prints the preflight summary.
+func (c *Console) ShowReport(r Report) {
+	WriteReport(c.Output(), r)
+}

@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"errors"
 	"math"
@@ -51,7 +52,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, t.TempDir(), restorePath, items[3:], false, false, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return nil })
+	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), restorePath, items[3:], false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
 		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
@@ -70,7 +71,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}}
 
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return nil })
+	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	output := sb.String()
 
 	selectionLine := "  [OK] " + docsEntry.String() + " (parts: 4)"
@@ -100,7 +101,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	} {
 		var sb strings.Builder
 		connected := tc.connected
-		printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, t.TempDir(), t.TempDir(), items, true, false, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return connected })
+		ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), t.TempDir(), items, true, false, operation.LocalStagingPlan{}, func() error { return connected }))
 		output := sb.String()
 		authIdx := strings.Index(output, "Authentication: password + YubiKey")
 		statusIdx := strings.Index(output, tc.want)
@@ -118,7 +119,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}
 	var sb strings.Builder
-	printRestorePreflightWithYubiKeyCheck(&sb, &util.Config{}, t.TempDir(), t.TempDir(), items, false, false, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return nil })
+	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), t.TempDir(), items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	if !strings.Contains(sb.String(), "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", sb.String())
 	}

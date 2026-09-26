@@ -53,7 +53,7 @@ func Run(u ui.UI, cfg *util.Config, exeDir string) error {
 	preflight := buildVerifyPreflight(selectedInfos, infos)
 	mode := util.AuthMode(first.KeySet.AuthMode)
 	usesYubiKey := mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey
-	printVerifyPreflightWithYubiKeyCheck(out, cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	u.ShowReport(verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyConnected))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -140,49 +140,38 @@ func buildVerifyPreflight(selected, inventory []catalog.SetInfo) []verifyPreflig
 	return items
 }
 
-func printVerifyPreflightWithYubiKeyCheck(
-	w io.Writer,
+// verifyPreflightReport describes the verification: the selected backups
+// (with the full backup a differential needs) and the issues that block it.
+func verifyPreflightReport(
 	cfg *util.Config,
 	backupDir string,
 	items []verifyPreflightItem,
 	usesYubiKey, yubiKeyOnly bool,
-	checkYubiKeyAvailability func() error,
 	checkYubiKeyConnected func() error,
-) {
-	var issues []string
-
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Verification preflight")
-	fmt.Fprintln(w, "----------------------")
-
-	// Backup selection
-	fmt.Fprintln(w, "Backup selection:")
-	fmt.Fprintf(w, "  Path: %s\n", filepath.ToSlash(backupDir))
+) ui.Report {
+	var issues []ui.Issue
+	rows := []ui.Row{ui.Heading("Backup selection"), ui.Item(ui.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
 	for _, item := range items {
+		status := ui.StatusOK
 		if item.Err != nil {
-			fmt.Fprintf(w, "  [ERROR] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
-			issues = append(issues, item.Err.Error())
-		} else {
-			fmt.Fprintf(w, "  [OK] %s (parts: %d)\n", item.Entry.String(), item.PartCount)
+			status = ui.StatusError
+			issues = append(issues, ui.Issue{Status: ui.StatusError, Text: item.Err.Error()})
 		}
+		var details []string
 		if item.Base != nil {
-			fmt.Fprintf(w, "          → with full backup %s (parts: %d)\n", item.Base.Entry.String(), len(item.Base.Parts))
+			details = append(details, fmt.Sprintf("with full backup %s (parts: %d)", item.Base.Entry.String(), len(item.Base.Parts)))
 		}
+		rows = append(rows, ui.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
 	}
-	totalBytes := estimateVerifyBytes(items)
+	rows = append(rows, operation.AuthRows(util.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "verification", checkYubiKeyConnected)...)
 
-	// Authentication
-	operation.PrintAuthStatus(w, util.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "verification", checkYubiKeyAvailability, checkYubiKeyConnected)
-
-	fmt.Fprintln(w)
-	if totalBytes > 0 {
-		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Backup size", util.FormatBytesBinary(uint64(totalBytes)))
-	} else {
-		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Backup size", "unknown")
+	size := "unknown"
+	if totalBytes := estimateVerifyBytes(items); totalBytes > 0 {
+		size = util.FormatBytesBinary(uint64(totalBytes))
 	}
-	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Log level", strings.ToLower(cfg.LogLevel))
+	summary := []ui.Row{ui.Field("Backup size", size), ui.Field("Log level", strings.ToLower(cfg.LogLevel))}
 
-	operation.PrintPreflightIssues(w, issues)
+	return ui.Report{Title: "Verification preflight", Sections: []ui.Section{{Rows: rows}, {Rows: summary}}, Issues: issues}
 }
 
 func estimateVerifyBytes(items []verifyPreflightItem) int64 {

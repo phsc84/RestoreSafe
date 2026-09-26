@@ -46,9 +46,13 @@ type BackupStartOptions struct {
 // UI is what the workflows need from the user. Secrets are returned as byte
 // slices that the caller zeroes after use.
 type UI interface {
-	// Output receives everything the user should see: log lines, preflight
-	// reports, notices, and results.
+	// Output receives the text the user should see besides reports and
+	// questions: log lines, notices, and results.
 	Output() io.Writer
+
+	// ShowReport shows the preflight summary of an operation before its
+	// start is confirmed.
+	ShowReport(r Report)
 
 	// SelectBackups asks which backups to restore or verify (action is
 	// "restore" or "verify"). runs is newest first and not empty. It returns
