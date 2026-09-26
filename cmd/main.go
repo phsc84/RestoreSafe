@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/restore"
 	"RestoreSafe/internal/startup"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
 	"bufio"
@@ -66,7 +67,8 @@ func main() {
 	}
 
 	printStartupBanner(Version)
-	health := startup.RunStartupHealthCheck(cfg, exeDir, configPath)
+	console := &ui.Console{}
+	health := startup.RunStartupHealthCheck(console.Output(), cfg, exeDir, configPath)
 
 	// Interactive menu mode.
 	for {
@@ -79,7 +81,7 @@ func main() {
 			if health.BlocksBackup() {
 				reportHealthCheckBlocking("Backup")
 				waitForKeyPress()
-			} else if err := backup.Run(cfg, exeDir); err != nil {
+			} else if err := backup.Run(console, cfg, exeDir); err != nil {
 				reportOperationError("Backup", err)
 				waitForKeyPress()
 			}
@@ -88,7 +90,7 @@ func main() {
 			if health.BlocksRestoreOrVerify() {
 				reportHealthCheckBlocking("Restore")
 				waitForKeyPress()
-			} else if err := restore.Run(cfg, exeDir); err != nil {
+			} else if err := restore.Run(console, cfg, exeDir); err != nil {
 				reportOperationError("Restore", err)
 				waitForKeyPress()
 			}
@@ -97,7 +99,7 @@ func main() {
 			if health.BlocksRestoreOrVerify() {
 				reportHealthCheckBlocking("Verification")
 				waitForKeyPress()
-			} else if err := verify.Run(cfg, exeDir); err != nil {
+			} else if err := verify.Run(console, cfg, exeDir); err != nil {
 				reportOperationError("Verification", err)
 				waitForKeyPress()
 			}

@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"bytes"
 	"errors"
@@ -15,33 +16,38 @@ import (
 type unlockStub struct {
 	passwordCalls int
 	lines         []string
+	out           bytes.Buffer
+	console       *ui.Console
 }
 
-// stubUnlockInputs replaces the credential sources for one test. The YubiKey
-// stub answers with the challenge at yubiIndex and yubiSecret. Not safe for
-// parallel use.
+// stubUnlockInputs scripts the user's answers for one test: passwords for
+// secret prompts and lines for line prompts. The YubiKey stub answers with
+// the challenge at yubiIndex and yubiSecret. Not safe for parallel use.
 func stubUnlockInputs(t *testing.T, passwords []string, yubiIndex int, yubiSecret []byte, lines ...string) *unlockStub {
 	t.Helper()
-	prevRead, prevCheck, prevDerive, prevLine := readPasswordFn, checkYubiKeyConnectedFn, deriveYubiKeySecretFn, readLineFn
+	prevCheck, prevDerive := checkYubiKeyConnectedFn, deriveYubiKeySecretFn
 	t.Cleanup(func() {
-		readPasswordFn, checkYubiKeyConnectedFn, deriveYubiKeySecretFn, readLineFn = prevRead, prevCheck, prevDerive, prevLine
+		checkYubiKeyConnectedFn, deriveYubiKeySecretFn = prevCheck, prevDerive
 	})
 	stub := &unlockStub{lines: lines}
-	readPasswordFn = func(string) ([]byte, error) {
-		if stub.passwordCalls >= len(passwords) {
-			return nil, errors.New("no more passwords")
-		}
-		pw := passwords[stub.passwordCalls]
-		stub.passwordCalls++
-		return []byte(pw), nil
-	}
-	readLineFn = func(string) (string, error) {
-		if len(stub.lines) == 0 {
-			return "", errors.New("no more lines")
-		}
-		l := stub.lines[0]
-		stub.lines = stub.lines[1:]
-		return l, nil
+	stub.console = &ui.Console{
+		Out: &stub.out,
+		ReadPassword: func(string) ([]byte, error) {
+			if stub.passwordCalls >= len(passwords) {
+				return nil, errors.New("no more passwords")
+			}
+			pw := passwords[stub.passwordCalls]
+			stub.passwordCalls++
+			return []byte(pw), nil
+		},
+		ReadLine: func(string) (string, error) {
+			if len(stub.lines) == 0 {
+				return "", errors.New("no more lines")
+			}
+			l := stub.lines[0]
+			stub.lines = stub.lines[1:]
+			return l, nil
+		},
 	}
 	checkYubiKeyConnectedFn = func() error { return nil }
 	deriveYubiKeySecretFn = func(challenges []security.ChallengeData) (int, []byte, error) {
@@ -77,19 +83,20 @@ func yubiKeySet(t *testing.T, mode int, password []byte, yubiSecrets ...[]byte) 
 	return ks, master
 }
 
-func unlock(t *testing.T, ks *container.KeySet, opts UnlockOptions) ([]byte, error, string) {
+// unlock runs UnlockKeySet with the scripted answers and returns the output
+// of this call.
+func (s *unlockStub) unlock(t *testing.T, ks *container.KeySet, opts UnlockOptions) ([]byte, error, string) {
 	t.Helper()
-	var got []byte
-	var err error
-	out := testutil.CaptureStdout(t, func() { got, err = UnlockKeySet(ks, opts, nil) })
-	return got, err, out
+	s.out.Reset()
+	got, err := UnlockKeySet(s.console, ks, opts, nil)
+	return got, err, s.out.String()
 }
 
 func TestUnlockKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("right"))
 	stub := stubUnlockInputs(t, []string{"wrong", "right"}, 0, nil)
 
-	got, err, out := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+	got, err, out := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock failed: %v", err)
 	}
@@ -100,9 +107,9 @@ func TestUnlockKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
 
 func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 	ks, _ := testutil.NewPasswordKeySet(t, []byte("right"))
-	stubUnlockInputs(t, []string{"a", "b", "c"}, 0, nil)
+	stub := stubUnlockInputs(t, []string{"a", "b", "c"}, 0, nil)
 
-	_, err, _ := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+	_, err, _ := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 	if err == nil || !strings.Contains(err.Error(), "Too many wrong password attempts") {
 		t.Fatalf("expected give-up error, got %v", err)
 	}
@@ -111,9 +118,9 @@ func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
 	secret := bytes.Repeat([]byte{7}, 32)
 	ks, master := yubiKeySet(t, container.AuthModePasswordYubiKey, []byte("pw"), secret)
-	stubUnlockInputs(t, []string{"pw"}, 0, secret)
+	stub := stubUnlockInputs(t, []string{"pw"}, 0, secret)
 
-	got, err, _ := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+	got, err, _ := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock failed: %v", err)
 	}
@@ -125,8 +132,8 @@ func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 	for _, mode := range []int{container.AuthModePasswordYubiKey, container.AuthModeYubiKey} {
 		ks, master := yubiKeySet(t, mode, []byte("pw"), primary, spare)
 		// The spare YubiKey (index 1) is connected.
-		stubUnlockInputs(t, []string{"pw"}, 1, spare)
-		got, err, out := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+		stub := stubUnlockInputs(t, []string{"pw"}, 1, spare)
+		got, err, out := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 		if err != nil || !bytes.Equal(got, master) {
 			t.Fatalf("mode %d: unlock with spare failed: %v", mode, err)
 		}
@@ -139,14 +146,14 @@ func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 func TestUnlockKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
 	ks, master := yubiKeySet(t, container.AuthModeYubiKey, nil, bytes.Repeat([]byte{7}, 32))
 
-	stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{7}, 32))
-	got, err, _ := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+	stub := stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{7}, 32))
+	got, err, _ := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock with right YubiKey failed: %v", err)
 	}
 
-	stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{8}, 32))
-	_, err, _ = unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
+	stub = stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{8}, 32))
+	_, err, _ = stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "})
 	if err == nil || !strings.Contains(err.Error(), "does not unlock the backup") {
 		t.Fatalf("expected wrong-YubiKey error, got %v", err)
 	}
@@ -173,7 +180,7 @@ func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
 
 	// A typo and a code of other keys are rejected before the right code works.
 	stub := stubUnlockInputs(t, []string{string(typo), other.String(), strings.ToLower(code.String())}, 0, nil, "r")
-	got, err, out := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: ", AllowRecovery: true})
+	got, err, out := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: ", AllowRecovery: true})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("recovery unlock failed: %v (output %q)", err, out)
 	}
@@ -186,14 +193,14 @@ func TestUnlockKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
 	ks, master, _ := keySetWithRecovery(t)
 
 	// Without AllowRecovery no choice is asked; the password unlocks.
-	stubUnlockInputs(t, []string{"pw"}, 0, nil)
-	if got, err, _ := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "}); err != nil || !bytes.Equal(got, master) {
+	stub := stubUnlockInputs(t, []string{"pw"}, 0, nil)
+	if got, err, _ := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: "}); err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("password unlock failed: %v", err)
 	}
 
 	// With AllowRecovery the default answer keeps the password path.
-	stubUnlockInputs(t, []string{"pw"}, 0, nil, "")
-	if got, err, _ := unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: ", AllowRecovery: true}); err != nil || !bytes.Equal(got, master) {
+	stub = stubUnlockInputs(t, []string{"pw"}, 0, nil, "")
+	if got, err, _ := stub.unlock(t, ks, UnlockOptions{PasswordPrompt: "pw: ", AllowRecovery: true}); err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("password unlock with recovery offered failed: %v", err)
 	}
 }
@@ -208,7 +215,7 @@ func TestUnlockKeySetsAuthenticatesOncePerKeySet(t *testing.T) {
 	stub := stubUnlockInputs(t, []string{"pw", "pw"}, 0, nil)
 
 	var keys MasterKeys
-	testutil.CaptureStdout(t, func() { keys, err = UnlockKeySets(infos, "pw: ", nil) })
+	keys, err = UnlockKeySets(stub.console, infos, "pw: ", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

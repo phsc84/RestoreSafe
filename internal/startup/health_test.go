@@ -233,7 +233,7 @@ func TestRunStartupHealthCheckPrintsReportAndReturnsResult(t *testing.T) {
 
 	var result HealthCheckResult
 	output := testutil.CaptureStdout(t, func() {
-		result = RunStartupHealthCheck(cfg, exeDir, configPath)
+		result = RunStartupHealthCheck(os.Stdout, cfg, exeDir, configPath)
 	})
 
 	if !strings.Contains(output, "Startup health check") {

@@ -38,7 +38,7 @@ func TestMoveBackupResultsMovesOnlyPartsAndFinalizesThem(t *testing.T) {
 	createFile(t, filepath.Join(staging, "unrelated.txt"), "not a part")
 
 	output := testutil.CaptureStdout(t, func() {
-		if err := moveBackupResults(staging, target, nil, nil, util.NewConsoleLogger("info")); err != nil {
+		if err := moveBackupResults(staging, target, nil, nil, util.NewConsoleLogger("info", nil)); err != nil {
 			t.Fatalf("moveBackupResults: %v", err)
 		}
 	})

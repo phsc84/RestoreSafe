@@ -3,6 +3,7 @@ package backup
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"fmt"
 	"os"
@@ -25,7 +26,7 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 	}
 
 	logPath := filepath.Join(backupDir, fmt.Sprintf("test-%d.log", time.Now().UnixNano()))
-	logger, err := util.NewLogger(logPath, level)
+	logger, err := util.NewLogger(logPath, level, nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -97,7 +98,7 @@ func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 	}
 	// Append a subdir to the file path — MkdirAll will fail.
 	cfg := &util.Config{BackupDirectory: filepath.Join(filePath, "sub")}
-	err := Run(cfg, "")
+	err := Run(&ui.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when target dir cannot be created, got nil")
 	}
@@ -113,7 +114,7 @@ func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 		BackupDirectory:   backupDir,
 		SourceDirectories: []string{filepath.Join(backupDir, "nonexistent-source")},
 	}
-	err := Run(cfg, "")
+	err := Run(&ui.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when all sources fail, got nil")
 	}
@@ -146,7 +147,7 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 	}
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = Run(cfg, "")
+		runErr = Run(&ui.Console{}, cfg, "")
 	})
 	if runErr != nil {
 		t.Fatalf("expected nil error on cancel, got: %v", runErr)
@@ -167,7 +168,7 @@ func TestRemoveLeftoverTempPartsDeletesOnlyTempParts(t *testing.T) {
 	for _, p := range []string{temp, keep, other} {
 		createFile(t, p, "x")
 	}
-	removeLeftoverTempParts(dir, util.NewConsoleLogger("info"))
+	removeLeftoverTempParts(dir, util.NewConsoleLogger("info", nil))
 	assertNotExists(t, temp)
 	assertExists(t, keep)
 	assertExists(t, other)

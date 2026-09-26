@@ -10,6 +10,7 @@ import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
@@ -19,8 +20,9 @@ import (
 	"strings"
 )
 
-// Run executes the full restore workflow.
-func Run(cfg *util.Config, exeDir string) error {
+// Run executes the full restore workflow, asking u for decisions and credentials.
+func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+	out := u.Output()
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
 	// Enumerate backups.
@@ -30,14 +32,14 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	runs := catalog.BackupRunSummaries(infos)
 	if len(runs) == 0 {
-		fmt.Println("No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is configured.")
+		fmt.Fprintln(out, "No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is configured.")
 		return nil
 	}
 
-	selected, err := operation.PromptBackupSelection("restore", runs)
+	selected, err := u.SelectBackups("restore", runs)
 	if err != nil {
-		if errors.Is(err, operation.ErrSelectionCancelled) {
-			fmt.Println("Restore cancelled.")
+		if errors.Is(err, ui.ErrCancelled) {
+			fmt.Fprintln(out, "Restore cancelled.")
 			return nil
 		}
 		return err
@@ -46,17 +48,17 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	first := selectedInfos[0].Header
 	logPath := util.LogFileName(backupDir, first.Date, util.BackupID(first.RunID))
-	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID))
+	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID), out)
 	warningCount := 0
 	if log.IsConsoleOnly() {
 		warningCount++
 	}
 	defer log.Close()
 
-	restorePath, err := promptRestoreDestination(backupDir)
+	restorePath, err := u.RestoreDestination(backupDir)
 	if err != nil {
-		if errors.Is(err, operation.ErrSelectionCancelled) {
-			fmt.Println("Restore cancelled.")
+		if errors.Is(err, ui.ErrCancelled) {
+			fmt.Fprintln(out, "Restore cancelled.")
 			return nil
 		}
 		return err
@@ -65,7 +67,7 @@ func Run(cfg *util.Config, exeDir string) error {
 	stagingPlan := operation.PlanLocalStaging(backupDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	printRestorePreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	printRestorePreflightWithYubiKeyCheck(out, cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -76,13 +78,13 @@ func Run(cfg *util.Config, exeDir string) error {
 		return err
 	}
 
-	confirmed, err := operation.PromptStartAction("restore")
+	confirmed, err := u.ConfirmStart("restore")
 	if err != nil {
 		return err
 	}
 	if !confirmed {
 		log.InfoLogOnly("Restore cancelled by user before start")
-		fmt.Println("Restore cancelled.")
+		fmt.Fprintln(out, "Restore cancelled.")
 		return nil
 	}
 
@@ -90,13 +92,13 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.InfoLogOnly("Local staging enabled: selected backup parts will be copied to temp storage at %s before restore", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 	}
 
-	masters, err := operation.UnlockKeySets(selectedInfos, "Enter restore password: ", log)
+	masters, err := operation.UnlockKeySets(u, selectedInfos, "Enter restore password: ", log)
 	if err != nil {
 		return err
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
+	return runRestoreOperation(out, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
 }
 
 func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
@@ -108,8 +110,8 @@ func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
 // takes no further user input, so tests and automated flows can drive it
 // directly by supplying the master keys. inventory is used to find the full
 // backup of each selected differential.
-func runRestoreOperation(selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
-	fmt.Println()
+func runRestoreOperation(out io.Writer, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+	fmt.Fprintln(out)
 	first := selected[0].Header
 	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
 	log.Info("Restore selection:")
@@ -126,38 +128,11 @@ func runRestoreOperation(selected, inventory []catalog.SetInfo, backupDir, resto
 	}
 
 	log.Info("Restore completed successfully.")
-	fmt.Printf("\nLog file: %s\n", logPath)
+	fmt.Fprintf(out, "\nLog file: %s\n", logPath)
 	if warningCount > 0 {
-		fmt.Printf("Warnings: %d\n", warningCount)
+		fmt.Fprintf(out, "Warnings: %d\n", warningCount)
 	}
 	return nil
-}
-
-func promptRestoreDestination(backupDir string) (string, error) {
-	for {
-		fmt.Printf("Enter restore destination:\n")
-		fmt.Printf("  - Enter a dot (.) → restore in the backup directory itself [%s]\n", backupDir)
-		fmt.Printf("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory\n")
-		fmt.Printf("  - Enter q → cancel\n")
-		fmt.Println()
-
-		restorePath, err := security.ReadLine("Restore destination: ")
-		if err != nil {
-			return "", err
-		}
-		fmt.Println()
-		restorePath = strings.TrimSpace(restorePath)
-
-		switch restorePath {
-		case "":
-			continue
-		case "q":
-			return "", operation.ErrSelectionCancelled
-		case ".":
-			return backupDir, nil
-		}
-		return restorePath, nil
-	}
 }
 
 type restorePreflightItem struct {

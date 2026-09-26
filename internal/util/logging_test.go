@@ -11,7 +11,7 @@ import (
 
 func TestNewConsoleLogger(t *testing.T) {
 	output := testutil.CaptureStdout(t, func() {
-		log := util.NewConsoleLogger("debug")
+		log := util.NewConsoleLogger("debug", nil)
 		if !log.IsConsoleOnly() {
 			t.Fatal("expected console-only logger")
 		}
@@ -53,7 +53,7 @@ func TestNewLoggerRecordsVersionOnFreshLogOnce(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "2026-06-05_ABC123.log")
 
 	// Fresh log: the version banner is written as the first line.
-	log, err := util.NewLogger(logPath, "info")
+	log, err := util.NewLogger(logPath, "info", nil)
 	if err != nil {
 		t.Fatalf("NewLogger returned error: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestNewLoggerRecordsVersionOnFreshLogOnce(t *testing.T) {
 	}
 
 	// Reopening the same log (as restore/verify do) appends without a second banner.
-	log2, err := util.NewLogger(logPath, "info")
+	log2, err := util.NewLogger(logPath, "info", nil)
 	if err != nil {
 		t.Fatalf("NewLogger (reopen) returned error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestNewLoggerRecordsVersionOnFreshLogOnce(t *testing.T) {
 
 func TestWarnLogOnlyWritesFileWithoutStdout(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "restore.log")
-	log, err := util.NewLogger(logPath, "info")
+	log, err := util.NewLogger(logPath, "info", nil)
 	if err != nil {
 		t.Fatalf("NewLogger returned error: %v", err)
 	}

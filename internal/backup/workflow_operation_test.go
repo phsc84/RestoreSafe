@@ -33,7 +33,7 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	}
 	env.sources = resolveBackupSources([]string{env.srcDir}, "")
 	env.logPath = filepath.Join(env.backupDir, "operation.log")
-	logger, err := util.NewLogger(env.logPath, "info")
+	logger, err := util.NewLogger(env.logPath, "info", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -47,7 +47,7 @@ func (env *operationEnv) run(t *testing.T, plan operation.LocalStagingPlan, id u
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
+		runErr = runBackupOperation(os.Stdout, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
 	})
 	env.logger.Close()
 	if runErr != nil {
@@ -134,7 +134,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 
 	var failures int
 	testutil.CaptureStdout(t, func() {
-		failures = verifyBackupAfterWrite(fx.BackupDir, []util.BackupEntry{fx.Entry}, fx.Master, util.NewConsoleLogger("info"))
+		failures = verifyBackupAfterWrite(fx.BackupDir, []util.BackupEntry{fx.Entry}, fx.Master, util.NewConsoleLogger("info", nil))
 	})
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)

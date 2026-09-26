@@ -5,18 +5,20 @@ import (
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 )
 
 // Run verifies selected backup sets without restoring them to disk: every
-// part is decrypted and every file is checked against its manifest hash.
-func Run(cfg *util.Config, exeDir string) error {
+// part is decrypted and every file is checked against its manifest hash. u is
+// asked for decisions and credentials.
+func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+	out := u.Output()
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
 	infos, err := catalog.Inventory(backupDir)
@@ -25,14 +27,14 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 	runs := catalog.BackupRunSummaries(infos)
 	if len(runs) == 0 {
-		fmt.Println("No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
+		fmt.Fprintln(out, "No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
 		return nil
 	}
 
-	selected, err := operation.PromptBackupSelection("verify", runs)
+	selected, err := u.SelectBackups("verify", runs)
 	if err != nil {
-		if errors.Is(err, operation.ErrSelectionCancelled) {
-			fmt.Println("Verification cancelled.")
+		if errors.Is(err, ui.ErrCancelled) {
+			fmt.Fprintln(out, "Verification cancelled.")
 			return nil
 		}
 		return err
@@ -41,7 +43,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	first := selectedInfos[0].Header
 	logPath := util.LogFileName(backupDir, first.Date, util.BackupID(first.RunID))
-	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID))
+	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID), out)
 	warningCount := 0
 	if log.IsConsoleOnly() {
 		warningCount++
@@ -51,36 +53,36 @@ func Run(cfg *util.Config, exeDir string) error {
 	preflight := buildVerifyPreflight(selectedInfos, infos)
 	mode := util.AuthMode(first.KeySet.AuthMode)
 	usesYubiKey := mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey
-	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	printVerifyPreflightWithYubiKeyCheck(out, cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
 
-	confirmed, err := operation.PromptStartAction("verification")
+	confirmed, err := u.ConfirmStart("verification")
 	if err != nil {
 		return err
 	}
 	if !confirmed {
 		log.InfoLogOnly("Verification cancelled by user before start")
-		fmt.Println("Verification cancelled.")
+		fmt.Fprintln(out, "Verification cancelled.")
 		return nil
 	}
 
-	masters, err := operation.UnlockKeySets(selectedInfos, "Enter verification password: ", log)
+	masters, err := operation.UnlockKeySets(u, selectedInfos, "Enter verification password: ", log)
 	if err != nil {
 		return err
 	}
 	defer masters.Zero()
 
-	return runVerifyOperation(selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
+	return runVerifyOperation(out, selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
 }
 
 // runVerifyOperation performs the verification using already-unlocked keys.
 // It takes no further user input, so tests and automated flows can drive it
 // directly by supplying the master keys. inventory is used to find the full
 // backup of each selected differential.
-func runVerifyOperation(selected, inventory []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
-	fmt.Println()
+func runVerifyOperation(out io.Writer, selected, inventory []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
+	fmt.Fprintln(out)
 	first := selected[0].Header
 	log.Info("Verification started - ID: %s, date: %s", first.RunID, first.Date)
 	log.Info("Verification selection:")
@@ -97,9 +99,9 @@ func runVerifyOperation(selected, inventory []catalog.SetInfo, backupDir, logPat
 	}
 
 	log.Info("Verification completed successfully.")
-	fmt.Printf("\nLog file: %s\n", logPath)
+	fmt.Fprintf(out, "\nLog file: %s\n", logPath)
 	if warningCount > 0 {
-		fmt.Printf("Warnings: %d\n", warningCount)
+		fmt.Fprintf(out, "Warnings: %d\n", warningCount)
 	}
 	return nil
 }

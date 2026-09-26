@@ -71,9 +71,9 @@ func buildHealthCheckResult(items []healthItem) HealthCheckResult {
 
 // RunStartupHealthCheck performs a non-interactive diagnostic pass when the
 // application starts. It never aborts startup; it only reports findings.
-func RunStartupHealthCheck(cfg *util.Config, exeDir, configPath string) HealthCheckResult {
+func RunStartupHealthCheck(out io.Writer, cfg *util.Config, exeDir, configPath string) HealthCheckResult {
 	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath)
-	printStartupHealthCheck(os.Stdout, items)
+	printStartupHealthCheck(out, items)
 	return buildHealthCheckResult(items)
 }
 

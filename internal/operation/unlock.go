@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ const maxPasswordAttempts = 3
 
 // Injectable for tests.
 var (
-	readPasswordFn          = security.ReadPassword
 	checkYubiKeyConnectedFn = security.CheckYubiKeyConnected
 	deriveYubiKeySecretFn   = security.DeriveFIDO2SecretAny
 )
@@ -32,14 +32,14 @@ type UnlockOptions struct {
 // YubiKey, or both; optionally the recovery code) and returns the key set's
 // master key. A wrong password can be retried; the YubiKey is touched only
 // once. The caller must zero the returned key.
-func UnlockKeySet(ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([]byte, error) {
+func UnlockKeySet(u ui.UI, ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([]byte, error) {
 	if opts.AllowRecovery && ks.HasSlotType(container.SlotRecovery) {
-		useRecovery, err := askUnlockMethod(ks)
+		useRecovery, err := u.ChooseUnlockMethod(util.AuthMode(ks.AuthMode).Label())
 		if err != nil {
 			return nil, err
 		}
 		if useRecovery {
-			return unlockWithRecoveryCode(ks, log)
+			return unlockWithRecoveryCode(u, ks, log)
 		}
 	}
 
@@ -52,7 +52,7 @@ func UnlockKeySet(ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([
 	var yubiSecret []byte
 	slotIndex := indexes[0]
 	if slotType != container.SlotPassword {
-		idx, secret, err := deriveYubiKeySecret(ks, indexes)
+		idx, secret, err := deriveYubiKeySecret(u, ks, indexes)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +74,7 @@ func UnlockKeySet(ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([
 	}
 
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		password, err := readPasswordFn(opts.PasswordPrompt)
+		password, err := u.Password(opts.PasswordPrompt)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +96,7 @@ func UnlockKeySet(ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([
 		}
 		remaining := maxPasswordAttempts - attempt
 		if remaining > 0 {
-			fmt.Printf("%s %d attempt(s) remaining.\n", PasswordFailurePrefix(yubiSecret != nil, false), remaining)
+			fmt.Fprintf(u.Output(), "%s %d attempt(s) remaining.\n", PasswordFailurePrefix(yubiSecret != nil, false), remaining)
 			log.WarnLogOnly("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
@@ -106,30 +106,10 @@ func UnlockKeySet(ks *container.KeySet, opts UnlockOptions, log *util.Logger) ([
 	return nil, fmt.Errorf("Too many wrong password attempts.")
 }
 
-// askUnlockMethod lets the user choose between the regular credentials and
-// the recovery code.
-func askUnlockMethod(ks *container.KeySet) (bool, error) {
-	regular := util.AuthMode(ks.AuthMode).Label()
-	for {
-		answer, err := readLineFn(fmt.Sprintf("Unlock with [Y] %s (default) or [R] recovery code? [Y/r]: ", regular))
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return false, nil
-		case "r":
-			return true, nil
-		default:
-			fmt.Println("Please enter y (password/YubiKey) or r (recovery code).")
-		}
-	}
-}
-
-func unlockWithRecoveryCode(ks *container.KeySet, log *util.Logger) ([]byte, error) {
+func unlockWithRecoveryCode(u ui.UI, ks *container.KeySet, log *util.Logger) ([]byte, error) {
 	index := ks.SlotIndexes(container.SlotRecovery)[0]
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		input, err := readPasswordFn("Enter recovery code: ")
+		input, err := u.Password("Enter recovery code: ")
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +132,7 @@ func unlockWithRecoveryCode(ks *container.KeySet, log *util.Logger) ([]byte, err
 			err = fmt.Errorf("Wrong recovery code.")
 		}
 		if remaining := maxPasswordAttempts - attempt; remaining > 0 {
-			fmt.Printf("%v %d attempt(s) remaining.\n", err, remaining)
+			fmt.Fprintf(u.Output(), "%v %d attempt(s) remaining.\n", err, remaining)
 			log.WarnLogOnly("Recovery code rejected; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
@@ -172,7 +152,7 @@ func (m MasterKeys) Zero() {
 // UnlockKeySets unlocks every distinct key set used by sets. Usually all
 // selected backups share one key set, so the user authenticates once; backups
 // made with older keys need their own credentials, which the prompt says.
-func UnlockKeySets(sets []catalog.SetInfo, passwordPrompt string, log *util.Logger) (MasterKeys, error) {
+func UnlockKeySets(u ui.UI, sets []catalog.SetInfo, passwordPrompt string, log *util.Logger) (MasterKeys, error) {
 	keys := make(MasterKeys)
 	for _, info := range sets {
 		ks := info.Header.KeySet
@@ -180,9 +160,9 @@ func UnlockKeySets(sets []catalog.SetInfo, passwordPrompt string, log *util.Logg
 			continue
 		}
 		if len(keys) > 0 {
-			fmt.Printf("Backup %s uses different keys (created %s). Authenticate with the credentials of those keys.\n", info.Entry.String(), ks.Created().Local().Format("2006-01-02"))
+			fmt.Fprintf(u.Output(), "Backup %s uses different keys (created %s). Authenticate with the credentials of those keys.\n", info.Entry.String(), ks.Created().Local().Format("2006-01-02"))
 		}
-		master, err := UnlockKeySet(&ks, UnlockOptions{PasswordPrompt: passwordPrompt, AllowRecovery: true}, log)
+		master, err := UnlockKeySet(u, &ks, UnlockOptions{PasswordPrompt: passwordPrompt, AllowRecovery: true}, log)
 		if err != nil {
 			keys.Zero()
 			return nil, err
@@ -196,7 +176,7 @@ func UnlockKeySets(sets []catalog.SetInfo, passwordPrompt string, log *util.Logg
 // key set's YubiKey slots in one request: whichever registered YubiKey is
 // connected answers. It returns the slot index of that YubiKey with the
 // secret.
-func deriveYubiKeySecret(ks *container.KeySet, indexes []int) (int, []byte, error) {
+func deriveYubiKeySecret(u ui.UI, ks *container.KeySet, indexes []int) (int, []byte, error) {
 	if err := checkYubiKeyConnectedFn(); err != nil {
 		return 0, nil, security.ErrYubiKeyRequired
 	}
@@ -207,9 +187,9 @@ func deriveYubiKeySecret(ks *container.KeySet, indexes []int) (int, []byte, erro
 		labels[i] = ks.Slots[idx].Label
 	}
 	if len(indexes) > 1 {
-		fmt.Printf("Use any registered YubiKey (%s). Follow the on-screen prompts to authenticate.\n", strings.Join(labels, " or "))
+		fmt.Fprintf(u.Output(), "Use any registered YubiKey (%s). Follow the on-screen prompts to authenticate.\n", strings.Join(labels, " or "))
 	} else {
-		fmt.Println("YubiKey connected. Follow the on-screen prompts to authenticate.")
+		fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
 	}
 	i, secret, err := deriveYubiKeySecretFn(challenges)
 	if err != nil {

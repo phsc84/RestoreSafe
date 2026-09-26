@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"bytes"
 	"encoding/json"
@@ -47,44 +48,50 @@ func TestPlanKeys(t *testing.T) {
 }
 
 type enrollStub struct {
-	passwords [][2]string // pairs returned by readPasswordConfirmedFn
+	passwords [][2]string // password and its confirmation, per new password prompt
 	lines     []string
 	connected string // "keyA" or "keyB": which YubiKey is plugged in
 	secrets   map[string][]byte
 	code      security.RecoveryCode
+	out       bytes.Buffer
+	console   *ui.Console
 }
 
-// stubEnrollment replaces the interactive credential sources. Not safe for
-// parallel use.
+// stubEnrollment scripts the user's answers and replaces the YubiKey and
+// recovery code sources. Not safe for parallel use.
 func stubEnrollment(t *testing.T, s *enrollStub) {
 	t.Helper()
-	prevRead, prevLine, prevCheck, prevCombine, prevSpare, prevGen := readPasswordConfirmedFn, readLineFn, checkYubiKeyConnectedFn, combineWithPasswordFn, registerSpareFn, generateRecoveryCodeFn
+	prevCheck, prevCombine, prevSpare, prevGen := checkYubiKeyConnectedFn, combineWithPasswordFn, registerSpareFn, generateRecoveryCodeFn
 	t.Cleanup(func() {
-		readPasswordConfirmedFn, readLineFn, checkYubiKeyConnectedFn, combineWithPasswordFn, registerSpareFn, generateRecoveryCodeFn = prevRead, prevLine, prevCheck, prevCombine, prevSpare, prevGen
+		checkYubiKeyConnectedFn, combineWithPasswordFn, registerSpareFn, generateRecoveryCodeFn = prevCheck, prevCombine, prevSpare, prevGen
 	})
 	s.secrets = map[string][]byte{"keyA": bytes.Repeat([]byte{1}, 32), "keyB": bytes.Repeat([]byte{2}, 32)}
-	readPasswordConfirmedFn = func(string, string) ([]byte, error) {
-		if len(s.passwords) == 0 {
-			return nil, errors.New("no more passwords")
-		}
-		p := s.passwords[0]
-		s.passwords = s.passwords[1:]
-		if p[0] != p[1] {
-			return nil, security.ErrPasswordMismatch
-		}
-		return []byte(p[0]), nil
+	var passwords []string
+	for _, p := range s.passwords {
+		passwords = append(passwords, p[0], p[1])
 	}
-	readLineFn = func(string) (string, error) {
-		if len(s.lines) == 0 {
-			return "", errors.New("no more lines")
-		}
-		l := s.lines[0]
-		s.lines = s.lines[1:]
-		if l == "<swap>" {
-			s.connected = "keyB"
-			return "", nil
-		}
-		return l, nil
+	s.console = &ui.Console{
+		Out: &s.out,
+		ReadPassword: func(string) ([]byte, error) {
+			if len(passwords) == 0 {
+				return nil, errors.New("no more passwords")
+			}
+			p := passwords[0]
+			passwords = passwords[1:]
+			return []byte(p), nil
+		},
+		ReadLine: func(string) (string, error) {
+			if len(s.lines) == 0 {
+				return "", errors.New("no more lines")
+			}
+			l := s.lines[0]
+			s.lines = s.lines[1:]
+			if l == "<swap>" {
+				s.connected = "keyB"
+				return "", nil
+			}
+			return l, nil
+		},
 	}
 	checkYubiKeyConnectedFn = func() error { return nil }
 	challenge := func(key string, noPassword bool) string {
@@ -106,13 +113,10 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	generateRecoveryCodeFn = func() (security.RecoveryCode, error) { return code, nil }
 }
 
-func enroll(t *testing.T, cfg *util.Config) (*container.KeySet, []byte, error, string) {
+func enroll(t *testing.T, s *enrollStub, cfg *util.Config) (*container.KeySet, []byte, error, string) {
 	t.Helper()
-	var ks *container.KeySet
-	var master []byte
-	var err error
-	out := testutil.CaptureStdout(t, func() { ks, master, err = enrollKeySet(cfg, util.NewConsoleLogger("info")) })
-	return ks, master, err, out
+	ks, master, err := enrollKeySet(s.console, cfg, util.NewConsoleLogger("info", &s.out))
+	return ks, master, err, s.out.String()
 }
 
 func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
@@ -120,7 +124,7 @@ func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
 	stubEnrollment(t, s)
 	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
-	ks, master, err, out := enroll(t, cfg)
+	ks, master, err, out := enroll(t, s, cfg)
 	if err != nil {
 		t.Fatalf("enrollKeySet: %v", err)
 	}
@@ -136,7 +140,7 @@ func TestEnrollKeySetGivesUpAfterThreeInvalidPasswords(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a", "a"}, {"b", "b"}, {"c", "c"}}}
 	stubEnrollment(t, s)
 	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, cfg); err == nil || !strings.Contains(err.Error(), "No valid new password") {
+	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "No valid new password") {
 		t.Fatalf("expected give-up error, got %v", err)
 	}
 }
@@ -146,7 +150,7 @@ func TestEnrollKeySetCountsCharactersNotBytes(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"äöüßäöüß", "äöüßäöüß"}}}
 	stubEnrollment(t, s)
 	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, cfg); err != nil {
+	if _, _, err, _ := enroll(t, s, cfg); err != nil {
 		t.Fatalf("8-character password must be accepted: %v", err)
 	}
 }
@@ -160,7 +164,7 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		s.lines = []string{"", "<swap>", "WRONG-CODE", s.code.String()}
 		cfg := &util.Config{AuthenticationMode: mode, YubiKeySpare: true, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
-		ks, master, err, out := enroll(t, cfg)
+		ks, master, err, out := enroll(t, s, cfg)
 		if err != nil {
 			t.Fatalf("mode %d: enrollKeySet: %v\n%s", mode, err, out)
 		}
@@ -192,7 +196,7 @@ func TestEnrollKeySetFailsWhenRecoveryCodeNotConfirmed(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}, lines: []string{"x", "y", "z"}}
 	stubEnrollment(t, s)
 	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, cfg); err == nil || !strings.Contains(err.Error(), "Recovery code not confirmed") {
+	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "Recovery code not confirmed") {
 		t.Fatalf("expected unconfirmed recovery code error, got %v", err)
 	}
 }
@@ -202,7 +206,7 @@ func TestEnrollKeySetRequiresConnectedYubiKey(t *testing.T) {
 	stubEnrollment(t, s)
 	checkYubiKeyConnectedFn = func() error { return errors.New("not connected") }
 	cfg := &util.Config{AuthenticationMode: util.AuthModePasswordYubiKey, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, cfg); !errors.Is(err, security.ErrYubiKeyRequired) {
+	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, security.ErrYubiKeyRequired) {
 		t.Fatalf("expected ErrYubiKeyRequired, got %v", err)
 	}
 }
@@ -211,45 +215,15 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
 	prev := unlockKeySetFn
 	t.Cleanup(func() { unlockKeySetFn = prev })
-	unlockKeySetFn = func(got *container.KeySet, opts operation.UnlockOptions, _ *util.Logger) ([]byte, error) {
+	unlockKeySetFn = func(_ ui.UI, got *container.KeySet, opts operation.UnlockOptions, _ *util.Logger) ([]byte, error) {
 		if got.ID != ks.ID || opts.AllowRecovery {
 			t.Fatalf("unexpected unlock request (recovery must not be offered for backups)")
 		}
 		return append([]byte(nil), master...), nil
 	}
 
-	gotKS, gotMaster, err := obtainKeys(&util.Config{}, keyPlan{Existing: ks}, util.NewConsoleLogger("info"))
+	gotKS, gotMaster, err := obtainKeys(&ui.Console{}, &util.Config{}, keyPlan{Existing: ks}, util.NewConsoleLogger("info", nil))
 	if err != nil || gotKS.ID != ks.ID || !bytes.Equal(gotMaster, master) {
 		t.Fatalf("existing keys not reused: %v", err)
-	}
-}
-
-func TestPromptBackupStartChoices(t *testing.T) {
-	ks, _ := testutil.NewPasswordKeySet(t, []byte("pw"))
-	prev := readLineFn
-	t.Cleanup(func() { readLineFn = prev })
-
-	for _, tc := range []struct {
-		anyDiff bool
-		answers []string
-		want    startChoice
-		hint    string
-	}{
-		{false, []string{"maybe", "k"}, startNewKeys, "Please enter y (yes), k (new keys), or n (no)."},
-		{false, []string{"f", "y"}, startAsPlanned, "Please enter y (yes), k (new keys), or n (no)."},
-		{true, []string{"f"}, startFull, ""},
-		{true, []string{"x", "n"}, startCancel, "Please enter y (yes), f (full backup), k (new keys), or n (no)."},
-	} {
-		answers := tc.answers
-		readLineFn = func(string) (string, error) { a := answers[0]; answers = answers[1:]; return a, nil }
-		var got startChoice
-		var err error
-		out := testutil.CaptureStdout(t, func() { got, err = promptBackupStart(keyPlan{Existing: ks}, tc.anyDiff) })
-		if err != nil || got != tc.want {
-			t.Fatalf("answers %v: got %v (err %v), want %v", tc.answers, got, err, tc.want)
-		}
-		if tc.hint != "" && !strings.Contains(out, tc.hint) {
-			t.Fatalf("answers %v: expected hint %q, got %q", tc.answers, tc.hint, out)
-		}
 	}
 }

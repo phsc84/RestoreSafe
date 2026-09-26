@@ -65,7 +65,7 @@ func docsSources() []backupSource {
 func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	log := util.NewConsoleLogger("info")
+	log := util.NewConsoleLogger("info", nil)
 	if err := applyRetentionPolicy(dir, 0, 0, []backupSource{{Resolved: dir}}, nil, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	sources := []backupSource{{Resolved: dir, Err: errors.New("inaccessible")}}
-	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
@@ -83,7 +83,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
 	env := newRetentionEnv(t)
 	entry := env.writeFull(t, "Docs", "ONE001", "2026-03-14")
-	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, entry) {
@@ -98,7 +98,7 @@ func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	other := env.writeFull(t, "Pics", "AAA001", "2026-03-13")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -141,7 +141,7 @@ func TestApplyRetentionPolicyHandlesIncompleteSets(t *testing.T) {
 	old := env.truncateSet(t, oldEntry, time.Now().Add(-24*time.Hour))
 	recent := env.truncateSet(t, recentEntry, time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	assertNotExists(t, old)
@@ -155,7 +155,7 @@ func TestApplyRetentionPolicySkipsWhenASetIsUnreadable(t *testing.T) {
 	foreign := util.PartFileName(env.dir, util.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
 	createFile(t, foreign, "not a RestoreSafe backup")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
@@ -174,7 +174,7 @@ func TestApplyRetentionPolicyNeverTouchesLegacyFiles(t *testing.T) {
 		createFile(t, p, "1.x")
 	}
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
@@ -193,7 +193,7 @@ func TestApplyRetentionPolicyDeletesChainWithItsDifferentials(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 1)
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -218,7 +218,7 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, util.NewConsoleLogger("info"))
+		err = applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, util.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestApplyRetentionPolicyAppliesDifferentialLimitToEveryKeptChain(t *testing
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 2)
 
-	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, util.NewConsoleLogger("info")); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, gone := range []util.BackupEntry{olderDiffs[0], newerDiffs[0]} {
@@ -271,7 +271,7 @@ func TestApplyRetentionPolicyHoldsDirectoriesWithSkippedFiles(t *testing.T) {
 
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, util.NewConsoleLogger("info"))
+		err = applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, util.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -14,7 +14,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress.log")
-	logger, err := util.NewLogger(logPath, "debug")
+	logger, err := util.NewLogger(logPath, "debug", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestLogProgressUntilDoneLogsWhenDoneClosedImmediately(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress2.log")
-	logger, err := util.NewLogger(logPath, "debug")
+	logger, err := util.NewLogger(logPath, "debug", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}

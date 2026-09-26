@@ -12,8 +12,10 @@ import (
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/setio"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,8 +23,9 @@ import (
 	"time"
 )
 
-// Run executes the full backup workflow.
-func Run(cfg *util.Config, exeDir string) error {
+// Run executes the full backup workflow, asking u for decisions and credentials.
+func Run(u ui.UI, cfg *util.Config, exeDir string) error {
+	out := u.Output()
 	// Resolve backup directory (may be relative to exe dir).
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 	if err := os.MkdirAll(backupDir, 0o750); err != nil {
@@ -51,7 +54,7 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	// Set up logger.
 	logPath := util.LogFileName(backupDir, date, runID)
-	log, err := util.NewLogger(logPath, cfg.LogLevel)
+	log, err := util.NewLogger(logPath, cfg.LogLevel, out)
 	if err != nil {
 		return err
 	}
@@ -82,104 +85,54 @@ func Run(cfg *util.Config, exeDir string) error {
 	keys := planKeys(cfg, infos)
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
-	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	printBackupPreflightWithYubiKeyCheck(out, cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
-			fmt.Println()
-			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+			fmt.Fprintln(out)
+			fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
 		}
 		return err
 	}
 	if err := validateStagingSpaceForBackup(stagingPlan, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space in temp directory") {
-			fmt.Println()
-			fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+			fmt.Fprintln(out)
+			fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
 		}
 		return err
 	}
 	if err := validateBackupPartCount(cfg, sources); err != nil {
-		fmt.Println()
-		fmt.Printf("[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+		fmt.Fprintln(out)
+		fmt.Fprintf(out, "[ERROR] %s\n", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
 		return err
 	}
 
-	choice, err := promptBackupStart(keys, anyDifferential(plans))
+	// [F] makes every directory a full backup (offered when a differential is
+	// planned); [K] creates new keys (offered when existing keys would be
+	// reused), to change the password, replace a lost YubiKey, or get a new
+	// recovery code.
+	choice, err := u.ConfirmBackupStart(ui.BackupStartOptions{OfferFull: anyDifferential(plans), OfferNewKeys: keys.Existing != nil})
 	if err != nil {
 		return err
 	}
 	switch choice {
-	case startCancel:
+	case ui.BackupCancel:
 		log.InfoLogOnly("Backup cancelled by user before start")
-		fmt.Println("Backup cancelled.")
+		fmt.Fprintln(out, "Backup cancelled.")
 		return nil
-	case startFull:
+	case ui.BackupFull:
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
-	case startNewKeys:
+	case ui.BackupNewKeys:
 		keys = keyPlan{NewKeysReason: "New keys requested"}
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
 	}
 
-	keySet, master, err := obtainKeys(cfg, keys, log)
+	keySet, master, err := obtainKeys(u, cfg, keys, log)
 	if err != nil {
 		return err
 	}
 	defer security.ZeroBytes(master)
 
-	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
-}
-
-type startChoice int
-
-const (
-	startCancel startChoice = iota
-	startAsPlanned
-	startFull
-	startNewKeys
-)
-
-// promptBackupStart asks whether to start the backup. [F] makes every
-// directory a full backup (offered when a differential is planned); [K]
-// creates new keys (offered when existing keys would be reused), to change
-// the password, replace a lost YubiKey, or get a new recovery code.
-func promptBackupStart(keys keyPlan, anyDiff bool) (startChoice, error) {
-	if keys.Existing == nil {
-		ok, err := operation.PromptStartAction("backup")
-		if !ok || err != nil {
-			return startCancel, err
-		}
-		return startAsPlanned, nil
-	}
-	options := "[Y] yes"
-	valid := "y (yes)"
-	if anyDiff {
-		options += " / [F] full backup"
-		valid += ", f (full backup)"
-	}
-	options += " / [K] new keys + full backup / [N] cancel"
-	valid += ", k (new keys), or n (no)"
-	for {
-		fmt.Println()
-		answer, err := readLineFn("Start backup now? " + options + ": ")
-		fmt.Println()
-		if err != nil {
-			return startCancel, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return startAsPlanned, nil
-		case "f":
-			if anyDiff {
-				fmt.Println("Every source directory gets a full backup with the current keys.")
-				return startFull, nil
-			}
-		case "k":
-			fmt.Println("New keys will be created and every source directory gets a full backup. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
-			return startNewKeys, nil
-		case "n", "no":
-			return startCancel, nil
-		}
-		fmt.Printf("Please enter %s.\n", valid)
-	}
+	return runBackupOperation(out, cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in
@@ -224,10 +177,11 @@ func removeLeftoverTempParts(backupDir string, log *util.Logger) {
 
 // runBackupOperation performs the backup using an already-unlocked key set.
 // It takes no further input from the user, so it can be driven directly in
-// tests and automated flows by supplying the key set and master key. plans
-// decides full or differential per directory; directories without a plan
-// (or a nil map) get a full backup.
+// tests and automated flows by supplying the key set and master key; out
+// receives the summary. plans decides full or differential per directory;
+// directories without a plan (or a nil map) get a full backup.
 func runBackupOperation(
+	out io.Writer,
 	cfg *util.Config,
 	log *util.Logger,
 	logPath, backupDir string,
@@ -239,7 +193,7 @@ func runBackupOperation(
 	master []byte,
 	plans map[string]*dirPlan,
 ) error {
-	fmt.Println()
+	fmt.Fprintln(out)
 	n := runnableSourceCount(sources)
 	dirWord := "directories"
 	if n == 1 {
@@ -345,9 +299,9 @@ func runBackupOperation(
 		log.Info("Backup completed successfully")
 	}
 	if warningCount > 0 {
-		fmt.Printf("Warnings: %d\n", warningCount)
+		fmt.Fprintf(out, "Warnings: %d\n", warningCount)
 	}
-	fmt.Printf("\nLog file: %s\n", logPath)
+	fmt.Fprintf(out, "\nLog file: %s\n", logPath)
 	return nil
 }
 

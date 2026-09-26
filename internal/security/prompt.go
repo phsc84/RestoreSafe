@@ -23,26 +23,10 @@ func ZeroBytes(b []byte) {
 	}
 }
 
-// Input sources behind ReadPassword and ReadLine. End-to-end tests replace
-// them with SetInputForTest to script a whole interactive session.
-var (
-	passwordInput = readPasswordFromTerminal
-	lineInput     = readLineFromStdin
-)
-
-// SetInputForTest replaces the password and line input sources and returns a
-// function that restores the originals. Only for tests; not safe for parallel
-// use.
-func SetInputForTest(line func(prompt string) (string, error), password func(prompt string) ([]byte, error)) (restore func()) {
-	prevLine, prevPassword := lineInput, passwordInput
-	lineInput, passwordInput = line, password
-	return func() { lineInput, passwordInput = prevLine, prevPassword }
-}
-
-// ReadPassword prints the prompt text to stdout and reads a password,
-// displaying '*' for each accepted character.
+// ReadPassword prints the prompt text to stdout and reads a password from the
+// console, displaying '*' for each accepted character.
 func ReadPassword(prompt string) ([]byte, error) {
-	return passwordInput(prompt)
+	return readPasswordFromTerminal(prompt)
 }
 
 // readPasswordFromTerminal reads a password from the console in raw mode.
@@ -138,17 +122,16 @@ func readPasswordFromTerminal(prompt string) ([]byte, error) {
 	}
 }
 
-// Errors of ReadPasswordConfirmedWithPrompts that the user can correct by
+// Errors of ReadPasswordConfirmed that the user can correct by
 // entering the password again.
 var (
 	ErrPasswordEmpty    = errors.New("Password must not be empty.")
 	ErrPasswordMismatch = errors.New("Passwords do not match.")
 )
 
-// ReadPasswordConfirmedWithPrompts asks the user to enter and confirm a
-// password using custom prompt texts.
-func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte, error) {
-	pw1, err := ReadPassword(firstPrompt)
+// ReadPasswordConfirmed reads a password and its confirmation with read.
+func ReadPasswordConfirmed(read func(prompt string) ([]byte, error), firstPrompt, confirmPrompt string) ([]byte, error) {
+	pw1, err := read(firstPrompt)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +140,7 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 		return nil, ErrPasswordEmpty
 	}
 
-	pw2, err := ReadPassword(confirmPrompt)
+	pw2, err := read(confirmPrompt)
 	if err != nil {
 		ZeroBytes(pw1)
 		return nil, err
@@ -172,12 +155,9 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 	return pw1, nil
 }
 
-// ReadLine reads a single line from stdin (with echo).
+// ReadLine prints the prompt text to stdout and reads a single line from
+// stdin (with echo).
 func ReadLine(promptText string) (string, error) {
-	return lineInput(promptText)
-}
-
-func readLineFromStdin(promptText string) (string, error) {
 	fmt.Print(promptText)
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')

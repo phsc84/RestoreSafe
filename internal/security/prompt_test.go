@@ -1,6 +1,7 @@
 package security
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -79,25 +80,34 @@ func TestReadPasswordReturnsErrorForNonTerminalStdin(t *testing.T) {
 	}
 }
 
-func TestReadPasswordConfirmedReturnsErrorWhenReadPasswordFails(t *testing.T) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
+// answers returns a password reader that returns inputs in order.
+func answers(inputs ...string) func(string) ([]byte, error) {
+	return func(string) ([]byte, error) {
+		if len(inputs) == 0 {
+			return nil, errors.New("Failed to read password: EOF")
+		}
+		in := inputs[0]
+		inputs = inputs[1:]
+		return []byte(in), nil
 	}
-	defer w.Close()
+}
 
-	oldStdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		r.Close()
-	})
+func TestReadPasswordConfirmed(t *testing.T) {
+	t.Parallel()
 
-	_, err = ReadPasswordConfirmedWithPrompts("Password: ", "Confirm: ")
-	if err == nil {
-		t.Fatal("expected error when ReadPassword fails, got nil")
+	if pw, err := ReadPasswordConfirmed(answers("secret", "secret"), "Password: ", "Confirm: "); err != nil || string(pw) != "secret" {
+		t.Fatalf("matching passwords: got %q, %v", pw, err)
 	}
-	if !strings.Contains(err.Error(), "Failed to read password") {
-		t.Fatalf("expected 'Failed to read password' in error, got: %v", err)
+	if _, err := ReadPasswordConfirmed(answers("secret", "other"), "Password: ", "Confirm: "); !errors.Is(err, ErrPasswordMismatch) {
+		t.Fatalf("mismatch: expected ErrPasswordMismatch, got %v", err)
+	}
+	if _, err := ReadPasswordConfirmed(answers(""), "Password: ", "Confirm: "); !errors.Is(err, ErrPasswordEmpty) {
+		t.Fatalf("empty: expected ErrPasswordEmpty, got %v", err)
+	}
+	for _, in := range [][]string{nil, {"secret"}} {
+		_, err := ReadPasswordConfirmed(answers(in...), "Password: ", "Confirm: ")
+		if err == nil || !strings.Contains(err.Error(), "Failed to read password") {
+			t.Fatalf("read error after %d answer(s): got %v", len(in), err)
+		}
 	}
 }
