@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Implemented on branch `v2` (phases 1-7); hardware test of the YubiKey paths pending |
 | Target release | RestoreSafe 2.0.0 |
 | Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
 
@@ -357,7 +357,7 @@ Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] c
 ### 6.3 Credentials
 
 **Existing key set** (the normal case):
-- Modes 1/2: prompt the password **once** (no confirmation needed; the slot validates it). Wrong password: retry, as today via `ReadPasswordWithRetry`.
+- Modes 1/2: prompt the password **once** (no confirmation needed; the slot validates it). Wrong password: up to 3 attempts, as in 1.x.
 - Modes 2/3: one YubiKey touch (4.4.3).
 - The unlocked key set is used for every directory in the run, full and differential alike.
 
@@ -658,7 +658,7 @@ Synthetic source with 50,000 files (mixed sizes) and ~5 GB: measure differential
 
 ## Appendix A. README draft: "How your backups are locked"
 
-Audience: RestoreSafe users, not cryptography experts. This text goes into the README in phase 7 (adjust prompts and wording to the final implementation). Everything below the line is the README text.
+Audience: RestoreSafe users, not cryptography experts. This draft was adopted into README.md ("How your backups are locked") in phase 7, adjusted to the final prompts; the README is now the maintained version. Everything below the line is the original draft.
 
 ---
 

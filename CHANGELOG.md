@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - Unreleased
+
+**Breaking change:** RestoreSafe 2.0 uses a new backup format. It cannot restore backups created by 1.x, and 1.x cannot restore 2.0 backups. Keep RestoreSafe 1.0.2 to restore your 1.x backups; 2.0 never modifies or deletes them. Start from the new `config-SAMPLE.yaml`. See "Updating from RestoreSafe 1.x to 2.0" in the README.
+
+### Added
+- Differential backups: RestoreSafe chooses automatically between a full and a differential backup per source directory and shows the decision and reason before the backup starts. A differential stores only files that are new or changed since the last full backup (size, modification time, and NTFS change time are compared; unchanged files are not read).
+- `[F]` in the backup start prompt forces full backups.
+- Restore and verify of differential backups; a differential is restored together with its full backup, and the link between them is checked before any file is written.
+- Encrypted manifest in every backup: restore and verify check every file against its SHA-256 checksum.
+- Restore of creation and modification times and of the read-only, hidden, and system attributes.
+- Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey.
+- `[K]` in the backup start prompt creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
+- `password_min_length` (default 12, at least 8) for new passwords.
+- `exclude` patterns for files and directories to leave out of backups.
+- `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
+- `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).
+- The startup health check reports incomplete backups, differentials whose full backup is missing, leftovers of interrupted backups, 1.x backups, and the state of the keys.
+
+### Changed
+- New file names: `[Directory]_ID_DATE_FULL-001.enc` and `[Directory]_ID_DATE_DIFFnnn-001.enc`. All files of a chain (a full backup and its differentials) share the ID.
+- `.challenge` files are no longer created; the YubiKey data is stored inside the backup files.
+- A backup run asks for the password once (no confirmation) and needs one YubiKey touch; the password is entered twice and the YubiKey registered only when new keys are created.
+- `retention_keep` counts backup chains; a chain is always deleted as a whole.
+- Backup parts are written as `.tmp` files and renamed only when the backup is complete, so an interrupted backup never looks like a valid one.
+- Verify checks every file's checksum instead of only the archive structure.
+
 ## [1.0.2] - 2026-08-22
 
 ### Changed

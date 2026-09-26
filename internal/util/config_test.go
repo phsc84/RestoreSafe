@@ -139,6 +139,25 @@ func TestLoadDifferentialOptions(t *testing.T) {
 	}
 }
 
+// TestConfigSampleIsValid keeps config-SAMPLE.yaml loadable and its values
+// equal to the documented defaults.
+func TestConfigSampleIsValid(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Load(filepath.Join("..", "..", "config-SAMPLE.yaml"))
+	if err != nil {
+		t.Fatalf("config-SAMPLE.yaml does not load: %v", err)
+	}
+	d := cfg.Differential
+	switch {
+	case cfg.AuthenticationMode != AuthModePassword, cfg.YubiKeySpare, cfg.RecoveryCode,
+		cfg.PasswordMinLength != DefaultPasswordMinLength, cfg.OnUnreadableFile != OnUnreadableFail,
+		!cfg.ExcludeMatcher.Empty(), cfg.RetentionKeep != 3,
+		!d.IsEnabled(), d.IntervalDays() != DefaultFullBackupIntervalDays, d.SizePercent() != DefaultMaxSizePercent, d.RetentionKeepDifferentials != 0:
+		t.Fatalf("config-SAMPLE.yaml values differ from the documented defaults: %+v", cfg)
+	}
+}
+
 func TestLoadRejectsNegativeRetentionKeep(t *testing.T) {
 	t.Parallel()
 

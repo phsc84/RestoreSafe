@@ -72,8 +72,10 @@ io_diagnostics: false
 
 # Verify the backup immediately after it is written.
 # Re-reads and decrypts the new .enc parts (no extra password/YubiKey prompt)
-# to confirm the backup restores. A failure is logged as a warning and the
-# files are kept. Adds roughly one decrypt pass per backup run.
+# and checks every file against its checksum. For a differential backup, the
+# new and changed files are checked (its full backup was checked when it was
+# written). A failure is logged as a warning, the files are kept, and old
+# backups are not cleaned up. Adds roughly one decrypt pass per backup run.
 # Default: false
 verify_after_backup: false
 
@@ -104,19 +106,20 @@ password_min_length: 12
 
 # Argon2id key-derivation parameters.
 #
-# RestoreSafe uses Argon2id (RFC 9106) to derive the AES-256 encryption key from
-# your password. Argon2id is memory-hard, which makes GPU/ASIC-based brute-force
-# attacks orders of magnitude more expensive than classic password hashing (bcrypt,
-# PBKDF2, etc.).
+# RestoreSafe uses Argon2id (RFC 9106) to derive the key that unlocks your backups
+# from your password (and/or YubiKey response or recovery code). Argon2id is
+# memory-hard, which makes GPU/ASIC-based brute-force attacks orders of magnitude
+# more expensive than classic password hashing (bcrypt, PBKDF2, etc.).
 #
 # These three parameters control how much work is done each time the key is derived
 # (once per backup run, once per restore). Higher values slow down legitimate use
 # slightly, but make brute-force attacks proportionally harder — the cost grows for
 # an attacker exactly as it grows for you.
 #
-# The values in effect at encryption time are stored in every backup file, so
-# restore always uses the original parameters automatically. Changing these settings
-# only affects new backups, not existing ones.
+# The values are stored in the keys when new keys are created, and restore always
+# uses the stored values automatically. Because RestoreSafe reuses your keys,
+# changed values take effect the next time new keys are created (first backup, or
+# [K] in the backup summary); existing backups are not affected.
 #
 # Parameters and their effect:
 #
