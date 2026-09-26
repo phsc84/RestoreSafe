@@ -13,6 +13,20 @@ import (
 
 var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
+// chain groups the backup sets of one directory that share a chain ID.
+type chain struct {
+	id          util.BackupID
+	fullCreated time.Time
+	hasFull     bool
+	sets        []catalog.SetInfo
+}
+
+// applyRetentionPolicy keeps the newest retentionKeep chains (a full backup
+// plus its differentials) per configured source directory and deletes older
+// chains as a whole, so a full backup is never deleted while a kept
+// differential depends on it. Incomplete sets older than the newest complete
+// set of their directory are deleted too. Files that do not follow the
+// RestoreSafe 2 naming scheme (including 1.x backups) are never touched.
 func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupSource, log *util.Logger) error {
 	if retentionKeep <= 0 {
 		log.Info("Cleanup old data disabled (retention_keep=%d)", retentionKeep)
@@ -34,64 +48,38 @@ func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupS
 		return nil
 	}
 
-	index, err := catalog.ScanBackups(backupDir)
+	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backups for retention: %w", err)
 	}
-
-	type datedEntry struct {
-		entry      util.BackupEntry
-		newestTime time.Time
-	}
-
-	entriesByDirectory := make(map[string][]datedEntry)
-	for _, entry := range index {
-		if !directorySet[entry.DirectoryName] {
-			continue
-		}
-		newestTime, err := catalog.NewestPartModTime(backupDir, entry)
-		if err != nil {
-			log.Warn("Retention cleanup skipped: failed to inspect backup set %s (%v)", entry.String(), err)
+	for _, info := range infos {
+		if directorySet[info.Entry.DirectoryName] && info.Err != nil && !catalog.IsIncomplete(info.Err) {
+			log.Warn("Retention cleanup skipped: failed to inspect backup set %s (%v)", info.Entry.String(), info.Err)
 			log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
 			return nil
 		}
-		entriesByDirectory[entry.DirectoryName] = append(entriesByDirectory[entry.DirectoryName], datedEntry{entry: entry, newestTime: newestTime})
 	}
 
 	// The "Cleanup old data" header is logged lazily, immediately before the
 	// first deletion, so retention stays silent when there is nothing to remove.
 	headerShown := false
-	showHeader := func() {
-		if !headerShown {
-			log.Info("Cleanup old data (retention: keeping %d)", retentionKeep)
-			headerShown = true
+	logDeleted := func(names []string) {
+		for _, name := range names {
+			if !headerShown {
+				log.Info("Cleanup old data (retention: keeping %d)", retentionKeep)
+				headerShown = true
+			}
+			log.Info("  Deleted: %s", name)
 		}
 	}
 
-	for _, entries := range entriesByDirectory {
-		sort.Slice(entries, func(i, j int) bool {
-			if !entries[i].newestTime.Equal(entries[j].newestTime) {
-				return entries[i].newestTime.After(entries[j].newestTime)
-			}
-			if entries[i].entry.Date != entries[j].entry.Date {
-				return entries[i].entry.Date > entries[j].entry.Date
-			}
-			return string(entries[i].entry.ID) > string(entries[j].entry.ID)
-		})
-
-		if len(entries) <= retentionKeep {
-			continue
-		}
-
-		toDelete := entries[retentionKeep:]
-		for _, candidate := range toDelete {
-			deleted, err := deleteBackupEntryFiles(backupDir, candidate.entry)
+	for directory := range directorySet {
+		toDelete := retentionCandidates(directory, infos, retentionKeep)
+		for _, info := range toDelete {
+			deleted, err := deleteSetFiles(info.Parts)
+			logDeleted(deleted)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", candidate.entry.String(), err)
-			}
-			for _, name := range deleted {
-				showHeader()
-				log.Info("  Deleted: %s", name)
+				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", info.Entry.String(), err)
 			}
 		}
 	}
@@ -100,29 +88,87 @@ func applyRetentionPolicy(backupDir string, retentionKeep int, sources []backupS
 	if err != nil {
 		log.Warn("Retention log cleanup failed: %v", err)
 	}
-	for _, name := range deletedLogs {
-		showHeader()
-		log.Info("  Deleted: %s", name)
-	}
+	logDeleted(deletedLogs)
 
 	if !headerShown {
 		log.Info("Cleanup old data (retention: keeping %d) - nothing to delete", retentionKeep)
 	}
-
 	return nil
 }
 
-// deleteBackupEntryFiles removes every part file plus the optional challenge
-// file for a backup set, returning the base names of the files it deleted.
-func deleteBackupEntryFiles(backupDir string, entry util.BackupEntry) ([]string, error) {
-	var removed []string
-	parts, err := catalog.CollectParts(backupDir, entry)
-	if err != nil {
-		return removed, err
+// retentionCandidates returns the sets of directory that retention deletes.
+func retentionCandidates(directory string, infos []catalog.SetInfo, retentionKeep int) []catalog.SetInfo {
+	chains := make(map[util.BackupID]*chain)
+	var incomplete []catalog.SetInfo
+	var newestComplete time.Time
+	for _, info := range infos {
+		if info.Entry.DirectoryName != directory {
+			continue
+		}
+		if !info.Complete() {
+			incomplete = append(incomplete, info)
+			continue
+		}
+		if c := info.Created(); c.After(newestComplete) {
+			newestComplete = c
+		}
+		ch := chains[info.Entry.ChainID]
+		if ch == nil {
+			ch = &chain{id: info.Entry.ChainID}
+			chains[info.Entry.ChainID] = ch
+		}
+		ch.sets = append(ch.sets, info)
+		if !info.Entry.IsDiff() {
+			ch.hasFull = true
+			ch.fullCreated = info.Created()
+		}
 	}
+
+	// Only chains with a complete full backup take part in retention; a chain
+	// whose full backup is missing is reported by the health check instead.
+	ordered := make([]*chain, 0, len(chains))
+	for _, ch := range chains {
+		if ch.hasFull {
+			ordered = append(ordered, ch)
+		}
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if !ordered[i].fullCreated.Equal(ordered[j].fullCreated) {
+			return ordered[i].fullCreated.After(ordered[j].fullCreated)
+		}
+		return ordered[i].id > ordered[j].id
+	})
+
+	var out []catalog.SetInfo
+	if len(ordered) > retentionKeep {
+		for _, ch := range ordered[retentionKeep:] {
+			out = append(out, ch.sets...)
+		}
+	}
+	for _, info := range incomplete {
+		if !newestComplete.IsZero() && newestPartModTime(info.Parts).Before(newestComplete) {
+			out = append(out, info)
+		}
+	}
+	return out
+}
+
+func newestPartModTime(parts []string) time.Time {
+	var newest time.Time
+	for _, p := range parts {
+		if fi, err := os.Stat(p); err == nil && fi.ModTime().After(newest) {
+			newest = fi.ModTime()
+		}
+	}
+	return newest
+}
+
+// deleteSetFiles removes the given part files and returns the base names of
+// the files it deleted.
+func deleteSetFiles(parts []string) ([]string, error) {
+	var removed []string
 	for _, part := range parts {
-		err := os.Remove(part)
-		if err != nil {
+		if err := os.Remove(part); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -130,21 +176,15 @@ func deleteBackupEntryFiles(backupDir string, entry util.BackupEntry) ([]string,
 		}
 		removed = append(removed, filepath.Base(part))
 	}
-
-	challengePath := util.ChallengeFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID)
-	if err := os.Remove(challengePath); err == nil {
-		removed = append(removed, filepath.Base(challengePath))
-	} else if !os.IsNotExist(err) {
-		return removed, err
-	}
-
 	return removed, nil
 }
 
-// deleteOrphanLogFiles removes log files whose backup run no longer exists,
-// returning the base names of the log files it deleted.
+// deleteOrphanLogFiles removes log files whose backup run no longer has any
+// backup set, returning the base names of the log files it deleted. A log is
+// kept while any remaining set was written by its run (header run ID) or
+// carries its ID as chain ID, and 1.x logs next to 1.x backups are kept.
 func deleteOrphanLogFiles(backupDir string) ([]string, error) {
-	index, err := catalog.ScanBackups(backupDir)
+	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -152,9 +192,12 @@ func deleteOrphanLogFiles(backupDir string) ([]string, error) {
 		return nil, err
 	}
 
-	activeRuns := make(map[string]bool)
-	for _, entry := range index {
-		activeRuns[entry.RunKey()] = true
+	active := make(map[string]bool)
+	for _, info := range infos {
+		active[string(info.Entry.ChainID)] = true
+		if info.Header != nil {
+			active[info.Header.RunID] = true
+		}
 	}
 
 	des, err := os.ReadDir(backupDir)
@@ -164,26 +207,23 @@ func deleteOrphanLogFiles(backupDir string) ([]string, error) {
 		}
 		return nil, err
 	}
+	legacyLogs := make(map[string]bool)
+	for _, de := range des {
+		if name, ok := util.LegacyLogFileName(de.Name()); ok {
+			legacyLogs[name] = true
+		}
+	}
 
 	var deleted []string
 	for _, de := range des {
 		if de.IsDir() {
 			continue
 		}
-
 		matches := logFilePattern.FindStringSubmatch(de.Name())
-		if matches == nil {
+		if matches == nil || active[matches[2]] || legacyLogs[de.Name()] {
 			continue
 		}
-
-		runKey := matches[1] + "|" + matches[2]
-		if activeRuns[runKey] {
-			continue
-		}
-
-		logPath := filepath.Join(backupDir, de.Name())
-		err := os.Remove(logPath)
-		if err != nil {
+		if err := os.Remove(filepath.Join(backupDir, de.Name())); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -191,6 +231,5 @@ func deleteOrphanLogFiles(backupDir string) ([]string, error) {
 		}
 		deleted = append(deleted, de.Name())
 	}
-
 	return deleted, nil
 }

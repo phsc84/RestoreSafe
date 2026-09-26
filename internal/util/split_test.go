@@ -3,13 +3,13 @@ package util
 import (
 	"bytes"
 	"fmt"
-	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestSplitWriterAndSequentialReaderRoundTrip(t *testing.T) {
+func TestSplitWriterDistributesBytesAcrossParts(t *testing.T) {
 	dir := t.TempDir()
 	nameFunc := func(seq int) string {
 		return filepath.Join(dir, fmt.Sprintf("part-%03d.bin", seq))
@@ -45,12 +45,13 @@ func TestSplitWriterAndSequentialReaderRoundTrip(t *testing.T) {
 		t.Fatalf("expected %d file bytes, got %d", len(input), stats.FileWriteBytes)
 	}
 
-	r := NewSequentialReader(paths)
-	defer r.Close()
-
-	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("ReadAll returned error: %v", err)
+	var got []byte
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("failed to read part: %v", err)
+		}
+		got = append(got, data...)
 	}
 	if !bytes.Equal(got, input) {
 		t.Fatalf("round-trip mismatch: expected %q, got %q", input, got)
@@ -67,20 +68,6 @@ func TestSplitWriterRejectsNonPositivePartSize(t *testing.T) {
 		t.Fatal("expected error for non-positive part size, got nil")
 	}
 	if !strings.Contains(err.Error(), "Invalid split part size") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestSequentialReaderMissingPartFile(t *testing.T) {
-	r := NewSequentialReader([]string{filepath.Join(t.TempDir(), "missing.bin")})
-	defer r.Close()
-
-	buf := make([]byte, 1)
-	_, err := r.Read(buf)
-	if err == nil {
-		t.Fatal("expected error for missing part file, got nil")
-	}
-	if !strings.Contains(err.Error(), "Failed to open part file") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

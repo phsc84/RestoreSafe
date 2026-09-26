@@ -19,6 +19,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	backupDir string,
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
+	keys keyPlan,
 	checkYubiKeyAvailability func() error,
 	checkYubiKeyConnected func() error,
 ) {
@@ -78,6 +79,7 @@ func printBackupPreflightWithYubiKeyCheck(
 	fmt.Fprintf(w, "  [OK] %s\n", backupDir)
 
 	operation.PrintAuthStatus(w, cfg.AuthenticationMode.Label(), cfg.UseYubiKey(), "backup", checkYubiKeyAvailability, checkYubiKeyConnected)
+	printKeyPlan(w, keys)
 
 	fmt.Fprintln(w)
 	if estimatedBytes < 0 {
@@ -116,6 +118,18 @@ func printBackupPreflightWithYubiKeyCheck(
 			fmt.Fprintf(w, "  Free disk space: %s\n", util.FormatBytesBinary(localFreeBytes))
 		}
 	}
+}
+
+// printKeyPlan states whether the run reuses the existing keys or creates new
+// ones, and what that means for the user.
+func printKeyPlan(w io.Writer, keys keyPlan) {
+	if keys.Existing != nil {
+		operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "existing keys, "+describeKeySet(keys.Existing))
+		return
+	}
+	operation.PrintField(w, operation.DefaultFieldLabelWidth, "Keys", "new keys will be created")
+	fmt.Fprintf(w, "  [INFO] %s: new keys will be created and every source directory gets a full backup.\n", keys.NewKeysReason)
+	fmt.Fprintln(w, "  [INFO] Passwords, YubiKey registrations, and recovery codes of earlier keys do not open the new backups (they still open older backups).")
 }
 
 func validateSourceDirectories(sources []backupSource) error {

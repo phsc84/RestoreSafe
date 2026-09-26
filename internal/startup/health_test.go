@@ -38,15 +38,76 @@ func TestCheckConfigFileHealthErrorForMissingFile(t *testing.T) {
 	}
 }
 
+func passwordConfig() *util.Config {
+	return &util.Config{AuthenticationMode: util.AuthModePassword}
+}
+
+func findItem(items []healthItem, severity healthSeverity, scope, contains string) bool {
+	for _, item := range items {
+		if item.Severity == severity && item.Scope == scope && strings.Contains(item.Detail, contains) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestCheckBackupInventoryHealthWarnsWhenNoBackups(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	items := checkBackupInventoryHealth(dir)
-	if len(items) == 0 {
-		t.Fatal("expected at least one health item for empty inventory")
+	items := checkBackupInventoryHealth(passwordConfig(), t.TempDir())
+	if !findItem(items, healthWarn, healthScopeBackupInventory, "No backup sets found") {
+		t.Fatalf("expected WARN for empty backup inventory, got: %#v", items)
 	}
-	if items[0].Severity != healthWarn {
-		t.Fatalf("expected WARN for empty backup inventory, got severity: %v", items[0].Severity)
+	if !findItem(items, healthOK, healthScopeKeys, "next backup creates new keys") {
+		t.Fatalf("expected key status for empty inventory, got: %#v", items)
+	}
+}
+
+func TestCheckBackupInventoryHealthReportsCompleteSetAndKeys(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	items := checkBackupInventoryHealth(passwordConfig(), fx.BackupDir)
+	if !findItem(items, healthOK, healthScopeBackupInventory, "structurally complete") {
+		t.Fatalf("expected complete inventory, got: %#v", items)
+	}
+	if !findItem(items, healthOK, healthScopeKeys, "Current keys created") {
+		t.Fatalf("expected key summary, got: %#v", items)
+	}
+
+	yubiCfg := &util.Config{AuthenticationMode: util.AuthModePasswordYubiKey}
+	if items := checkBackupInventoryHealth(yubiCfg, fx.BackupDir); !findItem(items, healthWarn, healthScopeKeys, "creates new keys") {
+		t.Fatalf("expected warning about new keys after mode change, got: %#v", items)
+	}
+}
+
+func TestCheckBackupInventoryHealthReportsIncompleteAndOrphanSets(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	// A differential part whose full backup does not exist.
+	orphan := util.BackupEntry{DirectoryName: "Other", ChainID: "ORP001", Date: "2026-03-14", DiffNumber: 1}
+	if err := os.WriteFile(util.PartFileName(fx.BackupDir, orphan, 1), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	items := checkBackupInventoryHealth(passwordConfig(), fx.BackupDir)
+	if !findItem(items, healthError, healthScopeBackupSet, orphan.String()) {
+		t.Fatalf("expected error for broken set, got: %#v", items)
+	}
+	if findItem(items, healthOK, healthScopeBackupInventory, "structurally complete") {
+		t.Fatalf("did not expect complete inventory message, got: %#v", items)
+	}
+}
+
+func TestCheckBackupInventoryHealthWarnsAboutLegacyAndTempFiles(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for _, name := range []string{"[Docs]_2026-01-01_OLD001-001.enc", "[Docs]_ABC123_2026-03-14_FULL-001.enc.tmp"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items := checkBackupInventoryHealth(passwordConfig(), dir)
+	if !findItem(items, healthWarn, healthScopeBackupInventory, "RestoreSafe 1.x backups found") {
+		t.Fatalf("expected 1.x warning, got: %#v", items)
+	}
+	if !findItem(items, healthWarn, healthScopeBackupInventory, "interrupted backup") {
+		t.Fatalf("expected leftover warning, got: %#v", items)
 	}
 }
 
@@ -58,82 +119,6 @@ func TestCheckTempDirHealthReturnsOK(t *testing.T) {
 	}
 	if items[0].Severity != healthOK {
 		t.Fatalf("expected temp dir health to be OK, got severity %v with detail: %s", items[0].Severity, items[0].Detail)
-	}
-}
-
-func TestListChallengeFilesReturnsOnlyChallengeFiles(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	for _, name := range []string{"run1.challenge", "run2.challenge"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
-			t.Fatalf("failed to write %s: %v", name, err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(dir, "backup.enc"), []byte("z"), 0o600); err != nil {
-		t.Fatalf("failed to write enc file: %v", err)
-	}
-
-	files, err := listChallengeFiles(dir)
-	if err != nil {
-		t.Fatalf("listChallengeFiles returned error: %v", err)
-	}
-	if len(files) != 2 {
-		t.Fatalf("expected 2 challenge files, got %d", len(files))
-	}
-	if !files["run1.challenge"] || !files["run2.challenge"] {
-		t.Fatalf("expected both challenge files in result, got: %v", files)
-	}
-}
-
-func TestListChallengeFilesEmptyDirectoryReturnsEmpty(t *testing.T) {
-	t.Parallel()
-	files, err := listChallengeFiles(t.TempDir())
-	if err != nil {
-		t.Fatalf("listChallengeFiles returned error: %v", err)
-	}
-	if len(files) != 0 {
-		t.Fatalf("expected empty result for empty directory, got: %v", files)
-	}
-}
-
-func TestOrphanChallengeFilesReturnsEmptyWhenAllExpected(t *testing.T) {
-	t.Parallel()
-	actual := map[string]bool{"a.challenge": true, "b.challenge": true}
-	expected := map[string]bool{"a.challenge": true, "b.challenge": true}
-	if orphans := orphanChallengeFiles(actual, expected); len(orphans) != 0 {
-		t.Fatalf("expected no orphans when all files are expected, got: %v", orphans)
-	}
-}
-
-func TestBuildBackupInventoryIssueItemsDetectsOrphanChallengeFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-
-	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
-	if err := os.MkdirAll(filepath.Dir(part), 0o750); err != nil {
-		t.Fatalf("failed to create part dir: %v", err)
-	}
-	if err := os.WriteFile(part, []byte("x"), 0o600); err != nil {
-		t.Fatalf("failed to write part file: %v", err)
-	}
-
-	orphanChallenge := filepath.Join(dir, "[Other]_2025-01-01_XYZ999.challenge")
-	if err := os.WriteFile(orphanChallenge, []byte("hex"), 0o600); err != nil {
-		t.Fatalf("failed to write orphan challenge: %v", err)
-	}
-
-	items := buildBackupInventoryIssueItems(dir, []util.BackupEntry{entry})
-
-	hasOrphanWarn := false
-	for _, item := range items {
-		if item.Severity == healthWarn && item.Scope == healthScopeChallengeFile {
-			hasOrphanWarn = true
-			break
-		}
-	}
-	if !hasOrphanWarn {
-		t.Fatalf("expected orphan challenge file warning, got items: %#v", items)
 	}
 }
 
@@ -221,21 +206,6 @@ func TestHealthSeverityLabel(t *testing.T) {
 	}
 	if got := healthSeverityLabel(healthError); got != "ERROR" {
 		t.Fatalf("expected ERROR label, got %q", got)
-	}
-}
-
-func TestOrphanChallengeFilesReturnsSortedList(t *testing.T) {
-	t.Parallel()
-
-	actual := map[string]bool{"b.challenge": true, "a.challenge": true, "c.challenge": true}
-	expected := map[string]bool{"b.challenge": true}
-
-	orphans := orphanChallengeFiles(actual, expected)
-	if len(orphans) != 2 {
-		t.Fatalf("expected 2 orphan files, got %d", len(orphans))
-	}
-	if orphans[0] != "a.challenge" || orphans[1] != "c.challenge" {
-		t.Fatalf("unexpected orphan order/content: %#v", orphans)
 	}
 }
 
@@ -357,15 +327,6 @@ func TestBlocksRestoreOrVerify(t *testing.T) {
 		if result.BlocksRestoreOrVerify() {
 			t.Fatalf("did not expect error in scope %q to block restore/verify", scope)
 		}
-	}
-}
-
-func TestRunKey(t *testing.T) {
-	t.Parallel()
-
-	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	if got := entry.RunKey(); got != "2026-03-14|ABC123" {
-		t.Fatalf("unexpected RunKey: %q", got)
 	}
 }
 

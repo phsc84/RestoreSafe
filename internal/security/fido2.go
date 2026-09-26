@@ -299,19 +299,15 @@ func challengeChecksum(cd ChallengeData) string {
 	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
-// ParseChallengeFile reads and parses the JSON from a .challenge file path.
-func ParseChallengeFile(path string) (ChallengeData, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ChallengeData{}, err
-	}
-	return parseChallengeData(strings.TrimSpace(string(data)))
-}
-
 // ValidateChallengeJSON reports whether s is a well-formed FIDO2 challenge JSON string.
 func ValidateChallengeJSON(s string) error {
 	_, err := parseChallengeData(s)
 	return err
+}
+
+// ParseChallengeJSON parses and validates a FIDO2 challenge JSON string.
+func ParseChallengeJSON(s string) (ChallengeData, error) {
+	return parseChallengeData(s)
 }
 
 func parseChallengeData(s string) (ChallengeData, error) {

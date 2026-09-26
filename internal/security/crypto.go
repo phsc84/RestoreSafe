@@ -1,46 +1,44 @@
-// Package crypto provides password-based AES-256-GCM streaming encryption.
+// Package security provides the cryptographic primitives of container format 2:
+// Argon2id key derivation, key wrapping, HKDF subkeys, and authenticated
+// streaming encryption.
 //
 // # Design decisions
 //
 // Algorithm: AES-256-GCM
 //   - Industry standard authenticated encryption (AEAD)
 //   - Provides both confidentiality AND integrity/authenticity
-//   - Detects tampering or wrong passwords at decryption time
+//   - Detects tampering or wrong keys at decryption time
 //
 // KDF: Argon2id (RFC 9106)
 //   - Winner of the Password Hashing Competition (2015)
 //   - Memory-hard → resistant to GPU/ASIC brute-force
-//   - "id" variant combines side-channel and GPU resistance
+//   - Used to derive a key-encryption key (KEK) per key slot; the KEK wraps the
+//     random master key of a key set (see package container)
 //   - Default parameters: 512 MB memory, 3 iterations, 4 threads
-//   - Parameters are configurable and stored in the file header
+//
+// Subkeys: HKDF-SHA256
+//   - The data and manifest section keys of every backup set are derived from
+//     the key set master key, salted with the set's header hash, so every set
+//     and every section has its own key
 //
 // Stream chunking
-//   - Large files are split into fixed-size chunks (chunkSize = 8 MB)
-//   - Each chunk gets its own nonce derived deterministically from the
-//     chunk index, preventing nonce reuse across chunks of the same stream
+//   - Section plaintext is split into fixed-size chunks (ChunkSize = 8 MB)
+//   - Each chunk gets its own nonce derived deterministically from the chunk
+//     index, preventing nonce reuse within a stream
 //   - A 1-byte flag field and 4-byte big-endian length prefix are written before
 //     each encrypted chunk
-//   - The chunk index and flags are GCM associated data, binding chunk order and
-//     the final-chunk marker to authentication
-//   - This avoids temp files and limits RAM usage to ~2× chunkSize
-//
-// File header layout (all values big-endian), format version 1:
-//
-//	[6]  magic prefix "RSBKP\x00"
-//	[1]  format version (currently 1)
-//	[1]  reserved (0x00)
-//	[4]  salt length (always saltLen = 32)
-//	[32] salt
-//	[4]  chunk size (bytes, currently 8388608)
-//	[4]  Argon2id time (iterations)
-//	[4]  Argon2id memory (kibibytes)
-//	[4]  Argon2id threads
+//   - The caller-supplied AAD prefix, the chunk index, and the flags are GCM
+//     associated data, binding the chunk to its set header and section as well
+//     as chunk order and the final-chunk marker to authentication
+//   - This avoids temp files and limits RAM usage to ~2× ChunkSize
 package security
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -50,34 +48,37 @@ import (
 )
 
 const (
-	// magicPrefix is the 6-byte file identifier: ASCII "RSBKP" + null separator.
-	magicPrefix = "RSBKP\x00"
-	// formatVersion is incremented on any breaking change to the header or chunk layout.
-	// Readers that encounter a different version emit a clear version-mismatch error.
-	formatVersion = byte(1)
-	// saltLen is the byte length of the Argon2id salt.
-	saltLen = 32
-	// keyLen is the AES-256 key length in bytes.
-	keyLen = 32
-	// nonceLen is the GCM nonce length.
-	nonceLen = 12
-	// chunkSize is the plaintext chunk size for streaming.
-	chunkSize = 8 * 1024 * 1024 // 8 MB
+	// SaltLen is the byte length of Argon2id salts.
+	SaltLen = 32
+	// KeyLen is the AES-256 key length in bytes.
+	KeyLen = 32
+	// NonceLen is the GCM nonce length.
+	NonceLen = 12
+	// ChunkSize is the plaintext chunk size for streaming.
+	ChunkSize = 8 * 1024 * 1024 // 8 MB
+	// chunkPrefixLen is the per-chunk framing: 1 flag byte + 4 length bytes.
+	chunkPrefixLen = 5
+	// gcmTagLen is the GCM authentication tag length.
+	gcmTagLen = 16
 	// maxEncryptedChunkSize is the largest valid GCM-sealed chunk payload.
-	maxEncryptedChunkSize = chunkSize + 16
+	maxEncryptedChunkSize = ChunkSize + gcmTagLen
+	// FullEncryptedChunkSize is the on-disk size of every chunk except the last
+	// one of a stream (framing + full ciphertext + tag). Fixed chunk sizes make
+	// chunk positions computable for random access.
+	FullEncryptedChunkSize = chunkPrefixLen + maxEncryptedChunkSize
 	// chunkFlagFinal marks the final authenticated chunk in a stream.
 	chunkFlagFinal = byte(1)
 )
 
 // Argon2id parameter bounds. This package owns the canonical bounds because it
-// owns the key-derivation function (argon2.IDKey) and the on-disk header format;
-// package util derives its MB-based config bounds from these. Memory is
-// expressed here in KiB to match the header and KDF native units.
+// owns the key-derivation function (argon2.IDKey); package util derives its
+// MB-based config bounds from these. Memory is expressed here in KiB to match
+// the on-disk format and the KDF native units.
 //
-// readHeader enforces these on every backup header so that hostile or corrupted
-// values cannot trigger an OOM (a multi-terabyte memory request) or a panic
-// (parallelism 0 via the uint8 truncation). The threads maximum also keeps the
-// value within the uint8 range argon2 requires.
+// ValidateArgon2Params enforces these on every derivation so that hostile or
+// corrupted header values cannot trigger an OOM (a multi-terabyte memory
+// request) or a panic (parallelism 0 via the uint8 truncation). The threads
+// maximum also keeps the value within the uint8 range argon2 requires.
 const (
 	MinArgonTime     = 2
 	MaxArgonTime     = 20
@@ -88,8 +89,6 @@ const (
 )
 
 // Argon2Params holds the Argon2id key-derivation parameters.
-// All three values are stored in the file header so that decryption always
-// uses the exact parameters that were in effect during encryption.
 type Argon2Params struct {
 	Time     uint32 // number of iterations (passes over memory)
 	MemoryKB uint32 // working memory in kibibytes
@@ -106,31 +105,21 @@ var DefaultArgon2Params = Argon2Params{
 	Threads:  4,
 }
 
-// magic is the full 8-byte header marker: prefix + version + reserved byte.
-// Derived from magicPrefix + formatVersion so that bumping formatVersion
-// automatically updates the on-disk marker without a manual string edit.
-var magic = magicPrefix + string([]byte{formatVersion, 0x00})
+// ErrWrongPassword is returned when a key slot cannot be opened: the password,
+// YubiKey response, or recovery code does not match.
+var ErrWrongPassword = errors.New("Wrong password or YubiKey")
 
-// ErrWrongPassword is returned when decryption authentication fails.
-var ErrWrongPassword = errors.New("Wrong password or corrupted file")
+// ErrCorrupted is returned when an encrypted chunk fails authentication after
+// the key was already verified, i.e. the backup data was modified or damaged.
+var ErrCorrupted = errors.New("Backup data failed authentication (corrupted or modified)")
 
-// deriveKey derives a 256-bit AES key from the password and salt using Argon2id.
-func deriveKey(password, salt []byte, params Argon2Params) []byte {
-	return argon2.IDKey(password, salt, params.Time, params.MemoryKB, params.Threads, keyLen)
-}
-
-// validateArgon2Params reports whether the Argon2id parameters fall within the
-// bounds this package enforces before handing them to argon2.IDKey. Both Encrypt
-// (in-memory params from config or internal callers) and readHeader (params read
-// from an untrusted on-disk header) call it so a single set of checks guards
-// against an OOM (multi-terabyte memory request) or a panic (parallelism 0).
-//
-// Values are taken as uint32 so the raw header fields can be validated before the
-// uint8 truncation of Threads: a stored thread count of 256 truncates to 0, so
-// validating the post-truncation value would mask it. context and remedy are
-// interpolated so the message reads naturally for both the header and the
-// encryption-parameter path.
-func validateArgon2Params(time, memoryKB, threads uint32, context, remedy string) error {
+// ValidateArgon2Params reports whether the Argon2id parameters fall within the
+// enforced bounds. Values are taken as uint32 so raw header fields can be
+// validated before the uint8 truncation of Threads: a stored thread count of
+// 256 truncates to 0, so validating the post-truncation value would mask it.
+// context and remedy are interpolated so the message reads naturally for both
+// the header and the configuration path.
+func ValidateArgon2Params(time, memoryKB, threads uint32, context, remedy string) error {
 	switch {
 	case time < MinArgonTime || time > MaxArgonTime:
 		return fmt.Errorf("Invalid Argon2 time %s: %d (allowed %d-%d). %s", context, time, MinArgonTime, MaxArgonTime, remedy)
@@ -142,42 +131,102 @@ func validateArgon2Params(time, memoryKB, threads uint32, context, remedy string
 	return nil
 }
 
-// Encrypt reads plaintext from src, encrypts it with password and params, and writes
-// ciphertext to dst. The function streams data in chunkSize chunks so that
-// arbitrarily large files can be processed with constant memory.
-func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params) error {
-	// Validate before doing any work so invalid parameters from internal callers
-	// or tests cannot reach argon2.IDKey and trigger an OOM or panic.
-	if err := validateArgon2Params(params.Time, params.MemoryKB, uint32(params.Threads), "in encryption parameters", "Remedy: Adjust the argon2 settings in config.yaml."); err != nil {
-		return err
+// RandomBytes returns n cryptographically random bytes.
+func RandomBytes(n int) ([]byte, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return nil, fmt.Errorf("Failed to generate random bytes: %w", err)
 	}
+	return b, nil
+}
 
-	// Generate a random salt.
-	salt := make([]byte, saltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("Failed to generate salt: %w", err)
+// DeriveKEK derives a 256-bit key-encryption key from secret and salt with
+// Argon2id. The parameters are validated first so invalid values can never
+// reach argon2.IDKey.
+func DeriveKEK(secret, salt []byte, params Argon2Params) ([]byte, error) {
+	if len(salt) != SaltLen {
+		return nil, fmt.Errorf("Invalid Argon2 salt length: %d (want %d).", len(salt), SaltLen)
 	}
+	if err := ValidateArgon2Params(params.Time, params.MemoryKB, uint32(params.Threads), "in key derivation parameters", "Remedy: Adjust the argon2 settings in config.yaml."); err != nil {
+		return nil, err
+	}
+	return argon2.IDKey(secret, salt, params.Time, params.MemoryKB, params.Threads, KeyLen), nil
+}
 
-	key := deriveKey(password, salt, params)
+// SealKey encrypts plaintext (a key) with kek under nonce and aad.
+func SealKey(kek, nonce, plaintext, aad []byte) ([]byte, error) {
+	gcm, err := newGCM(kek)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) != NonceLen {
+		return nil, fmt.Errorf("Invalid nonce length: %d (want %d).", len(nonce), NonceLen)
+	}
+	return gcm.Seal(nil, nonce, plaintext, aad), nil
+}
 
+// OpenKey decrypts a key sealed with SealKey. It returns ErrWrongPassword when
+// authentication fails, which is the expected outcome for a wrong credential.
+func OpenKey(kek, nonce, ciphertext, aad []byte) ([]byte, error) {
+	gcm, err := newGCM(kek)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) != NonceLen {
+		return nil, fmt.Errorf("Invalid nonce length: %d (want %d).", len(nonce), NonceLen)
+	}
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, aad)
+	if err != nil {
+		return nil, ErrWrongPassword
+	}
+	return plaintext, nil
+}
+
+// DeriveSubkey derives a 256-bit subkey from master with HKDF-SHA256.
+func DeriveSubkey(master, salt []byte, info string) ([]byte, error) {
+	if len(master) != KeyLen {
+		return nil, fmt.Errorf("Invalid master key length: %d (want %d).", len(master), KeyLen)
+	}
+	key, err := hkdf.Key(sha256.New, master, salt, info, KeyLen)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to derive subkey: %w", err)
+	}
+	return key, nil
+}
+
+func newGCM(key []byte) (cipher.AEAD, error) {
+	if len(key) != KeyLen {
+		return nil, fmt.Errorf("Invalid key length: %d (want %d).", len(key), KeyLen)
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("Failed to create AES cipher: %w", err)
+		return nil, fmt.Errorf("Failed to create AES cipher: %w", err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w", err)
+		return nil, fmt.Errorf("Failed to create GCM: %w", err)
 	}
+	return gcm, nil
+}
 
-	// Write file header.
-	if err := writeHeader(dst, salt, params); err != nil {
+// EncryptStream reads plaintext from src, encrypts it with key, and writes the
+// chunk stream to dst. aadPrefix is prepended to every chunk's associated data.
+// The function streams data in ChunkSize chunks so that arbitrarily large
+// inputs are processed with constant memory. An empty input produces a single
+// empty final chunk.
+//
+// The key must be unique per stream: the chunk nonce is a counter starting at
+// 0, so reusing a key for a second stream would reuse (key, nonce) pairs.
+// Package container guarantees this by deriving a fresh subkey per set and
+// section.
+func EncryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
+	gcm, err := newGCM(key)
+	if err != nil {
 		return err
 	}
 
-	// Stream plaintext in chunks.
-	buf := make([]byte, chunkSize)
+	buf := make([]byte, ChunkSize)
 	var chunkIndex uint64
-
 	for {
 		n, readErr := io.ReadFull(src, buf)
 		if readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF) && !errors.Is(readErr, io.EOF) {
@@ -185,111 +234,94 @@ func Encrypt(dst io.Writer, src io.Reader, password []byte, params Argon2Params)
 		}
 
 		isFinal := errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF)
-		if n == 0 && errors.Is(readErr, io.EOF) {
-			if err := writeEncryptedChunk(dst, gcm, chunkIndex, nil, true); err != nil {
-				return err
-			}
-			break
-		}
-
-		if err := writeEncryptedChunk(dst, gcm, chunkIndex, buf[:n], isFinal); err != nil {
+		if err := writeEncryptedChunk(dst, gcm, aadPrefix, chunkIndex, buf[:n], isFinal); err != nil {
 			return err
 		}
-
-		chunkIndex++
 		if isFinal {
-			break
+			return nil
 		}
+		chunkIndex++
 	}
-
-	return nil
 }
 
-// Decrypt reads ciphertext from src, decrypts it with password, and writes
-// plaintext to dst. The Argon2id parameters are read from the file header.
-// Returns ErrWrongPassword if authentication fails.
-func Decrypt(dst io.Writer, src io.Reader, password []byte) error {
-	salt, params, err := readHeader(src)
+// DecryptStream reads a chunk stream written by EncryptStream from src,
+// decrypts it with key, and writes plaintext to dst. src must end exactly after
+// the final chunk; trailing bytes are rejected. Authentication failures return
+// ErrCorrupted.
+func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
+	gcm, err := newGCM(key)
 	if err != nil {
 		return err
 	}
 
-	key := deriveKey(password, salt, params)
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return fmt.Errorf("Failed to create AES cipher: %w", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("Failed to create GCM: %w", err)
-	}
-
 	var chunkIndex uint64
 	sawFinal := false
+	encrypted := make([]byte, 0, maxEncryptedChunkSize)
 
 	for {
-		var flags [1]byte
-		if _, err := io.ReadFull(src, flags[:]); err != nil {
+		var prefix [chunkPrefixLen]byte
+		if _, err := io.ReadFull(src, prefix[:1]); err != nil {
 			if errors.Is(err, io.EOF) {
 				if sawFinal {
-					break
+					return nil
 				}
 				return fmt.Errorf("Missing final encrypted chunk marker. Remedy: Check backup-part completeness and file readability.")
 			}
 			return fmt.Errorf("Failed to read chunk flags: %w. Remedy: Check backup-part completeness and file readability.", err)
 		}
 		if sawFinal {
-			return fmt.Errorf("Unexpected encrypted chunk after final marker. Remedy: Use an unmodified backup created by this RestoreSafe version.")
+			return fmt.Errorf("Unexpected data after final encrypted chunk. Remedy: Use an unmodified backup created by RestoreSafe.")
 		}
-		if flags[0] != 0 && flags[0] != chunkFlagFinal {
-			return fmt.Errorf("Invalid encrypted chunk flags: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", flags[0])
+		flags := prefix[0]
+		if flags != 0 && flags != chunkFlagFinal {
+			return fmt.Errorf("Invalid encrypted chunk flags: %d. Remedy: Use an unmodified backup created by RestoreSafe.", flags)
 		}
 
-		var length uint32
-		if err := binary.Read(src, binary.BigEndian, &length); err != nil {
+		if _, err := io.ReadFull(src, prefix[1:]); err != nil {
 			return fmt.Errorf("Failed to read chunk length: %w. Remedy: Check backup-part completeness and file readability.", err)
 		}
-		if length > maxEncryptedChunkSize {
-			return fmt.Errorf("Invalid encrypted chunk length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", length)
+		length := binary.BigEndian.Uint32(prefix[1:])
+		if length < gcmTagLen || length > maxEncryptedChunkSize {
+			return fmt.Errorf("Invalid encrypted chunk length: %d. Remedy: Use an unmodified backup created by RestoreSafe.", length)
 		}
 
-		encrypted := make([]byte, length)
+		encrypted = encrypted[:length]
 		if _, err := io.ReadFull(src, encrypted); err != nil {
 			return fmt.Errorf("Failed to read chunk data: %w. Remedy: Check backup-part completeness and file readability.", err)
 		}
 
-		nonce := chunkNonce(chunkIndex)
-		plaintext, err := gcm.Open(nil, nonce, encrypted, chunkAAD(chunkIndex, flags[0]))
+		plaintext, err := gcm.Open(encrypted[:0], chunkNonce(chunkIndex), encrypted, chunkAAD(aadPrefix, chunkIndex, flags))
 		if err != nil {
-			return ErrWrongPassword
+			return ErrCorrupted
+		}
+		if flags != chunkFlagFinal && len(plaintext) != ChunkSize {
+			return fmt.Errorf("Invalid non-final chunk size: %d. Remedy: Use an unmodified backup created by RestoreSafe.", len(plaintext))
 		}
 
-		if _, err := dst.Write(plaintext); err != nil {
-			return fmt.Errorf("Failed to write decrypted data: %w", err)
+		if len(plaintext) > 0 {
+			if _, err := dst.Write(plaintext); err != nil {
+				return fmt.Errorf("Failed to write decrypted data: %w", err)
+			}
 		}
 
-		sawFinal = flags[0] == chunkFlagFinal
+		sawFinal = flags == chunkFlagFinal
 		chunkIndex++
 	}
-
-	return nil
 }
 
-func writeEncryptedChunk(w io.Writer, gcm cipher.AEAD, index uint64, plaintext []byte, isFinal bool) error {
+func writeEncryptedChunk(w io.Writer, gcm cipher.AEAD, aadPrefix []byte, index uint64, plaintext []byte, isFinal bool) error {
 	var flags byte
 	if isFinal {
 		flags = chunkFlagFinal
 	}
 
-	nonce := chunkNonce(index)
-	encrypted := gcm.Seal(nil, nonce, plaintext, chunkAAD(index, flags))
+	encrypted := gcm.Seal(nil, chunkNonce(index), plaintext, chunkAAD(aadPrefix, index, flags))
 
-	if _, err := w.Write([]byte{flags}); err != nil {
-		return fmt.Errorf("Failed to write chunk flags: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, uint32(len(encrypted))); err != nil {
-		return fmt.Errorf("Failed to write chunk length: %w", err)
+	var prefix [chunkPrefixLen]byte
+	prefix[0] = flags
+	binary.BigEndian.PutUint32(prefix[1:], uint32(len(encrypted)))
+	if _, err := w.Write(prefix[:]); err != nil {
+		return fmt.Errorf("Failed to write chunk header: %w", err)
 	}
 	if _, err := w.Write(encrypted); err != nil {
 		return fmt.Errorf("Failed to write chunk data: %w", err)
@@ -297,136 +329,31 @@ func writeEncryptedChunk(w io.Writer, gcm cipher.AEAD, index uint64, plaintext [
 	return nil
 }
 
-// writeHeader writes the v1 file header to w.
-func writeHeader(w io.Writer, salt []byte, params Argon2Params) error {
-	if _, err := io.WriteString(w, magic); err != nil {
-		return fmt.Errorf("Failed to write magic: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, uint32(saltLen)); err != nil {
-		return fmt.Errorf("Failed to write salt length: %w", err)
-	}
-	if _, err := w.Write(salt); err != nil {
-		return fmt.Errorf("Failed to write salt: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, uint32(chunkSize)); err != nil {
-		return fmt.Errorf("Failed to write chunk size: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, params.Time); err != nil {
-		return fmt.Errorf("Failed to write Argon2 time: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, params.MemoryKB); err != nil {
-		return fmt.Errorf("Failed to write Argon2 memory: %w", err)
-	}
-	if err := binary.Write(w, binary.BigEndian, uint32(params.Threads)); err != nil {
-		return fmt.Errorf("Failed to write Argon2 threads: %w", err)
-	}
-	return nil
-}
-
-// readHeader reads and validates the v1 file header from r, returning the salt
-// and Argon2id parameters stored in the header.
-func readHeader(r io.Reader) ([]byte, Argon2Params, error) {
-	magicBuf := make([]byte, len(magic))
-	if _, err := io.ReadFull(r, magicBuf); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read magic: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-
-	// Check the 6-byte identifier prefix before inspecting the version byte,
-	// so that a version mismatch produces a clear message rather than a generic
-	// "Invalid file format" error.
-	if string(magicBuf[:len(magicPrefix)]) != magicPrefix {
-		return nil, Argon2Params{}, fmt.Errorf("Invalid file format (not a RestoreSafe backup). Remedy: Select a valid RestoreSafe .enc backup file.")
-	}
-	fileVersion := magicBuf[len(magicPrefix)]
-	if fileVersion != formatVersion {
-		return nil, Argon2Params{}, fmt.Errorf(
-			"Incompatible backup format %d (this RestoreSafe version uses backup format %d). Remedy: Restore with the RestoreSafe version that created this backup; it is recorded on the first line of the backup's .log file. Download other releases: https://github.com/phsc84/RestoreSafe/releases",
-			fileVersion, formatVersion,
-		)
-	}
-
-	var saltLength uint32
-	if err := binary.Read(r, binary.BigEndian, &saltLength); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read salt length: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-	if saltLength != saltLen {
-		return nil, Argon2Params{}, fmt.Errorf("Invalid salt length: %d. Remedy: Use an unmodified backup created by this RestoreSafe version.", saltLength)
-	}
-
-	salt := make([]byte, saltLen)
-	if _, err := io.ReadFull(r, salt); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read salt: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-
-	// Read and validate stored chunk size for format compatibility.
-	var storedChunkSize uint32
-	if err := binary.Read(r, binary.BigEndian, &storedChunkSize); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read stored chunk size: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-	if storedChunkSize != uint32(chunkSize) {
-		return nil, Argon2Params{}, fmt.Errorf("Unsupported chunk size in backup header: %d. Remedy: Use a backup created by this RestoreSafe version.", storedChunkSize)
-	}
-
-	// Read Argon2id parameters stored at encryption time.
-	var argonTime, argonMemoryKB, argonThreads uint32
-	if err := binary.Read(r, binary.BigEndian, &argonTime); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 time: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-	if err := binary.Read(r, binary.BigEndian, &argonMemoryKB); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 memory: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-	if err := binary.Read(r, binary.BigEndian, &argonThreads); err != nil {
-		return nil, Argon2Params{}, fmt.Errorf("Failed to read Argon2 threads: %w. Remedy: Check that the backup file is complete and readable.", err)
-	}
-
-	// Validate the stored parameters against the same bounds enforced for the
-	// config before handing them to argon2.IDKey. Without this, a corrupted or
-	// tampered header could request a multi-terabyte allocation (OOM) or a
-	// parallelism of 0 (panic via the uint8 truncation below), so a single
-	// bit-flip must produce a clean "corrupted header" error instead. argonThreads
-	// is validated as a uint32 here, before the uint8 truncation, so a stored
-	// value of 256 (which would truncate to 0) is still rejected.
-	if err := validateArgon2Params(argonTime, argonMemoryKB, argonThreads, "in backup header", "Remedy: Use an unmodified backup created by this RestoreSafe version."); err != nil {
-		return nil, Argon2Params{}, err
-	}
-
-	params := Argon2Params{
-		Time:     argonTime,
-		MemoryKB: argonMemoryKB,
-		Threads:  uint8(argonThreads),
-	}
-	return salt, params, nil
-}
-
 // chunkNonce derives a deterministic 12-byte nonce from the chunk index
 // (low 8 bytes = index, high 4 bytes = 0).
 //
-// A counter nonce is safe here because of the (key, nonce) uniqueness invariant:
-// every call to Encrypt generates a fresh random salt and therefore a unique key
-// for that stream, while chunks within a single stream are numbered by a
-// strictly increasing counter. No (key, nonce) pair is ever reused across or
-// within streams, which is the requirement AES-GCM relies on.
+// A counter nonce is safe because every stream is encrypted with its own key
+// (see EncryptStream), while chunks within a stream are numbered by a strictly
+// increasing counter. No (key, nonce) pair is ever reused.
 func chunkNonce(index uint64) []byte {
-	nonce := make([]byte, nonceLen)
+	nonce := make([]byte, NonceLen)
 	binary.BigEndian.PutUint64(nonce[4:], index)
 	return nonce
 }
 
-// chunkAAD builds the GCM associated data for a chunk: the 8-byte chunk index
-// followed by the 1-byte flags field.
+// chunkAAD builds the GCM associated data for a chunk: the caller's prefix,
+// the 8-byte chunk index, and the 1-byte flags field.
 //
-// The flags byte is the load-bearing part: it binds the final-chunk marker to
-// authentication so that clearing it on the real last chunk (to hide a dropped
-// tail) fails gcm.Open instead of silently decrypting. Truncation that removes
-// whole trailing chunks is then caught by the sawFinal check in Decrypt.
-//
-// The index is defense-in-depth and is largely redundant with the counter
-// nonce: chunkNonce already encodes the index, so reordering or swapping chunks
-// changes the nonce and fails authentication regardless of the AAD. It is
-// included anyway so chunk position is bound explicitly rather than implicitly.
-func chunkAAD(index uint64, flags byte) []byte {
-	aad := make([]byte, 9)
-	binary.BigEndian.PutUint64(aad[:8], index)
-	aad[8] = flags
+// The prefix binds each chunk to its set header and section (package
+// container passes header hash + section ID). The flags byte binds the
+// final-chunk marker to authentication so that clearing it on the real last
+// chunk (to hide a dropped tail) fails gcm.Open; truncation that removes whole
+// trailing chunks is caught by the sawFinal check in DecryptStream. The index
+// is defense-in-depth; the counter nonce already encodes it.
+func chunkAAD(prefix []byte, index uint64, flags byte) []byte {
+	aad := make([]byte, len(prefix)+9)
+	copy(aad, prefix)
+	binary.BigEndian.PutUint64(aad[len(prefix):], index)
+	aad[len(prefix)+8] = flags
 	return aad
 }

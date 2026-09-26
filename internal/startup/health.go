@@ -9,8 +9,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
-	"strings"
 )
 
 type healthSeverity int
@@ -30,7 +28,7 @@ const (
 	healthScopeYubiKey         = "YubiKey"
 	healthScopeBackupInventory = "Backup inventory"
 	healthScopeBackupSet       = "Backup set"
-	healthScopeChallengeFile   = "Challenge file"
+	healthScopeKeys            = "Keys"
 )
 
 type healthItem struct {
@@ -114,7 +112,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 
 	items = append(items, checkBackupDirectoryHealth(backupDir)...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
-	items = append(items, checkBackupInventoryHealth(backupDir)...)
+	items = append(items, checkBackupInventoryHealth(cfg, backupDir)...)
 
 	// Prefer a source that shares the target volume so staging is detected when
 	// only some sources are on the same drive as the target (mirrors backup/workflow.go).
@@ -266,8 +264,8 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 	}}
 }
 
-func checkBackupInventoryHealth(backupDir string) []healthItem {
-	index, err := catalog.ScanBackups(backupDir)
+func checkBackupInventoryHealth(cfg *util.Config, backupDir string) []healthItem {
+	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []healthItem{{
@@ -283,80 +281,78 @@ func checkBackupInventoryHealth(backupDir string) []healthItem {
 		}}
 	}
 
-	if len(index) == 0 {
-		return []healthItem{{
+	items := make([]healthItem, 0)
+	items = append(items, checkLegacyAndTempFiles(backupDir)...)
+
+	if len(infos) == 0 {
+		items = append(items, healthItem{
 			Severity: healthWarn,
 			Scope:    healthScopeBackupInventory,
 			Detail:   "No backup sets found. Remedy: Check backup directory or create a new backup run.",
-		}}
+		})
+		return append(items, checkKeyHealth(cfg, infos)...)
 	}
 
-	items := []healthItem{{
+	items = append(items, healthItem{
 		Severity: healthOK,
 		Scope:    healthScopeBackupInventory,
-		Detail:   fmt.Sprintf("Found %d backup set(s)", len(index)),
-	}}
+		Detail:   fmt.Sprintf("Found %d backup set(s)", len(infos)),
+	})
+	items = append(items, buildBackupInventoryIssueItems(infos)...)
+	return append(items, checkKeyHealth(cfg, infos)...)
+}
 
-	for _, item := range buildBackupInventoryIssueItems(backupDir, index) {
-		items = append(items, item)
+// checkLegacyAndTempFiles warns about RestoreSafe 1.x backups (which 2.0
+// cannot restore and never touches) and about leftovers of interrupted
+// backups (removed at the start of the next backup).
+func checkLegacyAndTempFiles(backupDir string) []healthItem {
+	var items []healthItem
+	if legacy, err := catalog.ListLegacyFiles(backupDir); err == nil && len(legacy) > 0 {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    healthScopeBackupInventory,
+			Detail:   fmt.Sprintf("RestoreSafe 1.x backups found (%d file(s)). RestoreSafe 2.0 cannot restore them. Remedy: Keep RestoreSafe 1.0.2 to restore these files; they are never modified or deleted by 2.0.", len(legacy)),
+		})
 	}
-
+	if temps, err := catalog.ListTempParts(backupDir); err == nil && len(temps) > 0 {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Scope:    healthScopeBackupInventory,
+			Detail:   fmt.Sprintf("%d leftover file(s) of an interrupted backup found (*.enc.tmp). They are removed at the start of the next backup.", len(temps)),
+		})
+	}
 	return items
 }
 
-func buildBackupInventoryIssueItems(backupDir string, index []util.BackupEntry) []healthItem {
-	challengeFiles, err := listChallengeFiles(backupDir)
-	if err != nil {
-		return []healthItem{{
-			Severity: healthError,
-			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to inspect challenge files: %v. Remedy: Check read permissions in backup directory.", err),
-		}}
-	}
-
-	sorted := catalog.SortedEntries(index)
-	runHasChallenge := make(map[string]bool)
-	entryHasChallenge := make(map[string]bool)
-	expectedChallengeFiles := make(map[string]bool)
+func buildBackupInventoryIssueItems(infos []catalog.SetInfo) []healthItem {
 	items := make([]healthItem, 0)
 	structuralIssues := 0
 
-	for _, entry := range sorted {
-		_, _, err := catalog.InspectBackupParts(backupDir, entry)
-		entryLabel := entry.String()
-		if err != nil {
+	completeFulls := make(map[string]bool)
+	for _, info := range infos {
+		if info.Complete() && !info.Entry.IsDiff() {
+			completeFulls[info.Entry.ChainKey()] = true
+		}
+	}
+
+	for _, info := range infos {
+		if info.Err != nil {
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
 				Scope:    healthScopeBackupSet,
-				Detail:   fmt.Sprintf("%s → %v", entryLabel, err),
+				Detail:   fmt.Sprintf("%s → %v", info.Entry.String(), info.Err),
 			})
+			continue
 		}
-
-		challengeBase := filepath.Base(util.ChallengeFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID))
-		hasChallenge := challengeFiles[challengeBase]
-		entryHasChallenge[entryLabel] = hasChallenge
-		expectedChallengeFiles[challengeBase] = true
-		runHasChallenge[entry.RunKey()] = runHasChallenge[entry.RunKey()] || hasChallenge
-	}
-
-	for _, entry := range sorted {
-		if runHasChallenge[entry.RunKey()] && !entryHasChallenge[entry.String()] {
+		if info.Entry.IsDiff() && !completeFulls[info.Entry.ChainKey()] {
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
-				Scope:    healthScopeChallengeFile,
-				Detail:   fmt.Sprintf("%s is missing its .challenge file for a YubiKey-protected backup run. Remedy: Put the matching .challenge file in the same directory as the .enc files.", entry.String()),
+				Scope:    healthScopeBackupSet,
+				Detail:   fmt.Sprintf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing or incomplete. Remedy: Restore the FULL files of %s from your copy, or delete the DIFF files of %s.", info.Entry.String(), info.Entry.DirectoryName, info.Entry.ChainID, info.Entry.ChainID, info.Entry.ChainID, info.Entry.ChainID),
 			})
 		}
-	}
-
-	for _, orphan := range orphanChallengeFiles(challengeFiles, expectedChallengeFiles) {
-		items = append(items, healthItem{
-			Severity: healthWarn,
-			Scope:    healthScopeChallengeFile,
-			Detail:   fmt.Sprintf("%s has no matching backup parts. Remedy: Remove the file or restore the related backup parts.", orphan),
-		})
 	}
 
 	if structuralIssues == 0 {
@@ -366,38 +362,29 @@ func buildBackupInventoryIssueItems(backupDir string, index []util.BackupEntry) 
 			Detail:   "All detected backup sets are structurally complete",
 		})
 	}
-
 	return items
 }
 
-func listChallengeFiles(backupDir string) (map[string]bool, error) {
-	entries, err := os.ReadDir(backupDir)
-	if err != nil {
-		return nil, err
+// checkKeyHealth summarizes the current keys and whether the configuration
+// requires new keys at the next backup.
+func checkKeyHealth(cfg *util.Config, infos []catalog.SetInfo) []healthItem {
+	ks := catalog.CurrentKeySet(infos)
+	if ks == nil {
+		return []healthItem{{
+			Severity: healthOK,
+			Scope:    healthScopeKeys,
+			Detail:   "No keys yet; the next backup creates new keys",
+		}}
 	}
-
-	files := make(map[string]bool)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), ".challenge") {
-			files[entry.Name()] = true
-		}
+	detail := fmt.Sprintf("Current keys created %s (%s)", ks.Created().Local().Format("2006-01-02"), util.AuthMode(ks.AuthMode).Label())
+	if ks.AuthMode != int(cfg.AuthenticationMode) {
+		return []healthItem{{
+			Severity: healthWarn,
+			Scope:    healthScopeKeys,
+			Detail:   detail + ". authentication_mode in config.yaml differs: the next backup creates new keys and full backups.",
+		}}
 	}
-
-	return files, nil
-}
-
-func orphanChallengeFiles(actual, expected map[string]bool) []string {
-	orphans := make([]string, 0)
-	for name := range actual {
-		if !expected[name] {
-			orphans = append(orphans, name)
-		}
-	}
-	sort.Strings(orphans)
-	return orphans
+	return []healthItem{{Severity: healthOK, Scope: healthScopeKeys, Detail: detail}}
 }
 
 func printStartupHealthCheck(w io.Writer, items []healthItem) {

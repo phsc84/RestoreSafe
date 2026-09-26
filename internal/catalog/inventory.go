@@ -1,45 +1,41 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/util"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
-// ScanBackups walks backupDir and builds an index of all backup entries.
+// ScanBackups lists every backup set (complete part-file names only) in
+// backupDir.
 func ScanBackups(backupDir string) ([]util.BackupEntry, error) {
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return nil, err
 	}
 
-	seen := make(map[string]bool)
+	seen := make(map[util.BackupEntry]bool)
 	var result []util.BackupEntry
-
 	for _, de := range entries {
 		if de.IsDir() {
 			continue
 		}
 		entry, _, ok := util.ParsePartFileName(de.Name())
-		if !ok {
+		if !ok || seen[entry] {
 			continue
 		}
-		key := entry.String()
-		if !seen[key] {
-			seen[key] = true
-			result = append(result, entry)
-		}
+		seen[entry] = true
+		result = append(result, entry)
 	}
-
 	return result, nil
 }
 
-// CollectParts returns the sorted part file paths for an entry.
+// CollectParts returns the part file paths of an entry, sorted by part number.
 func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
 	des, err := os.ReadDir(backupDir)
 	if err != nil {
@@ -51,18 +47,13 @@ func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
 		path string
 	}
 	var parts []seqPath
-
 	for _, de := range des {
 		e, seq, ok := util.ParsePartFileName(de.Name())
-		if !ok {
-			continue
-		}
-		if e != entry {
+		if !ok || e != entry {
 			continue
 		}
 		parts = append(parts, seqPath{seq, filepath.Join(backupDir, de.Name())})
 	}
-
 	sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
 
 	paths := make([]string, len(parts))
@@ -72,84 +63,187 @@ func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
 	return paths, nil
 }
 
-// SortedEntries returns entries sorted by date desc, then directory name.
-func SortedEntries(index []util.BackupEntry) []util.BackupEntry {
-	sorted := make([]util.BackupEntry, len(index))
-	copy(sorted, index)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Date != sorted[j].Date {
-			return sorted[i].Date > sorted[j].Date
-		}
-		return sorted[i].DirectoryName < sorted[j].DirectoryName
-	})
-	return sorted
+// SetInfo is the password-free inspection result of one backup set.
+type SetInfo struct {
+	Entry     util.BackupEntry
+	Parts     []string
+	SizeBytes int64
+	Header    *container.Header
+	Trailer   container.Trailer
+	// Err is set when the set is incomplete or invalid; Header is nil then.
+	Err error
 }
 
-// BackupRunUsesYubiKey checks whether a backup run has a matching challenge file.
-// Returns (usesYubiKey, yubiKeyOnly, error).
-// yubiKeyOnly is true when the backup was created without a password (YubiKey-only mode).
-func BackupRunUsesYubiKey(backupDir string, entry util.BackupEntry) (bool, bool, error) {
-	path, found, err := FindChallengeFileForRun(backupDir, entry.Date, entry.ID)
-	if err != nil || !found {
-		return found, false, err
+// Complete reports whether the set passed every structural check.
+func (s SetInfo) Complete() bool { return s.Err == nil && s.Header != nil }
+
+// Created returns the creation time from the header, or the zero time.
+func (s SetInfo) Created() time.Time {
+	if s.Header == nil {
+		return time.Time{}
 	}
-	yubiKeyOnly, err := IsChallengeFileYubiKeyOnly(path)
-	if err != nil {
-		return true, false, err
-	}
-	return true, yubiKeyOnly, nil
+	return s.Header.Created()
 }
 
-// FindChallengeFileForRun returns the .challenge file path for date+ID if present.
-func FindChallengeFileForRun(backupDir, date string, id util.BackupID) (string, bool, error) {
-	entries, err := os.ReadDir(backupDir)
-	if err != nil {
-		return "", false, err
-	}
-
-	suffix := fmt.Sprintf("_%s_%s.challenge", date, string(id))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(entry.Name(), suffix) {
-			return filepath.Join(backupDir, entry.Name()), true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
-// IsChallengeFileYubiKeyOnly reports whether the challenge file was written
-// for a YubiKey-only (no-password) backup.
-func IsChallengeFileYubiKeyOnly(path string) (bool, error) {
-	cd, err := security.ParseChallengeFile(path)
-	if err != nil {
-		return false, err
-	}
-	return cd.NoPassword, nil
-}
-
-// NewestPartModTime returns the newest modification time among all part files.
-func NewestPartModTime(backupDir string, entry util.BackupEntry) (time.Time, error) {
+// OpenSet opens a backup set after checking part continuity and that the
+// file names match the set header. The caller must Close the set.
+func OpenSet(backupDir string, entry util.BackupEntry) (*container.Set, error) {
 	parts, err := CollectParts(backupDir, entry)
 	if err != nil {
-		return time.Time{}, err
+		return nil, err
 	}
+	if err := checkContinuity(parts); err != nil {
+		return nil, err
+	}
+	set, err := container.Open(parts)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkNameMatchesHeader(entry, set.Header); err != nil {
+		set.Close() //nolint:errcheck
+		return nil, err
+	}
+	return set, nil
+}
+
+// InspectSet opens and closes a set to report its status.
+func InspectSet(backupDir string, entry util.BackupEntry) SetInfo {
+	info := SetInfo{Entry: entry}
+	parts, err := CollectParts(backupDir, entry)
+	if err != nil {
+		info.Err = err
+		return info
+	}
+	info.Parts = parts
+	for _, p := range parts {
+		if fi, err := os.Stat(p); err == nil {
+			info.SizeBytes += fi.Size()
+		}
+	}
+	set, err := OpenSet(backupDir, entry)
+	if err != nil {
+		info.Err = err
+		return info
+	}
+	defer set.Close()
+	info.Header = set.Header
+	info.Trailer = set.Trailer
+	return info
+}
+
+// Inventory inspects every backup set in backupDir, newest first.
+func Inventory(backupDir string) ([]SetInfo, error) {
+	entries, err := ScanBackups(backupDir)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]SetInfo, 0, len(entries))
+	for _, e := range entries {
+		infos = append(infos, InspectSet(backupDir, e))
+	}
+	sortNewestFirst(infos)
+	return infos, nil
+}
+
+func sortNewestFirst(infos []SetInfo) {
+	sort.SliceStable(infos, func(i, j int) bool {
+		ti, tj := infos[i].Created(), infos[j].Created()
+		if !ti.Equal(tj) {
+			return ti.After(tj)
+		}
+		if infos[i].Entry.Date != infos[j].Entry.Date {
+			return infos[i].Entry.Date > infos[j].Entry.Date
+		}
+		return infos[i].Entry.String() < infos[j].Entry.String()
+	})
+}
+
+// SelectInfos returns the inventory entries of selected, in selection order.
+// Entries not in infos are skipped.
+func SelectInfos(infos []SetInfo, selected []util.BackupEntry) []SetInfo {
+	byEntry := make(map[util.BackupEntry]SetInfo, len(infos))
+	for _, info := range infos {
+		byEntry[info.Entry] = info
+	}
+	out := make([]SetInfo, 0, len(selected))
+	for _, e := range selected {
+		if info, ok := byEntry[e]; ok {
+			out = append(out, info)
+		}
+	}
+	return out
+}
+
+// CurrentKeySet returns the key set of the newest complete set, or nil when
+// the backup directory holds no complete RestoreSafe 2 backup. infos must be
+// sorted newest first (as returned by Inventory).
+func CurrentKeySet(infos []SetInfo) *container.KeySet {
+	for _, info := range infos {
+		if info.Complete() {
+			ks := info.Header.KeySet
+			return &ks
+		}
+	}
+	return nil
+}
+
+func checkContinuity(parts []string) error {
 	if len(parts) == 0 {
-		return time.Time{}, fmt.Errorf("No part files found. Remedy: Ensure all .enc parts for this backup are present in the backup directory.")
+		return fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in the backup directory.")
 	}
-
-	var newest time.Time
-	for _, part := range parts {
-		fi, err := os.Stat(part)
-		if err != nil {
-			return newest, err
-		}
-		if fi.ModTime().After(newest) {
-			newest = fi.ModTime()
+	for i, p := range parts {
+		_, seq, _ := util.ParsePartFileName(filepath.Base(p))
+		if seq != i+1 {
+			return fmt.Errorf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", i+1)
 		}
 	}
+	return nil
+}
 
-	return newest, nil
+func checkNameMatchesHeader(entry util.BackupEntry, h *container.Header) error {
+	if h.DirectoryName != entry.DirectoryName || h.ChainID != string(entry.ChainID) || h.Date != entry.Date || h.DiffNumber != entry.DiffNumber || h.IsDiff() != entry.IsDiff() {
+		return fmt.Errorf("File name does not match the backup header (header: %s_%s_%s, type %s). Remedy: Do not rename backup files; restore the original file names.", h.DirectoryName, h.ChainID, h.Date, h.SetType)
+	}
+	return nil
+}
+
+// IsIncomplete reports whether err marks an incomplete set (interrupted
+// backup or missing parts), as opposed to an unreadable or invalid one.
+func IsIncomplete(err error) bool {
+	var inc *container.ErrIncomplete
+	return errors.As(err, &inc)
+}
+
+// ListTempParts returns the names of RestoreSafe part files still carrying
+// the temporary suffix (left behind by an interrupted backup).
+func ListTempParts(backupDir string) ([]string, error) {
+	des, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, de := range des {
+		if de.IsDir() {
+			continue
+		}
+		if _, _, ok := util.ParseTempPartFileName(de.Name()); ok {
+			out = append(out, de.Name())
+		}
+	}
+	return out, nil
+}
+
+// ListLegacyFiles returns the names of RestoreSafe 1.x backup files.
+func ListLegacyFiles(backupDir string) ([]string, error) {
+	des, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, de := range des {
+		if !de.IsDir() && util.IsLegacyBackupFileName(de.Name()) {
+			out = append(out, de.Name())
+		}
+	}
+	return out, nil
 }

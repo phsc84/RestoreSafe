@@ -214,7 +214,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []backupSource{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, operation.LocalStagingPlan{}, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, operation.LocalStagingPlan{}, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -238,7 +238,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -275,7 +275,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
@@ -292,7 +292,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
@@ -318,7 +318,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -355,7 +355,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return errors.New("no YubiKey detected") })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return errors.New("no YubiKey detected") })
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -396,7 +396,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	localStagingLine := "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive"
@@ -432,7 +432,7 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	if strings.Contains(output, "Temp directory:") {
@@ -580,7 +580,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, func() error { return nil }, func() error { return nil })
+	printBackupPreflightWithYubiKeyCheck(&sb, cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, func() error { return nil }, func() error { return nil })
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")

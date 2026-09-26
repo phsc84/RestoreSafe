@@ -5,7 +5,6 @@ package util
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
@@ -182,74 +181,4 @@ func (s *Writer) closeCurrent() error {
 		closeErr = fmt.Errorf("Failed to close part file %q: %w", path, closeErr)
 	}
 	return errors.Join(syncErr, closeErr)
-}
-
-// SequentialReader joins multiple part files into a single io.Reader.
-type SequentialReader struct {
-	paths      []string
-	idx        int
-	current    *os.File
-	onFileOpen func(partIndex, partTotal int) // called when a new part file is opened (1-based index)
-}
-
-// NewSequentialReader creates a reader that reads parts in order.
-func NewSequentialReader(paths []string) *SequentialReader {
-	return &SequentialReader{paths: paths}
-}
-
-// SetOnFileOpen registers a callback invoked each time a new part file is opened.
-// partIndex is 1-based; partTotal is the total number of parts.
-func (r *SequentialReader) SetOnFileOpen(fn func(partIndex, partTotal int)) {
-	r.onFileOpen = fn
-}
-
-// Read implements io.Reader across all part files.
-func (r *SequentialReader) Read(p []byte) (int, error) {
-	for {
-		if r.current == nil {
-			if r.idx >= len(r.paths) {
-				return 0, io.EOF
-			}
-			f, err := os.Open(r.paths[r.idx])
-			if err != nil {
-				return 0, fmt.Errorf("Failed to open part file %q: %w. Remedy: Check that the part file exists and is readable.", r.paths[r.idx], err)
-			}
-			r.current = f
-			r.idx++
-			if r.onFileOpen != nil {
-				r.onFileOpen(r.idx, len(r.paths))
-			}
-		}
-
-		n, err := r.current.Read(p)
-		if err == io.EOF {
-			if closeErr := r.current.Close(); closeErr != nil {
-				r.current = nil
-				return n, fmt.Errorf("Failed to close part file: %w", closeErr)
-			}
-			r.current = nil
-			if n > 0 {
-				return n, nil
-			}
-			continue
-		}
-		if n == 0 && err == nil {
-			currentPath := ""
-			if r.idx > 0 && r.idx-1 < len(r.paths) {
-				currentPath = r.paths[r.idx-1]
-			}
-			return 0, fmt.Errorf("No progress while reading part file %q. Remedy: Check drive/network availability and retry.", currentPath)
-		}
-		return n, err
-	}
-}
-
-// Close closes any open file handle.
-func (r *SequentialReader) Close() error {
-	if r.current != nil {
-		err := r.current.Close()
-		r.current = nil
-		return err
-	}
-	return nil
 }

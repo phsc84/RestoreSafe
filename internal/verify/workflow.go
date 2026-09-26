@@ -13,20 +13,22 @@ import (
 	"strings"
 )
 
-// Run verifies selected backup sets without restoring them to disk.
+// Run verifies selected backup sets without restoring them to disk: every
+// part is decrypted and every file is checked against its manifest hash.
 func Run(cfg *util.Config, exeDir string) error {
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
-	index, err := catalog.ScanBackups(backupDir)
+	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
 	}
-	if len(index) == 0 {
-		fmt.Println("No backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
+	runs := catalog.BackupRunSummaries(infos)
+	if len(runs) == 0 {
+		fmt.Println("No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
 		return nil
 	}
 
-	selected, selection, err := resolveVerifySelection(backupDir, index)
+	selected, err := operation.PromptBackupSelection("verify", runs)
 	if err != nil {
 		if errors.Is(err, operation.ErrSelectionCancelled) {
 			fmt.Println("Verification cancelled.")
@@ -34,25 +36,21 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 		return err
 	}
+	selectedInfos := catalog.SelectInfos(infos, selected)
+
+	first := selectedInfos[0].Header
+	logPath := util.LogFileName(backupDir, first.Date, util.BackupID(first.RunID))
+	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID))
 	warningCount := 0
-	if catalog.SelectionHasDateWarning(selection, index) {
-		warningCount++
-	}
-
-	usesYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(backupDir, selected[0])
-	if err != nil {
-		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup directory and existing .challenge files.", err)
-	}
-
-	logPath := util.LogFileName(backupDir, selected[0].Date, selected[0].ID)
-	log := operation.OpenLogger(cfg, backupDir, selected[0])
 	if log.IsConsoleOnly() {
 		warningCount++
 	}
 	defer log.Close()
 
-	preflight := buildVerifyPreflight(selected, backupDir)
-	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, usesYubiKey, yubiKeyOnly, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	preflight := buildVerifyPreflight(selectedInfos)
+	mode := util.AuthMode(first.KeySet.AuthMode)
+	usesYubiKey := mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey
+	printVerifyPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, preflight, usesYubiKey, mode == util.AuthModeYubiKey, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -67,29 +65,33 @@ func Run(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	// Collect password (with retry), then run the verification with it as input.
-	password, err := operation.ReadPasswordWithRetry(backupDir, selected[0], "Enter verification password: ", log)
+	masters, err := operation.UnlockKeySets(selectedInfos, "Enter verification password: ", log)
 	if err != nil {
 		return err
 	}
-	defer func() { security.ZeroBytes(password) }()
+	defer masters.Zero()
 
-	return runVerifyOperation(selected, backupDir, logPath, password, log, warningCount)
+	return runVerifyOperation(selectedInfos, backupDir, logPath, masters, log, warningCount)
 }
 
-// runVerifyOperation performs the verification using an already-collected
-// password. It takes no further user input, so tests and automated flows can
-// drive it directly by supplying the password.
-func runVerifyOperation(selected []util.BackupEntry, backupDir, logPath string, password []byte, log *util.Logger, warningCount int) error {
+// runVerifyOperation performs the verification using already-unlocked keys.
+// It takes no further user input, so tests and automated flows can drive it
+// directly by supplying the master keys.
+func runVerifyOperation(selected []catalog.SetInfo, backupDir, logPath string, masters operation.MasterKeys, log *util.Logger, warningCount int) error {
 	fmt.Println()
-	log.Info("Verification started - ID: %s, date: %s", string(selected[0].ID), selected[0].Date)
+	first := selected[0].Header
+	log.Info("Verification started - ID: %s, date: %s", first.RunID, first.Date)
 	log.Info("Verification selection:")
-	for _, entry := range selected {
-		log.Info("  %s", entry.String())
+	for _, info := range selected {
+		log.Info("  %s", info.Entry.String())
 	}
 
-	if _, err := verifySelectedEntries(selected, backupDir, password, log); err != nil {
+	skipped, err := verifySelectedEntries(selected, backupDir, masters, log)
+	if err != nil {
 		return err
+	}
+	if skipped > 0 {
+		warningCount++
 	}
 
 	log.Info("Verification completed successfully.")
@@ -100,10 +102,6 @@ func runVerifyOperation(selected []util.BackupEntry, backupDir, logPath string, 
 	return nil
 }
 
-func resolveVerifySelection(backupDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	return operation.PromptBackupSelection("verify", backupDir, index)
-}
-
 type verifyPreflightItem struct {
 	Entry          util.BackupEntry
 	PartCount      int
@@ -111,16 +109,19 @@ type verifyPreflightItem struct {
 	Err            error
 }
 
-func buildVerifyPreflight(selected []util.BackupEntry, backupDir string) []verifyPreflightItem {
+func buildVerifyPreflight(selected []catalog.SetInfo) []verifyPreflightItem {
 	items := make([]verifyPreflightItem, 0, len(selected))
-	for _, entry := range selected {
-		partCount, totalSizeBytes, err := catalog.InspectBackupParts(backupDir, entry)
-		items = append(items, verifyPreflightItem{
-			Entry:          entry,
-			PartCount:      partCount,
-			TotalSizeBytes: totalSizeBytes,
-			Err:            err,
-		})
+	for _, info := range selected {
+		item := verifyPreflightItem{
+			Entry:          info.Entry,
+			PartCount:      len(info.Parts),
+			TotalSizeBytes: info.SizeBytes,
+			Err:            info.Err,
+		}
+		if item.Err == nil && info.Entry.IsDiff() {
+			item.Err = fmt.Errorf("%s: verifying differential backups is not supported yet.", info.Entry.String())
+		}
+		items = append(items, item)
 	}
 	return items
 }
@@ -185,43 +186,33 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	)
 }
 
-func verifySelectedEntries(selected []util.BackupEntry, backupDir string, password []byte, log *util.Logger) (int, error) {
-	totalPartsProcessed := 0
-	for _, entry := range selected {
-		partCount, err := verifyEntry(entry, backupDir, password, log)
+// verifySelectedEntries verifies each selected set and returns the number of
+// files missing from the restore points because they could not be read
+// during backup.
+func verifySelectedEntries(selected []catalog.SetInfo, backupDir string, masters operation.MasterKeys, log *util.Logger) (int, error) {
+	skipped := 0
+	for _, info := range selected {
+		n, err := verifyEntry(info.Entry, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
-			return 0, fmt.Errorf("Failed to verify directory %q: %w", entry.String(), err)
+			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
-		totalPartsProcessed += partCount
-		log.Info("  Verified: %d part file(s) - [%s] successfully verified", partCount, entry.DirectoryName)
+		skipped += n
 	}
-	return totalPartsProcessed, nil
+	return skipped, nil
 }
 
-func verifyEntry(entry util.BackupEntry, backupDir string, password []byte, log *util.Logger) (int, error) {
-	parts, err := catalog.CollectParts(backupDir, entry)
+func verifyEntry(entry util.BackupEntry, backupDir string, master []byte, log *util.Logger) (int, error) {
+	set, err := catalog.OpenSet(backupDir, entry)
 	if err != nil {
 		return 0, err
 	}
-	if len(parts) == 0 {
-		return 0, fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
-	}
+	defer set.Close()
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
-
-	err = operation.RunDecryptPipeline(
-		parts,
-		password,
-		log,
-		entry.DirectoryName,
-		"verified",
-		"Archive validation",
-		util.ValidateTar,
-		nil,
-	)
+	m, err := operation.ProcessRestorePoint(set, master, "", true, log)
 	if err != nil {
 		return 0, err
 	}
-
-	return len(parts), nil
+	log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, len(set.Paths), entry.DirectoryName)
+	return operation.ReportSkippedFiles(m, entry.DirectoryName, log), nil
 }

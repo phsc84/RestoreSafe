@@ -41,54 +41,52 @@ func TestDateStringFormat(t *testing.T) {
 	}
 }
 
-func TestBackupEntryString(t *testing.T) {
+func TestBackupEntryStringAndLabels(t *testing.T) {
 	t.Parallel()
 
-	entry := BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: BackupID("ABC123")}
-	if got := entry.String(); got != "Docs_2026-03-15_ABC123" {
-		t.Fatalf("unexpected BackupEntry.String output: %q", got)
+	full := BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"}
+	if got := full.String(); got != "Docs_ABC123_2026-03-15_FULL" {
+		t.Fatalf("unexpected full String: %q", got)
+	}
+	diff := BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20", DiffNumber: 7}
+	if got := diff.String(); got != "Docs_ABC123_2026-03-20_DIFF007" {
+		t.Fatalf("unexpected diff String: %q", got)
+	}
+	if !diff.IsDiff() || full.IsDiff() {
+		t.Fatal("IsDiff mismatch")
+	}
+	if full.ChainKey() != diff.ChainKey() {
+		t.Fatal("entries of one chain must share a chain key")
 	}
 }
 
-func TestBackupEntryRunKey(t *testing.T) {
-	t.Parallel()
-
-	entry := BackupEntry{DirectoryName: "Docs", Date: "2026-03-15", ID: BackupID("ABC123")}
-	if got := entry.RunKey(); got != "2026-03-15|ABC123" {
-		t.Fatalf("unexpected BackupEntry.RunKey output: %q", got)
-	}
-
-	// RunKey ignores the directory name so parts of the same run share a key.
-	other := BackupEntry{DirectoryName: "Photos", Date: "2026-03-15", ID: BackupID("ABC123")}
-	if entry.RunKey() != other.RunKey() {
-		t.Fatalf("expected entries from the same run to share a RunKey, got %q and %q", entry.RunKey(), other.RunKey())
-	}
-}
-
-func TestPartFileNameAndParsePartFileNameRoundTrip(t *testing.T) {
+func TestPartFileNameAndParseRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	backupDir := t.TempDir()
-	entry := BackupEntry{
-		DirectoryName: "Docs",
-		Date:       "2026-03-15",
-		ID:         BackupID("ABC123"),
+	for _, entry := range []BackupEntry{
+		{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"},
+		{DirectoryName: "My Docs__from__C_Root~20~A", ChainID: "ZZ9Z99", Date: "2026-03-20", DiffNumber: 12},
+	} {
+		fullPath := PartFileName(backupDir, entry, 7)
+		parsed, seq, ok := ParsePartFileName(filepath.Base(fullPath))
+		if !ok || seq != 7 || parsed != entry {
+			t.Fatalf("round trip of %s failed: %#v seq=%d ok=%v", filepath.Base(fullPath), parsed, seq, ok)
+		}
+		if _, _, ok := ParseTempPartFileName(filepath.Base(fullPath)); ok {
+			t.Fatal("complete part must not parse as temporary")
+		}
+		tempName := filepath.Base(fullPath) + TempSuffix
+		if _, _, ok := ParsePartFileName(tempName); ok {
+			t.Fatal("temporary part must not parse as complete")
+		}
+		if got, _, ok := ParseTempPartFileName(tempName); !ok || got != entry {
+			t.Fatalf("temporary part not parsed: %#v", got)
+		}
 	}
 
-	fullPath := PartFileName(backupDir, entry.DirectoryName, entry.Date, entry.ID, 7)
-	if !strings.HasSuffix(fullPath, "[Docs]_2026-03-15_ABC123-007.enc") {
-		t.Fatalf("unexpected part filename: %s", fullPath)
-	}
-
-	parsed, seq, ok := ParsePartFileName(filepath.Base(fullPath))
-	if !ok {
-		t.Fatal("expected ParsePartFileName success, got false")
-	}
-	if seq != 7 {
-		t.Fatalf("expected seq 7, got %d", seq)
-	}
-	if parsed != entry {
-		t.Fatalf("unexpected parsed entry: %#v", parsed)
+	if got := filepath.Base(PartFileName(backupDir, BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15", DiffNumber: 2}, 1)); got != "[Docs]_ABC123_2026-03-15_DIFF002-001.enc" {
+		t.Fatalf("unexpected diff file name %q", got)
 	}
 }
 
@@ -97,20 +95,34 @@ func TestParsePartFileNameRejectsInvalidName(t *testing.T) {
 
 	invalidNames := []string{
 		"invalid.enc",
-		"[Docs]_2026-03-15_abc123-001.enc",
-		"[Docs]_2026-03-15_ABC123-1.enc",
-		"[Docs]_2026_03_15_ABC123-001.enc",
-		"[]_2026-03-15_ABC123-001.enc",
+		"[Docs]_abc123_2026-03-15_FULL-001.enc",
+		"[Docs]_ABC123_2026-03-15_FULL-1.enc",
+		"[Docs]_ABC123_2026-03-15_FULL-000.enc",
+		"[Docs]_ABC123_2026-03-15_DIFF000-001.enc",
+		"[Docs]_ABC123_2026-03-15_DIFF1-001.enc",
+		"[Docs]_ABC123_2026-03-15-001.enc",
+		"[Docs]_2026-03-15_ABC123-001.enc",
+		"[]_ABC123_2026-03-15_FULL-001.enc",
 	}
-
 	for _, name := range invalidNames {
-		name := name
-		t.Run(name, func(t *testing.T) {
-			_, _, ok := ParsePartFileName(name)
-			if ok {
-				t.Fatalf("expected ParsePartFileName to reject %q", name)
-			}
-		})
+		if _, _, ok := ParsePartFileName(name); ok {
+			t.Fatalf("expected ParsePartFileName to reject %q", name)
+		}
+	}
+}
+
+func TestIsLegacyBackupFileName(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"[Docs]_2026-03-15_ABC123-001.enc", "[Docs]_2026-03-15_ABC123.challenge"} {
+		if !IsLegacyBackupFileName(name) {
+			t.Fatalf("expected %q to be recognized as 1.x file", name)
+		}
+	}
+	for _, name := range []string{"[Docs]_ABC123_2026-03-15_FULL-001.enc", "2026-03-15_ABC123.log", "notes.txt"} {
+		if IsLegacyBackupFileName(name) {
+			t.Fatalf("%q must not be recognized as 1.x file", name)
+		}
 	}
 }
 
@@ -164,20 +176,12 @@ func TestValidateBackupEntryNameRejectsUnsafe(t *testing.T) {
 	}
 }
 
-func TestLogAndChallengeFileName(t *testing.T) {
+func TestLogFileName(t *testing.T) {
 	t.Parallel()
 
-	backupDir := t.TempDir()
-	id := BackupID("ZX9Q1P")
-
-	logPath := LogFileName(backupDir, "2026-03-15", id)
+	logPath := LogFileName(t.TempDir(), "2026-03-15", BackupID("ZX9Q1P"))
 	if !strings.HasSuffix(logPath, "2026-03-15_ZX9Q1P.log") {
 		t.Fatalf("unexpected log filename: %s", logPath)
-	}
-
-	challengePath := ChallengeFileName(backupDir, "Photos", "2026-03-15", id)
-	if !strings.HasSuffix(challengePath, "[Photos]_2026-03-15_ZX9Q1P.challenge") {
-		t.Fatalf("unexpected challenge filename: %s", challengePath)
 	}
 }
 

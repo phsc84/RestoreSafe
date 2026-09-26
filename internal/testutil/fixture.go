@@ -2,11 +2,11 @@
 package testutil
 
 import (
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/setio"
 	"RestoreSafe/internal/util"
-	"bufio"
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,6 +16,12 @@ const (
 	defaultSplitSizeMB = 1
 )
 
+// FastArgon2 are the minimum valid Argon2 parameters; tests use them to stay fast.
+var FastArgon2 = security.Argon2Params{Time: security.MinArgonTime, MemoryKB: security.MinArgonMemoryKB, Threads: security.MinArgonThreads}
+
+// FastArgon2Config is FastArgon2 in config.yaml units.
+var FastArgon2Config = util.Argon2Config{Time: util.Argon2MinTime, MemoryMB: util.Argon2MinMemoryMB, Threads: util.Argon2MinThreads}
+
 // BackupFixture holds workspace paths and metadata for an integration-style backup test.
 type BackupFixture struct {
 	SrcDir    string
@@ -23,6 +29,21 @@ type BackupFixture struct {
 	Entry     util.BackupEntry
 	Parts     int
 	Password  []byte
+	KeySet    *container.KeySet
+	Master    []byte
+}
+
+// NewPasswordKeySet creates a password-mode key set protected by password.
+func NewPasswordKeySet(t testing.TB, password []byte) (*container.KeySet, []byte) {
+	t.Helper()
+	ks, master, err := container.NewKeySet(container.AuthModePassword)
+	if err != nil {
+		t.Fatalf("NewKeySet: %v", err)
+	}
+	if err := ks.AddSlot(master, container.SlotPassword, "Password", password, FastArgon2, nil, ""); err != nil {
+		t.Fatalf("AddSlot: %v", err)
+	}
+	return ks, master
 }
 
 // NewBackupFixture creates a workspace with source files and a completed encrypted split backup.
@@ -38,17 +59,18 @@ func NewBackupFixture(t testing.TB, password []byte) *BackupFixture {
 	mustWriteFile(t, filepath.Join(srcDir, "nested", "small.txt"), []byte("hello restoresafe"))
 	mustWriteFile(t, filepath.Join(srcDir, "large.bin"), bytes.Repeat([]byte("A"), 2*1024*1024+256))
 
-	directoryName := filepath.Base(srcDir)
-	backupDate := "2026-03-14"
-	backupID := util.BackupID("FIX001")
-	parts := createEncryptedSplitBackup(t, srcDir, backupDir, directoryName, backupDate, backupID, password, defaultSplitSizeMB)
+	ks, master := NewPasswordKeySet(t, password)
+	entry := util.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "FIX001", Date: "2026-03-14"}
+	parts := WriteFullSet(t, srcDir, backupDir, entry, ks, master)
 
 	return &BackupFixture{
 		SrcDir:    srcDir,
 		BackupDir: backupDir,
-		Entry:     util.BackupEntry{DirectoryName: directoryName, Date: backupDate, ID: backupID},
+		Entry:     entry,
 		Parts:     parts,
 		Password:  password,
+		KeySet:    ks,
+		Master:    master,
 	}
 }
 
@@ -68,52 +90,37 @@ func NewRestoreFixture(t testing.TB, password []byte) *RestoreFixture {
 
 	return &RestoreFixture{BackupFixture: bf, RestoreRoot: restoreRoot}
 }
-// CreateBackupInDir creates an encrypted split backup for entry in backupDir,
-// using a small synthetic source directory. It is the exported entry point for
-// tests that need a second independent backup in an existing target directory.
-func CreateBackupInDir(t testing.TB, backupDir string, entry util.BackupEntry, password []byte) {
+
+// CreateBackupInDir writes a second, independent full backup set for entry
+// into backupDir with the fixture's key set, using a small synthetic source.
+func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry util.BackupEntry) {
 	t.Helper()
 
-	srcDir := filepath.Join(backupDir, "_src_"+entry.DirectoryName)
+	srcDir := filepath.Join(t.TempDir(), "_src_"+entry.DirectoryName)
 	mustMkdirAll(t, srcDir, 0o750)
 	mustWriteFile(t, filepath.Join(srcDir, "data.txt"), []byte("secondary backup content for "+entry.DirectoryName))
-
-	createEncryptedSplitBackup(t, srcDir, backupDir, entry.DirectoryName, entry.Date, entry.ID, password, defaultSplitSizeMB)
+	WriteFullSet(t, srcDir, f.BackupDir, entry, f.KeySet, f.Master)
 }
 
-func createEncryptedSplitBackup(t testing.TB, srcDir, backupDir, directoryName, backupDate string, backupID util.BackupID, password []byte, splitSizeMB int64) int {
+// WriteFullSet writes a full backup of srcDir as entry into backupDir and
+// returns the number of parts.
+func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
-	nameFunc := func(seq int) string {
-		return util.PartFileName(backupDir, directoryName, backupDate, backupID, seq)
+	res, err := setio.WriteFullSet(setio.FullSetParams{
+		SourceDir:      srcDir,
+		ExcludeDirs:    []string{backupDir},
+		OutputDir:      backupDir,
+		Entry:          entry,
+		RunID:          entry.ChainID,
+		KeySet:         *ks,
+		Master:         master,
+		SplitSizeBytes: defaultSplitSizeMB * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("WriteFullSet: %v", err)
 	}
-	sw := util.NewWriter(nameFunc, splitSizeMB*1024*1024)
-	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
-
-	pr, pw := io.Pipe()
-	tarErrCh := make(chan error, 1)
-	go func() {
-		err := util.WriteTar(pw, srcDir, backupDir)
-		pw.CloseWithError(err) //nolint:errcheck
-		tarErrCh <- err
-	}()
-
-	encryptErr := security.Encrypt(bw, pr, password, security.DefaultArgon2Params)
-	pr.Close() //nolint:errcheck
-	if encryptErr != nil {
-		t.Fatalf("security.Encrypt returned error: %v", encryptErr)
-	}
-	if err := bw.Flush(); err != nil {
-		t.Fatalf("failed to flush split buffer: %v", err)
-	}
-	if err := sw.Close(); err != nil {
-		t.Fatalf("failed to close split writer: %v", err)
-	}
-	if tarErr := <-tarErrCh; tarErr != nil {
-		t.Fatalf("WriteTar returned error: %v", tarErr)
-	}
-
-	return len(sw.Paths())
+	return len(res.Parts)
 }
 
 func mustMkdirAll(t testing.TB, path string, perm os.FileMode) {

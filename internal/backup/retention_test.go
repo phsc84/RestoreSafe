@@ -1,164 +1,201 @@
 package backup
 
 import (
+	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/util"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestDeleteBackupEntryFilesRemovesPartsAndChallenge(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-
-	part1 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
-	part2 := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 2)
-	challenge := util.ChallengeFileName(dir, entry.DirectoryName, entry.Date, entry.ID)
-
-	createFile(t, part1, "p1")
-	createFile(t, part2, "p2")
-	createFile(t, challenge, "challenge")
-
-	removed, err := deleteBackupEntryFiles(dir, entry)
-	if err != nil {
-		t.Fatalf("deleteBackupEntryFiles returned error: %v", err)
-	}
-	if len(removed) != 3 {
-		t.Fatalf("expected 3 removed files, got %d", len(removed))
-	}
-
-	assertNotExists(t, part1)
-	assertNotExists(t, part2)
-	assertNotExists(t, challenge)
+type retentionEnv struct {
+	dir    string
+	ks     *container.KeySet
+	master []byte
 }
 
-func TestDeleteBackupEntryFilesSkipsWhenNoChallengeFile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("NCC001")}
-
-	// Create only a part file, no challenge file.
-	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
-	createFile(t, part, "data")
-
-	removed, err := deleteBackupEntryFiles(dir, entry)
-	if err != nil {
-		t.Fatalf("expected no error when challenge file is absent, got: %v", err)
-	}
-	if len(removed) != 1 {
-		t.Fatalf("expected 1 removed file (only the part), got %d", len(removed))
-	}
-	assertNotExists(t, part)
+func newRetentionEnv(t *testing.T) *retentionEnv {
+	t.Helper()
+	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
+	return &retentionEnv{dir: t.TempDir(), ks: ks, master: master}
 }
 
-func TestDeleteOrphanLogFilesKeepsActiveRunLogs(t *testing.T) {
-	t.Parallel()
+// writeFull writes a small, complete full backup set and returns its entry.
+func (e *retentionEnv) writeFull(t *testing.T, directory, chainID, date string) util.BackupEntry {
+	t.Helper()
+	src := filepath.Join(t.TempDir(), directory)
+	createFile(t, filepath.Join(src, "f.txt"), "content of "+chainID)
+	entry := util.BackupEntry{DirectoryName: directory, ChainID: util.BackupID(chainID), Date: date}
+	testutil.WriteFullSet(t, src, e.dir, entry, e.ks, e.master)
+	return entry
+}
 
-	dir := t.TempDir()
-	active := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ABC123")}
-	otherDate := "2026-03-13"
-	otherID := util.BackupID("ZZZ999")
-
-	activePart := util.PartFileName(dir, active.DirectoryName, active.Date, active.ID, 1)
-	createFile(t, activePart, "enc")
-
-	activeLog := util.LogFileName(dir, active.Date, active.ID)
-	orphanLog := util.LogFileName(dir, otherDate, otherID)
-	unrelated := filepath.Join(dir, "notes.log")
-	createFile(t, activeLog, "active")
-	createFile(t, orphanLog, "orphan")
-	createFile(t, unrelated, "keep")
-
-	deleted, err := deleteOrphanLogFiles(dir)
+func (e *retentionEnv) parts(t *testing.T, entry util.BackupEntry) []string {
+	t.Helper()
+	parts, err := catalog.CollectParts(e.dir, entry)
 	if err != nil {
-		t.Fatalf("deleteOrphanLogFiles returned error: %v", err)
+		t.Fatal(err)
 	}
-	if len(deleted) != 1 {
-		t.Fatalf("expected exactly 1 deleted orphan log, got %d", len(deleted))
-	}
+	return parts
+}
 
-	assertExists(t, activeLog)
-	assertNotExists(t, orphanLog)
-	assertExists(t, unrelated)
+func docsSources() []backupSource {
+	return []backupSource{{Resolved: "C:/src/Docs", BackupName: "Docs"}}
 }
 
 func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	log, err := util.NewLogger(filepath.Join(dir, "test.log"), "info")
-	if err != nil {
-		t.Fatalf("failed to create logger: %v", err)
-	}
-	defer log.Close()
-
-	sources := []backupSource{{Resolved: dir}}
-	if err := applyRetentionPolicy(dir, 0, sources, log); err != nil {
+	log := util.NewConsoleLogger("info")
+	if err := applyRetentionPolicy(dir, 0, []backupSource{{Resolved: dir}}, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
-	}
-}
-
-func TestDeleteOrphanLogFilesReturnZeroWhenTargetMissing(t *testing.T) {
-	t.Parallel()
-	missing := filepath.Join(t.TempDir(), "nonexistent")
-	deleted, err := deleteOrphanLogFiles(missing)
-	if err != nil {
-		t.Fatalf("expected no error for missing target dir, got: %v", err)
-	}
-	if len(deleted) != 0 {
-		t.Fatalf("expected 0 deleted files, got %d", len(deleted))
 	}
 }
 
 func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	log := util.NewConsoleLogger("info")
-	sources := []backupSource{
-		{Resolved: dir, Err: errors.New("inaccessible")},
-	}
-	if err := applyRetentionPolicy(dir, 1, sources, log); err != nil {
+	sources := []backupSource{{Resolved: dir, Err: errors.New("inaccessible")}}
+	if err := applyRetentionPolicy(dir, 1, sources, util.NewConsoleLogger("info")); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
 
 func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
-	dir := t.TempDir()
-	log := util.NewConsoleLogger("info")
-
-	entry := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("ONE001")}
-	part := util.PartFileName(dir, entry.DirectoryName, entry.Date, entry.ID, 1)
-	createFile(t, part, "data")
-
-	sources := []backupSource{{Resolved: dir + "/Docs", BackupName: "Docs"}}
-	if err := applyRetentionPolicy(dir, 2, sources, log); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+	env := newRetentionEnv(t)
+	entry := env.writeFull(t, "Docs", "ONE001", "2026-03-14")
+	if err := applyRetentionPolicy(env.dir, 2, docsSources(), util.NewConsoleLogger("info")); err != nil {
+		t.Fatal(err)
 	}
-	assertExists(t, part)
+	for _, p := range env.parts(t, entry) {
+		assertExists(t, p)
+	}
 }
 
-func TestApplyRetentionPolicyDeletesOlderSetsAboveRetentionKeep(t *testing.T) {
-	dir := t.TempDir()
-	log := util.NewConsoleLogger("info")
+func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
+	env := newRetentionEnv(t)
+	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
+	olderParts := env.parts(t, older)
+	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+	other := env.writeFull(t, "Pics", "AAA001", "2026-03-13")
 
-	entry1 := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-13", ID: util.BackupID("OLD001")}
-	entry2 := util.BackupEntry{DirectoryName: "Docs", Date: "2026-03-14", ID: util.BackupID("NEW002")}
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range olderParts {
+		assertNotExists(t, p)
+	}
+	for _, p := range env.parts(t, newer) {
+		assertExists(t, p)
+	}
+	// Directories that are not configured sources are never touched.
+	for _, p := range env.parts(t, other) {
+		assertExists(t, p)
+	}
+}
 
-	part1 := util.PartFileName(dir, entry1.DirectoryName, entry1.Date, entry1.ID, 1)
-	part2 := util.PartFileName(dir, entry2.DirectoryName, entry2.Date, entry2.ID, 1)
-	createFile(t, part1, "old data")
-	createFile(t, part2, "new data")
+// truncateSet damages a set's last part so its trailer is missing (the set
+// becomes incomplete) and sets the part's modification time.
+func (e *retentionEnv) truncateSet(t *testing.T, entry util.BackupEntry, mtime time.Time) string {
+	t.Helper()
+	parts := e.parts(t, entry)
+	last := parts[len(parts)-1]
+	fi, err := os.Stat(last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(last, fi.Size()-10); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(last, mtime, mtime); err != nil {
+		t.Fatal(err)
+	}
+	return last
+}
 
-	sources := []backupSource{{Resolved: dir + "/Docs", BackupName: "Docs"}}
-	if err := applyRetentionPolicy(dir, 1, sources, log); err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+func TestApplyRetentionPolicyHandlesIncompleteSets(t *testing.T) {
+	env := newRetentionEnv(t)
+	oldEntry := env.writeFull(t, "Docs", "OLD001", "2026-03-10")
+	recentEntry := env.writeFull(t, "Docs", "NEW003", "2026-03-15")
+	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+
+	old := env.truncateSet(t, oldEntry, time.Now().Add(-24*time.Hour))
+	recent := env.truncateSet(t, recentEntry, time.Now().Add(time.Hour))
+
+	if err := applyRetentionPolicy(env.dir, 5, docsSources(), util.NewConsoleLogger("info")); err != nil {
+		t.Fatal(err)
+	}
+	assertNotExists(t, old)
+	assertExists(t, recent)
+}
+
+func TestApplyRetentionPolicySkipsWhenASetIsUnreadable(t *testing.T) {
+	env := newRetentionEnv(t)
+	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
+	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+	foreign := util.PartFileName(env.dir, util.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
+	createFile(t, foreign, "not a RestoreSafe backup")
+
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range env.parts(t, older) {
+		assertExists(t, p)
+	}
+	assertExists(t, foreign)
+}
+
+func TestApplyRetentionPolicyNeverTouchesLegacyFiles(t *testing.T) {
+	env := newRetentionEnv(t)
+	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+	legacyPart := filepath.Join(env.dir, "[Docs]_2026-01-01_OLD001-001.enc")
+	legacyChallenge := filepath.Join(env.dir, "[Docs]_2026-01-01_OLD001.challenge")
+	legacyLog := filepath.Join(env.dir, "2026-01-01_OLD001.log")
+	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
+		createFile(t, p, "1.x")
 	}
 
-	assertNotExists(t, part1)
-	assertExists(t, part2)
+	if err := applyRetentionPolicy(env.dir, 1, docsSources(), util.NewConsoleLogger("info")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
+		assertExists(t, p)
+	}
+}
+
+func TestDeleteOrphanLogFilesKeepsActiveRunLogs(t *testing.T) {
+	env := newRetentionEnv(t)
+	active := env.writeFull(t, "Docs", "ABC123", "2026-03-14")
+
+	activeLog := util.LogFileName(env.dir, active.Date, active.ChainID)
+	orphanLog := util.LogFileName(env.dir, "2026-03-13", "ZZZ999")
+	unrelated := filepath.Join(env.dir, "notes.log")
+	createFile(t, activeLog, "active")
+	createFile(t, orphanLog, "orphan")
+	createFile(t, unrelated, "keep")
+
+	deleted, err := deleteOrphanLogFiles(env.dir)
+	if err != nil {
+		t.Fatalf("deleteOrphanLogFiles returned error: %v", err)
+	}
+	if len(deleted) != 1 {
+		t.Fatalf("expected exactly 1 deleted orphan log, got %v", deleted)
+	}
+	assertExists(t, activeLog)
+	assertNotExists(t, orphanLog)
+	assertExists(t, unrelated)
+}
+
+func TestDeleteOrphanLogFilesReturnZeroWhenTargetMissing(t *testing.T) {
+	t.Parallel()
+	deleted, err := deleteOrphanLogFiles(filepath.Join(t.TempDir(), "nonexistent"))
+	if err != nil || len(deleted) != 0 {
+		t.Fatalf("expected no error and no deletions, got %v, %v", deleted, err)
+	}
 }
 
 func createFile(t *testing.T, path string, content string) {

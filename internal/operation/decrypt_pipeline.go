@@ -1,78 +1,67 @@
 package operation
 
 import (
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/util"
-	"errors"
 	"fmt"
 	"io"
 	"sync/atomic"
 )
 
-// RunDecryptPipeline decrypts selected parts and streams plaintext to consume.
-// onPartStart is called just before each part file is opened (1-based index, total count);
-// pass nil to skip per-part callbacks.
+// recordingWriter remembers whether a write to the pipe failed, which means
+// the consumer stopped reading (it is the root cause, not the decryption).
+type recordingWriter struct {
+	w      io.Writer
+	failed atomic.Bool
+}
+
+func (r *recordingWriter) Write(p []byte) (int, error) {
+	n, err := r.w.Write(p)
+	if err != nil {
+		r.failed.Store(true)
+	}
+	return n, err
+}
+
+// RunSectionPipeline decrypts the data section of set and streams the
+// plaintext (a TAR stream) to consume.
 //
-// consume is expected to read the plaintext stream to EOF. RunDecryptPipeline
-// always closes the read end of the pipe once consume returns, so the decrypt
-// goroutine can never block forever writing to a consumer that has stopped
-// reading. A consumer that returns nil *without* draining the stream therefore
-// causes the decrypt goroutine's pending write to fail, and that failure is
-// reported as a decryption error rather than success — drain the stream fully to
-// obtain a clean result.
-func RunDecryptPipeline(
-	parts []string,
-	password []byte,
+// consume is expected to read the stream to EOF. The read end of the pipe is
+// always closed once consume returns, so the decrypt goroutine can never block
+// forever writing to a consumer that has stopped reading. When both sides
+// fail, the error of the side that failed first is reported.
+func RunSectionPipeline(
+	set *container.Set,
+	keys *container.SectionKeys,
 	log *util.Logger,
 	directoryName string,
 	progressVerb string,
 	consumeFailurePrefix string,
 	consume func(io.Reader) error,
-	onPartStart func(partIndex, partCount int),
 ) error {
-	seqReader := util.NewSequentialReader(parts)
-	defer seqReader.Close()
-
-	seqReader.SetOnFileOpen(onPartStart)
-
-	var inBytes atomic.Int64
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
-	stopProgress := StartProgressTracking(log, directoryName, progressVerb, &inBytes, &outBytes, &outWriteCalls)
+	stopProgress := StartProgressTracking(log, directoryName, progressVerb, &outBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
 	pr, pw := io.Pipe()
+	rw := &recordingWriter{w: pw}
 	decErrCh := make(chan error, 1)
 	go func() {
-		err := security.Decrypt(
-			&CountingWriter{W: pw, Total: &outBytes, Calls: &outWriteCalls},
-			&CountingReader{R: seqReader, Total: &inBytes},
-			password,
-		)
+		err := set.DecryptData(keys, &util.CountingWriter{W: rw, Total: &outBytes, Calls: &outWriteCalls})
 		pw.CloseWithError(err) //nolint:errcheck
 		decErrCh <- err
 	}()
 
 	consumeErr := consume(pr)
-	// Always close the read end once consume returns, regardless of outcome.
-	// If consume drained the stream, the decrypt goroutine has already closed pw
-	// and exited, so this is a no-op. If consume stopped early — whether it
-	// failed or returned nil without reading to EOF — closing pr makes the
-	// goroutine's pending pw.Write fail instead of blocking forever, which would
-	// otherwise deadlock the <-decErrCh receive below. CloseWithError(nil) makes
-	// pending writes fail with io.ErrClosedPipe.
 	pr.CloseWithError(consumeErr) //nolint:errcheck
 	decErr := <-decErrCh
 
-	if decErr != nil {
-		if errors.Is(decErr, security.ErrWrongPassword) {
-			return fmt.Errorf("%w. Remedy: Check the password; for YubiKey backups, the matching .challenge file must be in the same directory as the .enc files.", security.ErrWrongPassword)
-		}
-		return fmt.Errorf("Decryption failed: %w", decErr)
-	}
-	if consumeErr != nil {
+	if consumeErr != nil && (decErr == nil || rw.failed.Load()) {
 		return fmt.Errorf("%s failed: %w", consumeFailurePrefix, consumeErr)
 	}
-
+	if decErr != nil {
+		return fmt.Errorf("Decryption failed: %w", decErr)
+	}
 	return nil
 }

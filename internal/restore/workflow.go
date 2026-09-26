@@ -1,8 +1,8 @@
 // Package restore orchestrates the full restore workflow:
 //  1. List available backups in the backup directory
 //  2. Let the user choose which backup(s) to restore
-//  3. Verify password (up to 3 attempts)
-//  4. Decrypt and extract to the user-specified restore path
+//  3. Unlock the keys (password and/or YubiKey, up to 3 password attempts)
+//  4. Decrypt, extract, and check every file against its manifest hash
 package restore
 
 import (
@@ -23,16 +23,17 @@ func Run(cfg *util.Config, exeDir string) error {
 	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
 
 	// Enumerate backups.
-	index, err := catalog.ScanBackups(backupDir)
+	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory exists and is readable.", backupDir, err)
 	}
-	if len(index) == 0 {
-		fmt.Println("No backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is configured.")
+	runs := catalog.BackupRunSummaries(infos)
+	if len(runs) == 0 {
+		fmt.Println("No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is configured.")
 		return nil
 	}
 
-	selected, selection, err := resolveRestoreSelection(backupDir, index)
+	selected, err := operation.PromptBackupSelection("restore", runs)
 	if err != nil {
 		if errors.Is(err, operation.ErrSelectionCancelled) {
 			fmt.Println("Restore cancelled.")
@@ -40,18 +41,12 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 		return err
 	}
+	selectedInfos := catalog.SelectInfos(infos, selected)
+
+	first := selectedInfos[0].Header
+	logPath := util.LogFileName(backupDir, first.Date, util.BackupID(first.RunID))
+	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID))
 	warningCount := 0
-	if catalog.SelectionHasDateWarning(selection, index) {
-		warningCount++
-	}
-
-	usesYubiKey, yubiKeyOnly, err := catalog.BackupRunUsesYubiKey(backupDir, selected[0])
-	if err != nil {
-		return fmt.Errorf("Failed to inspect backup authentication: %w. Remedy: Check read permissions in the backup directory and verify .challenge filenames.", err)
-	}
-
-	logPath := util.LogFileName(backupDir, selected[0].Date, selected[0].ID)
-	log := operation.OpenLogger(cfg, backupDir, selected[0])
 	if log.IsConsoleOnly() {
 		warningCount++
 	}
@@ -67,7 +62,8 @@ func Run(cfg *util.Config, exeDir string) error {
 	}
 
 	stagingPlan := operation.PlanLocalStaging(backupDir, restorePath, os.TempDir())
-	preflight := buildRestorePreflight(selected, backupDir, restorePath)
+	preflight := buildRestorePreflight(selectedInfos, restorePath)
+	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
 	printRestorePreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
@@ -93,29 +89,38 @@ func Run(cfg *util.Config, exeDir string) error {
 		log.InfoLogOnly("Local staging enabled: selected backup parts will be copied to temp storage at %s before restore", filepath.ToSlash(stagingPlan.ResolvedTempDir))
 	}
 
-	// Collect password (with retry), then run the restore with it as input.
-	password, err := operation.ReadPasswordWithRetry(backupDir, selected[0], "Enter restore password: ", log)
+	masters, err := operation.UnlockKeySets(selectedInfos, "Enter restore password: ", log)
 	if err != nil {
 		return err
 	}
-	defer func() { security.ZeroBytes(password) }()
+	defer masters.Zero()
 
-	return runRestoreOperation(selected, backupDir, restorePath, logPath, password, log, stagingPlan, warningCount)
+	return runRestoreOperation(selectedInfos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
 }
 
-// runRestoreOperation performs the restore using an already-collected password.
-// It takes no further user input, so tests and automated flows can drive it
-// directly by supplying the password.
-func runRestoreOperation(selected []util.BackupEntry, backupDir, restorePath, logPath string, password []byte, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
+	mode := util.AuthMode(authMode)
+	return mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey, mode == util.AuthModeYubiKey
+}
+
+// runRestoreOperation performs the restore using already-unlocked keys. It
+// takes no further user input, so tests and automated flows can drive it
+// directly by supplying the master keys.
+func runRestoreOperation(selected []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
 	fmt.Println()
-	log.Info("Restore started - ID: %s, date: %s", string(selected[0].ID), selected[0].Date)
+	first := selected[0].Header
+	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
 	log.Info("Restore selection:")
-	for _, entry := range selected {
-		log.Info("  %s", entry.String())
+	for _, info := range selected {
+		log.Info("  %s", info.Entry.String())
 	}
 
-	if _, err := restoreSelectedEntries(selected, backupDir, restorePath, password, log, stagingPlan); err != nil {
+	skipped, err := restoreSelectedEntries(selected, backupDir, restorePath, masters, log, stagingPlan)
+	if err != nil {
 		return err
+	}
+	if skipped > 0 {
+		warningCount++
 	}
 
 	log.Info("Restore completed successfully.")
@@ -124,10 +129,6 @@ func runRestoreOperation(selected []util.BackupEntry, backupDir, restorePath, lo
 		fmt.Printf("Warnings: %d\n", warningCount)
 	}
 	return nil
-}
-
-func resolveRestoreSelection(backupDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	return operation.PromptBackupSelection("restore", backupDir, index)
 }
 
 func promptRestoreDestination(backupDir string) (string, error) {
@@ -162,22 +163,23 @@ type restorePreflightItem struct {
 	PartCount      int
 	TotalSizeBytes int64
 	OutputDir      string
-	Err            error // parts-level error (inspection failure, no parts found)
+	Err            error // set-level error (incomplete, unsupported)
 	OutputDirErr   error // output directory error (already exists)
 }
 
-func buildRestorePreflight(selected []util.BackupEntry, backupDir, restorePath string) []restorePreflightItem {
+func buildRestorePreflight(selected []catalog.SetInfo, restorePath string) []restorePreflightItem {
 	items := make([]restorePreflightItem, 0, len(selected))
-	for _, entry := range selected {
-		partCount, totalSizeBytes, err := catalog.InspectBackupParts(backupDir, entry)
+	for _, info := range selected {
+		entry := info.Entry
 		item := restorePreflightItem{
 			Entry:          entry,
-			PartCount:      partCount,
-			TotalSizeBytes: totalSizeBytes,
+			PartCount:      len(info.Parts),
+			TotalSizeBytes: info.SizeBytes,
 			OutputDir:      filepath.Join(restorePath, entry.DirectoryName),
+			Err:            info.Err,
 		}
-		if err != nil {
-			item.Err = err
+		if item.Err == nil && entry.IsDiff() {
+			item.Err = fmt.Errorf("%s: restoring differential backups is not supported yet.", entry.String())
 		}
 		if nameErr := util.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr = nameErr
@@ -373,9 +375,13 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 	return util.QueryFreeSpaceBytes(restorePath)
 }
 
-func restoreSelectedEntries(selected []util.BackupEntry, backupDir, restorePath string, password []byte, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
-	totalPartsProcessed := 0
-	for _, entry := range selected {
+// restoreSelectedEntries restores each selected set and returns the number of
+// files that are missing from the restore points because they could not be
+// read during backup.
+func restoreSelectedEntries(selected []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
+	skipped := 0
+	for _, info := range selected {
+		entry := info.Entry
 		var scope *operation.StagingScope
 		if stagingPlan.Enabled {
 			stagedDir, err := stageBackupEntryLocally(backupDir, entry, stagingPlan.ResolvedTempDir, log)
@@ -385,16 +391,15 @@ func restoreSelectedEntries(selected []util.BackupEntry, backupDir, restorePath 
 			scope = operation.ActiveStagingScope(stagedDir, log)
 		}
 
-		partCount, err := restoreEntry(entry, scope.ActiveDir(backupDir), restorePath, password, log)
+		master := masters[info.Header.KeySet.ID]
+		n, err := restoreEntry(entry, scope.ActiveDir(backupDir), restorePath, master, log)
+		scope.Cleanup()
 		if err != nil {
-			scope.Cleanup()
 			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
 		}
-		totalPartsProcessed += partCount
-		log.Info("  Extracted: %d part file(s) - [%s] successfully restored", partCount, entry.DirectoryName)
-		scope.Cleanup()
+		skipped += n
 	}
-	return totalPartsProcessed, nil
+	return skipped, nil
 }
 
 func stageBackupEntryLocally(backupDir string, entry util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
@@ -430,18 +435,18 @@ func stageBackupEntryLocally(backupDir string, entry util.BackupEntry, tempDir s
 	return stageDir, nil
 }
 
-// restoreEntry decrypts all parts of one backup entry and extracts to destDir.
-func restoreEntry(entry util.BackupEntry, backupDir, destDir string, password []byte, log *util.Logger) (int, error) {
+// restoreEntry decrypts one backup set and extracts it to destDir, checking
+// every file against its manifest hash. It returns the number of files that
+// are not in the restore point because they could not be read during backup.
+func restoreEntry(entry util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
 	if err := util.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
-	parts, err := catalog.CollectParts(backupDir, entry)
+	set, err := catalog.OpenSet(backupDir, entry)
 	if err != nil {
 		return 0, err
 	}
-	if len(parts) == 0 {
-		return 0, fmt.Errorf("No part files found for %s. Remedy: Put all related .enc files into the same backup directory.", entry.String())
-	}
+	defer set.Close()
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
 
@@ -461,19 +466,11 @@ func restoreEntry(entry util.BackupEntry, backupDir, destDir string, password []
 		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
 	}
 
-	err = operation.RunDecryptPipeline(
-		parts,
-		password,
-		log,
-		entry.DirectoryName,
-		"decrypted",
-		"Extraction",
-		func(r io.Reader) error { return util.ExtractTar(r, outDir) },
-		nil,
-	)
+	m, err := operation.ProcessRestorePoint(set, master, outDir, false, log)
 	if err != nil {
+		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
-
-	return len(parts), nil
+	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, len(set.Paths), entry.DirectoryName)
+	return operation.ReportSkippedFiles(m, entry.DirectoryName, log), nil
 }

@@ -22,14 +22,35 @@ func ZeroBytes(b []byte) {
 	}
 }
 
+// Input sources behind ReadPassword and ReadLine. End-to-end tests replace
+// them with SetInputForTest to script a whole interactive session.
+var (
+	passwordInput = readPasswordFromTerminal
+	lineInput     = readLineFromStdin
+)
+
+// SetInputForTest replaces the password and line input sources and returns a
+// function that restores the originals. Only for tests; not safe for parallel
+// use.
+func SetInputForTest(line func(prompt string) (string, error), password func(prompt string) ([]byte, error)) (restore func()) {
+	prevLine, prevPassword := lineInput, passwordInput
+	lineInput, passwordInput = line, password
+	return func() { lineInput, passwordInput = prevLine, prevPassword }
+}
+
 // ReadPassword prints the prompt text to stdout and reads a password,
 // displaying '*' for each accepted character.
+func ReadPassword(prompt string) ([]byte, error) {
+	return passwordInput(prompt)
+}
+
+// readPasswordFromTerminal reads a password from the console in raw mode.
 //
 // UTF-8 multi-byte characters are accepted: bytes are buffered until a
 // complete codepoint is assembled, then accepted if printable. Backspace
 // removes the last complete codepoint (not just one byte). Non-printable or
 // invalid bytes produce a terminal bell and are silently discarded.
-func ReadPassword(prompt string) ([]byte, error) {
+func readPasswordFromTerminal(prompt string) ([]byte, error) {
 	fmt.Print(prompt)
 
 	fd := int(os.Stdin.Fd())
@@ -145,6 +166,10 @@ func ReadPasswordConfirmedWithPrompts(firstPrompt, confirmPrompt string) ([]byte
 
 // ReadLine reads a single line from stdin (with echo).
 func ReadLine(promptText string) (string, error) {
+	return lineInput(promptText)
+}
+
+func readLineFromStdin(promptText string) (string, error) {
 	fmt.Print(promptText)
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')

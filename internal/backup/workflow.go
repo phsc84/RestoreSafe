@@ -1,20 +1,23 @@
 // Package backup orchestrates the full backup workflow:
-//  1. Prompt for password (and optionally YubiKey 2FA)
-//  2. For each source directory: stream TAR → split → encrypt → write .enc parts
-//  3. Optionally re-read and verify the written parts (verify_after_backup)
-//  4. Write a log file per backup run
+//  1. Determine the keys: reuse the current key set or create new keys
+//  2. For each source directory: stream TAR → encrypt → split → .enc parts
+//     (written as .tmp and renamed once the set is complete)
+//  3. Optionally re-read and verify the written sets (verify_after_backup)
+//  4. Apply the retention policy and write a log file per backup run
 package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/setio"
 	"RestoreSafe/internal/util"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 )
 
 // Run executes the full backup workflow.
@@ -33,20 +36,27 @@ func Run(cfg *util.Config, exeDir string) error {
 
 	sources := resolveBackupSources(cfg.SourceDirectories, exeDir)
 
+	infos, err := catalog.Inventory(backupDir)
+	if err != nil {
+		return fmt.Errorf("Failed to scan backup directory: %w. Remedy: Check read permissions in the backup directory.", err)
+	}
+
 	// Determine backup run identifiers.
-	id, err := util.NewBackupID()
+	runID, err := newRunID(infos)
 	if err != nil {
 		return err
 	}
 	date := util.DateString()
 
 	// Set up logger.
-	logPath := util.LogFileName(backupDir, date, id)
+	logPath := util.LogFileName(backupDir, date, runID)
 	log, err := util.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer log.Close()
+
+	removeLeftoverTempParts(backupDir, log)
 
 	if err := validateSourceDirectories(sources); err != nil {
 		return err
@@ -68,8 +78,9 @@ func Run(cfg *util.Config, exeDir string) error {
 		}
 	}
 	stagingPlan := operation.PlanLocalStaging(stagingSourceDir, backupDir, os.TempDir())
+	keys := planKeys(cfg, infos)
 
-	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
+	printBackupPreflightWithYubiKeyCheck(os.Stdout, cfg, backupDir, sources, stagingPlan, keys, security.CheckYubiKeyAvailability, security.CheckYubiKeyConnected)
 	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
 		if strings.Contains(err.Error(), "Insufficient free space for backup:") {
 			fmt.Println()
@@ -100,59 +111,58 @@ func Run(cfg *util.Config, exeDir string) error {
 		return nil
 	}
 
-	// Collect encryption credential(s), then run the backup with them as inputs.
-	password, challengeJSON, err := collectBackupCredentials(cfg, log)
+	keySet, master, err := obtainKeys(cfg, keys, log)
 	if err != nil {
 		return err
 	}
-	defer func() { security.ZeroBytes(password) }()
+	defer security.ZeroBytes(master)
 
-	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, id, password, challengeJSON)
+	return runBackupOperation(cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master)
 }
 
-// collectBackupCredentials gathers the encryption credential(s) for a backup run:
-// the password (unless YubiKey-only) and, when a YubiKey factor is enabled, the
-// combined key material plus the FIDO2 challenge JSON to persist alongside the parts.
-// On every error path it zeroes any password material it has read.
-func collectBackupCredentials(cfg *util.Config, log *util.Logger) (password []byte, challengeJSON string, err error) {
-	if cfg.IsYubiKeyOnly() {
-		fmt.Println("YubiKey-only mode: no password required.")
-		password = []byte{}
-	} else {
-		password, err = security.ReadPasswordConfirmedWithPrompts("Enter backup password: ", "Re-enter backup password: ")
-		if err != nil {
-			return nil, "", err
+// newRunID generates a run ID that is not yet used as chain ID or run ID in
+// the backup directory, so a chain ID always identifies one full backup.
+func newRunID(infos []catalog.SetInfo) (util.BackupID, error) {
+	used := make(map[string]bool)
+	for _, info := range infos {
+		used[string(info.Entry.ChainID)] = true
+		if info.Header != nil {
+			used[info.Header.RunID] = true
 		}
 	}
-
-	// Optional YubiKey factor (2FA or sole factor in yubikey mode).
-	if !cfg.UseYubiKey() {
-		return password, "", nil
+	for attempt := 0; attempt < 100; attempt++ {
+		id, err := util.NewBackupID()
+		if err != nil {
+			return "", err
+		}
+		if !used[string(id)] {
+			return id, nil
+		}
 	}
-
-	if err := security.CheckYubiKeyConnected(); err != nil {
-		security.ZeroBytes(password)
-		return nil, "", security.ErrYubiKeyRequired
-	}
-	fmt.Println("YubiKey interaction:")
-	fmt.Println("  1. Windows first asks for your YubiKey PIN to register the backup credential.")
-	fmt.Println("  2. Windows asks again for your YubiKey PIN to derive the encryption key.")
-	combined, chal, err := security.CombineWithPassword(password, cfg.IsYubiKeyOnly())
-	security.ZeroBytes(password)
-	if err != nil {
-		return nil, "", fmt.Errorf("YubiKey authentication failed: %w", err)
-	}
-	if cfg.IsYubiKeyOnly() {
-		log.InfoLogOnly("YubiKey-only authentication successful.")
-	} else {
-		log.InfoLogOnly("YubiKey-2FA successful.")
-	}
-	return combined, chal, nil
+	return "", fmt.Errorf("Failed to generate a unique backup ID.")
 }
 
-// runBackupOperation performs the backup using already-collected credentials. It
-// takes no further input from the user, so it can be driven directly in tests and
-// automated flows by supplying password (and challengeJSON for YubiKey runs).
+// removeLeftoverTempParts deletes part files an interrupted backup left
+// behind with the temporary suffix. It runs under the backup lock, so no other
+// backup can be writing them.
+func removeLeftoverTempParts(backupDir string, log *util.Logger) {
+	names, err := catalog.ListTempParts(backupDir)
+	if err != nil {
+		log.Warn("Failed to look for leftovers of interrupted backups: %v", err)
+		return
+	}
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(backupDir, name)); err != nil {
+			log.Warn("Failed to remove leftover of an interrupted backup %s: %v", name, err)
+			continue
+		}
+		log.Info("Removed leftover of an interrupted backup: %s", name)
+	}
+}
+
+// runBackupOperation performs the backup using an already-unlocked key set.
+// It takes no further input from the user, so it can be driven directly in
+// tests and automated flows by supplying the key set and master key.
 func runBackupOperation(
 	cfg *util.Config,
 	log *util.Logger,
@@ -160,9 +170,9 @@ func runBackupOperation(
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	date string,
-	id util.BackupID,
-	password []byte,
-	challengeJSON string,
+	runID util.BackupID,
+	keySet *container.KeySet,
+	master []byte,
 ) error {
 	fmt.Println()
 	n := runnableSourceCount(sources)
@@ -170,9 +180,9 @@ func runBackupOperation(
 	if n == 1 {
 		dirWord = "directory"
 	}
-	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(id), date, n, dirWord)
+	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(runID), date, n, dirWord)
 	warningCount := 0
-	totalPartsCreated := 0
+	var written []util.BackupEntry
 	processedDirectories := make([]string, 0)
 	directorySourcePaths := make(map[string]string)
 
@@ -206,27 +216,13 @@ func runBackupOperation(
 		log.Info("Processing source directory: %s", srcAbs)
 		log.Debug("Directory name in archive: %s", directoryName)
 
-		argon2Params := security.Argon2Params{
-			Time:     uint32(cfg.Argon2.Time),
-			MemoryKB: uint32(cfg.Argon2.MemoryMB) * 1024,
-			Threads:  uint8(cfg.Argon2.Threads),
-		}
-		partCount, err := backupDirectory(srcAbs, directoryName, workingDir, date, id, password, argon2Params, cfg, staging.Dir == "", log)
-		if err != nil {
+		entry := util.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
+		if err := backupDirectory(srcAbs, entry, runID, workingDir, backupDir, keySet, master, cfg, staging.Dir == "", log); err != nil {
 			return fmt.Errorf("Backup of %q failed: %w", srcAbs, err)
 		}
-		totalPartsCreated += partCount
+		written = append(written, entry)
 		processedDirectories = append(processedDirectories, directoryName)
 		directorySourcePaths[directoryName] = srcAbs
-
-		// Write FIDO2 challenge file if needed.
-		if cfg.UseYubiKey() && challengeJSON != "" {
-			challengePath := util.ChallengeFileName(workingDir, directoryName, date, id)
-			if err := os.WriteFile(challengePath, []byte(challengeJSON), 0o600); err != nil {
-				return fmt.Errorf("Failed to write challenge file: %w. Remedy: Check write permissions in the backup directory; for YubiKey backups, the .challenge file must be in the same directory as the .enc files.", err)
-			}
-			log.Debug("Challenge file written: %s", challengePath)
-		}
 	}
 
 	// Move results from staging to backup directory if needed.
@@ -236,10 +232,10 @@ func runBackupOperation(
 		}
 	}
 
-	// Optionally verify the freshly written parts before pruning old backups.
+	// Optionally verify the freshly written sets before pruning old backups.
 	verifyFailed := false
-	if cfg.VerifyAfterBackup && len(processedDirectories) > 0 {
-		failed := verifyBackupAfterWrite(backupDir, date, id, processedDirectories, password, log)
+	if cfg.VerifyAfterBackup && len(written) > 0 {
+		failed := verifyBackupAfterWrite(backupDir, written, master, log)
 		if failed > 0 {
 			verifyFailed = true
 			warningCount += failed
@@ -264,42 +260,36 @@ func runBackupOperation(
 	return nil
 }
 
-// verifyBackupAfterWrite re-reads the part files just written for each processed
-// directory, decrypts them, and confirms the decrypted stream is a readable TAR.
-// It reuses the in-memory credential the backup already derived (the combined
-// password + YubiKey hmac-secret in YubiKey modes), so it needs no additional
-// password prompt or YubiKey touch. Failures are logged as warnings and the
-// backup files are left in place; the number of directories that failed is
-// returned so the caller can flag the run and skip retention.
 // verifyKeptRemedy is appended to each post-backup verification failure so the
 // reason and the "files kept / try a manual restore" guidance live on one line.
 const verifyKeptRemedy = " The backup files were kept; try a manual restore/verify."
 
-func verifyBackupAfterWrite(backupDir, date string, id util.BackupID, directories []string, password []byte, log *util.Logger) int {
+// verifyBackupAfterWrite re-reads the sets just written, decrypts them, and
+// checks every file against its manifest hash. It reuses the unlocked master
+// key, so it needs no additional password prompt or YubiKey touch. Failures
+// are logged as warnings and the backup files are left in place; the number of
+// sets that failed is returned so the caller can flag the run and skip
+// retention.
+func verifyBackupAfterWrite(backupDir string, entries []util.BackupEntry, master []byte, log *util.Logger) int {
 	log.Info("Verifying backup integrity")
 
 	failures := 0
-	for _, directoryName := range directories {
-		entry := util.BackupEntry{DirectoryName: directoryName, Date: date, ID: id}
-		parts, err := catalog.CollectParts(backupDir, entry)
+	for _, entry := range entries {
+		set, err := catalog.OpenSet(backupDir, entry)
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", directoryName, err, verifyKeptRemedy)
+			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			continue
 		}
-		if len(parts) == 0 {
-			log.Warn("  Post-backup verification failed for [%s]: no part files found in the backup directory.%s", directoryName, verifyKeptRemedy)
-			failures++
-			continue
-		}
-
-		err = operation.RunDecryptPipeline(parts, password, log, directoryName, "verified", "Archive validation", util.ValidateTar, nil)
+		m, err := operation.ProcessRestorePoint(set, master, "", true, log)
+		parts := len(set.Paths)
+		set.Close() //nolint:errcheck
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", directoryName, err, verifyKeptRemedy)
+			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			continue
 		}
-		log.Info("  Verified: %d part file(s) - [%s] successfully verified", len(parts), directoryName)
+		log.Info("  Verified: %d part file(s), %d file(s) - [%s] successfully verified", parts, m.Footer.Files, entry.DirectoryName)
 	}
 
 	if failures == 0 {
@@ -308,45 +298,47 @@ func verifyBackupAfterWrite(backupDir, date string, id util.BackupID, directorie
 	return failures
 }
 
-// backupDirectory streams directory → TAR → encrypt → split-writer.
+// backupDirectory writes one full backup set of srcDir into workingDir.
 func backupDirectory(
-	srcDir, directoryName, backupDir, date string,
-	id util.BackupID,
-	password []byte,
-	params security.Argon2Params,
+	srcDir string,
+	entry util.BackupEntry,
+	runID util.BackupID,
+	workingDir, backupDir string,
+	keySet *container.KeySet,
+	master []byte,
 	cfg *util.Config,
 	syncParts bool,
 	log *util.Logger,
-) (int, error) {
-	sw, bw := newSplitOutput(backupDir, directoryName, date, id, cfg.SplitSizeMB, syncParts)
-	sw.SetPartOpenedHook(func(seq int, path string) {
-		log.Info("  Part %03d: %s", seq, filepath.Base(path))
-	})
-	pr, pw := io.Pipe()
-	counters := &backupCounters{}
-
+) error {
+	var inBytes, outBytes, outWriteCalls atomic.Int64
 	var progressLog *util.Logger
 	if cfg.IODiagnostics {
 		progressLog = log
 	}
-	stopProgress := operation.StartProgressTracking(progressLog, directoryName, "encrypted", &counters.inBytes, &counters.outBytes, &counters.outWriteCalls)
+	stopProgress := operation.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
-	tarErrCh := startTarProducer(log, srcDir, backupDir, pw)
-	encErr := runEncryptStage(log, bw, pr, password, params, counters)
-	tarErr := <-tarErrCh
-	closeErr := closeSplitOutput(bw, sw)
+	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
+	res, err := setio.WriteFullSet(setio.FullSetParams{
+		SourceDir:      srcDir,
+		ExcludeDirs:    []string{backupDir, workingDir},
+		OutputDir:      workingDir,
+		Entry:          entry,
+		RunID:          runID,
+		KeySet:         *keySet,
+		Master:         master,
+		SplitSizeBytes: cfg.SplitSizeMB * 1024 * 1024,
+		SyncParts:      syncParts,
+		OnPartOpened: func(seq int, path string) {
+			log.Info("  Part %03d: %s", seq, filepath.Base(path))
+		},
+		Counters: setio.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
+	})
+	if err != nil {
+		return err
+	}
 
-	if encErr != nil {
-		return 0, fmt.Errorf("Encryption failed: %w. Remedy: Check password/YubiKey and retry.", encErr)
-	}
-	if closeErr != nil {
-		return 0, closeErr
-	}
-	if tarErr != nil {
-		return 0, fmt.Errorf("Creating TAR failed: %w. Remedy: Check source-directory access and file permissions.", tarErr)
-	}
-
-	logPartSummary(sw, directoryName, cfg.IODiagnostics, counters, log)
-	return len(sw.Paths()), nil
+	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
+	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, util.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
+	return nil
 }

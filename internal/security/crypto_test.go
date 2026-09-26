@@ -13,383 +13,314 @@ type failReader struct{ err error }
 
 func (r *failReader) Read([]byte) (int, error) { return 0, r.err }
 
-func TestDecryptRejectsWrongStoredChunkSize(t *testing.T) {
-	t.Parallel()
+type failWriter struct{ err error }
 
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(magic)
-	if err := binary.Write(buf, binary.BigEndian, uint32(saltLen)); err != nil {
-		t.Fatalf("failed to write salt length: %v", err)
-	}
-	buf.Write(bytes.Repeat([]byte{1}, saltLen))
-	if err := binary.Write(buf, binary.BigEndian, uint32(chunkSize+1)); err != nil {
-		t.Fatalf("failed to write wrong chunk size: %v", err)
-	}
+func (w *failWriter) Write([]byte) (int, error) { return 0, w.err }
 
-	err := Decrypt(io.Discard, bytes.NewReader(buf.Bytes()), []byte("pw"))
-	if err == nil {
-		t.Fatal("expected error for wrong stored chunk size, got nil")
+var testParams = Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}
+
+func testKey(t *testing.T) []byte {
+	t.Helper()
+	key, err := RandomBytes(KeyLen)
+	if err != nil {
+		t.Fatalf("RandomBytes: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Unsupported chunk size") {
-		t.Fatalf("expected unsupported-chunk-size error, got: %v", err)
-	}
+	return key
 }
 
-// writeArgonHeader writes a valid v1 header with the given Argon2 parameters.
-// Threads is taken as a uint32 so out-of-range values (e.g. 256, 0) can be
-// written to exercise header validation.
-func writeArgonHeader(t *testing.T, time, memoryKB, threads uint32) []byte {
+func encryptToBytes(t *testing.T, plaintext, key, aad []byte) []byte {
 	t.Helper()
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(magic)
-	if err := binary.Write(buf, binary.BigEndian, uint32(saltLen)); err != nil {
-		t.Fatalf("failed to write salt length: %v", err)
-	}
-	buf.Write(bytes.Repeat([]byte{1}, saltLen))
-	for _, v := range []uint32{uint32(chunkSize), time, memoryKB, threads} {
-		if err := binary.Write(buf, binary.BigEndian, v); err != nil {
-			t.Fatalf("failed to write header value %d: %v", v, err)
-		}
+	var buf bytes.Buffer
+	if err := EncryptStream(&buf, bytes.NewReader(plaintext), key, aad); err != nil {
+		t.Fatalf("EncryptStream: %v", err)
 	}
 	return buf.Bytes()
 }
 
-// TestDecryptRejectsOutOfBoundsArgon2Params ensures a corrupted or hostile
-// header yields a clean "invalid" error rather than a panic (parallelism 0 via
-// uint8 truncation) or an OOM (multi-terabyte memory request) inside argon2.
-func TestDecryptRejectsOutOfBoundsArgon2Params(t *testing.T) {
+func TestStreamRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name           string
-		time, mem, thr uint32
-		want           string
-	}{
-		{"time too low", MinArgonTime - 1, MinArgonMemoryKB, MinArgonThreads, "Invalid Argon2 time"},
-		{"time too high", MaxArgonTime + 1, MinArgonMemoryKB, MinArgonThreads, "Invalid Argon2 time"},
-		{"memory too low", MinArgonTime, MinArgonMemoryKB - 1, MinArgonThreads, "Invalid Argon2 memory"},
-		{"memory too high", MinArgonTime, MaxArgonMemoryKB + 1, MinArgonThreads, "Invalid Argon2 memory"},
-		{"memory max uint32 (OOM guard)", MinArgonTime, 0xFFFFFFFF, MinArgonThreads, "Invalid Argon2 memory"},
-		{"threads zero (panic guard)", MinArgonTime, MinArgonMemoryKB, 0, "Invalid Argon2 threads"},
-		{"threads 256 truncates to 0 (panic guard)", MinArgonTime, MinArgonMemoryKB, 256, "Invalid Argon2 threads"},
-	}
+	key := testKey(t)
+	aad := []byte("header-hash|section")
+	for _, size := range []int{0, 1, ChunkSize - 1, ChunkSize, ChunkSize + 1, 2*ChunkSize + 17} {
+		plaintext := bytes.Repeat([]byte{0xAB}, size)
+		ciphertext := encryptToBytes(t, plaintext, key, aad)
 
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			header := writeArgonHeader(t, tc.time, tc.mem, tc.thr)
-			err := Decrypt(io.Discard, bytes.NewReader(header), []byte("pw"))
-			if err == nil {
-				t.Fatal("expected error for out-of-bounds Argon2 params, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected %q error, got: %v", tc.want, err)
-			}
-		})
+		var out bytes.Buffer
+		if err := DecryptStream(&out, bytes.NewReader(ciphertext), key, aad); err != nil {
+			t.Fatalf("size %d: DecryptStream: %v", size, err)
+		}
+		if !bytes.Equal(out.Bytes(), plaintext) {
+			t.Fatalf("size %d: round trip mismatch", size)
+		}
 	}
 }
 
-func TestDecryptReturnsWriteError(t *testing.T) {
+func TestStreamNonFinalChunksHaveFixedSize(t *testing.T) {
 	t.Parallel()
 
-	password := []byte("pw")
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello world")), password, Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}); err != nil {
-		t.Fatalf("Encrypt failed: %v", err)
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, bytes.Repeat([]byte{1}, 2*ChunkSize+5), key, nil)
+	lastChunk := chunkPrefixLen + 5 + gcmTagLen
+	if want := 2*FullEncryptedChunkSize + lastChunk; len(ciphertext) != want {
+		t.Fatalf("ciphertext length = %d, want %d", len(ciphertext), want)
 	}
+}
 
+func TestDecryptStreamRejectsWrongKey(t *testing.T) {
+	t.Parallel()
+
+	ciphertext := encryptToBytes(t, []byte("secret"), testKey(t), nil)
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), testKey(t), nil)
+	if !errors.Is(err, ErrCorrupted) {
+		t.Fatalf("expected ErrCorrupted, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsDifferentAADPrefix(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("secret"), key, []byte("section-1"))
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, []byte("section-2"))
+	if !errors.Is(err, ErrCorrupted) {
+		t.Fatalf("expected ErrCorrupted for swapped section, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsFlippedByte(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("secret payload"), key, nil)
+	ciphertext[len(ciphertext)-1] ^= 0x01
+	if err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, nil); !errors.Is(err, ErrCorrupted) {
+		t.Fatalf("expected ErrCorrupted, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsTruncatedChunk(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("secret payload"), key, nil)
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext[:len(ciphertext)-3]), key, nil)
+	if err == nil || !strings.Contains(err.Error(), "Failed to read chunk data") {
+		t.Fatalf("expected truncated-chunk error, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsMissingFinalChunk(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, bytes.Repeat([]byte{2}, ChunkSize+10), key, nil)
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext[:FullEncryptedChunkSize]), key, nil)
+	if err == nil || !strings.Contains(err.Error(), "Missing final encrypted chunk marker") {
+		t.Fatalf("expected missing-final-chunk error, got %v", err)
+	}
+}
+
+func TestDecryptStreamAuthenticatesFinalFlag(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("tail"), key, nil)
+	ciphertext[0] = 0 // clear the final flag
+	if err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, nil); !errors.Is(err, ErrCorrupted) {
+		t.Fatalf("expected ErrCorrupted after clearing final flag, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsTrailingData(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := append(encryptToBytes(t, []byte("data"), key, nil), 0x00)
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, nil)
+	if err == nil || !strings.Contains(err.Error(), "Unexpected data after final encrypted chunk") {
+		t.Fatalf("expected trailing-data error, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsInvalidFlags(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("data"), key, nil)
+	ciphertext[0] = 7
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, nil)
+	if err == nil || !strings.Contains(err.Error(), "Invalid encrypted chunk flags") {
+		t.Fatalf("expected invalid-flags error, got %v", err)
+	}
+}
+
+func TestDecryptStreamRejectsOversizedChunkLength(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("data"), key, nil)
+	binary.BigEndian.PutUint32(ciphertext[1:5], maxEncryptedChunkSize+1)
+	err := DecryptStream(io.Discard, bytes.NewReader(ciphertext), key, nil)
+	if err == nil || !strings.Contains(err.Error(), "Invalid encrypted chunk length") {
+		t.Fatalf("expected invalid-length error, got %v", err)
+	}
+}
+
+func TestDecryptStreamReturnsWriteError(t *testing.T) {
+	t.Parallel()
+
+	key := testKey(t)
+	ciphertext := encryptToBytes(t, []byte("data"), key, nil)
 	writeErr := errors.New("disk full")
-	err := Decrypt(&failWriter{err: writeErr}, bytes.NewReader(encrypted.Bytes()), password)
-	if err == nil {
-		t.Fatal("expected write error, got nil")
-	}
-	if !strings.Contains(err.Error(), "Failed to write decrypted data") {
-		t.Fatalf("expected write-error message, got: %v", err)
+	err := DecryptStream(&failWriter{err: writeErr}, bytes.NewReader(ciphertext), key, nil)
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("expected write error, got %v", err)
 	}
 }
 
-type failWriter struct{ err error }
+func TestEncryptStreamReturnsReadError(t *testing.T) {
+	t.Parallel()
 
-func (fw *failWriter) Write([]byte) (int, error) { return 0, fw.err }
-
-func TestEncryptDecryptRoundTrip(t *testing.T) {
-	password := []byte("super-secret")
-	plaintext := []byte("RestoreSafe round-trip payload")
-
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader(plaintext), password, DefaultArgon2Params); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
-
-	var decrypted bytes.Buffer
-	if err := Decrypt(&decrypted, bytes.NewReader(encrypted.Bytes()), password); err != nil {
-		t.Fatalf("Decrypt returned error: %v", err)
-	}
-
-	if !bytes.Equal(decrypted.Bytes(), plaintext) {
-		t.Fatalf("decrypted payload mismatch: expected %q, got %q", plaintext, decrypted.Bytes())
+	readErr := errors.New("read failed")
+	err := EncryptStream(io.Discard, &failReader{err: readErr}, testKey(t), nil)
+	if !errors.Is(err, readErr) {
+		t.Fatalf("expected read error, got %v", err)
 	}
 }
 
-func TestEncryptDecryptEmptyPayload(t *testing.T) {
-	password := []byte("super-secret")
+func TestEncryptStreamReturnsWriteError(t *testing.T) {
+	t.Parallel()
 
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader(nil), password, Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
-
-	var decrypted bytes.Buffer
-	if err := Decrypt(&decrypted, bytes.NewReader(encrypted.Bytes()), password); err != nil {
-		t.Fatalf("Decrypt returned error: %v", err)
-	}
-
-	if len(decrypted.Bytes()) != 0 {
-		t.Fatalf("expected empty payload, got %q", decrypted.Bytes())
+	writeErr := errors.New("write failed")
+	err := EncryptStream(&failWriter{err: writeErr}, bytes.NewReader([]byte("x")), testKey(t), nil)
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("expected write error, got %v", err)
 	}
 }
 
-func TestEncryptDecryptCustomArgon2Params(t *testing.T) {
-	password := []byte("custom-params-pw")
-	plaintext := []byte("testing custom argon2 parameters")
+func TestStreamRejectsWrongKeyLength(t *testing.T) {
+	t.Parallel()
 
-	params := Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}
-
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader(plaintext), password, params); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
+	if err := EncryptStream(io.Discard, bytes.NewReader(nil), []byte("short"), nil); err == nil {
+		t.Fatal("expected error for short key")
 	}
-
-	var decrypted bytes.Buffer
-	if err := Decrypt(&decrypted, bytes.NewReader(encrypted.Bytes()), password); err != nil {
-		t.Fatalf("Decrypt returned error: %v", err)
-	}
-
-	if !bytes.Equal(decrypted.Bytes(), plaintext) {
-		t.Fatalf("decrypted payload mismatch: expected %q, got %q", plaintext, decrypted.Bytes())
+	if err := DecryptStream(io.Discard, bytes.NewReader(nil), []byte("short"), nil); err == nil {
+		t.Fatal("expected error for short key")
 	}
 }
 
-func TestDecryptWrongPassword(t *testing.T) {
-	password := []byte("correct-password")
-	plaintext := []byte("payload")
+func TestSealOpenKeyRoundTrip(t *testing.T) {
+	t.Parallel()
 
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader(plaintext), password, DefaultArgon2Params); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
+	kek := testKey(t)
+	nonce, _ := RandomBytes(NonceLen)
+	master := testKey(t)
+	sealed, err := SealKey(kek, nonce, master, []byte("aad"))
+	if err != nil {
+		t.Fatalf("SealKey: %v", err)
 	}
-
-	err := Decrypt(io.Discard, bytes.NewReader(encrypted.Bytes()), []byte("wrong-password"))
-	if !errors.Is(err, ErrWrongPassword) {
-		t.Fatalf("expected ErrWrongPassword, got: %v", err)
+	opened, err := OpenKey(kek, nonce, sealed, []byte("aad"))
+	if err != nil {
+		t.Fatalf("OpenKey: %v", err)
+	}
+	if !bytes.Equal(opened, master) {
+		t.Fatal("opened key differs from sealed key")
 	}
 }
 
-func TestDecryptRejectsInvalidMagic(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString("NOTRSBK!")
-	if err := binary.Write(buf, binary.BigEndian, uint32(saltLen)); err != nil {
-		t.Fatalf("failed to write salt length: %v", err)
-	}
-	buf.Write(bytes.Repeat([]byte{1}, saltLen))
-	if err := binary.Write(buf, binary.BigEndian, uint32(chunkSize)); err != nil {
-		t.Fatalf("failed to write chunk size: %v", err)
-	}
+func TestOpenKeyRejectsWrongKEKAndAAD(t *testing.T) {
+	t.Parallel()
 
-	err := Decrypt(io.Discard, bytes.NewReader(buf.Bytes()), []byte("pw"))
-	if err == nil {
-		t.Fatal("expected invalid format error, got nil")
+	kek := testKey(t)
+	nonce, _ := RandomBytes(NonceLen)
+	sealed, err := SealKey(kek, nonce, testKey(t), []byte("aad"))
+	if err != nil {
+		t.Fatalf("SealKey: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Invalid file format") {
-		t.Fatalf("unexpected error: %v", err)
+	if _, err := OpenKey(testKey(t), nonce, sealed, []byte("aad")); !errors.Is(err, ErrWrongPassword) {
+		t.Fatalf("wrong KEK: expected ErrWrongPassword, got %v", err)
+	}
+	if _, err := OpenKey(kek, nonce, sealed, []byte("other")); !errors.Is(err, ErrWrongPassword) {
+		t.Fatalf("wrong AAD: expected ErrWrongPassword, got %v", err)
 	}
 }
 
-func TestDecryptRejectsWrongFormatVersion(t *testing.T) {
-	// Build a header with the correct prefix but an unsupported version byte.
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(magicPrefix)
-	buf.WriteByte(2) // unsupported format version
-	buf.WriteByte(0) // reserved
+func TestDeriveKEKIsDeterministicAndSaltDependent(t *testing.T) {
+	t.Parallel()
 
-	err := Decrypt(io.Discard, bytes.NewReader(buf.Bytes()), []byte("pw"))
-	if err == nil {
-		t.Fatal("expected version mismatch error, got nil")
+	salt1 := bytes.Repeat([]byte{1}, SaltLen)
+	salt2 := bytes.Repeat([]byte{2}, SaltLen)
+	a, err := DeriveKEK([]byte("pw"), salt1, testParams)
+	if err != nil {
+		t.Fatalf("DeriveKEK: %v", err)
 	}
-	if !strings.Contains(err.Error(), "Incompatible backup format") {
-		t.Fatalf("expected version mismatch error, got: %v", err)
+	b, _ := DeriveKEK([]byte("pw"), salt1, testParams)
+	c, _ := DeriveKEK([]byte("pw"), salt2, testParams)
+	if !bytes.Equal(a, b) {
+		t.Fatal("DeriveKEK is not deterministic")
+	}
+	if bytes.Equal(a, c) {
+		t.Fatal("DeriveKEK ignores the salt")
 	}
 }
 
-func TestDecryptRejectsInvalidSaltLength(t *testing.T) {
-	buf := bytes.NewBuffer(nil)
-	buf.WriteString(magic)
-	if err := binary.Write(buf, binary.BigEndian, uint32(1)); err != nil {
-		t.Fatalf("failed to write salt length: %v", err)
-	}
-	buf.WriteByte(0x42)
-	if err := binary.Write(buf, binary.BigEndian, uint32(chunkSize)); err != nil {
-		t.Fatalf("failed to write chunk size: %v", err)
-	}
+func TestDeriveKEKRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 
-	err := Decrypt(io.Discard, bytes.NewReader(buf.Bytes()), []byte("pw"))
-	if err == nil {
-		t.Fatal("expected invalid salt length error, got nil")
+	salt := bytes.Repeat([]byte{1}, SaltLen)
+	cases := []struct {
+		name   string
+		salt   []byte
+		params Argon2Params
+		want   string
+	}{
+		{"short salt", salt[:10], testParams, "salt length"},
+		{"time too low", salt, Argon2Params{Time: 1, MemoryKB: MinArgonMemoryKB, Threads: 1}, "Argon2 time"},
+		{"memory too high", salt, Argon2Params{Time: 2, MemoryKB: MaxArgonMemoryKB + 1, Threads: 1}, "Argon2 memory"},
+		{"zero threads", salt, Argon2Params{Time: 2, MemoryKB: MinArgonMemoryKB, Threads: 0}, "Argon2 threads"},
 	}
-	if !strings.Contains(err.Error(), "Invalid salt length") {
-		t.Fatalf("unexpected error: %v", err)
+	for _, tc := range cases {
+		if _, err := DeriveKEK([]byte("pw"), tc.salt, tc.params); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: expected error containing %q, got %v", tc.name, tc.want, err)
+		}
 	}
 }
 
-func TestDecryptRejectsTruncatedChunk(t *testing.T) {
-	password := []byte("pw")
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello")), password, DefaultArgon2Params); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
+func TestValidateArgon2ParamsRejectsThreadsBeforeTruncation(t *testing.T) {
+	t.Parallel()
 
-	truncated := encrypted.Bytes()
-	truncated = truncated[:len(truncated)-1]
-
-	err := Decrypt(io.Discard, bytes.NewReader(truncated), password)
-	if err == nil {
-		t.Fatal("expected error for truncated chunk, got nil")
-	}
-	if !strings.Contains(err.Error(), "Failed to read chunk data") {
-		t.Fatalf("unexpected error: %v", err)
+	// 256 would truncate to 0 as uint8; it must be rejected as a raw value.
+	if err := ValidateArgon2Params(2, MinArgonMemoryKB, 256, "in test", "Remedy: none."); err == nil {
+		t.Fatal("expected threads=256 to be rejected")
 	}
 }
 
-func TestDecryptRejectsTruncatedWholeFinalChunk(t *testing.T) {
-	password := []byte("pw")
-	plaintext := bytes.Repeat([]byte("x"), chunkSize+1)
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader(plaintext), password, Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
+func TestDeriveSubkeySeparatesInfoAndSalt(t *testing.T) {
+	t.Parallel()
+
+	master := testKey(t)
+	a, err := DeriveSubkey(master, []byte("salt"), "data")
+	if err != nil {
+		t.Fatalf("DeriveSubkey: %v", err)
 	}
-
-	data := encrypted.Bytes()
-	headerLen := len(magic) + 4 + saltLen + 4 + 4 + 4 + 4
-	firstChunkLen := int(binary.BigEndian.Uint32(data[headerLen+1 : headerLen+5]))
-	truncatedLen := headerLen + 1 + 4 + firstChunkLen
-
-	err := Decrypt(io.Discard, bytes.NewReader(data[:truncatedLen]), password)
-	if err == nil {
-		t.Fatal("expected error for missing final chunk marker, got nil")
+	b, _ := DeriveSubkey(master, []byte("salt"), "manifest")
+	c, _ := DeriveSubkey(master, []byte("other"), "data")
+	if bytes.Equal(a, b) || bytes.Equal(a, c) {
+		t.Fatal("subkeys must differ by info and salt")
 	}
-	if !strings.Contains(err.Error(), "Missing final encrypted chunk marker") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestDecryptAuthenticatesFinalChunkFlag(t *testing.T) {
-	password := []byte("pw")
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello")), password, Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
-
-	data := encrypted.Bytes()
-	headerLen := len(magic) + 4 + saltLen + 4 + 4 + 4 + 4
-	data[headerLen] = 0
-
-	err := Decrypt(io.Discard, bytes.NewReader(data), password)
-	if !errors.Is(err, ErrWrongPassword) {
-		t.Fatalf("expected ErrWrongPassword for tampered final flag, got: %v", err)
-	}
-}
-
-func TestDecryptRejectsOversizedChunkLength(t *testing.T) {
-	password := []byte("pw")
-	var encrypted bytes.Buffer
-	if err := Encrypt(&encrypted, bytes.NewReader([]byte("hello")), password, DefaultArgon2Params); err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
-
-	data := encrypted.Bytes()
-	// v1 header: 8 (magic) + 4 (saltLen) + 32 (salt) + 4 (chunkSize) + 4 (time) + 4 (memKB) + 4 (threads)
-	headerLen := len(magic) + 4 + saltLen + 4 + 4 + 4 + 4
-	binary.BigEndian.PutUint32(data[headerLen+1:headerLen+5], uint32(maxEncryptedChunkSize+1))
-
-	err := Decrypt(io.Discard, bytes.NewReader(data), password)
-	if err == nil {
-		t.Fatal("expected oversized chunk length error, got nil")
-	}
-	if !strings.Contains(err.Error(), "Invalid encrypted chunk length") {
-		t.Fatalf("unexpected error: %v", err)
+	if _, err := DeriveSubkey([]byte("short"), nil, "data"); err == nil {
+		t.Fatal("expected error for short master key")
 	}
 }
 
 func TestChunkNonceDeterministic(t *testing.T) {
-	nonceA := chunkNonce(1)
-	nonceB := chunkNonce(1)
-	nonceC := chunkNonce(2)
-
-	if !bytes.Equal(nonceA, nonceB) {
-		t.Fatal("expected same nonce for same index")
-	}
-	if bytes.Equal(nonceA, nonceC) {
-		t.Fatal("expected different nonce for different indexes")
-	}
-	if len(nonceA) != nonceLen {
-		t.Fatalf("expected nonce length %d, got %d", nonceLen, len(nonceA))
-	}
-}
-
-func TestEncryptFailsWhenWriterFailsOnHeader(t *testing.T) {
-	t.Parallel()
-	params := Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}
-	err := Encrypt(&failWriter{err: errors.New("disk full")}, bytes.NewReader([]byte("hello")), []byte("pw"), params)
-	if err == nil {
-		t.Fatal("expected error for failing writer, got nil")
-	}
-	if !strings.Contains(err.Error(), "Failed to write magic") {
-		t.Fatalf("expected magic-write failure, got: %v", err)
-	}
-}
-
-// TestEncryptRejectsOutOfBoundsArgon2Params ensures invalid parameters from an
-// internal caller or test are rejected before reaching argon2.IDKey, so they
-// cannot trigger an OOM (multi-terabyte memory request) or a panic.
-func TestEncryptRejectsOutOfBoundsArgon2Params(t *testing.T) {
 	t.Parallel()
 
-	cases := []struct {
-		name   string
-		params Argon2Params
-		want   string
-	}{
-		{"time too low", Argon2Params{Time: MinArgonTime - 1, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}, "Invalid Argon2 time"},
-		{"time too high", Argon2Params{Time: MaxArgonTime + 1, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}, "Invalid Argon2 time"},
-		{"memory too low", Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB - 1, Threads: MinArgonThreads}, "Invalid Argon2 memory"},
-		{"memory too high", Argon2Params{Time: MinArgonTime, MemoryKB: MaxArgonMemoryKB + 1, Threads: MinArgonThreads}, "Invalid Argon2 memory"},
-		{"threads zero", Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: 0}, "Invalid Argon2 threads"},
+	if !bytes.Equal(chunkNonce(7), chunkNonce(7)) {
+		t.Fatal("chunkNonce is not deterministic")
 	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			err := Encrypt(io.Discard, bytes.NewReader([]byte("payload")), []byte("pw"), tc.params)
-			if err == nil {
-				t.Fatal("expected error for out-of-bounds Argon2 params, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected %q error, got: %v", tc.want, err)
-			}
-		})
-	}
-}
-
-func TestEncryptFailsWhenReaderFails(t *testing.T) {
-	t.Parallel()
-	params := Argon2Params{Time: MinArgonTime, MemoryKB: MinArgonMemoryKB, Threads: MinArgonThreads}
-	err := Encrypt(&bytes.Buffer{}, &failReader{err: errors.New("read error")}, []byte("pw"), params)
-	if err == nil {
-		t.Fatal("expected error for failing reader, got nil")
-	}
-	if !strings.Contains(err.Error(), "Failed to read plaintext") {
-		t.Fatalf("expected read-plaintext failure, got: %v", err)
+	if bytes.Equal(chunkNonce(7), chunkNonce(8)) {
+		t.Fatal("chunkNonce must differ per index")
 	}
 }

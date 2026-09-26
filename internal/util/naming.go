@@ -1,11 +1,14 @@
 // Package naming provides helpers for generating and parsing backup file names.
 //
-// Naming scheme:
+// Naming scheme (RestoreSafe 2):
 //
-//	[SourceDirectoryName]_YYYY-MM-DD_ABC123-{Seq}.enc
-//	[SourceDirectoryName]_YYYY-MM-DD_ABC123.challenge  (YubiKey challenge file)
+//	[SourceDirectoryName]_CHAINID_YYYY-MM-DD_FULL-{Part}.enc      full backup
+//	[SourceDirectoryName]_CHAINID_YYYY-MM-DD_DIFF{NNN}-{Part}.enc differential NNN of the chain
+//	YYYY-MM-DD_RUNID.log                                          log of one backup run
 //
-// The backup ID (ABC123) is a random 6-character string drawn from [A-Z0-9].
+// The chain ID is the ID of the chain's full backup, so all files of a chain
+// share it and sort together. IDs are random 6-character strings drawn from
+// [A-Z0-9]. Parts are written as "<name>.tmp" and renamed once complete.
 package util
 
 import (
@@ -14,6 +17,7 @@ import (
 	"math/big"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,7 +35,13 @@ const (
 // rejected during preflight to prevent silent, unrecoverable data loss.
 const MaxPartSequence = 999
 
-// BackupID is a random 6-character identifier for a single backup run.
+// MaxDiffNumber is the highest differential number within a chain.
+const MaxDiffNumber = 999
+
+// TempSuffix is appended to part files while a backup set is being written.
+const TempSuffix = ".tmp"
+
+// BackupID is a random 6-character identifier of a backup run or chain.
 type BackupID string
 
 // NewBackupID generates a cryptographically random 6-character backup ID.
@@ -55,73 +65,121 @@ func DateString() string {
 	return time.Now().Format("2006-01-02")
 }
 
+// BackupEntry identifies one backup set: all parts of one source directory
+// written in one run.
+type BackupEntry struct {
+	DirectoryName string
+	ChainID       BackupID
+	Date          string
+	// DiffNumber is 0 for a full backup and 1-999 for a differential.
+	DiffNumber int
+}
+
+// IsDiff reports whether the entry is a differential backup.
+func (e BackupEntry) IsDiff() bool { return e.DiffNumber > 0 }
+
+// TypeLabel returns "FULL" or "DIFFnnn" as used in file names.
+func (e BackupEntry) TypeLabel() string {
+	if e.IsDiff() {
+		return fmt.Sprintf("DIFF%03d", e.DiffNumber)
+	}
+	return "FULL"
+}
+
+// String returns the display name without part/extension, e.g.
+// "Documents_ABC123_2026-09-01_FULL".
+func (e BackupEntry) String() string {
+	return fmt.Sprintf("%s_%s_%s_%s", e.DirectoryName, string(e.ChainID), e.Date, e.TypeLabel())
+}
+
+// ChainKey identifies the chain of the entry (directory + chain ID).
+func (e BackupEntry) ChainKey() string {
+	return e.DirectoryName + "|" + string(e.ChainID)
+}
+
 // PartFileName returns the path for a backup part file.
-//
-//	{dir}/[directoryName]_YYYY-MM-DD_{id}-{seq:03d}.enc
-func PartFileName(dir, directoryName, date string, id BackupID, seq int) string {
-	name := fmt.Sprintf("[%s]_%s_%s-%03d.enc", directoryName, date, string(id), seq)
+func PartFileName(dir string, e BackupEntry, seq int) string {
+	name := fmt.Sprintf("[%s]_%s_%s_%s-%03d.enc", e.DirectoryName, string(e.ChainID), e.Date, e.TypeLabel(), seq)
 	return filepath.Join(dir, name)
 }
 
 // LogFileName returns the path for the log file of a backup run.
 //
-//	{dir}/YYYY-MM-DD_{id}.log
-func LogFileName(dir, date string, id BackupID) string {
-	name := fmt.Sprintf("%s_%s.log", date, string(id))
+//	{dir}/YYYY-MM-DD_{runID}.log
+func LogFileName(dir, date string, runID BackupID) string {
+	name := fmt.Sprintf("%s_%s.log", date, string(runID))
 	return filepath.Join(dir, name)
 }
 
-// ChallengeFileName returns the path for the YubiKey challenge file.
-//
-//	{dir}/[directoryName]_YYYY-MM-DD_{id}.challenge
-func ChallengeFileName(dir, directoryName, date string, id BackupID) string {
-	name := fmt.Sprintf("[%s]_%s_%s.challenge", directoryName, date, string(id))
-	return filepath.Join(dir, name)
-}
-
-// BackupEntry represents one logical backup (all parts of one source directory).
-type BackupEntry struct {
-	DirectoryName string
-	Date       string
-	ID         BackupID
-}
-
-// String returns the display name without part/extension.
-func (e BackupEntry) String() string {
-	return fmt.Sprintf("%s_%s_%s", e.DirectoryName, e.Date, string(e.ID))
-}
-
-// RunKey returns a unique key for the backup run (date + ID).
-// Used for deduplication and map lookups across catalog, retention, and health checks.
-func (e BackupEntry) RunKey() string {
-	return e.Date + "|" + string(e.ID)
-}
-
-// partFilePattern matches:  [name]_{YYYY-MM-DD}_{ID}-{seq}.enc
-// Named capture groups:
-//
-//	1 (.+?)              - Directory name (non-greedy)
-//	2 (\d{4}-\d{2}-\d{2}) - Date in YYYY-MM-DD format
-//	3 ([A-Z0-9]{6})      - 6-character backup ID
-//	4 (\d{3})            - 3-digit sequence number (001, 002, ...)
+// partFilePattern matches [name]_{ID}_{YYYY-MM-DD}_{FULL|DIFFnnn}-{seq}.enc
+// with an optional ".tmp" suffix for parts still being written.
 var partFilePattern = regexp.MustCompile(
-	`^\[(.+?)\]_(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})-(\d{3})\.enc$`,
+	`^\[(.+?)\]_([A-Z0-9]{6})_(\d{4}-\d{2}-\d{2})_(FULL|DIFF(\d{3}))-(\d{3})\.enc(\.tmp)?$`,
 )
 
-// ParsePartFileName tries to parse a .enc filename.
+// ParsePartFileName parses a complete (non-temporary) part file name.
 // Returns (entry, seq, true) on success.
 func ParsePartFileName(basename string) (BackupEntry, int, bool) {
-	m := partFilePattern.FindStringSubmatch(basename)
-	if m == nil {
+	entry, seq, temp, ok := parsePartFileName(basename)
+	if !ok || temp {
 		return BackupEntry{}, 0, false
 	}
-	var seq int
-	fmt.Sscanf(m[4], "%d", &seq)
+	return entry, seq, true
+}
+
+// ParseTempPartFileName parses the name of a part that is still being written
+// (or was left behind by an interrupted backup).
+func ParseTempPartFileName(basename string) (BackupEntry, int, bool) {
+	entry, seq, temp, ok := parsePartFileName(basename)
+	if !ok || !temp {
+		return BackupEntry{}, 0, false
+	}
+	return entry, seq, true
+}
+
+func parsePartFileName(basename string) (BackupEntry, int, bool, bool) {
+	m := partFilePattern.FindStringSubmatch(basename)
+	if m == nil {
+		return BackupEntry{}, 0, false, false
+	}
+	seq, _ := strconv.Atoi(m[6])
+	if seq < 1 {
+		return BackupEntry{}, 0, false, false
+	}
+	diff := 0
+	if m[5] != "" {
+		diff, _ = strconv.Atoi(m[5])
+		if diff < 1 {
+			return BackupEntry{}, 0, false, false
+		}
+	}
 	return BackupEntry{
 		DirectoryName: m[1],
-		Date:       m[2],
-		ID:         BackupID(m[3]),
-	}, seq, true
+		ChainID:       BackupID(m[2]),
+		Date:          m[3],
+		DiffNumber:    diff,
+	}, seq, m[7] != "", true
+}
+
+// legacyFilePattern matches RestoreSafe 1.x part and challenge files.
+var legacyFilePattern = regexp.MustCompile(
+	`^\[(.+?)\]_(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})(-\d{3}\.enc|\.challenge)$`,
+)
+
+// IsLegacyBackupFileName reports whether basename is a RestoreSafe 1.x backup
+// file (part or challenge file). RestoreSafe 2 never modifies these files.
+func IsLegacyBackupFileName(basename string) bool {
+	return legacyFilePattern.MatchString(basename)
+}
+
+// LegacyLogFileName returns the base name of the log file belonging to a
+// RestoreSafe 1.x backup file, so retention can leave 1.x logs untouched.
+func LegacyLogFileName(basename string) (string, bool) {
+	m := legacyFilePattern.FindStringSubmatch(basename)
+	if m == nil {
+		return "", false
+	}
+	return m[2] + "_" + m[3] + ".log", true
 }
 
 // reservedWindowsNames are device names Windows refuses to use as a path
@@ -145,7 +203,7 @@ var reservedWindowsNames = map[string]struct{}{
 // explicitly turns those failures into a clear, early preflight error and makes
 // the invariant survive future refactors.
 func ValidateBackupEntryName(name string) error {
-	remedy := "Remedy: This backup's filename is malformed or unsafe; rename the .enc file(s) to a valid [name]_DATE_ID-SEQ.enc pattern."
+	remedy := "Remedy: This backup's filename is malformed or unsafe; rename the .enc file(s) to a valid [name]_ID_DATE_FULL-SEQ.enc pattern."
 
 	if name == "" {
 		return fmt.Errorf("Backup directory name is empty. %s", remedy)

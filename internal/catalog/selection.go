@@ -8,113 +8,75 @@ import (
 	"time"
 )
 
+// BackupRunSummary groups the complete backup sets written by one backup run.
 type BackupRunSummary struct {
-	Date       string
-	ID         util.BackupID
-	Entries    []util.BackupEntry
-	NewestTime time.Time
+	RunID   util.BackupID
+	Date    string
+	Entries []util.BackupEntry
+	Created time.Time
 }
 
-func BackupRunSummaries(backupDir string, index []util.BackupEntry) ([]BackupRunSummary, error) {
-	runsByKey := make(map[string]BackupRunSummary)
-	for _, entry := range index {
-		newestTime, err := NewestPartModTime(backupDir, entry)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to inspect backup sets: %w", err)
+// BackupRunSummaries groups complete sets by the run that wrote them, newest
+// run first. Incomplete sets are not restore points and are left out.
+func BackupRunSummaries(infos []SetInfo) []BackupRunSummary {
+	byRun := make(map[string]*BackupRunSummary)
+	for _, info := range infos {
+		if !info.Complete() {
+			continue
 		}
-
-		key := entry.RunKey()
-		run := runsByKey[key]
-		run.Date = entry.Date
-		run.ID = entry.ID
-		run.Entries = append(run.Entries, entry)
-		if newestTime.After(run.NewestTime) {
-			run.NewestTime = newestTime
+		key := info.Header.RunID
+		run := byRun[key]
+		if run == nil {
+			run = &BackupRunSummary{RunID: util.BackupID(info.Header.RunID), Date: info.Entry.Date}
+			byRun[key] = run
 		}
-		runsByKey[key] = run
+		run.Entries = append(run.Entries, info.Entry)
+		if c := info.Created(); c.After(run.Created) {
+			run.Created = c
+		}
 	}
 
-	if len(runsByKey) == 0 {
-		return nil, fmt.Errorf("No backups found. Remedy: Check whether .enc files are present in the backup directory.")
-	}
-
-	runs := make([]BackupRunSummary, 0, len(runsByKey))
-	for _, run := range runsByKey {
+	runs := make([]BackupRunSummary, 0, len(byRun))
+	for _, run := range byRun {
 		sort.Slice(run.Entries, func(i, j int) bool {
 			return run.Entries[i].DirectoryName < run.Entries[j].DirectoryName
 		})
-		runs = append(runs, run)
+		runs = append(runs, *run)
 	}
-
 	sort.Slice(runs, func(i, j int) bool {
-		if !runs[i].NewestTime.Equal(runs[j].NewestTime) {
-			return runs[i].NewestTime.After(runs[j].NewestTime)
+		if !runs[i].Created.Equal(runs[j].Created) {
+			return runs[i].Created.After(runs[j].Created)
 		}
-		if runs[i].Date != runs[j].Date {
-			return runs[i].Date > runs[j].Date
-		}
-		return string(runs[i].ID) > string(runs[j].ID)
+		return string(runs[i].RunID) > string(runs[j].RunID)
 	})
-
-	return runs, nil
+	return runs
 }
 
-func ResolveNewestBackupRunSelection(backupDir string, index []util.BackupEntry) ([]util.BackupEntry, string, error) {
-	runs, err := BackupRunSummaries(backupDir, index)
-	if err != nil {
-		return nil, "", fmt.Errorf("Failed to inspect newest backup set: %w", err)
-	}
-	if len(runs) == 0 {
-		return nil, "", fmt.Errorf("No backup sets found. Remedy: Ensure backup directory contains valid backup parts.")
-	}
-	run := runs[0]
-	return run.Entries, fmt.Sprintf("newest set %s/%s", run.Date, run.ID), nil
-}
+// ResolveSelection maps user input to backup sets: a run ID selects every set
+// written by that run; a full set name (e.g. Docs_ABC123_2026-09-01_FULL)
+// selects that set.
+func ResolveSelection(input string, runs []BackupRunSummary) ([]util.BackupEntry, error) {
+	input = strings.TrimSpace(input)
+	upper := strings.ToUpper(input)
 
-// ResolveSelection maps user input to one or more BackupEntry values.
-func ResolveSelection(input string, index []util.BackupEntry) ([]util.BackupEntry, error) {
-	input = strings.TrimSpace(strings.ToUpper(input))
-
-	if IsRawBackupID(input) {
-		matched, _, _, found := ResolveSelectionForIDNewestDate(input, index)
-		if found {
-			return matched, nil
+	if IsRawBackupID(upper) {
+		for _, run := range runs {
+			if string(run.RunID) == upper {
+				return run.Entries, nil
+			}
 		}
 	}
-
-	for _, e := range index {
-		if strings.EqualFold(e.String(), input) {
-			return []util.BackupEntry{e}, nil
+	for _, run := range runs {
+		for _, e := range run.Entries {
+			if strings.EqualFold(e.String(), input) {
+				return []util.BackupEntry{e}, nil
+			}
 		}
 	}
-
 	return nil, fmt.Errorf("Backup %q not found.", input)
 }
 
-func ResolveSelectionForIDNewestDate(id string, index []util.BackupEntry) ([]util.BackupEntry, string, []string, bool) {
-	matchedByDate := make(map[string][]util.BackupEntry)
-	for _, entry := range index {
-		if string(entry.ID) != id {
-			continue
-		}
-		matchedByDate[entry.Date] = append(matchedByDate[entry.Date], entry)
-	}
-	if len(matchedByDate) == 0 {
-		return nil, "", nil, false
-	}
-
-	allDates := make([]string, 0, len(matchedByDate))
-	for date := range matchedByDate {
-		allDates = append(allDates, date)
-	}
-	sort.Slice(allDates, func(i, j int) bool {
-		return allDates[i] > allDates[j]
-	})
-
-	newestDate := allDates[0]
-	return matchedByDate[newestDate], newestDate, allDates, true
-}
-
+// IsRawBackupID reports whether input has the form of a 6-character backup ID.
 func IsRawBackupID(input string) bool {
 	if len(input) != 6 {
 		return false
@@ -125,19 +87,4 @@ func IsRawBackupID(input string) bool {
 		}
 	}
 	return true
-}
-
-// SelectionHasDateWarning reports whether the given selection resolves to a
-// backup ID that spans multiple dates. In that case only the newest date's
-// entries are processed, which warrants a warning to the user.
-func SelectionHasDateWarning(selection string, index []util.BackupEntry) bool {
-	normalized := strings.ToUpper(strings.TrimSpace(selection))
-	if !IsRawBackupID(normalized) {
-		return false
-	}
-	_, _, allDates, found := ResolveSelectionForIDNewestDate(normalized, index)
-	if !found {
-		return false
-	}
-	return len(allDates) > 1
 }

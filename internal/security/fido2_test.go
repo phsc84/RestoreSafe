@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"unsafe"
@@ -410,38 +408,21 @@ func TestBuildClientData(t *testing.T) {
 	}
 }
 
-func TestParseChallengeFileReadsValidFile(t *testing.T) {
+func TestParseChallengeJSONReadsValidChallenge(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join(t.TempDir(), "run.challenge")
-	// Surrounding whitespace must be tolerated (ParseChallengeFile trims it).
-	if err := os.WriteFile(path, []byte("\n  "+makeValidChallengeJSON(t)+"  \n"), 0o600); err != nil {
-		t.Fatalf("failed to write challenge file: %v", err)
-	}
-
-	cd, err := ParseChallengeFile(path)
+	cd, err := ParseChallengeJSON(makeValidChallengeJSON(t))
 	if err != nil {
-		t.Fatalf("ParseChallengeFile returned error: %v", err)
+		t.Fatalf("ParseChallengeJSON returned error: %v", err)
 	}
 	if cd.Version != 1 {
 		t.Fatalf("expected version 1, got %d", cd.Version)
 	}
 }
 
-func TestParseChallengeFileMissingFile(t *testing.T) {
+func TestParseChallengeJSONRejectsInvalidContent(t *testing.T) {
 	t.Parallel()
-	if _, err := ParseChallengeFile(filepath.Join(t.TempDir(), "missing.challenge")); err == nil {
-		t.Fatal("expected error for missing challenge file")
-	}
-}
-
-func TestParseChallengeFileInvalidContent(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join(t.TempDir(), "bad.challenge")
-	if err := os.WriteFile(path, []byte("not-json"), 0o600); err != nil {
-		t.Fatalf("failed to write challenge file: %v", err)
-	}
-	if _, err := ParseChallengeFile(path); err == nil {
+	if _, err := ParseChallengeJSON("not-json"); err == nil {
 		t.Fatal("expected error for invalid challenge content")
 	}
 }
