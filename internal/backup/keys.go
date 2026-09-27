@@ -257,9 +257,9 @@ func createRecoveryCode(u ui.UI) (security.RecoveryCode, error) {
 			return code, nil
 		}
 		if err == nil {
-			err = fmt.Errorf("The code does not match the recovery code shown above.")
+			err = fmt.Errorf("The code does not match the recovery code shown above. Remedy: Check your note.")
 		}
-		fmt.Fprintf(out, "%v Please check your note.\n", err)
+		fmt.Fprintln(out, err)
 	}
 	return security.RecoveryCode{}, fmt.Errorf("Recovery code not confirmed. No backup was written.")
 }

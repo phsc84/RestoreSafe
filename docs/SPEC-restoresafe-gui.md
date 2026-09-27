@@ -239,7 +239,7 @@ Win32 common controls have no supported dark mode. The first version follows the
 1. The password field is an edit control with `ES_PASSWORD` (Windows prevents copying its text).
 2. On OK, `GetWindowTextW` reads it into a `[]uint16` buffer the GUI allocates, which is converted to UTF-8 into a `[]byte` returned to the workflow (which zeroes it, as today).
 3. The `[]uint16` buffer and every intermediate buffer are zeroed immediately.
-4. The control's text is overwritten with the same number of filler characters and then cleared, before the dialog is destroyed, so its own buffer does not keep the password.
+4. The control's text is overwritten with the same number of filler characters and then cleared, and its undo buffer is emptied, before the dialog is destroyed, so neither its buffer nor Undo keeps the password.
 
 **Limits** (documented, same class as the console's): the edit control's buffer belongs to Windows; step 4 overwrites it in place in practice but Windows does not guarantee that no copy remains in freed memory. Go strings are never used for secrets.
 
@@ -249,8 +249,8 @@ As 9.1 for both fields. The dialog returns both entries; `gui.UI.NewPassword` ch
 
 ### 9.3 Recovery code
 
-- Shown once in a dialog in large Consolas text with the console's instructions. Copying is disabled (static control, not an edit); there is no Print or Save button, so the code never touches the clipboard or a file through RestoreSafe.
-- **I have written it down** switches to the retype field (an edit control, not masked, like the console); the displayed code is overwritten before the switch, so it is not visible while retyping.
+- Shown once in its own dialog, in large bold Consolas on two lines of three groups, with the console's instructions. The code is a static control, so it cannot be selected or copied; there is no Print or Save button. A Windows task dialog is not used, because task dialogs copy their text to the clipboard on Ctrl+C.
+- **I have written it down** (or closing the dialog) overwrites the displayed code and closes the dialog; the retype dialog follows (an edit control, not masked, like the console), so the code is not visible while retyping. The code reaches the GUI as a Go string, like the console's, so it is not zeroed.
 - A wrong code shows the workflow's message and allows the next attempt; after the last attempt the workflow aborts as today.
 
 ## 10. YubiKey and Windows Security dialogs
@@ -302,7 +302,7 @@ Decided on 2026-09-26:
 | G1 | `startup.CheckHealth` and `HealthCheckResult.Report()`, `ui.ShowResult` (console: the "Log file:" line is now last for restore and verify too), `security.SetParentWindow`, application manifest in the build. Done. |
 | G2 | `internal/win32` wrapper, main window, message loop, fonts, DPI handling, layout helper, home screen. Until G7 the GUI is built from `cmd/gui` as `RestoreSafe-gui.exe`, next to the console version. Done. |
 | G3 | Bridge, `gui.UI`, preflight, running and result screens, log pane, progress, cancel, closing and session end. A first version of every question: password, new password, unlock method, recovery code, spare YubiKey, and confirmations (task dialogs and an input dialog); interim run selection (a task dialog with one option per backup run) and destination (text field). Done. |
-| G4 | Dialog refinements: recovery-code dialog in large monospaced type (9.3), password dialogs per 9.1 and 9.2 reviewed. |
+| G4 | Dialog refinements: recovery-code dialog in large monospaced type (9.3), password dialogs per 9.1 and 9.2 reviewed (undo buffer emptied). Done. |
 | G5 | Selection tree with single backup sets, destination with folder picker. |
 | G6 | Keyboard and accessibility pass, manual checklist, README screenshots. |
 | G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. |

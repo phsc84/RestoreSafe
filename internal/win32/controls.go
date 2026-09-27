@@ -17,8 +17,10 @@ const (
 	WS_SYSMENU          = 0x00080000
 	WS_EX_DLGMODALFRAME = 0x00000001
 
-	ES_PASSWORD    = 0x20
-	ES_AUTOHSCROLL = 0x80
+	ES_PASSWORD        = 0x20
+	SS_CENTER          = 0x1
+	EM_EMPTYUNDOBUFFER = 0x00CD
+	ES_AUTOHSCROLL     = 0x80
 
 	PBS_MARQUEE        = 0x08
 	PBM_SETPOS         = 0x0402
@@ -91,13 +93,15 @@ func textBuffer(hwnd HWND) []uint16 {
 }
 
 // ReadSecret returns the text of an edit control as UTF-8 bytes without
-// creating Go strings, zeroes the UTF-16 buffer, and overwrites the
-// control's text with filler before clearing it, so neither keeps the
-// secret. The caller zeroes the returned bytes.
+// creating Go strings, zeroes the buffers it used, and overwrites the
+// control's text (see OverwriteText), so neither keeps the secret. The
+// caller zeroes the returned bytes.
 func ReadSecret(hwnd HWND) []byte {
 	buf := textBuffer(hwnd)
-	n := len(buf)
-	out := make([]byte, 0, n*3)
+	// At most 3 UTF-8 bytes per UTF-16 unit: out never grows, so no copy of
+	// the secret is left behind by a reallocation.
+	out := make([]byte, 0, len(buf)*3)
+	var enc [4]byte
 	for i := 0; i < len(buf); {
 		r := rune(buf[i])
 		size := 1
@@ -105,21 +109,31 @@ func ReadSecret(hwnd HWND) []byte {
 			r = utf16.DecodeRune(r, rune(buf[i+1]))
 			size = 2
 		}
-		var enc [4]byte
 		out = append(out, enc[:encodeRune(enc[:], r)]...)
 		i += size
 	}
+	enc = [4]byte{}
 	for i := range buf {
 		buf[i] = 0
 	}
+	runtime.KeepAlive(enc)
+	OverwriteText(hwnd)
+	return out
+}
+
+// OverwriteText replaces the text of a control with filler of the same
+// length before clearing it, so the control's own buffer does not keep the
+// previous text, and empties an edit control's undo buffer.
+func OverwriteText(hwnd HWND) {
+	n, _, _ := procGetWindowTextLengthW.Call(uintptr(hwnd))
 	filler := make([]uint16, n+1)
-	for i := 0; i < n; i++ {
+	for i := uintptr(0); i < n; i++ {
 		filler[i] = '*'
 	}
 	SendMessage(hwnd, WM_SETTEXT, 0, uintptr(unsafe.Pointer(&filler[0])))
 	SendMessage(hwnd, WM_SETTEXT, 0, uintptr(unsafe.Pointer(&filler[n])))
+	SendMessage(hwnd, EM_EMPTYUNDOBUFFER, 0, 0)
 	runtime.KeepAlive(filler)
-	return out
 }
 
 // encodeRune writes r as UTF-8 into p and returns the number of bytes.

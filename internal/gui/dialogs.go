@@ -23,6 +23,14 @@ type inputDialog struct {
 	messageIsError bool
 	fields         []inputField
 	okText         string
+	// code is shown large in a monospaced font, e.g. a recovery code. It is a
+	// static control, so it cannot be selected or copied, and it is
+	// overwritten when the dialog closes.
+	code string
+	// note is explanatory text below the code.
+	note string
+	// noCancel shows only the OK button; closing the dialog counts as OK.
+	noCancel bool
 }
 
 // dialogState is the open input dialog; the GUI shows at most one at a time.
@@ -33,6 +41,9 @@ type dialogState struct {
 	edits          []win32.HWND
 	fields         []inputField
 	values         [][]byte
+	code           win32.HWND
+	codeFont       windows.Handle
+	noCancel       bool
 	ok, open       bool
 	messageIsError bool
 }
@@ -46,13 +57,15 @@ const dialogClass = "RestoreSafeInputDialog"
 
 // Sizes of the input dialog, in DIPs.
 const (
-	dialogWidth   = 440
-	dialogMargin  = 16
-	headingHeight = 24
-	messageHeight = 36
-	fieldLabel    = 20
-	fieldHeight   = 26
-	dialogButton  = 88
+	dialogWidth    = 440
+	dialogMargin   = 16
+	headingHeight  = 24
+	messageHeight  = 54
+	codeHeight     = 76
+	codeNoteHeight = 84
+	fieldLabel     = 20
+	fieldHeight    = 26
+	dialogButton   = 88
 )
 
 // runInputDialog shows d modal to the main window and returns the field
@@ -78,6 +91,12 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	if d.message != "" {
 		height += messageHeight + gap
 	}
+	if d.code != "" {
+		height += codeHeight + gap
+	}
+	if d.note != "" {
+		height += codeNoteHeight + gap
+	}
 	height += int32(len(d.fields)) * (fieldLabel + fieldHeight + gap)
 	height += gap + buttonHeight + dialogMargin
 
@@ -92,7 +111,7 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	if err != nil {
 		return nil, false
 	}
-	ds := &dialogState{hwnd: hwnd, fields: d.fields, open: true, messageIsError: d.messageIsError}
+	ds := &dialogState{hwnd: hwnd, fields: d.fields, open: true, messageIsError: d.messageIsError, noCancel: d.noCancel}
 	activeDialog = ds
 	a.modal = hwnd
 
@@ -110,6 +129,18 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 		ds.message = child("STATIC", d.message, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, messageHeight), 0)
 		yy += messageHeight + gap
 	}
+	if d.code != "" {
+		ds.code = child("STATIC", d.code, win32.SS_NOPREFIX|win32.SS_CENTER, s.rect(dialogMargin, yy, w, codeHeight), 0)
+		if font, err := a.codeFont(); err == nil {
+			ds.codeFont = font
+			win32.SetFont(ds.code, font)
+		}
+		yy += codeHeight + gap
+	}
+	if d.note != "" {
+		child("STATIC", d.note, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, codeNoteHeight), 0)
+		yy += codeNoteHeight + gap
+	}
 	for _, f := range d.fields {
 		child("STATIC", f.label, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, fieldLabel), 0)
 		yy += fieldLabel
@@ -125,13 +156,21 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	if okText == "" {
 		okText = "OK"
 	}
-	child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.rect(dialogWidth-dialogMargin-2*dialogButton-gap, yy, dialogButton, buttonHeight), win32.IDOK)
-	child("BUTTON", "Cancel", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, s.rect(dialogWidth-dialogMargin-dialogButton, yy, dialogButton, buttonHeight), win32.IDCANCEL)
+	var okButton win32.HWND
+	if d.noCancel {
+		width := int32(2*dialogButton + gap)
+		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.rect(dialogWidth-dialogMargin-width, yy, width, buttonHeight), win32.IDOK)
+	} else {
+		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.rect(dialogWidth-dialogMargin-2*dialogButton-gap, yy, dialogButton, buttonHeight), win32.IDOK)
+		child("BUTTON", "Cancel", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, s.rect(dialogWidth-dialogMargin-dialogButton, yy, dialogButton, buttonHeight), win32.IDCANCEL)
+	}
 
 	win32.Enable(a.hwnd, false)
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	if len(ds.edits) > 0 {
 		win32.SetFocus(ds.edits[0])
+	} else {
+		win32.SetFocus(okButton)
 	}
 
 	var msg win32.Msg
@@ -152,15 +191,37 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	win32.Enable(a.hwnd, true)
 	win32.SetForeground(a.hwnd)
 	win32.DestroyWindow(hwnd)
+	win32.DeleteObject(ds.codeFont)
 	activeDialog = nil
 	a.modal = 0
 	return ds.values, ds.ok
 }
 
-// close ends the dialog; with ok, the field values are read first.
+// codeFont creates the font for a displayed code: monospaced, bold, and
+// about twice the message font's size. The caller deletes it.
+func (a *app) codeFont() (windows.Handle, error) {
+	lf, err := win32.MessageFont(a.dpi)
+	if err != nil {
+		return 0, err
+	}
+	lf.Height *= 2
+	lf.Weight = win32.FW_BOLD
+	lf.FaceName = [32]uint16{}
+	copy(lf.FaceName[:], windows.StringToUTF16("Consolas"))
+	return win32.CreateFont(&lf)
+}
+
+// close ends the dialog; with ok, the field values are read first. A
+// displayed code is overwritten, so the control does not keep it.
 func (ds *dialogState) close(ok bool) {
 	if !ds.open {
 		return
+	}
+	if ds.noCancel {
+		ok = true
+	}
+	if ds.code != 0 {
+		win32.OverwriteText(ds.code)
 	}
 	if ok {
 		for i, e := range ds.edits {

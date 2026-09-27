@@ -33,14 +33,19 @@ var _ ui.UI = (*guiUI)(nil)
 func (g *guiUI) Output() io.Writer      { return g.b }
 func (g *guiUI) Progress(p ui.Progress) { g.b.Progress(p) }
 func (g *guiUI) ShowResult(r ui.Result) { g.b.setResult(r) }
+
+// ShowRecoveryCode shows the new recovery code once, in a dialog that cannot
+// copy it (docs/SPEC-restoresafe-gui.md, section 9.3).
 func (g *guiUI) ShowRecoveryCode(code string) {
 	g.b.ask(func(answer func(any, error)) {
-		g.app.taskDialog(win32.TaskDialog{
-			Instruction: "Your recovery code",
-			Content: code + "\n\nThis code alone restores every backup made with these keys, even without password or YubiKey. " +
-				"Treat it like the key to a safe. Write it down on paper and store it in a safe place, never next to your backups. It is shown only this once.",
-			Icon:    win32.TD_WARNING_ICON,
-			Buttons: []win32.TaskButton{{ID: win32.IDOK, Text: "I have written it down"}},
+		g.app.runInputDialog(inputDialog{
+			title:   "RestoreSafe - recovery code",
+			heading: "Your recovery code",
+			code:    codeLines(code),
+			note: "This code alone restores every backup made with these keys, even without password or YubiKey. " +
+				"Treat it like the key to a safe.\r\n\r\nWrite it down on paper and store it in a safe place, never next to your backups. It is shown only this once.",
+			okText:   "I have written it down",
+			noCancel: true,
 		})
 		answer(nil, nil)
 	}, nil, nil)
@@ -219,13 +224,17 @@ func (g *guiUI) Password(prompt string) ([]byte, error) {
 	g.lastPasswordPrompt = prompt
 	message := g.recentMessage()
 	v, err := g.b.ask(func(answer func(any, error)) {
-		label := strings.TrimRight(strings.TrimSpace(prompt), ":")
+		heading := strings.TrimRight(strings.TrimSpace(prompt), ":")
+		label := "Password:"
+		if strings.Contains(strings.ToLower(prompt), "recovery code") {
+			label = "Recovery code:"
+		}
 		values, ok := g.app.runInputDialog(inputDialog{
 			title:          "RestoreSafe",
-			heading:        label,
+			heading:        heading,
 			message:        message,
 			messageIsError: retry,
-			fields:         []inputField{{label: label + ":", masked: true}},
+			fields:         []inputField{{label: label, masked: true}},
 		})
 		if !ok {
 			answer(nil, ui.ErrCancelled)
@@ -322,4 +331,15 @@ func (g *guiUI) WaitForSpareYubiKey() (bool, error) {
 		answer(button == win32.IDOK, nil)
 	}, false, nil)
 	return v.(bool), err
+}
+
+// codeLines splits a recovery code (groups separated by dashes) into two
+// lines of equal group count, so it fits the dialog in a large font.
+func codeLines(code string) string {
+	groups := strings.Split(code, "-")
+	if len(groups) < 2 {
+		return code
+	}
+	half := (len(groups) + 1) / 2
+	return strings.Join(groups[:half], "-") + "\r\n" + strings.Join(groups[half:], "-")
 }
