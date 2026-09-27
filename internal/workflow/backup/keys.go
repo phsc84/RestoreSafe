@@ -19,9 +19,9 @@ import (
 
 // Injectable for tests.
 var (
-	checkYubiKeyConnectedFn = yubikey.CheckYubiKeyConnected
+	checkYubiKeyConnectedFn = yubikey.CheckConnected
 	combineWithPasswordFn   = yubikey.CombineWithPassword
-	registerSpareFn         = yubikey.RegisterSpareYubiKey
+	registerSpareFn         = yubikey.RegisterSpare
 	generateRecoveryCodeFn  = recovery.Generate
 	unlockKeySetFn          = unlock.KeySet
 )
@@ -187,7 +187,7 @@ func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]n
 	out := u.Output()
 	slotType := container.RegularSlotType(mode)
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return nil, yubikey.ErrYubiKeyRequired
+		return nil, yubikey.ErrRequired
 	}
 	fmt.Fprintln(out, "YubiKey 1:")
 	fmt.Fprintln(out, "  1. Windows first asks for your YubiKey PIN to register the backup credential.")
@@ -222,7 +222,7 @@ func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]n
 		}
 		fmt.Fprintln(out, "  Windows asks twice for the PIN of the spare YubiKey (register, then derive).")
 		combined, challengeJSON, err := registerSpareFn(password, primary)
-		if errors.Is(err, yubikey.ErrYubiKeyAlreadyRegistered) {
+		if errors.Is(err, yubikey.ErrAlreadyRegistered) {
 			fmt.Fprintln(out, "This is YubiKey 1. Remove it and insert your spare YubiKey.")
 			continue
 		}

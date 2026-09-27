@@ -15,33 +15,33 @@ import (
 
 // ── CheckYubiKey* tests ───────────────────────────────────────────────────────
 
-func TestCheckYubiKeyConnectedSuccess(t *testing.T) {
+func TestCheckConnectedSuccess(t *testing.T) {
 	prev := fido2RuntimeReady
 	t.Cleanup(func() { fido2RuntimeReady = prev })
 	fido2RuntimeReady = func() error { return nil }
 
-	if err := CheckYubiKeyConnected(); err != nil {
+	if err := CheckConnected(); err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
 }
 
-func TestCheckYubiKeyConnectedNotFound(t *testing.T) {
+func TestCheckConnectedNotFound(t *testing.T) {
 	prev := fido2RuntimeReady
 	t.Cleanup(func() { fido2RuntimeReady = prev })
-	fido2RuntimeReady = func() error { return ErrYubiKeyNotConnected }
+	fido2RuntimeReady = func() error { return ErrNotConnected }
 
-	err := CheckYubiKeyConnected()
-	if !errors.Is(err, ErrYubiKeyNotConnected) {
-		t.Fatalf("expected ErrYubiKeyNotConnected, got: %v", err)
+	err := CheckConnected()
+	if !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("expected ErrNotConnected, got: %v", err)
 	}
 }
 
-func TestCheckYubiKeyConnectedPropagatesError(t *testing.T) {
+func TestCheckConnectedPropagatesError(t *testing.T) {
 	prev := fido2RuntimeReady
 	t.Cleanup(func() { fido2RuntimeReady = prev })
 	fido2RuntimeReady = func() error { return errors.New("webauthn error") }
 
-	err := CheckYubiKeyConnected()
+	err := CheckConnected()
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -419,7 +419,7 @@ func stubFIDO2(t *testing.T, connected string) map[string][]byte {
 	fido2MakeCredFn = func(exclude [][]byte) ([]byte, error) {
 		for _, ex := range exclude {
 			if strings.HasPrefix(string(ex), connected) {
-				return nil, ErrYubiKeyAlreadyRegistered
+				return nil, ErrAlreadyRegistered
 			}
 		}
 		id := []byte(fmt.Sprintf("%s-cred-%d", connected, len(secrets)))
@@ -437,7 +437,7 @@ func stubFIDO2(t *testing.T, connected string) map[string][]byte {
 	return secrets
 }
 
-func TestRegisterSpareYubiKeySharesSaltAndAnswersIndividually(t *testing.T) {
+func TestRegisterSpareSharesSaltAndAnswersIndividually(t *testing.T) {
 	stubFIDO2(t, "keyA")
 	_, primaryJSON, err := CombineWithPassword([]byte("pw"), false)
 	if err != nil {
@@ -446,14 +446,14 @@ func TestRegisterSpareYubiKeySharesSaltAndAnswersIndividually(t *testing.T) {
 	primary, _ := ParseChallengeJSON(primaryJSON)
 
 	// Registering the spare with the first YubiKey still connected is refused.
-	if _, _, err := RegisterSpareYubiKey([]byte("pw"), primary); !errors.Is(err, ErrYubiKeyAlreadyRegistered) {
-		t.Fatalf("expected ErrYubiKeyAlreadyRegistered, got %v", err)
+	if _, _, err := RegisterSpare([]byte("pw"), primary); !errors.Is(err, ErrAlreadyRegistered) {
+		t.Fatalf("expected ErrAlreadyRegistered, got %v", err)
 	}
 
 	secrets := stubFIDO2(t, "keyB")
-	_, spareJSON, err := RegisterSpareYubiKey([]byte("pw"), primary)
+	_, spareJSON, err := RegisterSpare([]byte("pw"), primary)
 	if err != nil {
-		t.Fatalf("RegisterSpareYubiKey: %v", err)
+		t.Fatalf("RegisterSpare: %v", err)
 	}
 	spare, _ := ParseChallengeJSON(spareJSON)
 	if spare.Salt != primary.Salt || spare.CredID == primary.CredID || spare.NoPassword != primary.NoPassword {

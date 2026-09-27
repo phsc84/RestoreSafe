@@ -107,7 +107,7 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	}
 	registerSpareFn = func(pw []byte, primary yubikey.ChallengeData) ([]byte, string, error) {
 		if s.connected == "keyA" {
-			return nil, "", yubikey.ErrYubiKeyAlreadyRegistered
+			return nil, "", yubikey.ErrAlreadyRegistered
 		}
 		return yubikey.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, primary.NoPassword), nil
 	}
@@ -209,8 +209,8 @@ func TestEnrollKeySetRequiresConnectedYubiKey(t *testing.T) {
 	stubEnrollment(t, s)
 	checkYubiKeyConnectedFn = func() error { return errors.New("not connected") }
 	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, yubikey.ErrYubiKeyRequired) {
-		t.Fatalf("expected ErrYubiKeyRequired, got %v", err)
+	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, yubikey.ErrRequired) {
+		t.Fatalf("expected yubikey.ErrRequired, got %v", err)
 	}
 }
 

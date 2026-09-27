@@ -91,7 +91,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
 	est := estimateBackupSpace(cfg, backupDir, sources, plans)
-	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, yubikey.CheckYubiKeyConnected)
+	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, yubikey.CheckConnected)
 	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan, est)
 	report.Issues = issues
 	u.ShowReport(report)
@@ -424,7 +424,7 @@ func backupDirectory(
 	defer stopReport()
 
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
-	res, err := setio.WriteSet(setio.SetParams{
+	res, err := setio.Write(setio.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    excludeDirs,
 		OutputDir:      workingDir,

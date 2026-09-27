@@ -36,8 +36,8 @@ type Base struct {
 	ManifestSHA256 string
 }
 
-// SetParams describes one backup set to write.
-type SetParams struct {
+// Params describes one backup set to write.
+type Params struct {
 	SourceDir   string
 	ExcludeDirs []string
 	// Exclude holds the configured exclude patterns; nil excludes nothing.
@@ -82,12 +82,12 @@ type Result struct {
 	Stats    archive.BuildStats
 }
 
-// WriteSet writes a full backup of p.SourceDir, or a differential when p.Base
+// Write writes a full backup of p.SourceDir, or a differential when p.Base
 // is set. Parts are written with the temporary suffix and renamed to their
 // final names only after the trailer is on disk, so an interrupted backup
 // never looks like a complete set. On error, all parts written so far are
 // removed.
-func WriteSet(p SetParams) (*Result, error) {
+func Write(p Params) (*Result, error) {
 	setType := manifest.SetTypeFull
 	var baseManifest *manifest.Manifest
 	if p.Base != nil {

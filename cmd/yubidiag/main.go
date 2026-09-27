@@ -120,7 +120,7 @@ func printResults(ifaces []yubiInterface) {
 
 	fmt.Println()
 	fmt.Println("WebAuthn API:")
-	webauthnErr := yubikey.CheckYubiKeyAvailability()
+	webauthnErr := yubikey.CheckAvailability()
 	if webauthnErr == nil {
 		fmt.Println("  [OK] Windows WebAuthn API (webauthn.dll) is present and supports hmac-secret.")
 	} else {
@@ -227,7 +227,7 @@ func printRegistrySection() {
 }
 
 func findYubiKeyInterfaces() []yubiInterface {
-	paths, err := yubikey.YubiKeyHIDDevicePaths()
+	paths, err := yubikey.HIDDevicePaths()
 	if err != nil {
 		fmt.Printf("[ERROR] HID device enumeration failed: %v\n", err)
 		return nil

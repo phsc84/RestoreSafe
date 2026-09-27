@@ -20,7 +20,7 @@ const maxPasswordAttempts = 3
 
 // Injectable for tests.
 var (
-	checkYubiKeyConnectedFn = yubikey.CheckYubiKeyConnected
+	checkYubiKeyConnectedFn = yubikey.CheckConnected
 	deriveYubiKeySecretFn   = yubikey.DeriveFIDO2SecretAny
 )
 
@@ -183,7 +183,7 @@ func KeySets(u interact.UI, sets []catalog.SetInfo, passwordPrompt string, log *
 // secret.
 func deriveYubiKeySecret(u interact.UI, ks *container.KeySet, indexes []int) (int, []byte, error) {
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return 0, nil, yubikey.ErrYubiKeyRequired
+		return 0, nil, yubikey.ErrRequired
 	}
 	challenges := make([]yubikey.ChallengeData, len(indexes))
 	labels := make([]string, len(indexes))

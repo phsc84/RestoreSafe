@@ -40,13 +40,13 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 	entry := naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}
 
 	var opened []string
-	res, err := WriteSet(SetParams{
+	res, err := Write(Params{
 		SourceDir: src, OutputDir: backupDir, Entry: entry, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
 		OnPartOpened: func(seq int, path string) { opened = append(opened, filepath.Base(path)) },
 	})
 	if err != nil {
-		t.Fatalf("WriteSet: %v", err)
+		t.Fatalf("Write: %v", err)
 	}
 	if len(res.Parts) < 3 || len(opened) != len(res.Parts) || opened[0] != "[src]_ABC123_2026-09-26_FULL-001.enc" {
 		t.Fatalf("unexpected parts: %v (opened %v)", res.Parts, opened)
@@ -86,7 +86,7 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 
 	backupDir := t.TempDir()
 	ks, master := newKeySet(t)
-	_, err := WriteSet(SetParams{
+	_, err := Write(Params{
 		SourceDir: filepath.Join(t.TempDir(), "does-not-exist"), OutputDir: backupDir,
 		Entry: naming.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
@@ -100,7 +100,7 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 	}
 }
 
-func TestWriteSetRejectsInconsistentDifferentialParams(t *testing.T) {
+func TestWriteRejectsInconsistentDifferentialParams(t *testing.T) {
 	t.Parallel()
 
 	ks, master := newKeySet(t)
@@ -113,7 +113,7 @@ func TestWriteSetRejectsInconsistentDifferentialParams(t *testing.T) {
 		{naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}, base},
 		{naming.BackupEntry{DirectoryName: "src", ChainID: "XYZ999", Date: "2026-09-26", DiffNumber: 1}, base},
 	} {
-		_, err := WriteSet(SetParams{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
+		_, err := Write(Params{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
 		if err == nil || !strings.Contains(err.Error(), "Internal error") {
 			t.Fatalf("%+v: expected internal error, got %v", tc.entry, err)
 		}

@@ -23,7 +23,7 @@ const (
 var FastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
 
 // FastArgon2Config is FastArgon2 in config.yaml units.
-var FastArgon2Config = config.Argon2Config{Time: config.Argon2MinTime, MemoryMB: config.Argon2MinMemoryMB, Threads: config.Argon2MinThreads}
+var FastArgon2Config = config.Argon2{Time: config.Argon2MinTime, MemoryMB: config.Argon2MinMemoryMB, Threads: config.Argon2MinThreads}
 
 // BackupFixture holds workspace paths and metadata for an integration-style backup test.
 type BackupFixture struct {
@@ -110,7 +110,7 @@ func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry naming.BackupEntry
 func WriteFullSet(t testing.TB, srcDir, backupDir string, entry naming.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
-	res, err := setio.WriteSet(setio.SetParams{
+	res, err := setio.Write(setio.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
@@ -153,7 +153,7 @@ func WriteDiffSet(t testing.TB, srcDir, backupDir string, base naming.BackupEntr
 
 	entry := naming.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
 	runID, _ := naming.NewBackupID()
-	_, err = setio.WriteSet(setio.SetParams{
+	_, err = setio.Write(setio.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
@@ -165,7 +165,7 @@ func WriteDiffSet(t testing.TB, srcDir, backupDir string, base naming.BackupEntr
 		SplitSizeBytes: defaultSplitSizeMB * 1024 * 1024,
 	})
 	if err != nil {
-		t.Fatalf("WriteSet (differential): %v", err)
+		t.Fatalf("setio.Write (differential): %v", err)
 	}
 	return entry
 }

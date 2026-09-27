@@ -76,7 +76,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	stagingPlan := staging.PlanLocal(backupDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, yubikey.CheckYubiKeyConnected))
+	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, yubikey.CheckConnected))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}

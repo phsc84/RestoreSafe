@@ -63,7 +63,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	preflight := buildVerifyPreflight(selectedInfos, infos)
 	mode := config.AuthMode(first.KeySet.AuthMode)
 	usesYubiKey := mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey
-	u.ShowReport(verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == config.AuthModeYubiKey, yubikey.CheckYubiKeyConnected))
+	u.ShowReport(verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == config.AuthModeYubiKey, yubikey.CheckConnected))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}

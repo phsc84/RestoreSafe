@@ -313,7 +313,7 @@ func checkYubiKeyHealth(cfg *config.Config) []healthItem {
 		}}
 	}
 
-	if err := yubikey.CheckYubiKeyConnected(); err != nil {
+	if err := yubikey.CheckConnected(); err != nil {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    healthScopeYubiKey,

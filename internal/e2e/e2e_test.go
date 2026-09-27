@@ -28,7 +28,7 @@ const password = "correct horse battery"
 var disabled = false
 
 // fullBackupsOnly disables differentials for tests about full backups.
-var fullBackupsOnly = config.DifferentialConfig{Enabled: &disabled}
+var fullBackupsOnly = config.Differential{Enabled: &disabled}
 
 // script feeds scripted answers to the workflows. Running out of answers fails
 // the test, so every prompt of a workflow is accounted for.

@@ -34,8 +34,8 @@ func fido2Log(format string, args ...any) {
 
 // ── Sentinel errors ───────────────────────────────────────────────────────────
 
-var ErrYubiKeyNotConnected = errors.New("no FIDO2 authenticator detected")
-var ErrYubiKeyRequired = errors.New("FIDO2 authenticator is required but none was detected. Remedy: Connect the YubiKey and retry.")
+var ErrNotConnected = errors.New("no FIDO2 authenticator detected")
+var ErrRequired = errors.New("FIDO2 authenticator is required but none was detected. Remedy: Connect the YubiKey and retry.")
 
 // ── Windows WebAuthn API bindings ─────────────────────────────────────────────
 
@@ -358,29 +358,29 @@ var fido2RuntimeReady = func() error {
 		return err
 	}
 	if !yubiKeyVIDVisible() {
-		return ErrYubiKeyNotConnected
+		return ErrNotConnected
 	}
 	return nil
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-// CheckYubiKeyAvailability returns nil when the Windows WebAuthn API is present
+// CheckAvailability returns nil when the Windows WebAuthn API is present
 // and new enough to support PRF/hmac-secret salt values in GetAssertion options.
-func CheckYubiKeyAvailability() error {
+func CheckAvailability() error {
 	return checkWebAuthnAPIVersion()
 }
 
-// CheckYubiKeyConnected returns nil when a Yubico FIDO2 authenticator is
+// CheckConnected returns nil when a Yubico FIDO2 authenticator is
 // detected and the WebAuthn platform is ready.
-func CheckYubiKeyConnected() error {
+func CheckConnected() error {
 	return fido2RuntimeReady()
 }
 
-// YubiKeyHIDDevicePaths returns HID device interface paths for connected
+// HIDDevicePaths returns HID device interface paths for connected
 // Yubico devices. It is used by diagnostics that need more detail than the
 // boolean runtime readiness check.
-func YubiKeyHIDDevicePaths() ([]string, error) {
+func HIDDevicePaths() ([]string, error) {
 	return hidDevicePathsForVID(yubicoVID)
 }
 
@@ -397,18 +397,18 @@ func CombineWithPassword(password []byte, noPassword bool) (combined []byte, cha
 	return registerWithSalt(password, noPassword, salt, nil)
 }
 
-// ErrYubiKeyAlreadyRegistered is returned when a spare YubiKey registration is
+// ErrAlreadyRegistered is returned when a spare YubiKey registration is
 // refused because the connected YubiKey already holds the first registration.
-var ErrYubiKeyAlreadyRegistered = errors.New("this YubiKey is already registered for these keys")
+var ErrAlreadyRegistered = errors.New("this YubiKey is already registered for these keys")
 
-// RegisterSpareYubiKey registers a second YubiKey for the same keys as
+// RegisterSpare registers a second YubiKey for the same keys as
 // primary. The connected YubiKey must not be the primary one: the primary
 // credential is passed as exclude list, so the primary YubiKey refuses and
-// ErrYubiKeyAlreadyRegistered is returned. The spare uses the primary's
+// ErrAlreadyRegistered is returned. The spare uses the primary's
 // hmac-secret salt; its output still differs because hmac-secret is keyed by
 // each credential's own secret, and a shared salt lets restore ask for either
 // YubiKey in one request.
-func RegisterSpareYubiKey(password []byte, primary ChallengeData) (combined []byte, challengeJSON string, err error) {
+func RegisterSpare(password []byte, primary ChallengeData) (combined []byte, challengeJSON string, err error) {
 	primaryCred, err := base64.StdEncoding.DecodeString(primary.CredID)
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid primary YubiKey credential: %w", err)
@@ -423,7 +423,7 @@ func RegisterSpareYubiKey(password []byte, primary ChallengeData) (combined []by
 func registerWithSalt(password []byte, noPassword bool, salt []byte, exclude [][]byte) (combined []byte, challengeJSON string, err error) {
 	credID, err := fido2MakeCredFn(exclude)
 	if err != nil {
-		if errors.Is(err, ErrYubiKeyAlreadyRegistered) {
+		if errors.Is(err, ErrAlreadyRegistered) {
 			return nil, "", err
 		}
 		return nil, "", fmt.Errorf("FIDO2 credential creation failed: %w", err)
@@ -473,7 +473,7 @@ func DeriveFIDO2SecretForRestore(challengeJSON string) ([]byte, error) {
 // DeriveFIDO2SecretAny asks the connected YubiKey for the hmac-secret of any
 // of the given challenges in one request (one touch) and returns the index of
 // the challenge that answered with its secret. All challenges must share the
-// same hmac-secret salt (see RegisterSpareYubiKey). The caller owns the
+// same hmac-secret salt (see RegisterSpare). The caller owns the
 // returned slice and must zero it when done.
 func DeriveFIDO2SecretAny(challenges []ChallengeData) (int, []byte, error) {
 	if len(challenges) == 0 {
@@ -691,7 +691,7 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 		uintptr(unsafe.Pointer(&attestation)),
 	)
 	if hr == hresultNTEExists && len(exclude) > 0 {
-		return nil, ErrYubiKeyAlreadyRegistered
+		return nil, ErrAlreadyRegistered
 	}
 	if hr != 0 {
 		return nil, fmt.Errorf("WebAuthNAuthenticatorMakeCredential: %s. Remedy: Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.", webauthnErrorString(hr))
@@ -846,7 +846,7 @@ type spDeviceInterfaceData struct {
 // yubiKeyVIDVisible returns true if any HID device path contains the Yubico VID.
 // Used as a lightweight presence check that does not open any device handle.
 func yubiKeyVIDVisible() bool {
-	paths, err := YubiKeyHIDDevicePaths()
+	paths, err := HIDDevicePaths()
 	return err == nil && len(paths) > 0
 }
 

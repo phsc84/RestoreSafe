@@ -71,7 +71,7 @@ const (
 	Argon2MaxThreads  = cryptox.MaxArgonThreads
 )
 
-// Argon2Config holds the Argon2id key-derivation tuning knobs exposed in config.yaml.
+// Argon2 holds the Argon2id key-derivation tuning knobs exposed in config.yaml.
 //
 // What these parameters do:
 //   - Time: number of passes over memory (more = slower to brute-force, slower to run).
@@ -81,7 +81,7 @@ const (
 // Minimums (enforced by validation): Time ≥ 2, MemoryMB ≥ 64, Threads ≥ 1.
 // Maximums (clamped with a warning): Time ≤ 20, MemoryMB ≤ 4096, Threads ≤ 255.
 // Defaults: Time = 3, MemoryMB = 512, Threads = 4.
-type Argon2Config struct {
+type Argon2 struct {
 	Time     int `yaml:"time"`
 	MemoryMB int `yaml:"memory_mb"`
 	Threads  int `yaml:"threads"`
@@ -89,21 +89,21 @@ type Argon2Config struct {
 
 // Config holds all application configuration.
 type Config struct {
-	SourceDirectories  []string           `yaml:"source_directories"`
-	BackupDirectory    string             `yaml:"backup_directory"`
-	SplitSizeMB        int64              `yaml:"split_size_mb"`
-	RetentionKeep      int                `yaml:"retention_keep"`
-	LogLevel           string             `yaml:"log_level"`
-	IODiagnostics      bool               `yaml:"io_diagnostics"`
-	VerifyAfterBackup  bool               `yaml:"verify_after_backup"`
-	AuthenticationMode AuthMode           `yaml:"authentication_mode"`
-	YubiKeySpare       bool               `yaml:"yubikey_spare"`
-	RecoveryCode       bool               `yaml:"recovery_code"`
-	PasswordMinLength  int                `yaml:"password_min_length"`
-	Exclude            []string           `yaml:"exclude"`
-	OnUnreadableFile   string             `yaml:"on_unreadable_file"`
-	Differential       DifferentialConfig `yaml:"differential"`
-	Argon2             Argon2Config       `yaml:"argon2"`
+	SourceDirectories  []string     `yaml:"source_directories"`
+	BackupDirectory    string       `yaml:"backup_directory"`
+	SplitSizeMB        int64        `yaml:"split_size_mb"`
+	RetentionKeep      int          `yaml:"retention_keep"`
+	LogLevel           string       `yaml:"log_level"`
+	IODiagnostics      bool         `yaml:"io_diagnostics"`
+	VerifyAfterBackup  bool         `yaml:"verify_after_backup"`
+	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
+	YubiKeySpare       bool         `yaml:"yubikey_spare"`
+	RecoveryCode       bool         `yaml:"recovery_code"`
+	PasswordMinLength  int          `yaml:"password_min_length"`
+	Exclude            []string     `yaml:"exclude"`
+	OnUnreadableFile   string       `yaml:"on_unreadable_file"`
+	Differential       Differential `yaml:"differential"`
+	Argon2             Argon2       `yaml:"argon2"`
 
 	// ExcludeMatcher is the parsed form of Exclude, set by Load. A nil
 	// matcher excludes nothing.
@@ -125,9 +125,9 @@ func (c *Config) IsYubiKeyOnly() bool {
 	return c.AuthenticationMode == AuthModeYubiKey
 }
 
-// DifferentialConfig holds the settings of differential backups. Zero values
+// Differential holds the settings of differential backups. Zero values
 // mean "use the default"; use the accessor methods.
-type DifferentialConfig struct {
+type Differential struct {
 	Enabled                    *bool `yaml:"enabled"`
 	FullBackupIntervalDays     int   `yaml:"full_backup_interval_days"`
 	MaxSizePercent             int   `yaml:"max_size_percent"`
@@ -142,10 +142,10 @@ const (
 )
 
 // IsEnabled reports whether differential backups are enabled (default true).
-func (d DifferentialConfig) IsEnabled() bool { return d.Enabled == nil || *d.Enabled }
+func (d Differential) IsEnabled() bool { return d.Enabled == nil || *d.Enabled }
 
 // IntervalDays returns the maximum age of a full backup used as base.
-func (d DifferentialConfig) IntervalDays() int {
+func (d Differential) IntervalDays() int {
 	if d.FullBackupIntervalDays <= 0 {
 		return DefaultFullBackupIntervalDays
 	}
@@ -154,7 +154,7 @@ func (d DifferentialConfig) IntervalDays() int {
 
 // SizePercent returns the differential size, in percent of the full backup,
 // at which a new full backup is created.
-func (d DifferentialConfig) SizePercent() int {
+func (d Differential) SizePercent() int {
 	if d.MaxSizePercent <= 0 {
 		return DefaultMaxSizePercent
 	}
