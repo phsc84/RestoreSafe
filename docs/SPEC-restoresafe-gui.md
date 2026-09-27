@@ -122,7 +122,7 @@ Title `RestoreSafe <version>`, application icon, resizable, minimum size 720 × 
 - The health check runs at start as today; `startup.CheckHealth` returns the findings without printing them, `HealthCheckResult.Report()` describes them as a `ui.Report`, which is shown in the report view (section 8.3). **Recheck** runs it again (e.g. after connecting a YubiKey or a network drive).
 - The buttons are disabled when the health check blocks the operation (`BlocksBackup`, `BlocksRestoreOrVerify`); a line under the buttons names the reason.
 - **Open** opens `config.yaml` in its default application and the backup directory in Explorer (`ShellExecuteW`). After editing the configuration, the user restarts RestoreSafe; a hint says so. A changed configuration is not reloaded automatically.
-- A configuration that cannot be loaded shows an error screen with the message and **Exit** instead of the home screen (console today: message and "Press Enter to exit").
+- A configuration that cannot be loaded (or an invalid `-config` argument) shows an error message box with the message; closing it ends RestoreSafe (console today: message and "Press Enter to exit").
 
 ### 5.2 Operation screens
 
@@ -300,7 +300,7 @@ Decided on 2026-09-26:
 | Phase | Content |
 |---|---|
 | G1 | `startup.CheckHealth` and `HealthCheckResult.Report()`, `ui.ShowResult` (console: the "Log file:" line is now last for restore and verify too), `security.SetParentWindow`, application manifest in the build. Done. |
-| G2 | `internal/win32` wrapper, main window, message loop, fonts, DPI handling, layout helper, home screen. |
+| G2 | `internal/win32` wrapper, main window, message loop, fonts, DPI handling, layout helper, home screen. Until G7 the GUI is built from `cmd/gui` as `RestoreSafe-gui.exe`, next to the console version. Done. |
 | G3 | Bridge, `gui.UI`, running and result screens, log pane, progress, cancel, closing and session end. |
 | G4 | Dialogs: password, new password, unlock method, recovery code, spare YubiKey, confirmations. |
 | G5 | Selection tree, destination with folder picker, preflight screen with report view. |
