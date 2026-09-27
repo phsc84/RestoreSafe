@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-27; phase 1 done |
+| Status | Agreed 2026-09-27; phases 1-2 done |
 | Branch | `v2` (after GUI phase G7, commit `9f2f21a`) |
 | Scope | Folder and package structure only. No change in behavior, file formats, or the user interface. |
 
@@ -85,7 +85,7 @@ RestoreSafe/
 ├── scripts/gui-test/           PowerShell UI automation and screenshot helpers, with a README
 ├── dist/                       build output: RestoreSafe.exe, RestoreSafe-x.y.z.zip (ignored)
 ├── sandbox/                    personal manual test folder (ignored)
-└── build.bat  config-SAMPLE.yaml  README.md  CHANGELOG.md  LICENSE  go.mod  go.sum  .gitignore
+└── build.bat  config-SAMPLE.yaml  README.md  CHANGELOG.md  LICENSE  go.mod  go.sum  .gitignore  .gitattributes
 ```
 
 `config-SAMPLE.yaml` stays in the root: it ships in the ZIP and users look for it there.

@@ -18,7 +18,7 @@ if errorlevel 1 (
 )
 
 echo [BUILD] Generate resources (icon, manifest, version information)...
-goversioninfo -64 -o cmd/resource.syso %VERSIONINFO%
+goversioninfo -64 -o cmd/restoresafe/resource.syso %VERSIONINFO%
 if errorlevel 1 (
     echo [ERROR] goversioninfo failed
     exit /b 1
@@ -43,7 +43,7 @@ set GOARCH=amd64
 set CGO_ENABLED=0
 
 REM -H=windowsgui: a window application; no console window opens.
-go build -trimpath -ldflags="-s -w -H=windowsgui -X main.Version=%VERSION%" -o "%DIST_DIR%\RestoreSafe.exe" ./cmd
+go build -trimpath -ldflags="-s -w -H=windowsgui -X main.Version=%VERSION%" -o "%DIST_DIR%\RestoreSafe.exe" ./cmd/restoresafe
 if errorlevel 1 (
     echo [ERROR] Compilation failed
     exit /b 1
