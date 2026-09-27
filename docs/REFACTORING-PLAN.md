@@ -12,7 +12,7 @@ The layout grew in the order features were built:
 
 - `internal/` holds 17 packages side by side; window code, the backup format, and the workflows are not distinguishable.
 - `util` (13 files) and `operation` (8 files) are grab bags; `security` mixes cryptography, YubiKey/WebAuthn, and terminal prompts that only tests still use.
-- `ui` mixes the contract between workflows and frontends with a frontend (`ui.Console`, now test-only).
+- `ui` mixes the contract between workflows and frontends with a frontend (`ui.Console`, now test-only), and its name is one letter away from `gui`, although it is the opposite: the contract, not a user interface.
 - `cmd/main.go` does not follow the one-folder-per-program convention that `cmd/yubidiag/` already follows.
 - `assets/` mixes build inputs, README screenshots, and untracked icon sources hidden by exception rules in `.gitignore`.
 - `test/` is both the build output and a personal sandbox; the release ZIP lands in the repository root.
@@ -22,7 +22,7 @@ The layout grew in the order features were built:
 | # | Decision |
 |---|---|
 | 1 | Grouped layout: `internal/<group>/<package>`, at most two levels below `internal/`. |
-| 2 | Groups: `gui` (frontend), `ui` (contract), `workflow` (what the user starts), `format` (the backup format on disk), `security` (key material: cryptography, recovery code, and YubiKey). |
+| 2 | Groups: `gui` (the frontend), `workflow` (what the user starts, including `workflow/interact`, the contract with a frontend), `format` (the backup format on disk), `security` (key material: cryptography, recovery code, and YubiKey). |
 | 3 | No `util`, `common`, or `helpers` package or group. `config`, `logging`, `fsx`, and `buildinfo` stay directly under `internal/`: small, unrelated, and named after what they contain. A `util` folder would recreate the grab bag one level up. |
 | 4 | `security` is a group of three packages that handle key material and unlock methods: `cryptox`, `recovery`, `yubikey`. Having them in one folder scopes security reviews and makes changes there visible in a diff. |
 | 5 | Unit tests stay next to the code (`*_test.go`). Only end-to-end tests (`internal/e2e`) and shared fixtures (`internal/testutil`) have their own packages. |
@@ -34,6 +34,7 @@ The layout grew in the order features were built:
 | 11 | The 1.x console screenshot is kept for history, with the other screenshots in `docs/images/`. |
 | 12 | The PowerShell GUI automation used for the manual checklist is kept in `scripts/gui-test/`. |
 | 13 | Every move uses `git mv`, so file history is kept. |
+| 14 | The contract between the workflows and a frontend is `workflow/interact`, not `ui`: `ui` is one letter away from `gui` but means the opposite. It lives in the workflow group because the workflows define what they need (Go defines interfaces on the consumer side). `interface` is not possible (a Go keyword) and would be too generic. Its test helper is `interacttest`, like `net/http/httptest`. |
 
 Deliberately not done: no `pkg/` (RestoreSafe is not a library), no `src/`, no splitting of files that are fine as they are.
 
@@ -47,9 +48,9 @@ RestoreSafe/
 ├── internal/
 │   ├── gui/                    window, screens, dialogs, bridge between worker and UI thread
 │   │   └── win32/              Win32 wrapper (only gui uses it)
-│   ├── ui/                     contract: UI, Report, Progress, Result, ErrCancelled, ReadPasswordConfirmed
-│   │   └── uitest/             scripted UI for tests (today ui.Console)
 │   ├── workflow/
+│   │   ├── interact/           contract with a frontend: UI, Report, Progress, Result, ErrCancelled (today ui)
+│   │   │   └── interacttest/   scripted UI for tests: Script (today ui.Console)
 │   │   ├── backup/             backup workflow, keys and enrollment, planning, preflight, retention
 │   │   ├── restore/            restore workflow
 │   │   ├── verify/             verify workflow
@@ -94,8 +95,8 @@ RestoreSafe/
 Imports point downward only:
 
 ```text
-cmd/restoresafe → gui → ui, workflow
-workflow        → ui, format, security, config, logging, fsx, buildinfo
+cmd/restoresafe → gui → workflow (mainly workflow/interact and the workflows' Run functions)
+workflow        → format, security, config, logging, fsx, buildinfo
 format          → security, fsx, buildinfo
 security        → (standard library, x/crypto, x/sys only; inside the group, recovery → cryptox)
 config, logging, fsx, buildinfo → no group
@@ -110,8 +111,8 @@ Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that list
 | `cmd/main.go`, `cmd/main_test.go` | `cmd/restoresafe/` |
 | `internal/gui` | `internal/gui` (unchanged) |
 | `internal/win32` | `internal/gui/win32` |
-| `internal/ui` (`ui.go`, `report.go`, `progress.go`, `result.go`) | `internal/ui` |
-| `internal/ui/console.go` + tests | `internal/ui/uitest` |
+| `internal/ui` (`ui.go`, `report.go`, `progress.go`, `result.go`) | `internal/workflow/interact` (package `interact`) |
+| `internal/ui/console.go` + tests | `internal/workflow/interact/interacttest` (`Console` becomes `Script`) |
 | `internal/backup`, `restore`, `verify` | `internal/workflow/backup`, `restore`, `verify` |
 | `internal/startup` | `internal/workflow/health` (package `health`) |
 | `internal/operation/unlock.go` | `internal/workflow/unlock` |
@@ -128,7 +129,7 @@ Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that list
 | `internal/security/crypto.go`, `ZeroBytes` | `internal/security/cryptox` |
 | `internal/security/recovery.go` | `internal/security/recovery` (`recovery.Code`, `recovery.Generate`, `recovery.Parse`) |
 | `internal/security/fido2.go` | `internal/security/yubikey` |
-| `internal/security/prompt.go`: `ReadPasswordConfirmed`, `ErrPasswordEmpty`, `ErrPasswordMismatch` | `internal/ui` |
+| `internal/security/prompt.go`: `ReadPasswordConfirmed`, `ErrPasswordEmpty`, `ErrPasswordMismatch` | `internal/workflow/interact` |
 | `internal/security/prompt.go`: terminal `ReadPassword`, `ReadLine` | removed |
 | `internal/testutil`, `internal/e2e` | unchanged |
 | `assets/RestoreSafe.ico`, `assets/RestoreSafe.manifest`, `versioninfo.json` | `build/windows/` |
@@ -144,8 +145,8 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 
 1. **Repository root.** `build/windows/`, `docs/images/` (README links), `assets/icon/`, `scripts/gui-test/`, `dist/` output in `build.bat` (resource paths in `versioninfo.json` and `build.bat`), `test/` → `sandbox/`, `dev_setup.txt` → `docs/DEVELOPMENT.md`, simplified `.gitignore`.
 2. **Entry point.** `cmd/main.go` → `cmd/restoresafe/`; `build.bat` builds `./cmd/restoresafe` and generates `cmd/restoresafe/resource.syso`.
-3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `format/setio`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; move `ReadPasswordConfirmed` to `ui`; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
-4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `run`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `ui.Console` → `ui/uitest`; `win32` → `gui/win32`.
+3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `format/setio`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; rename `ui` to `workflow/interact` and move `ReadPasswordConfirmed` there; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
+4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `run`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `interact.Console` → `interact/interacttest.Script`; `win32` → `gui/win32`.
 5. **Format and checks.** Move `archive`, `container`, `manifest`, `catalog`, `setio` under `format/`; add the dependency-direction test; update the package tables in both specs, the README development section, and `docs/DEVELOPMENT.md`; mark this plan as done.
 
 ## 7. Notes
