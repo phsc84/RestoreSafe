@@ -1,12 +1,12 @@
 package gui
 
 import (
-	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/restore"
-	"RestoreSafe/internal/verify"
-	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/gui/win32"
+	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/restore"
+	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"fmt"
 	"strings"

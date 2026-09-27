@@ -1,8 +1,8 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/win32"
 
 	"golang.org/x/sys/windows"
 )

@@ -1,13 +1,14 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/restore"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/verify"
+	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/restore"
+	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"errors"
 	"os"
@@ -17,10 +18,10 @@ import (
 	"testing"
 )
 
-// observedUI is a scripted console that also records progress reports and
+// observedUI is a script that also records progress reports and
 // can react to them.
 type observedUI struct {
-	*interact.Console
+	*interacttest.Script
 	mu         sync.Mutex
 	reports    []interact.Progress
 	onProgress func(interact.Progress)
@@ -68,7 +69,7 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	cfg := progressConfig([]string{docs}, filepath.Join(root, "Backups"))
 
 	s := useScript(t, []string{"y"}, password, password)
-	o := &observedUI{Console: s.console}
+	o := &observedUI{Script: s.ui}
 	testutil.CaptureStdout(t, func() {
 		if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
 			t.Fatalf("backup: %v", err)
@@ -85,7 +86,7 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 
 	dest := filepath.Join(root, "Restore")
 	s = useScript(t, []string{".", dest, "y"}, password)
-	o = &observedUI{Console: s.console}
+	o = &observedUI{Script: s.ui}
 	testutil.CaptureStdout(t, func() {
 		if err := restore.Run(context.Background(), o, cfg, ""); err != nil {
 			t.Fatalf("restore: %v", err)
@@ -113,7 +114,7 @@ func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
 	defer cancel()
 	s := useScript(t, []string{"y"}, password, password)
 	// Cancel as soon as the second directory starts.
-	o := &observedUI{Console: s.console, onProgress: func(p interact.Progress) {
+	o := &observedUI{Script: s.ui, onProgress: func(p interact.Progress) {
 		if p.Item == "Second" {
 			cancel()
 		}
@@ -149,7 +150,7 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 
 	s := useScript(t, []string{"y"}, password, password)
 	testutil.CaptureStdout(t, func() {
-		if err := backup.Run(context.Background(), s.console, cfg, ""); err != nil {
+		if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 			t.Fatalf("backup: %v", err)
 		}
 	})
@@ -160,14 +161,14 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 
 	s = useScript(t, []string{".", filepath.Join(root, "Restore"), "y"}, password)
 	var err error
-	testutil.CaptureStdout(t, func() { err = restore.Run(cancelled, s.console, cfg, "") })
+	testutil.CaptureStdout(t, func() { err = restore.Run(cancelled, s.ui, cfg, "") })
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Restore cancelled." {
 		t.Fatalf("restore: expected the cancellation, got %v", err)
 	}
 
 	s = useScript(t, []string{".", "y"}, password)
-	testutil.CaptureStdout(t, func() { err = verify.Run(cancelled, s.console, cfg, "") })
+	testutil.CaptureStdout(t, func() { err = verify.Run(cancelled, s.ui, cfg, "") })
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Verification cancelled." {
 		t.Fatalf("verify: expected the cancellation, got %v", err)

@@ -3,8 +3,8 @@ package gui
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/win32"
 	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"io"

@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/gui/win32"
 	"testing"
 )
 

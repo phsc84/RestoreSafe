@@ -1,12 +1,12 @@
 package gui
 
-import "RestoreSafe/internal/startup"
+import "RestoreSafe/internal/workflow/health"
 
 // homeState is what the home screen shows besides the paths: whether the
 // health check is running, and its result.
 type homeState struct {
 	checking bool
-	health   *startup.HealthCheckResult
+	health   *health.Result
 }
 
 // actionsEnabled returns which of backup, restore, and verify can start.

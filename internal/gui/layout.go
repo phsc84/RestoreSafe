@@ -1,6 +1,6 @@
 package gui
 
-import "RestoreSafe/internal/win32"
+import "RestoreSafe/internal/gui/win32"
 
 // scale converts device-independent pixels (1/96 inch) to pixels at dpi.
 type scale uint32

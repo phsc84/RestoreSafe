@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-27; phases 1-3 done |
+| Status | Agreed 2026-09-27; phases 1-4 done |
 | Branch | `v2` (after GUI phase G7, commit `9f2f21a`) |
 | Scope | Folder and package structure only. No change in behavior, file formats, or the user interface. |
 
@@ -58,7 +58,7 @@ RestoreSafe/
 │   │   ├── unlock/             unlocking key sets
 │   │   ├── staging/            local staging
 │   │   ├── restorepoint/       decrypt pipeline, restoring and verifying a restore point
-│   │   └── run/                shared plumbing of a workflow run: logger setup, progress, cancellation, preflight rows
+│   │   └── job/                what every run shares: logger setup, progress, cancellation, preflight rows, source checks
 │   ├── format/
 │   │   ├── archive/            TAR build and extraction, Windows file metadata
 │   │   ├── container/          set header, key set, sections, trailer, parts, multi-part writer
@@ -116,11 +116,11 @@ Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that list
 | `internal/ui` (`ui.go`, `report.go`, `progress.go`, `result.go`) | `internal/workflow/interact` (package `interact`) |
 | `internal/ui/console.go` + tests | `internal/workflow/interact/interacttest` (`Console` becomes `Script`) |
 | `internal/backup`, `restore`, `verify` | `internal/workflow/backup`, `restore`, `verify` |
-| `internal/startup` | `internal/workflow/health` (package `health`) |
-| `internal/operation/unlock.go` | `internal/workflow/unlock` |
-| `internal/operation/staging.go` | `internal/workflow/staging` |
-| `internal/operation/restorepoint.go`, `decrypt_pipeline.go` | `internal/workflow/restorepoint` |
-| `internal/operation/progress.go`, `runtime.go`, `preflight.go`, `source_validation.go` | `internal/workflow/run` |
+| `internal/startup` | `internal/workflow/health` (`startup.CheckHealth` becomes `health.Check`, `HealthCheckResult` becomes `health.Result`) |
+| `internal/operation/unlock.go` | `internal/workflow/unlock` (`unlock.Options`, `KeySet`, `KeySets`, `MasterKeys`; `PasswordFailurePrefix` moved here from `runtime.go`) |
+| `internal/operation/staging.go` | `internal/workflow/staging` (`staging.Plan`, `PlanLocal`, `Scope`, `NewScope`, `CreateDir`, `CleanupDir`) |
+| `internal/operation/restorepoint.go`, `decrypt_pipeline.go` | `internal/workflow/restorepoint` (`ProcessRestorePoint` becomes `restorepoint.Process`) |
+| `internal/operation/progress.go`, `runtime.go`, `preflight.go`, `source_validation.go` | `internal/workflow/job` (named `job`, not `run`: "run" is the domain term for one backup run and a common variable name) |
 | `internal/archive`, `container`, `manifest`, `catalog`, `setio` | `internal/format/...` |
 | `internal/util/naming.go` | `internal/format/naming` |
 | `internal/util/split.go` | `internal/format/container` (the multi-part writer; `container`'s own tests use it, and `setio` builds on `container`, so it cannot live in `setio`) |
@@ -148,7 +148,7 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 1. **Repository root.** `build/windows/`, `docs/images/` (README links), `assets/icon/`, `scripts/gui-test/`, `dist/` output in `build.bat` (resource paths in `versioninfo.json` and `build.bat`), `test/` → `sandbox/`, `dev_setup.txt` → `docs/DEVELOPMENT.md`, simplified `.gitignore`.
 2. **Entry point.** `cmd/main.go` → `cmd/restoresafe/`; `build.bat` builds `./cmd/restoresafe` and generates `cmd/restoresafe/resource.syso`.
 3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `container`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; rename `ui` to `workflow/interact` and move `ReadPasswordConfirmed` there; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
-4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `run`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `interact.Console` → `interact/interacttest.Script`; `win32` → `gui/win32`.
+4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `job`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `interact.Console` → `interact/interacttest.Script`; `win32` → `gui/win32`.
 5. **Format and checks.** Move `archive`, `container`, `manifest`, `catalog`, `setio` under `format/`; add the dependency-direction test; update the package tables in both specs, the README development section, and `docs/DEVELOPMENT.md`; mark this plan as done.
 
 ## 7. Notes

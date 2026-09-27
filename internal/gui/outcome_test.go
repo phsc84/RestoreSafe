@@ -1,8 +1,8 @@
 package gui
 
 import (
-	workflow "RestoreSafe/internal/operation"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/job"
 	"errors"
 	"fmt"
 	"strings"
@@ -23,7 +23,7 @@ func TestOperationOutcome(t *testing.T) {
 		{opRestore, &interact.Result{Warnings: 2}, nil, interact.StatusWarn, "Restore completed with 2 warning(s). See the log.", false},
 		{opVerify, nil, nil, interact.StatusNone, "Verification not started.", false},
 		{opBackup, nil, fmt.Errorf("unlock: %w", interact.ErrCancelled), interact.StatusNone, "Backup not started.", false},
-		{opBackup, nil, workflow.Cancelled("Backup"), interact.StatusWarn, "Backup cancelled. See the log", false},
+		{opBackup, nil, job.Cancelled("Backup"), interact.StatusWarn, "Backup cancelled. See the log", false},
 		{opVerify, nil, errors.New("Verification preflight failed: 1 selected item(s) are invalid."), interact.StatusError, "Verification not started", true},
 		{opRestore, nil, errors.New("Wrong password."), interact.StatusError, "Restore failed: Wrong password.", false},
 	}

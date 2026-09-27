@@ -6,9 +6,9 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/startup"
-	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"path/filepath"
@@ -108,7 +108,7 @@ type app struct {
 	state homeState
 
 	mu            sync.Mutex
-	pendingHealth *startup.HealthCheckResult
+	pendingHealth *health.Result
 }
 
 var theApp *app
@@ -446,7 +446,7 @@ func (a *app) startHealthCheck() {
 	a.state.checking = true
 	a.refreshHome()
 	go func() {
-		result := startup.CheckHealth(a.opts.Config, a.opts.ExeDir, a.opts.ConfigPath)
+		result := health.Check(a.opts.Config, a.opts.ExeDir, a.opts.ConfigPath)
 		a.mu.Lock()
 		a.pendingHealth = &result
 		a.mu.Unlock()
