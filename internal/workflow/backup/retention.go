@@ -1,7 +1,7 @@
 package backup
 
 import (
-	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"fmt"

@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"

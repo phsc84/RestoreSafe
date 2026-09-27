@@ -2,8 +2,8 @@ package archive
 
 import (
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/manifest"
 	"archive/tar"
 	"context"
 	"crypto/sha256"

@@ -3,7 +3,7 @@
 package interacttest
 
 import (
-	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"

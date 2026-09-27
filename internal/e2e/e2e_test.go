@@ -3,8 +3,8 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact/interacttest"

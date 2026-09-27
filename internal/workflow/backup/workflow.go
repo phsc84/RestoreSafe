@@ -7,16 +7,16 @@
 package backup
 
 import (
-	"RestoreSafe/internal/archive"
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/archive"
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/format/setio"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/setio"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/restorepoint"

@@ -19,7 +19,7 @@ Main topics:
 ### 1.1 Goals
 
 1. **Clear decisions.** Choosing a restore point among chains, reading the preflight, and understanding key and YubiKey prompts is easier than in the console.
-2. **Same guarantees.** The GUI is a frontend over the existing workflows (`ui.UI`, phases 8-10). It never changes what a backup, restore, or verify does, and it adds no new ways for them to fail silently.
+2. **Same guarantees.** The GUI is a frontend over the existing workflows (`interact.UI`, phases 8-10). It never changes what a backup, restore, or verify does, and it adds no new ways for them to fail silently.
 3. **Small and fast.** One portable `RestoreSafe.exe`, no runtime, no installer, starts instantly, uses a few MB of memory.
 4. **Secrets stay as short-lived as in the console.** Passwords and recovery codes are zeroed after use (2.0 spec section 10).
 
@@ -42,7 +42,7 @@ Main topics:
 | Worker | The goroutine that runs one workflow (`backup.Run`, `restore.Run`, `verify.Run`). |
 | Screen | The content of the main window in one state (home, preflight, running, result). |
 | Dialog | A modal window for one question (password, recovery code, ...). |
-| Bridge | The code that forwards the worker's `ui.UI` calls to the UI thread and returns the answers. |
+| Bridge | The code that forwards the worker's `interact.UI` calls to the UI thread and returns the answers. |
 | DIP | Device-independent pixel: 1/96 inch. Layout is defined in DIPs and scaled to the window's DPI. |
 
 ## 3. Key design decisions
@@ -50,10 +50,10 @@ Main topics:
 | # | Decision | Rationale |
 |---|---|---|
 | G1 | Native Win32 controls through `golang.org/x/sys/windows`, with a small in-house wrapper. No GUI framework, no WebView. | No new dependency, pure Go, instant start, low memory. Secrets can be read from controls into buffers that are zeroed (section 9); a WebView keeps them as immutable JavaScript strings in another process. |
-| G2 | The GUI implements `ui.UI`; the workflows change only by reporting their result through `ShowResult`. | Phases 8-10 built this interface; the console and the GUI stay interchangeable and the workflows keep their tests. |
+| G2 | The GUI implements `interact.UI`; the workflows change only by reporting their result through `ShowResult`. | Phases 8-10 built this interface; the console and the GUI stay interchangeable and the workflows keep their tests. |
 | G3 | One main window with screens, plus modal dialogs for credentials. | A backup is a linear flow (preflight, credentials, progress, result); screens keep context visible, dialogs make secrets and decisions stand out. |
-| G4 | The worker blocks on each question; the bridge posts it to the UI thread and waits for the answer. | Matches the synchronous `ui.UI` contract; the UI thread never blocks on the worker. |
-| G5 | Progress is coalesced: the worker stores the latest `ui.Progress`, and the window is posted at most one progress message until it has taken it. The workflows report four times per second. | The window stays responsive regardless of how often progress arrives. |
+| G4 | The worker blocks on each question; the bridge posts it to the UI thread and waits for the answer. | Matches the synchronous `interact.UI` contract; the UI thread never blocks on the worker. |
+| G5 | Progress is coalesced: the worker stores the latest `interact.Progress`, and the window is posted at most one progress message until it has taken it. The workflows report four times per second. | The window stays responsive regardless of how often progress arrives. |
 | G6 | Cancelling cancels the workflow's context and waits for the worker to finish. | The workflows already clean up on cancellation (phase 10): incomplete parts are removed, the lock is released, the log is written. |
 | G7 | Per-monitor DPI awareness (v2) and common controls 6 through an application manifest. | Sharp text on every monitor and modern control visuals. |
 | G8 | Output (log lines) is shown in a read-only log pane, reports as formatted text. | Everything the console shows remains visible; nothing is lost when a message has no dedicated screen. |
@@ -64,12 +64,14 @@ Main topics:
 
 | Package | Content |
 |---|---|
-| `internal/win32` | Thin wrapper over the Win32 functions, structs, and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. |
-| `internal/gui` | The application: main window, screens, dialogs, layout, the bridge, and `gui.UI` (implements `ui.UI`). |
-| `internal/security` | Gains `SetParentWindow(hwnd)` (section 10). |
-| `internal/startup` | `CheckHealth` runs the health check without printing; `HealthCheckResult.Report()` returns its findings as a `ui.Report` (section 5.1). |
-| `internal/ui` | Gains `ShowResult(ui.Result)`: the workflows report their warning count and log file path at the end instead of only printing them (section 7.4). |
-| `cmd` | Starts the GUI (section 11). |
+| `cmd/restoresafe` | Starts the GUI (section 11). |
+| `internal/gui` | The application: main window, screens, dialogs, layout, the bridge, and `guiUI` (implements `interact.UI`). |
+| `internal/gui/win32` | Thin wrapper over the Win32 functions, structs, and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. |
+| `internal/workflow/interact` | The contract between the workflows and the frontend: `interact.UI`, `Report`, `Progress`, `ErrCancelled`, and `ShowResult(interact.Result)`, with which the workflows report their warning count and log file path at the end (section 7.4). |
+| `internal/workflow/health` | `health.Check` runs the startup health check without printing; `health.Result.Report()` returns its findings as an `interact.Report` (section 5.1). |
+| `internal/security/yubikey` | `SetParentWindow(hwnd)` (section 10). |
+
+The complete package layout and the rule that imports point downward only are in [REFACTORING-PLAN.md](REFACTORING-PLAN.md), sections 3 and 4; `internal/architecture` enforces the rule.
 
 The wrapper exposes only what is used. Structs mirror the Windows SDK layout; every call that can fail returns an error built from `GetLastError`.
 
@@ -93,9 +95,9 @@ message loop                           backup.Run(ctx, gui.UI, cfg, exeDir)
 
 - `main` calls `runtime.LockOSThread` before creating any window; all Win32 UI calls happen on that thread.
 - At most one worker runs at a time; the home screen's buttons are disabled while it runs.
-- **Questions:** the bridge puts a request (kind, parameters, reply channel) into a queue and posts `WM_APP_QUESTION`. The UI thread shows the screen or dialog and sends exactly one reply. If the window is closing or the operation is cancelled, pending and later questions are answered with `ui.ErrCancelled`.
+- **Questions:** the bridge puts a request (kind, parameters, reply channel) into a queue and posts `WM_APP_QUESTION`. The UI thread shows the screen or dialog and sends exactly one reply. If the window is closing or the operation is cancelled, pending and later questions are answered with `interact.ErrCancelled`.
 - **Output:** writes are appended to a mutex-protected buffer; `WM_APP_OUTPUT` is posted only when the buffer changes from empty to non-empty. The UI thread takes the whole buffer and appends it to the log pane.
-- **Progress:** the latest `ui.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending; the workflows report four times per second, which bounds the repaints.
+- **Progress:** the latest `interact.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending; the workflows report four times per second, which bounds the repaints.
 - **Reports:** `ShowReport` is a question without an answer: the worker waits until the preflight screen shows it, so the report and the following `ConfirmStart` appear together.
 
 ## 5. Main window
@@ -119,7 +121,7 @@ Title `RestoreSafe <version>`, application icon, resizable, minimum size 720 × 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-- The health check runs at start as today; `startup.CheckHealth` returns the findings without printing them, `HealthCheckResult.Report()` describes them as a `ui.Report`, which is shown in the report view (section 8.3). **Recheck** runs it again (e.g. after connecting a YubiKey or a network drive).
+- The health check runs at start as today; `health.Check` returns the findings without printing them, `health.Result.Report()` describes them as an `interact.Report`, which is shown in the report view (section 8.3). **Recheck** runs it again (e.g. after connecting a YubiKey or a network drive).
 - The buttons are disabled when the health check blocks the operation (`BlocksBackup`, `BlocksRestoreOrVerify`); a line under the buttons names the reason.
 - **Open** opens `config.yaml` in its default application and the backup directory in Explorer (`ShellExecuteW`). After editing the configuration, the user restarts RestoreSafe; a hint says so. A changed configuration is not reloaded automatically.
 - A configuration that cannot be loaded (or an invalid `-config` argument) shows an error message box with the message; closing it ends RestoreSafe (console today: message and "Press Enter to exit").
@@ -140,7 +142,7 @@ A preflight with blocking issues (`Report.HasErrors`) has no Start button; the w
 
 ## 6. Questions
 
-### 6.1 Mapping of `ui.UI`
+### 6.1 Mapping of `interact.UI`
 
 | Method | GUI |
 |---|---|
@@ -158,7 +160,7 @@ A preflight with blocking issues (`Report.HasErrors`) has no Start button; the w
 | `WaitForSpareYubiKey` | Dialog "Remove YubiKey 1 and insert your spare YubiKey", Continue/Cancel. |
 | `Progress` | Running screen. |
 
-Cancel in any question returns `ui.ErrCancelled` (selection, destination) or the method's "no" answer (`ConfirmStart` false, `BackupCancel`, `WaitForSpareYubiKey` false). Cancel in a password dialog returns an error "Cancelled."; the workflow aborts before anything is written.
+Cancel in any question returns `interact.ErrCancelled` (selection, destination) or the method's "no" answer (`ConfirmStart` false, `BackupCancel`, `WaitForSpareYubiKey` false). Cancel in a password dialog returns an error "Cancelled."; the workflow aborts before anything is written.
 
 Messages the workflows print between questions (e.g. "Wrong password. 2 attempt(s) remaining.", YubiKey instructions) appear in the log pane. The bridge also remembers the last output line, and a password dialog opened right after it shows that line above the field. This is a presentation aid only; the workflow logic does not depend on it.
 
@@ -178,9 +180,9 @@ An edit field with **Browse...** (folder picker `IFileOpenDialog` with `FOS_PICK
 
 ### 7.1 Running screen
 
-- Step and directory from `ui.Progress` ("Restoring - Documents").
+- Step and directory from `interact.Progress` ("Restoring - Documents").
 - Progress bar from `Progress.Fraction()`; marquee style while it is -1 (total unknown) and between steps.
-- Bytes as "1.2 GiB of 3.4 GiB" (`util.FormatBytesBinary`), elapsed time; no time estimate in the first version.
+- Bytes as "1.2 GiB of 3.4 GiB" (`fsx.FormatBytesBinary`), elapsed time; no time estimate in the first version.
 - Between credentials and the first progress (key derivation takes seconds), the screen shows "Unlocking keys ..." with a marquee bar.
 
 ### 7.2 Cancel
@@ -190,7 +192,7 @@ An edit field with **Browse...** (folder picker `IFileOpenDialog` with `FOS_PICK
 ### 7.3 Closing the window
 
 - No operation running: the window closes.
-- During a question: the question is answered with `ui.ErrCancelled`, the worker finishes, the window closes.
+- During a question: the question is answered with `interact.ErrCancelled`, the worker finishes, the window closes.
 - During a running operation: the same confirmation as Cancel; on Yes the context is cancelled and the window closes after the worker has finished (it stays open, disabled, showing "Cancelling ..."). This keeps the guarantees of phase 10: no incomplete parts, lock released, log written.
 - Windows shutdown or logoff (`WM_QUERYENDSESSION`): the operation is cancelled, and `ShutdownBlockReasonCreate` ("RestoreSafe is stopping a backup") asks Windows to wait until the worker has finished. Windows may still end the process after its timeout; the incomplete parts are then removed by the next backup (existing leftover cleanup, 2.0 spec 4.7).
 
@@ -220,7 +222,7 @@ Standard controls only: buttons, edit, static, tree view, progress bar, rich edi
 
 ### 8.3 Report view
 
-A `ui.Report` is rendered into a read-only rich edit: the title as heading, headings bold, status as colored markers (✔ OK green, ⓘ INFO blue, ⚠ WARN amber, ✖ ERROR red) followed by the text, details indented, fields in two aligned columns, issues at the end. The colors come from a fixed palette with sufficient contrast on the light system background; the marker symbol carries the meaning, so color is never the only signal.
+A `interact.Report` is rendered into a read-only rich edit: the title as heading, headings bold, status as colored markers (✔ OK green, ⓘ INFO blue, ⚠ WARN amber, ✖ ERROR red) followed by the text, details indented, fields in two aligned columns, issues at the end. The colors come from a fixed palette with sufficient contrast on the light system background; the marker symbol carries the meaning, so color is never the only signal.
 
 ### 8.4 Dark mode
 
@@ -245,7 +247,7 @@ Win32 common controls have no supported dark mode. The first version follows the
 
 ### 9.2 New password
 
-As 9.1 for both fields. The dialog returns both entries; `gui.UI.NewPassword` checks them with the same rules and errors as `security.ReadPasswordConfirmed` (`ErrPasswordEmpty`, `ErrPasswordMismatch`), zeroes the confirmation, and returns the password. The length rule stays in the workflow.
+As 9.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` checks them with the same rules and errors as `interact.ReadPasswordConfirmed` (`ErrPasswordEmpty`, `ErrPasswordMismatch`), zeroes the confirmation, and returns the password. The length rule stays in the workflow.
 
 ### 9.3 Recovery code
 
@@ -255,7 +257,7 @@ As 9.1 for both fields. The dialog returns both entries; `gui.UI.NewPassword` ch
 
 ## 10. YubiKey and Windows Security dialogs
 
-The WebAuthn calls take a parent window; today `consoleWindow()` supplies the console window. `security.SetParentWindow(hwnd)` sets the window used instead; the GUI sets its main window at start. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the running screen shows "Follow the Windows Security prompt" (the workflow's output line).
+The WebAuthn calls take a parent window; today `consoleWindow()` supplies the console window. `yubikey.SetParentWindow(hwnd)` sets the window used instead; the GUI sets its main window at start. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the running screen shows "Follow the Windows Security prompt" (the workflow's output line).
 
 ## 11. Build and start
 
@@ -267,7 +269,7 @@ The WebAuthn calls take a parent window; today `consoleWindow()` supplies the co
 
 ## 12. Console frontend
 
-The console frontend (`ui.Console`, the menu in `cmd/main.go`) is removed in phase G7, before the 2.0.0 release; there is no separate console build (decision 2, section 13). `ui.Console` stays in the code as long as tests use it to script sessions; the release binary does not reference it, so it is not linked. There is no hidden `-console` mode: a GUI-subsystem executable cannot use the console of the terminal it was started from reliably.
+The console frontend (`ui.Console`, the menu in `cmd/main.go`) was removed in phase G7, before the 2.0.0 release; there is no separate console build (decision 2, section 13). The scripted text UI the tests use lives on as `interacttest.Script` in `internal/workflow/interact/interacttest`; the release binary does not import it. There is no hidden `-console` mode: a GUI-subsystem executable cannot use the console of the terminal it was started from reliably.
 
 ## 13. Decisions
 
@@ -281,11 +283,11 @@ Decided on 2026-09-26:
 
 ### 14.1 Automated
 
-- Bridge: questions are answered exactly once; cancellation answers pending and later questions with `ui.ErrCancelled`; output is never lost and keeps its order; progress is coalesced (a burst of reports posts at most one message).
+- Bridge: questions are answered exactly once; cancellation answers pending and later questions with `interact.ErrCancelled`; output is never lost and keeps its order; progress is coalesced (a burst of reports posts at most one message).
 - Screen state machine (which screen follows which event) without windows, through an interface for the window side.
 - Secret handling: the reader functions zero their buffers (as in the 2.0 spec tests).
 - Result mapping (7.4) for each outcome, including the warning count and the log path from `ShowResult`.
-- The workflows' own tests are unchanged; the e2e tests keep driving them through `ui.Console`.
+- The workflows' own tests are unchanged; the e2e tests keep driving them through `interacttest.Script`.
 
 ### 14.2 Manual checklist (per release)
 
@@ -308,3 +310,5 @@ The checklist with the status of the last run is kept in [GUI-TEST-CHECKLIST.md]
 | G5 | Selection tree with single backup sets, destination with folder picker; Enter and Esc on all operation screens. Done. |
 | G6 | Keyboard and accessibility pass (hidden controls are disabled, so their access keys cannot fire; screen-reader names for rich edits, tree, and progress bar), manual checklist ([GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md)), README screenshots. Done. |
 | G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. Done. |
+
+Package and type names in this table are those at the time of the phase; section 4.1 has today's.

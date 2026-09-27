@@ -3,10 +3,10 @@ package testutil
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/format/setio"
 	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/setio"
 	"bytes"
 	"os"
 	"path/filepath"

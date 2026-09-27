@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-27; phases 1-4 done |
+| Status | Agreed 2026-09-27; done (phases 1-5) |
 | Branch | `v2` (after GUI phase G7, commit `9f2f21a`) |
 | Scope | Folder and package structure only. No change in behavior, file formats, or the user interface. |
 
@@ -74,6 +74,7 @@ RestoreSafe/
 │   ├── logging/                run log files
 │   ├── fsx/                    disk space, paths and volumes, directory checks, file copy, backup lock, I/O counters
 │   ├── buildinfo/              application version stamped by the build
+│   ├── architecture/           dependency-direction test (section 4)
 │   ├── testutil/               shared test fixtures
 │   └── e2e/                    end-to-end tests of the workflows
 ├── build/windows/              RestoreSafe.ico, RestoreSafe.manifest, versioninfo.json
@@ -92,19 +93,28 @@ RestoreSafe/
 
 ## 4. Dependency direction
 
-Imports point downward only:
+Imports point downward only. The layers, from top to bottom (a package may import its own layer and every layer below it):
 
 ```text
-cmd/restoresafe → gui → workflow (mainly workflow/interact and the workflows' Run functions)
-workflow        → format, security, config, logging, fsx, buildinfo
-format          → security, fsx, buildinfo
-security        → (standard library, x/crypto, x/sys only; inside the group, recovery → cryptox)
-config          → security/cryptox (Argon2 bounds)
-logging         → buildinfo
-fsx, buildinfo  → none
+cmd             restoresafe, yubidiag
+gui             gui, gui/win32
+workflow        interact, backup, restore, verify, health, unlock, staging, restorepoint, job
+format          archive, container, manifest, catalog, naming, setio
+config, logging config → security/cryptox (Argon2 bounds); logging → buildinfo
+security        cryptox, recovery, yubikey (recovery and yubikey → cryptox)
+fsx, buildinfo  no internal imports
 ```
 
-Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that lists the imports of every package with `go list` and fails when a lower group imports a higher one (for example `format` importing `workflow`, or anything below `gui` importing `gui`).
+`format` imports `config` (exclude patterns in `archive` and `setio`, the authentication mode in `container`, the configuration in `catalog`), so `config` sits below `format`, not beside it.
+
+Additional rules:
+
+- No workflow package imports `backup`, `restore`, `verify`, or `health`; only the frontend starts workflows.
+- `workflow/interact` (and `interacttest`) imports no other workflow package: the contract does not depend on workflow code.
+- `gui/win32` has no internal imports.
+- `testutil`, `e2e`, and `architecture` are test support: exempt from the layers, never imported by production code.
+
+`internal/architecture/architecture_test.go` enforces all of this on the production imports reported by `go list`, and fails for a package that belongs to no layer.
 
 ## 5. Where today's code goes
 
@@ -134,6 +144,7 @@ Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that list
 | `internal/security/prompt.go`: `ReadPasswordConfirmed`, `ErrPasswordEmpty`, `ErrPasswordMismatch` | `internal/workflow/interact` |
 | `internal/security/prompt.go`: terminal `ReadPassword`, `ReadLine` | removed |
 | `internal/testutil`, `internal/e2e` | unchanged |
+| (new) | `internal/architecture` (dependency-direction test) |
 | `assets/RestoreSafe.ico`, `assets/RestoreSafe.manifest`, `versioninfo.json` | `build/windows/` |
 | `assets/Screenshot_*.png` | `docs/images/` |
 | `assets/RestoreSafe_dark*`, `assets/RestoreSafe_light*` (untracked) | `assets/icon/` (tracked) |
@@ -149,7 +160,7 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 2. **Entry point.** `cmd/main.go` → `cmd/restoresafe/`; `build.bat` builds `./cmd/restoresafe` and generates `cmd/restoresafe/resource.syso`.
 3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `container`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; rename `ui` to `workflow/interact` and move `ReadPasswordConfirmed` there; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
 4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `job`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `interact.Console` → `interact/interacttest.Script`; `win32` → `gui/win32`.
-5. **Format and checks.** Move `archive`, `container`, `manifest`, `catalog`, `setio` under `format/`; add the dependency-direction test; update the package tables in both specs, the README development section, and `docs/DEVELOPMENT.md`; mark this plan as done.
+5. **Format and checks.** Move `archive`, `container`, `manifest`, `catalog`, `setio` under `format/`; add the dependency-direction test; update the package table in the GUI spec (the 2.0 spec has none), the README development section, and `docs/DEVELOPMENT.md`; mark this plan as done.
 
 ## 7. Notes
 

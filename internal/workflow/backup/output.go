@@ -2,9 +2,9 @@ package backup
 
 import (
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/format/setio"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/setio"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"context"

@@ -5,12 +5,12 @@
 package setio
 
 import (
-	"RestoreSafe/internal/archive"
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/archive"
+	"RestoreSafe/internal/format/container"
+	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/manifest"
 	"bufio"
 	"context"
 	"errors"

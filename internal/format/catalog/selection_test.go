@@ -1,7 +1,7 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
 	"strings"
 	"testing"

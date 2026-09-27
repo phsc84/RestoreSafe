@@ -1,9 +1,9 @@
 package backup
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"

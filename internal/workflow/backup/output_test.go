@@ -1,7 +1,7 @@
 package backup
 
 import (
-	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"context"

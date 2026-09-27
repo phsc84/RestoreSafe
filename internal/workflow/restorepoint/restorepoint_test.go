@@ -1,8 +1,8 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil"
 	"bytes"

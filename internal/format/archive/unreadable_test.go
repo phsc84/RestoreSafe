@@ -2,7 +2,7 @@ package archive
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/manifest"
+	"RestoreSafe/internal/format/manifest"
 	"archive/tar"
 	"bytes"
 	"crypto/sha256"

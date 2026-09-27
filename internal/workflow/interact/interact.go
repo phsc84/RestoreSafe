@@ -14,7 +14,7 @@
 package interact
 
 import (
-	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"errors"
 	"io"

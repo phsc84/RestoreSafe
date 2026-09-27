@@ -4,10 +4,10 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/archive"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/archive"
+	"RestoreSafe/internal/format/container"
+	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/manifest"
 	"context"
 	"fmt"
 	"io"

@@ -2,7 +2,7 @@ package catalog
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
 	"errors"
 	"fmt"

@@ -1,9 +1,9 @@
 package backup
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/recovery"
 	"RestoreSafe/internal/security/yubikey"

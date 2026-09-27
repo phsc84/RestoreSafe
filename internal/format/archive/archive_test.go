@@ -1,7 +1,7 @@
 package archive
 
 import (
-	"RestoreSafe/internal/manifest"
+	"RestoreSafe/internal/format/manifest"
 	"archive/tar"
 	"bytes"
 	"os"

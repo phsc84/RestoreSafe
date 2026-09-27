@@ -3,8 +3,8 @@
 package health
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"

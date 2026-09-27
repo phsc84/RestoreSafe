@@ -1,7 +1,7 @@
 package container
 
 import (
-	"RestoreSafe/internal/manifest"
+	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/security/cryptox"
 	"bufio"
 	"bytes"

@@ -1,8 +1,8 @@
 package restore
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/cryptox"

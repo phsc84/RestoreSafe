@@ -16,8 +16,8 @@ package container
 
 import (
 	"RestoreSafe/internal/buildinfo"
+	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/manifest"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/sha256"

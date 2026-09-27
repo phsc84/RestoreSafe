@@ -411,6 +411,23 @@ build.bat
 
 This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\windows\`) and creates `RestoreSafe-<version>.zip`, both in `dist\`.
 
+### Project layout
+
+| Folder | Content |
+|---|---|
+| `cmd/restoresafe` | Entry point of `RestoreSafe.exe` |
+| `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
+| `internal/gui` | The window application; `internal/gui/win32` wraps the Windows API it uses |
+| `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, staging, restore points); `workflow/interact` is the contract between the workflows and the GUI |
+| `internal/format` | The backup format: TAR archive, container, manifest, set I/O, inventory, and file names |
+| `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
+| `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
+| `build/windows` | Icon, application manifest, and version information embedded by `build.bat` |
+| `docs` | Specifications and the GUI test checklist |
+| `scripts/gui-test` | PowerShell UI automation for the manual GUI checklist |
+
+Imports point downward only (`gui` → `workflow` → `format` → `security`, ...); `go test ./internal/architecture` checks this.
+
 The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-restoresafe-2.0.md](docs/SPEC-restoresafe-2.0.md), the window application in [docs/SPEC-restoresafe-gui.md](docs/SPEC-restoresafe-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
 
 ### YubiKey diagnostic tool

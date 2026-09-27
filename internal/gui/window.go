@@ -3,8 +3,8 @@
 package gui
 
 import (
-	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/yubikey"
