@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -407,13 +409,32 @@ func addProgress(progress *atomic.Int64, n int64) {
 	}
 }
 
-// SourceSize estimates the bytes BuildTar handles for opts: the size of the
-// regular files it would back up, following the same exclude rules. Entries
-// that cannot be read are left out. It is the total for Progress.
-func SourceSize(opts BuildOptions) int64 {
+// SourceMeasure is the size of the regular files BuildTar would back up
+// from a source directory.
+type SourceMeasure struct {
+	// Total counts all of them: what a full backup stores.
+	Total int64
+	// Changed counts those whose last-write or creation time is at or after
+	// the time given to MeasureSource: an estimate of what a differential
+	// stores. It misses files that were moved or renamed (they keep their
+	// times but have a new path) and files whose times a tool set back; the
+	// differential itself also compares the path and the NTFS change time.
+	Changed int64
+}
+
+// MeasureSource measures the files BuildTar would back up for opts,
+// following the same exclude rules; entries that cannot be read are left
+// out. With a zero since, Changed equals Total. It reads only directory
+// listings, no file contents. The error is set when the source directory
+// itself cannot be read.
+func MeasureSource(opts BuildOptions, since time.Time) (SourceMeasure, error) {
+	var m SourceMeasure
 	srcDir := filepath.Clean(opts.SourceDir)
+	if _, err := os.Stat(srcDir); err != nil {
+		return m, err
+	}
 	excludes := normalizeExcludes(srcDir, opts.ExcludeDirs)
-	var total int64
+	sinceNano := since.UnixNano()
 	_ = filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || path == srcDir {
 			return nil
@@ -428,10 +449,32 @@ func SourceSize(opts BuildOptions) int64 {
 		if d.IsDir() {
 			return nil
 		}
-		if info, err := d.Info(); err == nil && isRegularOrDir(info) {
-			total += info.Size()
+		info, err := d.Info()
+		if err != nil || !isRegularOrDir(info) {
+			return nil
+		}
+		m.Total += info.Size()
+		if since.IsZero() || newestTime(info) >= sinceNano {
+			m.Changed += info.Size()
 		}
 		return nil
 	})
-	return total
+	return m, nil
+}
+
+// newestTime returns the later of a file's last-write and creation time, in
+// nanoseconds since 1970.
+func newestTime(info fs.FileInfo) int64 {
+	t := info.ModTime().UnixNano()
+	if attr, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+		t = max(t, attr.CreationTime.Nanoseconds())
+	}
+	return t
+}
+
+// SourceSize is the total for Progress: the size of the regular files
+// BuildTar would back up for opts (see MeasureSource).
+func SourceSize(opts BuildOptions) int64 {
+	m, _ := MeasureSource(opts, time.Time{})
+	return m.Total
 }

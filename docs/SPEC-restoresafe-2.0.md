@@ -355,6 +355,11 @@ Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] c
 - `K` creates a new key set (enrollment, 6.3) and forces a full backup for every directory. Use it to change the password, replace a lost YubiKey, or get a new recovery code. Creating new keys needs no old credentials; older chains keep their old key set and remain restorable with the old credentials.
 - There is no "force differential": when the automatic rules choose full, a differential would violate a configured limit or has no valid base.
 
+**Needed space.** The exact changes of a differential are known only after the password is entered (the full backup's manifest is encrypted), so the preflight estimates them from the directory listing: files whose last-write or creation time is at or after the full backup's creation count as changed. It shows `about <changed> (files changed since the full backup); up to <all files> if everything is stored again`. The estimate misses files moved or renamed since the full backup (they keep their times but get a new path) and files whose times a tool set back; the differential stores them anyway.
+
+- The free-space check (backup directory, and the temp directory when staging) fails only when even the estimate does not fit. When only the estimate fits, the preflight shows a warning; if the space then runs out, the backup stops and removes the unfinished set (4.7).
+- Choosing `F` or `K` when the estimate was used checks the free space again against all files, before anything is written.
+
 ### 6.3 Credentials
 
 **Existing key set** (the normal case):

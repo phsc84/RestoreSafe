@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSourceSizeFollowsExcludeRules(t *testing.T) {
@@ -35,5 +36,40 @@ func TestSourceSizeFollowsExcludeRules(t *testing.T) {
 	}
 	if got := SourceSize(BuildOptions{SourceDir: src}); got != 6330 {
 		t.Fatalf("SourceSize without excludes = %d, want 6330", got)
+	}
+}
+
+func TestMeasureSourceCountsFilesChangedSince(t *testing.T) {
+	t.Parallel()
+	src := t.TempDir()
+	fullBackup := time.Now().Add(-24 * time.Hour)
+	before := fullBackup.Add(-24 * time.Hour)
+	after := fullBackup.Add(time.Hour)
+	for name, times := range map[string][2]time.Time{
+		"unchanged.txt": {before, before}, // created and written before the full backup
+		"modified.txt":  {before, after},  // written after it
+		"copied.txt":    {after, before},  // copied in later: new creation time, old write time
+		"skip.tmp":      {after, after},   // excluded
+	} {
+		p := filepath.Join(src, name)
+		if err := os.WriteFile(p, make([]byte, 100), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		setFileTimes(t, p, times[0], times[1])
+	}
+	exclude, err := util.NewExcludeMatcher([]string{"*.tmp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := MeasureSource(BuildOptions{SourceDir: src, Exclude: exclude}, fullBackup)
+	if err != nil || m.Total != 300 || m.Changed != 200 {
+		t.Fatalf("MeasureSource = %+v, %v; want total 300, changed 200", m, err)
+	}
+	if m, _ := MeasureSource(BuildOptions{SourceDir: src, Exclude: exclude}, time.Time{}); m.Changed != m.Total {
+		t.Fatalf("without a since time everything counts as changed: %+v", m)
+	}
+	if _, err := MeasureSource(BuildOptions{SourceDir: filepath.Join(src, "missing")}, fullBackup); err == nil {
+		t.Fatal("a missing source directory must be reported")
 	}
 }

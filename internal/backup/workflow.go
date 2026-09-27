@@ -84,8 +84,9 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	keys := planKeys(cfg, infos)
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
-	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, security.CheckYubiKeyConnected)
-	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan)
+	est := estimateBackupSpace(cfg, backupDir, sources, plans)
+	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, security.CheckYubiKeyConnected)
+	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan, est)
 	report.Issues = issues
 	u.ShowReport(report)
 	if err != nil {
@@ -110,6 +111,11 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	case ui.BackupNewKeys:
 		keys = keyPlan{NewKeysReason: "New keys requested"}
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
+	}
+	if choice == ui.BackupFull || choice == ui.BackupNewKeys {
+		if err := checkSpaceForFullBackups(backupDir, stagingPlan, est); err != nil {
+			return err
+		}
 	}
 
 	keySet, master, err := obtainKeys(u, cfg, keys, log)

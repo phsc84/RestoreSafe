@@ -1,6 +1,8 @@
 package backup
 
 import (
+	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/container"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
@@ -35,57 +38,6 @@ func TestValidateSourceDirectoriesIncludesFailureCount(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "2 source directory(s)") {
 		t.Fatalf("expected failure count in message, got %q", msg)
-	}
-}
-
-func TestEstimateSelectedSourceBytes(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	srcA := filepath.Join(root, "A")
-	srcB := filepath.Join(root, "B")
-	if err := os.MkdirAll(srcA, 0o750); err != nil {
-		t.Fatalf("failed to create source A: %v", err)
-	}
-	if err := os.MkdirAll(srcB, 0o750); err != nil {
-		t.Fatalf("failed to create source B: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(srcA, "one.bin"), []byte("12345"), 0o600); err != nil {
-		t.Fatalf("failed to write source A file: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(srcB, "two.bin"), []byte("1234567890"), 0o600); err != nil {
-		t.Fatalf("failed to write source B file: %v", err)
-	}
-
-	sources := []backupSource{
-		{Resolved: srcA},
-		{Resolved: srcB, Skip: true},
-		{Resolved: filepath.Join(root, "missing"), Err: os.ErrNotExist},
-	}
-
-	total, warnings := estimateSelectedSourceBytes(sources)
-	if total != 5 {
-		t.Fatalf("expected total 5 bytes from runnable source, got %d", total)
-	}
-	if len(warnings) != 0 {
-		t.Fatalf("expected no warnings, got %#v", warnings)
-	}
-}
-
-func TestEstimateSelectedSourceBytesWarningOnUnreadablePath(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	filePath := filepath.Join(root, "not-a-dir-file")
-	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
-		t.Fatalf("failed to write file path: %v", err)
-	}
-
-	total, warnings := estimateSelectedSourceBytes([]backupSource{{Resolved: filePath}})
-	if total != 0 {
-		t.Fatalf("expected total 0 bytes when estimation fails, got %d", total)
-	}
-	if len(warnings) != 1 {
-		t.Fatalf("expected one warning, got %#v", warnings)
 	}
 }
 
@@ -215,7 +167,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []backupSource{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, operation.LocalStagingPlan{}, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, operation.LocalStagingPlan{}, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -239,7 +191,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -276,7 +228,7 @@ func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
@@ -293,7 +245,7 @@ func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: false, SameVolume: true}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
@@ -319,7 +271,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -356,7 +308,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	stagingPlan := operation.LocalStagingPlan{}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return errors.New("no YubiKey detected") }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -397,7 +349,7 @@ func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T)
 	stagingPlan := operation.LocalStagingPlan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	localStagingLine := "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive"
@@ -433,129 +385,11 @@ func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	if strings.Contains(output, "Temp directory:") {
 		t.Fatalf("did not expect Temp directory section when local staging is disabled, got: %q", output)
-	}
-}
-
-func TestValidateTargetSpaceForBackupSkipsWhenTargetUnavailable(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source")
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "one.bin"), []byte("12345"), 0o600); err != nil {
-		t.Fatalf("failed to write source file: %v", err)
-	}
-
-	missingTarget := filepath.Join(root, "missing-target")
-	sources := []backupSource{{Resolved: sourceDir}}
-
-	if err := validateTargetSpaceForBackup(missingTarget, sources); err != nil {
-		t.Fatalf("expected no error when free space cannot be determined, got: %v", err)
-	}
-}
-
-func TestValidateStagingSpaceSkipsWhenStagingDisabled(t *testing.T) {
-	t.Parallel()
-
-	sources := []backupSource{{Resolved: "C:/some/source"}}
-	plan := operation.LocalStagingPlan{Enabled: false}
-
-	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
-		t.Fatalf("expected no error when staging is disabled, got: %v", err)
-	}
-}
-
-func TestValidateStagingSpaceSkipsWhenEstimatedBytesZero(t *testing.T) {
-	t.Parallel()
-
-	// All sources are skipped → estimatedBytes = 0 → return nil.
-	sources := []backupSource{{Resolved: "C:/source", Skip: true}}
-	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
-
-	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
-		t.Fatalf("expected no error when estimated bytes is zero, got: %v", err)
-	}
-}
-
-func TestValidateStagingSpacePassesWhenSpaceIsSufficient(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source")
-	stagingDir := filepath.Join(root, "staging")
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.MkdirAll(stagingDir, 0o750); err != nil {
-		t.Fatalf("failed to create staging dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "small.bin"), []byte("x"), 0o600); err != nil {
-		t.Fatalf("failed to write source file: %v", err)
-	}
-
-	sources := []backupSource{{Resolved: sourceDir}}
-	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingDir}
-
-	if err := validateStagingSpaceForBackup(plan, sources); err != nil {
-		t.Fatalf("expected no error when space is sufficient, got: %v", err)
-	}
-}
-
-func TestValidateTargetSpacePassesWhenSpaceIsSufficient(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source")
-	backupDir := filepath.Join(root, "target")
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		t.Fatalf("failed to create target dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "small.bin"), []byte("x"), 0o600); err != nil {
-		t.Fatalf("failed to write source file: %v", err)
-	}
-
-	sources := []backupSource{{Resolved: sourceDir}}
-	if err := validateTargetSpaceForBackup(backupDir, sources); err != nil {
-		t.Fatalf("expected no error when target space is sufficient, got: %v", err)
-	}
-}
-
-func TestValidateStagingSpaceReturnsErrorWhenTempSpaceInsufficient(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	sourceDir := filepath.Join(root, "source")
-	stagingDir := filepath.Join(root, "staging")
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.MkdirAll(stagingDir, 0o750); err != nil {
-		t.Fatalf("failed to create staging dir: %v", err)
-	}
-
-	bigFile := make([]byte, 10*1024*1024)
-	if err := os.WriteFile(filepath.Join(sourceDir, "big.bin"), bigFile, 0o600); err != nil {
-		t.Fatalf("failed to write big file: %v", err)
-	}
-
-	freeBytes, err := util.QueryFreeSpaceBytes(stagingDir)
-	if err != nil || freeBytes > uint64(len(bigFile)) {
-		t.Skip("staging dir has sufficient free space; cannot test insufficient-space path")
-	}
-
-	sources := []backupSource{{Resolved: sourceDir}}
-	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: stagingDir}
-
-	if err := validateStagingSpaceForBackup(plan, sources); err == nil {
-		t.Fatal("expected error for insufficient staging space, got nil")
 	}
 }
 
@@ -581,7 +415,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	stagingPlan := operation.LocalStagingPlan{Enabled: false}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, func() error { return nil }))
+	ui.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
@@ -626,7 +460,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	cfg := &util.Config{SplitSizeMB: 1}
 	sources := []backupSource{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	issues, err := backupPreflightIssues(cfg, root, sources, operation.LocalStagingPlan{})
+	issues, err := backupPreflightIssues(cfg, root, sources, operation.LocalStagingPlan{}, estimateBackupSpace(cfg, root, sources, nil))
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
 		t.Fatalf("expected the source error first, got %v", err)
 	}
@@ -637,7 +471,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 		t.Fatalf("issue text must not repeat the error prefix: %q", issues[0].Text)
 	}
 
-	if issues, err := backupPreflightIssues(cfg, root, nil, operation.LocalStagingPlan{}); err != nil || len(issues) != 0 {
+	if issues, err := backupPreflightIssues(cfg, root, nil, operation.LocalStagingPlan{}, spaceEstimate{}); err != nil || len(issues) != 0 {
 		t.Fatalf("no sources to check: got %+v, %v", issues, err)
 	}
 }
@@ -648,7 +482,7 @@ func TestBackupPreflightReportStructure(t *testing.T) {
 	cfg := &util.Config{SplitSizeMB: 64, AuthenticationMode: util.AuthModeYubiKey, LogLevel: "info"}
 	sources := []backupSource{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	r := backupPreflightReport(cfg, root, sources, operation.LocalStagingPlan{}, keyPlan{NewKeysReason: "No existing keys"}, nil, func() error { return errors.New("no") })
+	r := backupPreflightReport(cfg, root, sources, operation.LocalStagingPlan{}, keyPlan{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
 	if r.Title != "Backup preflight" || len(r.Sections) != 2 {
 		t.Fatalf("unexpected report: %+v", r)
 	}
@@ -667,5 +501,149 @@ func TestBackupPreflightReportStructure(t *testing.T) {
 		if statuses[i] != want[i] {
 			t.Fatalf("item statuses %v, want %v", statuses, want)
 		}
+	}
+}
+
+func TestEstimateBackupSpaceMeasuresRunnableSources(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	srcA := filepath.Join(root, "A")
+	srcB := filepath.Join(root, "B")
+	for dir, content := range map[string]string{srcA: "12345", srcB: "1234567890"} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "f.bin"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notADir := filepath.Join(root, "file")
+	if err := os.WriteFile(notADir, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sources := []backupSource{
+		{Resolved: srcA},
+		{Resolved: srcB, Skip: true},
+		{Resolved: filepath.Join(root, "missing"), Err: os.ErrNotExist},
+		{Resolved: filepath.Join(root, "gone")},
+	}
+
+	est := estimateBackupSpace(&util.Config{}, filepath.Join(root, "Backups"), sources, nil)
+	if est.full != 5 || est.likely != 5 || est.anyDiff || len(est.sizes) != 1 {
+		t.Fatalf("unexpected estimate %+v", est)
+	}
+	if len(est.warnings) != 1 || !strings.Contains(est.warnings[0], "gone") {
+		t.Fatalf("expected a warning for the unreadable source, got %#v", est.warnings)
+	}
+	if est.neededText() != "5 B" {
+		t.Fatalf("full backups show one size, got %q", est.neededText())
+	}
+}
+
+func TestEstimateBackupSpaceCountsOnlyChangedFilesForDifferentials(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	src := filepath.Join(root, "Docs")
+	if err := os.MkdirAll(src, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "new.txt"), []byte("0123456789"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The full backup was made after the file was written: nothing changed
+	// since. A full backup made in the past counts the file as changed.
+	base := func(created time.Time) map[string]*dirPlan {
+		return map[string]*dirPlan{"Docs": {Base: &catalog.SetInfo{Header: &container.Header{CreatedUTC: created.UTC().Format(time.RFC3339)}}}}
+	}
+	sources := []backupSource{{Resolved: src}}
+
+	est := estimateBackupSpace(&util.Config{}, root, sources, base(time.Now().Add(time.Hour)))
+	if !est.anyDiff || est.full != 10 || est.likely != 0 {
+		t.Fatalf("unchanged since the full backup: %+v", est)
+	}
+	est = estimateBackupSpace(&util.Config{}, root, sources, base(time.Now().Add(-time.Hour)))
+	if est.full != 10 || est.likely != 10 {
+		t.Fatalf("written after the full backup: %+v", est)
+	}
+	if got := est.neededText(); got != "about 10 B (files changed since the full backup); up to 10 B if everything is stored again" {
+		t.Fatalf("unexpected text %q", got)
+	}
+}
+
+func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	free, err := util.QueryFreeSpaceBytes(dir)
+	if err != nil {
+		t.Skip("free space unknown")
+	}
+	staging := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: dir}
+	tooMuch := int64(free) + 1<<30
+
+	cases := []struct {
+		name     string
+		est      spaceEstimate
+		wantErr  bool
+		wantWarn bool
+	}{
+		{"fits", spaceEstimate{full: 1, likely: 1}, false, false},
+		{"full backup too large", spaceEstimate{full: tooMuch, likely: tooMuch}, true, false},
+		{"differential estimate too large", spaceEstimate{full: tooMuch, likely: tooMuch, anyDiff: true}, true, false},
+		{"differential fits only by its estimate", spaceEstimate{full: tooMuch, likely: 1, anyDiff: true}, false, true},
+	}
+	for _, c := range cases {
+		for where, check := range map[string]func() (string, error){
+			"target":  func() (string, error) { return validateTargetSpaceForBackup(dir, c.est) },
+			"staging": func() (string, error) { return validateStagingSpaceForBackup(staging, c.est) },
+		} {
+			warning, err := check()
+			if (err != nil) != c.wantErr || (warning != "") != c.wantWarn {
+				t.Errorf("%s / %s: warning %q, error %v", c.name, where, warning, err)
+			}
+			if warning != "" && !strings.Contains(warning, "Moved or renamed files count as new") {
+				t.Errorf("%s / %s: the warning must explain the risk: %q", c.name, where, warning)
+			}
+		}
+	}
+
+	// Unknown free space and disabled staging never block.
+	if w, err := validateTargetSpaceForBackup(filepath.Join(dir, "missing"), spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil || w != "" {
+		t.Fatalf("unknown free space: %q, %v", w, err)
+	}
+	if w, err := validateStagingSpaceForBackup(operation.LocalStagingPlan{}, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil || w != "" {
+		t.Fatalf("staging disabled: %q, %v", w, err)
+	}
+}
+
+func TestBackupPreflightIssuesWarnsForALargeDifferential(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	free, err := util.QueryFreeSpaceBytes(dir)
+	if err != nil {
+		t.Skip("free space unknown")
+	}
+	est := spaceEstimate{full: int64(free) + 1<<30, likely: 1, anyDiff: true}
+	issues, err := backupPreflightIssues(&util.Config{}, dir, nil, operation.LocalStagingPlan{}, est)
+	if err != nil || len(issues) != 1 || issues[0].Status != ui.StatusWarn {
+		t.Fatalf("expected one warning and no error, got %+v, %v", issues, err)
+	}
+}
+
+func TestCheckSpaceForFullBackups(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	free, err := util.QueryFreeSpaceBytes(dir)
+	if err != nil {
+		t.Skip("free space unknown")
+	}
+	tooMuch := int64(free) + 1<<30
+	if err := checkSpaceForFullBackups(dir, operation.LocalStagingPlan{}, spaceEstimate{full: tooMuch, likely: 1, anyDiff: true}); err == nil || !strings.HasPrefix(err.Error(), "Full backup not started: Insufficient free space") {
+		t.Fatalf("a full backup that does not fit must be refused, got %v", err)
+	}
+	if err := checkSpaceForFullBackups(dir, operation.LocalStagingPlan{}, spaceEstimate{full: 1, likely: 1, anyDiff: true}); err != nil {
+		t.Fatalf("a full backup that fits: %v", err)
+	}
+	if err := checkSpaceForFullBackups(dir, operation.LocalStagingPlan{}, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil {
+		t.Fatalf("without differentials the preflight already checked the full size: %v", err)
 	}
 }
