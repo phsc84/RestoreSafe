@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-27, not started |
+| Status | Agreed 2026-09-27; phase 1 done |
 | Branch | `v2` (after GUI phase G7, commit `9f2f21a`) |
 | Scope | Folder and package structure only. No change in behavior, file formats, or the user interface. |
 

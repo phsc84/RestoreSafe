@@ -25,19 +25,19 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
 The start screen runs a health check of the configuration, the directories, the YubiKey, and the existing backups:
 
-<img src="assets/Screenshot_v2.0.0_home.png" alt="RestoreSafe start screen with the startup health check">
+<img src="docs/images/Screenshot_v2.0.0_home.png" alt="RestoreSafe start screen with the startup health check">
 
 Before a backup starts, the preflight shows what RestoreSafe will do, including whether each directory gets a full or a differential backup:
 
-<img src="assets/Screenshot_v2.0.0_preflight.png" alt="Backup preflight with differential backups and the start choices">
+<img src="docs/images/Screenshot_v2.0.0_preflight.png" alt="Backup preflight with differential backups and the start choices">
 
 While it runs, RestoreSafe shows the progress and the log; Cancel stops it and removes the unfinished backup set:
 
-<img src="assets/Screenshot_v2.0.0_running.png" alt="Backup in progress with progress bar and log">
+<img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress with progress bar and log">
 
 To restore or verify, choose a whole backup run or a single backup set; for a differential, RestoreSafe reads its full backup too:
 
-<img src="assets/Screenshot_v2.0.0_selection.png" alt="Choosing the backup to restore">
+<img src="docs/images/Screenshot_v2.0.0_selection.png" alt="Choosing the backup to restore">
 
 
 ## Features
@@ -409,7 +409,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 build.bat
 ```
 
-This compiles `RestoreSafe.exe` (a Windows application with an embedded manifest) into the `test\` directory for local testing and creates `RestoreSafe-<version>.zip`.
+This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\windows\`) and creates `RestoreSafe-<version>.zip`, both in `dist\`.
 
 The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-restoresafe-2.0.md](docs/SPEC-restoresafe-2.0.md), the window application in [docs/SPEC-restoresafe-gui.md](docs/SPEC-restoresafe-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
 

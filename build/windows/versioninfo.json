@@ -27,6 +27,6 @@
                                             "CharsetID":  1200
                                         }
                     },
-    "IconPath":  "assets/RestoreSafe.ico",
-    "ManifestPath":  "assets/RestoreSafe.manifest"
+    "IconPath":  "build/windows/RestoreSafe.ico",
+    "ManifestPath":  "build/windows/RestoreSafe.manifest"
 }

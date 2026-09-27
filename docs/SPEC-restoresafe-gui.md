@@ -261,7 +261,7 @@ The WebAuthn calls take a parent window; today `consoleWindow()` supplies the co
 
 - `cmd/main.go` starts the GUI. It keeps the `-config=<absolute path>` flag; configuration errors are shown in the window (5.1).
 - The executable uses the Windows GUI subsystem (`-ldflags "-H=windowsgui"`); no console window opens.
-- `versioninfo.json` gains `ManifestPath: assets/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 10/11.
+- `build/windows/versioninfo.json` references the application manifest `build/windows/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 10/11.
 - The size target for the GUI code is a few hundred KB in the binary; no new modules in `go.mod`.
 - `yubidiag` stays a console tool.
 

@@ -2,7 +2,7 @@
 
 The manual part of the GUI test plan ([SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md), section 14.2). Run it before each release on a real Windows machine; the automated tests cover the logic, not the window.
 
-Status of the last run: 2026-09-27, branch `v2` (GUI phase G6), Windows 11, one monitor at 150 %. The window was driven by a UI-automation script (clicks, keystrokes, screenshots) and checked on the screenshots.
+Status of the last run: 2026-09-27, branch `v2` (GUI phase G6), Windows 11, one monitor at 150 %. The window was driven by UI automation (clicks, keystrokes, screenshots) and checked on the screenshots. The scripts are in [scripts/gui-test](../scripts/gui-test/README.md); `Smoke-BackupRestore.ps1` repeats the backup, restore, and verify checks.
 
 ## Backup, restore, verify
 
