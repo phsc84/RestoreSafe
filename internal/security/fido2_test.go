@@ -498,3 +498,15 @@ func TestParseChallengeJSONRejectsInvalidContent(t *testing.T) {
 		t.Fatal("expected error for invalid challenge content")
 	}
 }
+
+func TestSetParentWindowOverridesConsoleWindow(t *testing.T) {
+	t.Cleanup(func() { SetParentWindow(0) })
+	SetParentWindow(0x1234)
+	if got := dialogParent(); got != 0x1234 {
+		t.Fatalf("dialogParent() = %#x, want the window set by SetParentWindow", got)
+	}
+	SetParentWindow(0)
+	if got := dialogParent(); got == 0x1234 {
+		t.Fatal("SetParentWindow(0) must restore the console window default")
+	}
+}

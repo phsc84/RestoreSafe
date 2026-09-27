@@ -67,7 +67,7 @@ Main topics:
 | `internal/win32` | Thin wrapper over the Win32 functions, structs, and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. |
 | `internal/gui` | The application: main window, screens, dialogs, layout, the bridge, and `gui.UI` (implements `ui.UI`). |
 | `internal/security` | Gains `SetParentWindow(hwnd)` (section 10). |
-| `internal/startup` | The health check returns a `ui.Report` in addition to printing it (section 5.1). |
+| `internal/startup` | `CheckHealth` runs the health check without printing; `HealthCheckResult.Report()` returns its findings as a `ui.Report` (section 5.1). |
 | `internal/ui` | Gains `ShowResult(ui.Result)`: the workflows report their warning count and log file path at the end instead of only printing them (section 7.4). |
 | `cmd` | Starts the GUI (section 11). |
 
@@ -119,7 +119,7 @@ Title `RestoreSafe <version>`, application icon, resizable, minimum size 720 × 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-- The health check runs at start as today; its result is converted to a `ui.Report` (new `startup.HealthReport`) and shown in the report view (section 8.3). **Recheck** runs it again (e.g. after connecting a YubiKey or a network drive).
+- The health check runs at start as today; `startup.CheckHealth` returns the findings without printing them, `HealthCheckResult.Report()` describes them as a `ui.Report`, which is shown in the report view (section 8.3). **Recheck** runs it again (e.g. after connecting a YubiKey or a network drive).
 - The buttons are disabled when the health check blocks the operation (`BlocksBackup`, `BlocksRestoreOrVerify`); a line under the buttons names the reason.
 - **Open** opens `config.yaml` in its default application and the backup directory in Explorer (`ShellExecuteW`). After editing the configuration, the user restarts RestoreSafe; a hint says so. A changed configuration is not reloaded automatically.
 - A configuration that cannot be loaded shows an error screen with the message and **Exit** instead of the home screen (console today: message and "Press Enter to exit").
@@ -299,7 +299,7 @@ Decided on 2026-09-26:
 
 | Phase | Content |
 |---|---|
-| G1 | `startup.HealthReport`, `ui.ShowResult` (console output unchanged), `security.SetParentWindow`, application manifest in the build. |
+| G1 | `startup.CheckHealth` and `HealthCheckResult.Report()`, `ui.ShowResult` (console: the "Log file:" line is now last for restore and verify too), `security.SetParentWindow`, application manifest in the build. Done. |
 | G2 | `internal/win32` wrapper, main window, message loop, fonts, DPI handling, layout helper, home screen. |
 | G3 | Bridge, `gui.UI`, running and result screens, log pane, progress, cancel, closing and session end. |
 | G4 | Dialogs: password, new password, unlock method, recovery code, spare YubiKey, confirmations. |

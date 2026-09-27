@@ -2,6 +2,7 @@ package startup
 
 import (
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"os"
 	"path/filepath"
@@ -466,5 +467,56 @@ func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
 	}
 	if !strings.Contains(output, "Backup directory:") {
 		t.Fatalf("expected Backup directory title, got output: %q", output)
+	}
+}
+
+func TestHealthCheckReportGroupsFindingsByScope(t *testing.T) {
+	t.Parallel()
+
+	result := buildHealthCheckResult([]healthItem{
+		{Severity: healthOK, Scope: healthScopeConfig, Detail: "config loaded"},
+		{Severity: healthWarn, Scope: healthScopeSourceDirectory, Detail: "Docs is empty"},
+		{Severity: healthOK, Scope: healthScopeSourceDirectory, Detail: "Pics"},
+		{Severity: healthError, Scope: healthScopeYubiKey, Detail: "not connected"},
+		{isNote: true, Detail: "Local staging enabled."},
+		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
+	})
+	var sb strings.Builder
+	ui.WriteReport(&sb, result.Report())
+	want := `
+Startup health check
+--------------------
+Config:
+  [OK] config loaded
+Source directory(s):
+  [WARN] Docs is empty
+  [OK] Pics
+YubiKey:
+  [ERROR] not connected
+
+Local staging enabled.
+Temp directory:
+  [OK] C:/Temp
+
+Summary: 3 OK, 1 warning(s), 1 error(s)
+Review the reported errors before running backup, restore, or verify.
+`
+	if got := sb.String(); got != want {
+		t.Fatalf("unexpected report.\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestCheckHealthDoesNotPrint(t *testing.T) {
+	exeDir := t.TempDir()
+	cfg := &util.Config{BackupDirectory: filepath.Join(exeDir, "Backups"), LogLevel: "info"}
+	var result HealthCheckResult
+	output := testutil.CaptureStdout(t, func() {
+		result = CheckHealth(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
+	})
+	if output != "" {
+		t.Fatalf("CheckHealth must not print, got %q", output)
+	}
+	if r := result.Report(); r.Title != "Startup health check" || len(r.Sections) < 2 {
+		t.Fatalf("unexpected report %+v", r)
 	}
 }

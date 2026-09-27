@@ -108,10 +108,7 @@ func runVerifyOperation(ctx context.Context, u ui.UI, selected, inventory []cata
 	}
 
 	log.Info("Verification completed successfully.")
-	fmt.Fprintf(out, "\nLog file: %s\n", logPath)
-	if warningCount > 0 {
-		fmt.Fprintf(out, "Warnings: %d\n", warningCount)
-	}
+	u.ShowResult(ui.Result{Warnings: warningCount, LogPath: logPath})
 	return nil
 }
 

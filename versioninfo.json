@@ -27,5 +27,6 @@
                                             "CharsetID":  1200
                                         }
                     },
-    "IconPath":  "assets/RestoreSafe.ico"
+    "IconPath":  "assets/RestoreSafe.ico",
+    "ManifestPath":  "assets/RestoreSafe.manifest"
 }

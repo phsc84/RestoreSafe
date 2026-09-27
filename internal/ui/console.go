@@ -286,3 +286,11 @@ func (c *Console) ShowReport(r Report) {
 
 // Progress is ignored: the console shows the log lines of each step instead.
 func (c *Console) Progress(Progress) {}
+
+// ShowResult prints the warning count (if any) and the log file path.
+func (c *Console) ShowResult(r Result) {
+	if r.Warnings > 0 {
+		c.printf("Warnings: %d\n", r.Warnings)
+	}
+	c.printf("\nLog file: %s\n", r.LogPath)
+}

@@ -59,6 +59,10 @@ type UI interface {
 	// start is confirmed.
 	ShowReport(r Report)
 
+	// ShowResult shows the outcome of an operation that completed. It is
+	// called last, before the workflow returns without error.
+	ShowResult(r Result)
+
 	// SelectBackups asks which backups to restore or verify (action is
 	// "restore" or "verify"). runs is newest first and not empty. It returns
 	// ErrCancelled when the user cancels.

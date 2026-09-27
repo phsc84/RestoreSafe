@@ -16,6 +16,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -539,7 +540,23 @@ func checkWebAuthnAPIVersion() error {
 	return nil
 }
 
-func consoleWindow() uintptr {
+// parentWindow is the window the Windows Security dialogs (PIN, touch) belong
+// to; 0 means the console window.
+var parentWindow atomic.Uintptr
+
+// SetParentWindow sets the window that the Windows Security dialogs of
+// YubiKey operations belong to, so they appear in front of it and are modal
+// to it. A graphical frontend passes its main window; 0 restores the default,
+// the console window.
+func SetParentWindow(hwnd uintptr) {
+	parentWindow.Store(hwnd)
+}
+
+// dialogParent returns the parent window for the WebAuthn calls.
+func dialogParent() uintptr {
+	if hwnd := parentWindow.Load(); hwnd != 0 {
+		return hwnd
+	}
 	hwnd, _, _ := procGetConsoleWindow.Call()
 	return hwnd
 }
@@ -663,7 +680,7 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 
 	var attestation *webauthnCredAttestation
 	hr, _, _ := procWebAuthNAuthenticatorMakeCredential.Call(
-		consoleWindow(),
+		dialogParent(),
 		uintptr(unsafe.Pointer(&rp)),
 		uintptr(unsafe.Pointer(&user)),
 		uintptr(unsafe.Pointer(&credParams)),
@@ -738,7 +755,7 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 
 	var assertion *webauthnAssertion
 	hr, _, _ := procWebAuthNAuthenticatorGetAssertion.Call(
-		consoleWindow(),
+		dialogParent(),
 		uintptr(unsafe.Pointer(rpIdW)),
 		uintptr(unsafe.Pointer(&cd)),
 		uintptr(unsafe.Pointer(&opts)),

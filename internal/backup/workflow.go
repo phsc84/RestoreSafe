@@ -294,10 +294,7 @@ func runBackupOperation(
 	} else {
 		log.Info("Backup completed successfully")
 	}
-	if warningCount > 0 {
-		fmt.Fprintf(out, "Warnings: %d\n", warningCount)
-	}
-	fmt.Fprintf(out, "\nLog file: %s\n", logPath)
+	u.ShowResult(ui.Result{Warnings: warningCount, LogPath: logPath})
 	return nil
 }
 

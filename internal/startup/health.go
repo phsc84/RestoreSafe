@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"fmt"
 	"io"
@@ -38,9 +39,11 @@ type healthItem struct {
 	isNote   bool // printed as plain unindented text; skipped in OK/WARN/ERROR counts
 }
 
-// HealthCheckResult captures which health error scopes were detected at startup.
+// HealthCheckResult captures the findings of the startup health check and
+// which error scopes block an operation.
 type HealthCheckResult struct {
 	errorScopes map[string]bool
+	items       []healthItem
 }
 
 // BlocksBackup reports whether any health check error prevents running a backup.
@@ -66,15 +69,81 @@ func buildHealthCheckResult(items []healthItem) HealthCheckResult {
 			scopes[item.Scope] = true
 		}
 	}
-	return HealthCheckResult{errorScopes: scopes}
+	return HealthCheckResult{errorScopes: scopes, items: items}
 }
 
 // RunStartupHealthCheck performs a non-interactive diagnostic pass when the
-// application starts. It never aborts startup; it only reports findings.
+// application starts and prints it to out. It never aborts startup; it only
+// reports findings.
 func RunStartupHealthCheck(out io.Writer, cfg *util.Config, exeDir, configPath string) HealthCheckResult {
-	items := collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath)
-	printStartupHealthCheck(out, items)
-	return buildHealthCheckResult(items)
+	result := CheckHealth(cfg, exeDir, configPath)
+	printStartupHealthCheck(out, result.items)
+	return result
+}
+
+// CheckHealth performs the startup health check without printing it; the
+// result's Report describes the findings.
+func CheckHealth(cfg *util.Config, exeDir, configPath string) HealthCheckResult {
+	return buildHealthCheckResult(collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath))
+}
+
+// Report describes the findings as a report: one heading per checked scope
+// with its items, then local staging notes and the temp directory, then the
+// summary. The findings are items, not issues; BlocksBackup and
+// BlocksRestoreOrVerify decide what they block.
+func (r HealthCheckResult) Report() ui.Report {
+	var checks, staging []ui.Row
+	scopeRows := make(map[string][]ui.Row)
+	var scopes []string
+	okCount, warnCount, errorCount := 0, 0, 0
+	for _, item := range r.items {
+		switch {
+		case item.isNote:
+			staging = append(staging, ui.Note(item.Detail))
+			continue
+		case item.Severity == healthOK:
+			okCount++
+		case item.Severity == healthWarn:
+			warnCount++
+		case item.Severity == healthError:
+			errorCount++
+		}
+		row := ui.Item(healthStatus(item.Severity), item.Detail)
+		if _, seen := scopeRows[item.Scope]; !seen {
+			scopes = append(scopes, item.Scope)
+		}
+		scopeRows[item.Scope] = append(scopeRows[item.Scope], row)
+	}
+	for _, scope := range scopes {
+		rows := append([]ui.Row{ui.Heading(scope)}, scopeRows[scope]...)
+		if scope == healthScopeTempDirectory {
+			staging = append(staging, rows...)
+			continue
+		}
+		checks = append(checks, rows...)
+	}
+
+	summary := []ui.Row{ui.Note(fmt.Sprintf("Summary: %d OK, %d warning(s), %d error(s)", okCount, warnCount, errorCount))}
+	if errorCount > 0 {
+		summary = append(summary, ui.Note("Review the reported errors before running backup, restore, or verify."))
+	}
+	report := ui.Report{Title: "Startup health check", Sections: []ui.Section{{Rows: checks}}}
+	if len(staging) > 0 {
+		report.Sections = append(report.Sections, ui.Section{Rows: staging})
+	}
+	report.Sections = append(report.Sections, ui.Section{Rows: summary})
+	return report
+}
+
+func healthStatus(severity healthSeverity) ui.Status {
+	switch severity {
+	case healthOK:
+		return ui.StatusOK
+	case healthWarn:
+		return ui.StatusWarn
+	default:
+		return ui.StatusError
+	}
 }
 
 func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {

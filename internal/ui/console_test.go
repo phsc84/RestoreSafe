@@ -215,3 +215,13 @@ func TestWaitForSpareYubiKey(t *testing.T) {
 		t.Fatalf("q: got %v, %v; want false", ok, err)
 	}
 }
+
+func TestShowResultPrintsWarningsAndLogFileLast(t *testing.T) {
+	c, out := scripted()
+	c.ShowResult(Result{LogPath: "C:/Backups/run.log"})
+	c.ShowResult(Result{Warnings: 2, LogPath: "C:/Backups/run.log"})
+	want := "\nLog file: C:/Backups/run.log\nWarnings: 2\n\nLog file: C:/Backups/run.log\n"
+	if got := out.String(); got != want {
+		t.Fatalf("unexpected output.\nwant: %q\n got: %q", want, got)
+	}
+}
