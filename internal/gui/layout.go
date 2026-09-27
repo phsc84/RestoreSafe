@@ -79,20 +79,38 @@ const (
 	opProgressHeight = 16
 	opButtonWidth    = 180
 	opButtons        = 4
+	browseWidth      = 110
+	checkHeight      = 24
+	destNoteHeight   = 40
 )
 
-// operationLayout places the operation screen's controls.
+// opContent is what the content area of the operation screen shows.
+type opContent int
+
+const (
+	contentLog          opContent = iota // running and result screens
+	contentReport                        // preflight
+	contentReportAndLog                  // result after a blocking preflight
+	contentTree                          // backup selection
+	contentDestination                   // restore destination
+)
+
+// operationLayout places the operation screen's controls; rectangles of
+// controls the content mode does not show are empty.
 type operationLayout struct {
 	title, detail, progress win32.Rect
-	report, log             win32.Rect
+	report, log, tree       win32.Rect
+	destLabel, destEdit     win32.Rect
+	destBrowse, destCheck   win32.Rect
+	destNote                win32.Rect
 	buttons                 [opButtons]win32.Rect
 }
 
 // layoutOperation lays out the operation screen: heading, detail line,
-// progress bar (when shown), the report and the log (each alone takes the
-// whole content area; together the report gets two thirds), and a row of
-// buttons.
-func layoutOperation(s scale, width, height int32, showReport, showLog, showProgress bool) operationLayout {
+// progress bar (when shown), the content area, and a row of buttons. In the
+// content area, the report and the log each alone take all of it; together
+// the report gets two thirds.
+func layoutOperation(s scale, width, height int32, content opContent, showProgress bool) operationLayout {
 	w := width * 96 / int32(s)
 	h := height * 96 / int32(s)
 	var l operationLayout
@@ -106,17 +124,31 @@ func layoutOperation(s scale, width, height int32, showReport, showLog, showProg
 		y += opProgressHeight + gap
 	}
 	buttonsY := h - margin - buttonHeight
-	content := max(buttonsY-gap-y, 0)
-	if showReport {
-		reportH := content
-		if showLog {
-			reportH = content * 2 / 3
-		}
+	area := max(buttonsY-gap-y, 0)
+	full := s.rect(margin, y, w-2*margin, area)
+
+	switch content {
+	case contentLog:
+		l.log = full
+	case contentReport:
+		l.report = full
+	case contentReportAndLog:
+		reportH := area * 2 / 3
 		l.report = s.rect(margin, y, w-2*margin, reportH)
-		y += reportH + gap
-		content = max(content-reportH-gap, 0)
+		l.log = s.rect(margin, y+reportH+gap, w-2*margin, max(area-reportH-gap, 0))
+	case contentTree:
+		l.tree = full
+	case contentDestination:
+		l.destLabel = s.rect(margin, y, w-2*margin, fieldLabel)
+		y += fieldLabel
+		l.destEdit = s.rect(margin, y, max(w-2*margin-gap-browseWidth, 0), fieldHeight)
+		l.destBrowse = s.rect(w-margin-browseWidth, y, browseWidth, fieldHeight)
+		y += fieldHeight + gap
+		l.destCheck = s.rect(margin, y, w-2*margin, checkHeight)
+		y += checkHeight + gap
+		l.destNote = s.rect(margin, y, w-2*margin, destNoteHeight)
 	}
-	l.log = s.rect(margin, y, w-2*margin, content)
+
 	// Buttons are narrower when the window is too small for all of them.
 	bw := min(int32(opButtonWidth), (w-2*margin-(opButtons-1)*gap)/opButtons)
 	for i := range l.buttons {

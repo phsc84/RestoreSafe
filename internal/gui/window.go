@@ -3,6 +3,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/security"
 	"RestoreSafe/internal/startup"
 	"RestoreSafe/internal/ui"
@@ -33,6 +34,11 @@ const (
 	idVerify
 	idRecheck
 	idOpButton // idOpButton+i is button i of the operation screen
+
+	idTree       = 201
+	idDestEdit   = 202
+	idDestBrowse = 203
+	idDestCheck  = 204
 
 	msgHealthDone = win32.WM_APP + 1
 	msgBridge     = win32.WM_APP + 2 // wparam: noteQuestion, noteOutput, noteProgress
@@ -73,17 +79,24 @@ type app struct {
 
 	op struct {
 		title, detail, progress win32.HWND
-		report, log             win32.HWND
+		report, log, tree       win32.HWND
+		destLabel, destEdit     win32.HWND
+		destBrowse, destCheck   win32.HWND
+		destNote                win32.HWND
 		buttons                 [opButtons]win32.HWND
 	}
 	opButtons      []opButton
 	opTitleStatus  ui.Status
-	opShowReport   bool
-	opShowLog      bool
+	opContent      opContent
 	opShowProgress bool
-	progressText   string
-	run            *runState
-	opReport       *ui.Report // preflight report on screen, re-rendered on DPI changes
+	// Selection and destination screens.
+	treeNodes    map[win32.TreeItem]selectionNode
+	selectRuns   []catalog.BackupRunSummary
+	selectAction string // "restore" or "verify"
+	destDefault  string // the backup directory, for "restore into the backup directory"
+	progressText string
+	run          *runState
+	opReport     *ui.Report // preflight report on screen, re-rendered on DPI changes
 
 	home struct {
 		configLabel, configPath, configOpen win32.HWND
@@ -106,6 +119,9 @@ func Run(opts Options) error {
 	defer runtime.UnlockOSThread()
 
 	if err := win32.InitCommonControls(); err != nil {
+		return err
+	}
+	if err := win32.InitCOM(); err != nil {
 		return err
 	}
 	if err := win32.LoadRichEdit(); err != nil {
@@ -252,7 +268,7 @@ func (a *app) applyFonts() {
 func (a *app) controls() []win32.HWND {
 	h := &a.home
 	all := []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck,
-		a.op.detail, a.op.report}
+		a.op.detail, a.op.report, a.op.tree, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
 	all = append(all, a.op.buttons[:]...)
 	out := all[:0]
 	for _, c := range all {
@@ -285,6 +301,12 @@ func (a *app) createOperation() error {
 	o.progress = create(win32.PROGRESS_CLASS, 0, 0)
 	o.report = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
 	o.log = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
+	o.tree = create(win32.WC_TREEVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.TVS_HASBUTTONS|win32.TVS_HASLINES|win32.TVS_LINESATROOT|win32.TVS_SHOWSELALWAYS, idTree)
+	o.destLabel = create("STATIC", win32.SS_NOPREFIX, 0)
+	o.destEdit = create("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idDestEdit)
+	o.destBrowse = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, idDestBrowse)
+	o.destCheck = create("BUTTON", win32.WS_TABSTOP|win32.BS_AUTOCHECKBOX, idDestCheck)
+	o.destNote = create("STATIC", win32.SS_NOPREFIX, 0)
 	for i := range o.buttons {
 		o.buttons[i] = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, uintptr(idOpButton+i))
 	}
@@ -306,17 +328,28 @@ func (a *app) showPage(page int) {
 	for _, c := range a.homeControls() {
 		win32.SetVisible(c, page == pageHome)
 	}
-	o := &a.op
-	win32.SetVisible(o.log, page == pageOperation && a.opShowLog)
-	for _, c := range []win32.HWND{o.title, o.detail} {
-		win32.SetVisible(c, page == pageOperation)
-	}
-	win32.SetVisible(o.report, page == pageOperation && a.opShowReport)
-	win32.SetVisible(o.progress, page == pageOperation && a.opShowProgress)
-	for i, b := range o.buttons {
-		win32.SetVisible(b, page == pageOperation && i < len(a.opButtons))
-	}
+	a.applyOpVisibility()
 	a.layout()
+}
+
+// applyOpVisibility shows the operation screen's controls that the page,
+// the content mode, and the buttons call for.
+func (a *app) applyOpVisibility() {
+	on := a.page == pageOperation
+	o := &a.op
+	c := a.opContent
+	win32.SetVisible(o.title, on)
+	win32.SetVisible(o.detail, on)
+	win32.SetVisible(o.progress, on && a.opShowProgress)
+	win32.SetVisible(o.report, on && (c == contentReport || c == contentReportAndLog))
+	win32.SetVisible(o.log, on && (c == contentLog || c == contentReportAndLog))
+	win32.SetVisible(o.tree, on && c == contentTree)
+	for _, d := range []win32.HWND{o.destLabel, o.destEdit, o.destBrowse, o.destCheck, o.destNote} {
+		win32.SetVisible(d, on && c == contentDestination)
+	}
+	for i, b := range o.buttons {
+		win32.SetVisible(b, on && i < len(a.opButtons))
+	}
 }
 
 func (a *app) createHome() error {
@@ -371,9 +404,10 @@ func (a *app) layout() {
 	client := win32.ClientRect(a.hwnd)
 	s := scale(a.dpi)
 	if a.page == pageOperation {
-		l := layoutOperation(s, client.Width(), client.Height(), a.opShowReport, a.opShowLog, a.opShowProgress)
+		l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
 		o := &a.op
-		for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log} {
+		for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log, o.tree: l.tree,
+			o.destLabel: l.destLabel, o.destEdit: l.destEdit, o.destBrowse: l.destBrowse, o.destCheck: l.destCheck, o.destNote: l.destNote} {
 			win32.SetWindowPos(c, r)
 		}
 		for i, b := range o.buttons {
@@ -502,10 +536,40 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return uintptr(win32.SysColorBrush(win32.COLOR_WINDOW))
 	case win32.WM_COMMAND:
-		if win32.HiWord(wparam) == win32.BN_CLICKED && lparam != 0 {
-			a.onCommand(win32.LoWord(wparam))
+		id, code := win32.LoWord(wparam), win32.HiWord(wparam)
+		switch {
+		case id == win32.IDCANCEL && a.page == pageOperation:
+			a.clickCancel() // Esc
+			return 0
+		case id == idDestEdit && code == win32.EN_CHANGE:
+			a.updateDestination()
+			return 0
+		case id == idDestCheck && code == win32.BN_CLICKED:
+			a.updateDestination()
+			return 0
+		case id == idDestBrowse && code == win32.BN_CLICKED:
+			a.browseDestination()
+			return 0
+		case code == win32.BN_CLICKED && lparam != 0:
+			a.onCommand(id)
 			return 0
 		}
+	case win32.DM_GETDEFID:
+		// Enter clicks the first button of the operation screen.
+		if a.page == pageOperation && len(a.opButtons) > 0 {
+			return win32.DC_HASDEFID<<16 | uintptr(idOpButton)
+		}
+		return 0
+	case win32.WM_NOTIFY:
+		if nm := win32.NMHdrParam(lparam); nm.HwndFrom == a.op.tree {
+			switch nm.Code {
+			case win32.TVN_SELCHANGEDW:
+				a.onTreeSelection()
+			case win32.NM_DBLCLK, win32.NM_RETURN:
+				a.clickDefault()
+			}
+		}
+		return 0
 	case msgHealthDone:
 		a.healthDone()
 		return 0

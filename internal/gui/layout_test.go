@@ -54,35 +54,37 @@ func TestLayoutHomeFitsAndDoesNotOverlap(t *testing.T) {
 
 func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
 	t.Parallel()
+	empty := win32.Rect{}
 	for _, dpi := range []uint32{96, 144, 192} {
 		s := scale(dpi)
 		w, h := s.px(windowMinWidth), s.px(windowMinHeight)
-		for _, panes := range [][3]bool{{true, false, false}, {false, true, true}, {true, true, false}} {
-			l := layoutOperation(s, w, h, panes[0], panes[1], panes[2])
-			rects := []win32.Rect{l.title, l.detail}
-			if panes[2] {
-				rects = append(rects, l.progress)
-			}
-			if panes[0] {
-				rects = append(rects, l.report)
-			}
-			if panes[1] {
-				rects = append(rects, l.log)
-			}
-			rects = append(rects, l.buttons[:]...)
-			client := win32.Rect{Right: w, Bottom: h}
-			for i, r := range rects {
-				if !inside(r, client) {
-					t.Fatalf("dpi %d panes %v: control %d %+v outside %+v", dpi, panes, i, r, client)
-				}
-				for j := i + 1; j < len(rects); j++ {
-					if overlap(r, rects[j]) {
-						t.Fatalf("dpi %d panes %v: controls %d and %d overlap", dpi, panes, i, j)
+		for content := contentLog; content <= contentDestination; content++ {
+			for _, progress := range []bool{false, true} {
+				l := layoutOperation(s, w, h, content, progress)
+				var rects []win32.Rect
+				for _, r := range []win32.Rect{l.title, l.detail, l.progress, l.report, l.log, l.tree, l.destLabel, l.destEdit, l.destBrowse, l.destCheck, l.destNote} {
+					if r != empty {
+						rects = append(rects, r)
 					}
 				}
-			}
-			if panes[0] && !panes[1] && l.report.Bottom < l.buttons[0].Top-s.px(2*gap) {
-				t.Fatalf("dpi %d: a report without log must fill the content area", dpi)
+				rects = append(rects, l.buttons[:]...)
+				client := win32.Rect{Right: w, Bottom: h}
+				for i, r := range rects {
+					if !inside(r, client) {
+						t.Fatalf("dpi %d content %d: control %d %+v outside %+v", dpi, content, i, r, client)
+					}
+					for j := i + 1; j < len(rects); j++ {
+						if overlap(r, rects[j]) {
+							t.Fatalf("dpi %d content %d: controls %d %+v and %d %+v overlap", dpi, content, i, r, j, rects[j])
+						}
+					}
+				}
+				if content == contentReport && l.report.Bottom < l.buttons[0].Top-s.px(2*gap) {
+					t.Fatalf("dpi %d: the report must fill the content area", dpi)
+				}
+				if content == contentTree && l.tree.Height() < s.px(200) {
+					t.Fatalf("dpi %d: tree too small (%d px)", dpi, l.tree.Height())
+				}
 			}
 		}
 	}

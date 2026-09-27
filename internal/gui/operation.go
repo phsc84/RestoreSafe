@@ -53,7 +53,7 @@ func (a *app) startOperation(op operation) {
 	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version+" - "+op.title())
 	win32.SetRichText(a.op.log, "")
 	a.opReport = nil
-	a.setOpScreen(op.title(), ui.StatusNone, "Preparing ...", false, true, false, nil)
+	a.setOpScreen(op.title(), ui.StatusNone, "Preparing ...", contentLog, false, nil)
 
 	cfg, exeDir := a.opts.Config, a.opts.ExeDir
 	go func() {
@@ -76,18 +76,16 @@ func (a *app) startOperation(op operation) {
 	}()
 }
 
-// setOpScreen sets the operation screen's heading, detail line, which panes
-// are visible, and the buttons (nil: none).
-func (a *app) setOpScreen(title string, status ui.Status, detail string, showReport, showLog, showProgress bool, buttons []opButton) {
+// setOpScreen sets the operation screen's heading, detail line, content
+// area, progress bar, and buttons (nil: none).
+func (a *app) setOpScreen(title string, status ui.Status, detail string, content opContent, showProgress bool, buttons []opButton) {
 	a.opTitleStatus = status
 	win32.SetText(a.op.title, title)
 	win32.SetText(a.op.detail, detail)
-	a.opShowReport = showReport
-	a.opShowLog = showLog
-	win32.SetVisible(a.op.log, showLog)
+	a.opContent = content
 	a.opShowProgress = showProgress
-	win32.SetVisible(a.op.report, showReport)
-	win32.SetVisible(a.op.progress, showProgress)
+	a.opButtons = nil
+	a.applyOpVisibility()
 	a.setOpButtons(buttons)
 	a.layout()
 }
@@ -121,7 +119,7 @@ func (a *app) showPreflight(r ui.Report) {
 	if r.HasErrors() {
 		detail = "The preflight found errors."
 	}
-	a.setOpScreen(a.run.op.title(), ui.StatusNone, detail, true, false, false, nil)
+	a.setOpScreen(a.run.op.title(), ui.StatusNone, detail, contentReport, false, nil)
 }
 
 // offerStart shows the start buttons under the preflight.
@@ -140,7 +138,7 @@ func (a *app) startRunning() {
 		return
 	}
 	r.started = time.Now()
-	a.setOpScreen(r.op.name(), ui.StatusNone, "Unlocking keys ...", false, true, true, []opButton{{"Cancel", a.confirmCancel}})
+	a.setOpScreen(r.op.name(), ui.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
 	a.setMarquee(true)
 	win32.SetTimer(a.hwnd, elapsedTimerID, 1000)
 }
@@ -300,7 +298,11 @@ func (a *app) onWorkerDone() {
 		buttons = append(buttons, opButton{"Open &log", func() { a.open(logPath, true) }})
 	}
 	buttons = append(buttons, opButton{"&Back to start", a.backToHome})
-	a.setOpScreen(statusPrefix(o.status)+o.text, o.status, detail, o.showReport && r.report != nil, true, false, buttons)
+	content := contentLog
+	if o.showReport && r.report != nil {
+		content = contentReportAndLog
+	}
+	a.setOpScreen(statusPrefix(o.status)+o.text, o.status, detail, content, false, buttons)
 	win32.SetFocus(a.op.buttons[len(buttons)-1])
 }
 

@@ -7,9 +7,7 @@ import (
 	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/win32"
 	"bytes"
-	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 )
 
@@ -59,30 +57,17 @@ func (g *guiUI) ShowReport(r ui.Report) {
 	}, nil, nil)
 }
 
-// SelectBackups lets the user choose a backup run. The tree with single
-// backup sets follows in GUI phase G5.
+// SelectBackups shows the selection tree: a whole backup run or a single
+// backup set.
 func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([]util.BackupEntry, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
-		radios := make([]win32.TaskButton, len(runs))
-		for i, run := range runs {
-			radios[i] = win32.TaskButton{ID: int32(100 + i), Text: runLabel(run)}
-		}
-		verb := "Restore"
-		if action == "verify" {
-			verb = "Verify"
-		}
-		button, radio := g.app.taskDialog(win32.TaskDialog{
-			Instruction:  "Choose the backup run to " + action,
-			Content:      "All backup sets of the chosen run are " + completedAction(action) + ".",
-			Buttons:      []win32.TaskButton{{ID: win32.IDOK, Text: verb}, {ID: win32.IDCANCEL, Text: "Cancel"}},
-			Radios:       radios,
-			DefaultRadio: 100,
+		g.app.showSelection(action, runs, func(entries []util.BackupEntry, ok bool) {
+			if !ok {
+				answer(nil, ui.ErrCancelled)
+				return
+			}
+			answer(entries, nil)
 		})
-		if button != win32.IDOK || radio < 100 || int(radio-100) >= len(runs) {
-			answer(nil, ui.ErrCancelled)
-			return
-		}
-		answer(runs[radio-100].Entries, nil)
 	}, nil, ui.ErrCancelled)
 	if err != nil {
 		return nil, err
@@ -90,48 +75,16 @@ func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([
 	return v.([]util.BackupEntry), nil
 }
 
-// runLabel describes a backup run in one line.
-func runLabel(run catalog.BackupRunSummary) string {
-	names := make([]string, len(run.Entries))
-	diff := false
-	for i, e := range run.Entries {
-		names[i] = e.DirectoryName
-		diff = diff || e.IsDiff()
-	}
-	kind := "full"
-	if diff {
-		kind = "differential"
-	}
-	return fmt.Sprintf("%s  %s  (%s: %s)", run.RunID, run.Created.Local().Format("2006-01-02 15:04"), kind, strings.Join(names, ", "))
-}
-
-func completedAction(action string) string {
-	if action == "verify" {
-		return "verified"
-	}
-	return "restored"
-}
-
-// RestoreDestination asks for the folder to restore into. The folder picker
-// follows in GUI phase G5.
+// RestoreDestination shows the destination screen.
 func (g *guiUI) RestoreDestination(backupDir string) (string, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
-		values, ok := g.app.runInputDialog(inputDialog{
-			title:   "Restore destination",
-			heading: "Restore into which folder?",
-			message: "Leave the field empty to restore into the backup directory itself.",
-			fields:  []inputField{{label: "Folder:"}},
-			okText:  "Next",
+		g.app.showDestination(backupDir, func(path string, ok bool) {
+			if !ok {
+				answer(nil, ui.ErrCancelled)
+				return
+			}
+			answer(path, nil)
 		})
-		if !ok {
-			answer(nil, ui.ErrCancelled)
-			return
-		}
-		path := strings.TrimSpace(string(values[0]))
-		if path == "" {
-			path = backupDir
-		}
-		answer(filepath.Clean(path), nil)
 	}, nil, ui.ErrCancelled)
 	if err != nil {
 		return "", err
