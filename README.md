@@ -3,7 +3,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/phsc84/RestoreSafe)](https://github.com/phsc84/RestoreSafe/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2064--bit-blue)](https://github.com/phsc84/RestoreSafe/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
-[![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go)](https://go.dev/dl/)
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go)](https://go.dev/dl/)
 
 RestoreSafe is a standalone Windows 64-bit backup tool that backs up your directories into encrypted, split archive files, with password protection and optional YubiKey 2FA. It creates full and differential backups automatically, checks every restored file against its checksum, and needs nothing but `RestoreSafe.exe` to back up, verify, and restore.
 
@@ -400,7 +400,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 
 ### Prerequisites
 
-- [Go](https://go.dev/dl/) 1.26 or later
+- [Go](https://go.dev/dl/) 1.27 or later
 - [goversioninfo](https://github.com/josephspurrier/goversioninfo): `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`
 
 ### Build

@@ -32,6 +32,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `retention_keep` counts backup chains; a chain is always deleted as a whole.
 - Backup parts are written as `.tmp` files and renamed only when the backup is complete, so an interrupted backup never looks like a valid one.
 - Verify checks every file's checksum instead of only the archive structure.
+- Update Go to 1.27.1
+- YAML parsing uses the maintained `go.yaml.in/yaml/v3` module instead of the archived `gopkg.in/yaml.v3`.
 
 ## [1.0.2] - 2026-08-22
 
