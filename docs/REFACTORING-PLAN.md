@@ -65,7 +65,7 @@ RestoreSafe/
 │   │   ├── manifest/           manifest format
 │   │   ├── catalog/            inventory of the backup directory, selection
 │   │   ├── naming/             backup IDs, backup entries, part and log file names
-│   │   └── setio/              writing a backup set
+│   │   └── setwriter/          writing a backup set
 │   ├── security/
 │   │   ├── cryptox/            encryption, Argon2, key sealing, subkeys, random bytes, ZeroBytes
 │   │   ├── recovery/           recovery code: generate, parse, checksum
@@ -99,13 +99,13 @@ Imports point downward only. The layers, from top to bottom (a package may impor
 cmd             restoresafe, yubidiag
 gui             gui, gui/win32
 workflow        interact, backup, restore, verify, health, unlock, staging, restorepoint, job
-format          archive, container, manifest, catalog, naming, setio
+format          archive, container, manifest, catalog, naming, setwriter
 config, logging config → security/cryptox (Argon2 bounds); logging → buildinfo
 security        cryptox, recovery, yubikey (recovery and yubikey → cryptox)
 fsx, buildinfo  no internal imports
 ```
 
-`format` imports `config` (exclude patterns in `archive` and `setio`, the authentication mode in `container`, the configuration in `catalog`), so `config` sits below `format`, not beside it.
+`format` imports `config` (exclude patterns in `archive` and `setwriter`, the authentication mode in `container`, the configuration in `catalog`), so `config` sits below `format`, not beside it.
 
 Additional rules:
 
@@ -133,7 +133,7 @@ Additional rules:
 | `internal/operation/progress.go`, `runtime.go`, `preflight.go`, `source_validation.go` | `internal/workflow/job` (named `job`, not `run`: "run" is the domain term for one backup run and a common variable name) |
 | `internal/archive`, `container`, `manifest`, `catalog`, `setio` | `internal/format/...` |
 | `internal/util/naming.go` | `internal/format/naming` |
-| `internal/util/split.go` | `internal/format/container` (the multi-part writer; `container`'s own tests use it, and `setio` builds on `container`, so it cannot live in `setio`) |
+| `internal/util/split.go` | `internal/format/container` (the multi-part writer; `container`'s own tests use it, and `setwriter` builds on `container`, so it cannot live in `setwriter`) |
 | `internal/util/config.go`, `exclude.go` | `internal/config` |
 | `internal/util/logging.go` | `internal/logging` |
 | `internal/util/version.go` | `internal/buildinfo` (`util.AppVersion` becomes `buildinfo.Version`; the container imported `util` only for it) |
@@ -168,3 +168,4 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 - After phase 1, `sandbox/` keeps its content; configuration files in it that point to paths inside the old `test/` folder need their paths updated by hand.
 - The GUI automation scripts depend on control texts and window classes of the GUI; they are tools for the manual checklist, not part of `go test`.
 - After phase 5, exported names that repeated their package were shortened: in `yubikey`, `CheckConnected`, `CheckAvailability`, `RegisterSpare`, `HIDDevicePaths`, `ErrNotConnected`, `ErrRequired`, `ErrAlreadyRegistered` (all without `YubiKey`); `config.Argon2` and `config.Differential` (without `Config`); `setio.Write` and `setio.Params` (without `Set`). `config.Config` and `manifest.Manifest` stay: a package's central type named after the package is the Go convention.
+- `setio` was then renamed to `setwriter`: it only writes sets (reading is in `container`, `catalog`, and `restorepoint`), so "io" promised more than it holds. The name follows `text/tabwriter`.

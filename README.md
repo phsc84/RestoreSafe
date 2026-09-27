@@ -419,7 +419,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 | `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
 | `internal/gui` | The window application; `internal/gui/win32` wraps the Windows API it uses |
 | `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, staging, restore points); `workflow/interact` is the contract between the workflows and the GUI |
-| `internal/format` | The backup format: TAR archive, container, manifest, set I/O, inventory, and file names |
+| `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
 | `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
 | `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
 | `build/windows` | Icon, application manifest, and version information embedded by `build.bat` |

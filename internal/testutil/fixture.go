@@ -5,7 +5,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/format/setio"
+	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"os"
@@ -110,7 +110,7 @@ func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry naming.BackupEntry
 func WriteFullSet(t testing.TB, srcDir, backupDir string, entry naming.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
-	res, err := setio.Write(setio.Params{
+	res, err := setwriter.Write(setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
@@ -153,19 +153,19 @@ func WriteDiffSet(t testing.TB, srcDir, backupDir string, base naming.BackupEntr
 
 	entry := naming.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
 	runID, _ := naming.NewBackupID()
-	_, err = setio.Write(setio.Params{
+	_, err = setwriter.Write(setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
 		Entry:          entry,
-		Base:           &setio.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum},
+		Base:           &setwriter.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum},
 		RunID:          runID,
 		KeySet:         *ks,
 		Master:         master,
 		SplitSizeBytes: defaultSplitSizeMB * 1024 * 1024,
 	})
 	if err != nil {
-		t.Fatalf("setio.Write (differential): %v", err)
+		t.Fatalf("setwriter.Write (differential): %v", err)
 	}
 	return entry
 }

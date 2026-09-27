@@ -2,7 +2,7 @@ package backup
 
 import (
 	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/format/setio"
+	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
@@ -129,7 +129,7 @@ func moveDirectoryFiles(ctx context.Context, rep interact.ProgressReporter, log 
 		}
 		temps = append(temps, tmp)
 	}
-	if _, err := setio.FinalizeParts(temps); err != nil {
+	if _, err := setwriter.FinalizeParts(temps); err != nil {
 		return err
 	}
 

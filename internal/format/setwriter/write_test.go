@@ -1,4 +1,4 @@
-package setio
+package setwriter
 
 import (
 	"RestoreSafe/internal/format/archive"

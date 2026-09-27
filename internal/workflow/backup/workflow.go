@@ -12,7 +12,7 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/format/setio"
+	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/cryptox"
@@ -239,7 +239,7 @@ func runBackupOperation(
 		log.Debug("Directory name in archive: %s", directoryName)
 
 		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
-		var base *setio.Base
+		var base *setwriter.Base
 		if plan := plans[directoryName]; plan.IsDiff() {
 			loaded, err := loadBase(backupDir, plan.Base, keySet, master)
 			if err != nil {
@@ -368,7 +368,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 
 // loadBase opens the full backup a differential is based on and decrypts and
 // validates its manifest. The base must use the unlocked key set.
-func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet, master []byte) (*setio.Base, error) {
+func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet, master []byte) (*setwriter.Base, error) {
 	if info.Header.KeySet.ID != keySet.ID {
 		return nil, fmt.Errorf("it uses different keys")
 	}
@@ -386,7 +386,7 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 	if err != nil {
 		return nil, err
 	}
-	return &setio.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
+	return &setwriter.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
 }
 
 // backupDirectory writes one backup set of srcDir into workingDir: a
@@ -398,7 +398,7 @@ func backupDirectory(
 	srcDir string,
 	entry naming.BackupEntry,
 	runID naming.BackupID,
-	base *setio.Base,
+	base *setwriter.Base,
 	workingDir, backupDir string,
 	keySet *container.KeySet,
 	master []byte,
@@ -424,7 +424,7 @@ func backupDirectory(
 	defer stopReport()
 
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
-	res, err := setio.Write(setio.Params{
+	res, err := setwriter.Write(setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    excludeDirs,
 		OutputDir:      workingDir,
@@ -447,7 +447,7 @@ func backupDirectory(
 		OnPartOpened: func(seq int, path string) {
 			log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
-		Counters: setio.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
+		Counters: setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
 		Context:  ctx,
 		Progress: &done,
 	})

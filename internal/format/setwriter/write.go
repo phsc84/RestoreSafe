@@ -1,8 +1,8 @@
-// Package setio writes complete backup sets: it connects the TAR producer
+// Package setwriter writes complete backup sets: it connects the TAR producer
 // (package archive), the container writer (package container), and the split
 // writer, and makes a set appear under its final file names only once it is
 // complete.
-package setio
+package setwriter
 
 import (
 	"RestoreSafe/internal/config"
