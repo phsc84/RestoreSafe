@@ -10,13 +10,6 @@ import (
 	"testing"
 )
 
-func TestHealthSeverityLabelDefaultReturnsUnknown(t *testing.T) {
-	t.Parallel()
-	if got := healthSeverityLabel(healthSeverity(99)); got != "UNKNOWN" {
-		t.Fatalf("expected UNKNOWN for unknown severity, got %q", got)
-	}
-}
-
 func TestCheckConfigFileHealthOKForExistingFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -155,7 +148,7 @@ func TestCheckArgon2HealthSilentWithoutNotices(t *testing.T) {
 	}
 }
 
-func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
+func TestHealthReportShowsTempDirItemsWithNote(t *testing.T) {
 	t.Parallel()
 	items := []healthItem{
 		{isNote: true, Detail: "Local staging via temp directory enabled."},
@@ -163,7 +156,7 @@ func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	printStartupHealthCheck(&sb, items)
+	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if !strings.Contains(output, "Local staging via temp directory enabled.") {
@@ -177,7 +170,7 @@ func TestPrintStartupHealthCheckShowsTempDirItemsWithNote(t *testing.T) {
 	}
 }
 
-func TestPrintStartupHealthCheckNoAdviceLineWhenNoErrors(t *testing.T) {
+func TestHealthReportNoAdviceLineWhenNoErrors(t *testing.T) {
 	t.Parallel()
 	items := []healthItem{
 		{Severity: healthOK, Scope: "Config", Detail: "ok"},
@@ -185,7 +178,7 @@ func TestPrintStartupHealthCheckNoAdviceLineWhenNoErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	printStartupHealthCheck(&sb, items)
+	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if strings.Contains(output, "Review the reported errors") {
@@ -196,21 +189,7 @@ func TestPrintStartupHealthCheckNoAdviceLineWhenNoErrors(t *testing.T) {
 	}
 }
 
-func TestHealthSeverityLabel(t *testing.T) {
-	t.Parallel()
-
-	if got := healthSeverityLabel(healthOK); got != "OK" {
-		t.Fatalf("expected OK label, got %q", got)
-	}
-	if got := healthSeverityLabel(healthWarn); got != "WARN" {
-		t.Fatalf("expected WARN label, got %q", got)
-	}
-	if got := healthSeverityLabel(healthError); got != "ERROR" {
-		t.Fatalf("expected ERROR label, got %q", got)
-	}
-}
-
-func TestRunStartupHealthCheckPrintsReportAndReturnsResult(t *testing.T) {
+func TestCheckHealthReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 	exeDir := t.TempDir()
 	source := filepath.Join(exeDir, "Documents")
 	backup := filepath.Join(exeDir, "Backups")
@@ -232,10 +211,10 @@ func TestRunStartupHealthCheckPrintsReportAndReturnsResult(t *testing.T) {
 		LogLevel:          "info",
 	}
 
-	var result HealthCheckResult
-	output := testutil.CaptureStdout(t, func() {
-		result = RunStartupHealthCheck(os.Stdout, cfg, exeDir, configPath)
-	})
+	result := CheckHealth(cfg, exeDir, configPath)
+	var sb strings.Builder
+	ui.WriteReport(&sb, result.Report())
+	output := sb.String()
 
 	if !strings.Contains(output, "Startup health check") {
 		t.Fatalf("expected health check header in output, got: %q", output)
@@ -423,7 +402,7 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 	}
 }
 
-func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
+func TestHealthReportSummaryAndAdvice(t *testing.T) {
 	t.Parallel()
 	items := []healthItem{
 		{Severity: healthOK, Scope: "Config", Detail: "ok"},
@@ -432,7 +411,7 @@ func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	printStartupHealthCheck(&sb, items)
+	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 1 error(s)") {
@@ -443,7 +422,7 @@ func TestPrintStartupHealthCheckSummaryAndAdvice(t *testing.T) {
 	}
 }
 
-func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
+func TestHealthReportGroupsScopes(t *testing.T) {
 	t.Parallel()
 
 	items := []healthItem{
@@ -453,7 +432,7 @@ func TestPrintStartupHealthCheckGroupsScopes(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	printStartupHealthCheck(&sb, items)
+	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if strings.Count(output, "Source directory(s):") != 1 {

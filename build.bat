@@ -20,12 +20,6 @@ if errorlevel 1 (
     echo [ERROR] goversioninfo failed
     exit /b 1
 )
-REM GUI (in development until phase G7; not part of the ZIP yet)
-goversioninfo -64 -o cmd/gui/resource.syso versioninfo.json
-if errorlevel 1 (
-    echo [ERROR] goversioninfo failed for the GUI
-    exit /b 1
-)
 
 echo [BUILD] Extract version from versioninfo.json...
 for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-Content versioninfo.json | ConvertFrom-Json).StringFileInfo.ProductVersion"') do set VERSION=%%i
@@ -46,16 +40,10 @@ set GOOS=windows
 set GOARCH=amd64
 set CGO_ENABLED=0
 
-go build -trimpath -ldflags="-s -w -X main.Version=%VERSION%" -o "%TEST_DIR%\RestoreSafe.exe" ./cmd
+REM -H=windowsgui: a window application; no console window opens.
+go build -trimpath -ldflags="-s -w -H=windowsgui -X main.Version=%VERSION%" -o "%TEST_DIR%\RestoreSafe.exe" ./cmd
 if errorlevel 1 (
     echo [ERROR] Compilation failed
-    exit /b 1
-)
-
-echo [BUILD] Compile RestoreSafe-gui.exe (in development, not in the ZIP)...
-go build -trimpath -ldflags="-s -w -H=windowsgui -X main.Version=%VERSION%" -o "%TEST_DIR%\RestoreSafe-gui.exe" ./cmd/gui
-if errorlevel 1 (
-    echo [ERROR] Compilation of the GUI failed
     exit /b 1
 )
 

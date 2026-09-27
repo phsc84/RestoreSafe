@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft |
+| Status | Implemented on branch `v2` (phases G1-G7); manual checks pending, see [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
 | Target release | RestoreSafe 2.0.0 (together with the 2.0 format; the console frontend is removed before the release) |
 | Builds on | [SPEC-restoresafe-2.0.md](SPEC-restoresafe-2.0.md); formats, keys, and workflow behavior are unchanged |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
@@ -307,4 +307,4 @@ The checklist with the status of the last run is kept in [GUI-TEST-CHECKLIST.md]
 | G4 | Dialog refinements: recovery-code dialog in large monospaced type (9.3), password dialogs per 9.1 and 9.2 reviewed (undo buffer emptied). Done. |
 | G5 | Selection tree with single backup sets, destination with folder picker; Enter and Esc on all operation screens. Done. |
 | G6 | Keyboard and accessibility pass (hidden controls are disabled, so their access keys cannot fire; screen-reader names for rich edits, tree, and progress bar), manual checklist ([GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md)), README screenshots. Done. |
-| G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. |
+| G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. Done. |

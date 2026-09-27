@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented on branch `v2` (phases 1-7; phases 8-10 prepared the workflows for a graphical frontend); hardware test of the YubiKey paths pending |
+| Status | Implemented on branch `v2` (phases 1-10 and GUI phases G1-G7); hardware test of the YubiKey paths pending |
 | Target release | RestoreSafe 2.0.0 |
 | Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
 

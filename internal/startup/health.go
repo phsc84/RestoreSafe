@@ -7,7 +7,6 @@ import (
 	"RestoreSafe/internal/ui"
 	"RestoreSafe/internal/util"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 )
@@ -70,15 +69,6 @@ func buildHealthCheckResult(items []healthItem) HealthCheckResult {
 		}
 	}
 	return HealthCheckResult{errorScopes: scopes, items: items}
-}
-
-// RunStartupHealthCheck performs a non-interactive diagnostic pass when the
-// application starts and prints it to out. It never aborts startup; it only
-// reports findings.
-func RunStartupHealthCheck(out io.Writer, cfg *util.Config, exeDir, configPath string) HealthCheckResult {
-	result := CheckHealth(cfg, exeDir, configPath)
-	printStartupHealthCheck(out, result.items)
-	return result
 }
 
 // CheckHealth performs the startup health check without printing it; the
@@ -454,94 +444,4 @@ func checkKeyHealth(cfg *util.Config, infos []catalog.SetInfo) []healthItem {
 		}}
 	}
 	return []healthItem{{Severity: healthOK, Scope: healthScopeKeys, Detail: detail}}
-}
-
-func printStartupHealthCheck(w io.Writer, items []healthItem) {
-	fmt.Fprintln(w, "----------------------")
-	fmt.Fprintln(w, "Startup health check")
-	fmt.Fprintln(w, "----------------------")
-
-	okCount := 0
-	warnCount := 0
-	errorCount := 0
-
-	for _, item := range items {
-		if item.isNote {
-			continue // notes are informational only; don't count toward summary
-		}
-		switch item.Severity {
-		case healthOK:
-			okCount++
-		case healthWarn:
-			warnCount++
-		case healthError:
-			errorCount++
-		}
-	}
-
-	// Separate items: regular (printed in grouped-scope table), notes (plain
-	// unindented text shown after the table), temp-dir (scoped, shown after notes).
-	regularItems := make([]healthItem, 0)
-	noteItems := make([]healthItem, 0)
-	tempDirItems := make([]healthItem, 0)
-	for _, item := range items {
-		switch {
-		case item.isNote:
-			noteItems = append(noteItems, item)
-		case item.Scope == healthScopeTempDirectory:
-			tempDirItems = append(tempDirItems, item)
-		default:
-			regularItems = append(regularItems, item)
-		}
-	}
-
-	orderedScopes := make([]string, 0)
-	itemsByScope := make(map[string][]healthItem)
-	for _, item := range regularItems {
-		if _, exists := itemsByScope[item.Scope]; !exists {
-			orderedScopes = append(orderedScopes, item.Scope)
-		}
-		itemsByScope[item.Scope] = append(itemsByScope[item.Scope], item)
-	}
-
-	for _, scope := range orderedScopes {
-		fmt.Fprintf(w, "%s:\n", scope)
-		for _, item := range itemsByScope[scope] {
-			fmt.Fprintf(w, "  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
-		}
-	}
-
-	if len(noteItems) > 0 || len(tempDirItems) > 0 {
-		fmt.Fprintln(w)
-		for _, item := range noteItems {
-			fmt.Fprintln(w, item.Detail)
-		}
-		if len(tempDirItems) > 0 {
-			fmt.Fprintf(w, "%s:\n", healthScopeTempDirectory)
-			for _, item := range tempDirItems {
-				fmt.Fprintf(w, "  [%s] %s\n", healthSeverityLabel(item.Severity), item.Detail)
-			}
-		}
-		fmt.Fprintln(w)
-	} else {
-		fmt.Fprintln(w)
-	}
-	fmt.Fprintf(w, "Summary: %d OK, %d warning(s), %d error(s)\n", okCount, warnCount, errorCount)
-	if errorCount > 0 {
-		fmt.Fprintln(w, "Review the reported errors before running backup, restore, or verify.")
-	}
-	fmt.Fprintln(w)
-}
-
-func healthSeverityLabel(severity healthSeverity) string {
-	switch severity {
-	case healthOK:
-		return "OK"
-	case healthWarn:
-		return "WARN"
-	case healthError:
-		return "ERROR"
-	default:
-		return "UNKNOWN"
-	}
 }

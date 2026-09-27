@@ -1,59 +1,38 @@
 package main
 
 import (
-	"errors"
-	"io"
-	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestReportOperationErrorStartsWithSingleBlankLine(t *testing.T) {
-	output := captureStderr(t, func() {
-		reportOperationError("Restore", errors.New("Too many wrong password attempts."))
-	})
-
-	expected := "\nRestore failed: Too many wrong password attempts.\n\n"
-	if output != expected {
-		t.Fatalf("unexpected output.\nexpected: %q\n     got: %q", expected, output)
+func TestConfigPathFromArgs(t *testing.T) {
+	t.Parallel()
+	exeDir := `C:\Tools\RestoreSafe`
+	custom := `D:\Configs\home.yaml`
+	cases := []struct {
+		args    []string
+		want    string
+		wantErr string
+	}{
+		{nil, filepath.Join(exeDir, "config.yaml"), ""},
+		{[]string{"-config=" + custom}, custom, ""},
+		{[]string{"--config=" + custom}, custom, ""},
+		{[]string{"-config=" + `D:\Configs\..\Configs\home.yaml`}, custom, ""},
+		{[]string{"-config", custom}, "", "equals form only"},
+		{[]string{"-config="}, "", "requires an absolute path"},
+		{[]string{"-config=home.yaml"}, "", "requires an absolute path"},
 	}
-}
-
-func TestReportPreflightErrorStartsWithSingleBlankLine(t *testing.T) {
-	output := captureStderr(t, func() {
-		reportOperationError("Backup", errors.New("Backup preflight failed: source is invalid"))
-	})
-
-	expected := "\nBackup failed.\n\n"
-	if output != expected {
-		t.Fatalf("unexpected output.\nexpected: %q\n     got: %q", expected, output)
+	for _, c := range cases {
+		got, err := configPathFromArgs(c.args, exeDir)
+		if c.wantErr != "" {
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Errorf("%v: error %v, want %q", c.args, err, c.wantErr)
+			}
+			continue
+		}
+		if err != nil || got != c.want {
+			t.Errorf("%v: got %q, %v; want %q", c.args, got, err, c.want)
+		}
 	}
-}
-
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-
-	prevStderr := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stderr pipe: %v", err)
-	}
-	os.Stderr = w
-	t.Cleanup(func() {
-		os.Stderr = prevStderr
-	})
-
-	fn()
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close stderr writer: %v", err)
-	}
-	output, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("failed to read stderr: %v", err)
-	}
-	if err := r.Close(); err != nil {
-		t.Fatalf("failed to close stderr reader: %v", err)
-	}
-
-	return string(output)
 }

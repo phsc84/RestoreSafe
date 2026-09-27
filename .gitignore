@@ -3,7 +3,6 @@
 *.exe
 *.zip
 cmd/resource.syso
-cmd/gui/resource.syso
 dev_setup.txt
 
 assets/**

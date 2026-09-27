@@ -66,7 +66,9 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Interactive menu; custom config path via `-config` flag
+- Windows application: preflight summary before every operation, progress with a live log, Cancel at any time, and a result screen
+- Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
+- Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
 - Backup split size configurable; supports multiple source directories with automatic alias disambiguation
 - Per-run log files; configurable log level
@@ -82,13 +84,13 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe and extract it to any directory on your computer.
 2. Rename `config-SAMPLE.yaml` to `config.yaml`.
 
-   By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a `.bat` file to launch RestoreSafe with the desired config (always use an absolute path):
+   By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a shortcut to `RestoreSafe.exe` and add the configuration to its **Target** (always use an absolute path):
 
-   ```bat
-   @echo off
+   ```text
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
-   pause
    ```
+
+   The start screen shows which configuration is loaded. RestoreSafe reads `config.yaml` at start; after changing it, restart RestoreSafe.
 3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs. Every parameter is explained in `config-SAMPLE.yaml`.
@@ -138,35 +140,31 @@ RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created b
 
 ## Usage
 
-### Create a backup
-Double-click RestoreSafe.exe and choose **Create backup** from the menu. The preflight summary shows, for every source directory, whether it gets a full or a differential backup and why, for example:
+Double-click RestoreSafe.exe. The start screen shows the configuration, the backup directory, and the startup health check. **Create backup**, **Restore backup**, and **Verify backup** are available when the health check finds nothing that blocks them; otherwise the line below the check says why. Fix the problem, then click **Recheck**.
 
-```text
-Source directory(s):
-  [OK] C:/Users/Me/Documents
-          → Differential backup (base: full 2026-09-01 ABC123, 25 days old)
-  [OK] C:/Users/Me/Pictures
-          → Full backup (reason: full backup is 31 days old (limit 30))
-```
+### Create a backup
+Click **Create backup**. The preflight summary shows, for every source directory, whether it gets a full or a differential backup and why (see [Screenshots](#screenshots)). For a differential, the needed space is an estimate of the files changed since the full backup; the summary also shows the size if everything were stored again.
 
 Then choose:
 
-- `Y` - start the backup as planned
-- `F` - full backup for every directory instead (offered when a differential is planned)
-- `K` - create new keys and full backups (to change your password, replace a lost YubiKey, or get a new recovery code; see [How your backups are locked](#how-your-backups-are-locked))
-- `N` - cancel
+- **Start backup** - start the backup as planned
+- **Full backup** - full backup for every directory instead (offered when a differential is planned)
+- **New keys + full backup** - create new keys and full backups (to change your password, replace a lost YubiKey, or get a new recovery code; see [How your backups are locked](#how-your-backups-are-locked))
+- **Cancel**
 
-Then enter your password and/or touch your YubiKey. On your first backup, RestoreSafe creates your keys first (see [What you will see](#what-you-will-see)).
+Then enter your password and/or confirm the Windows Security prompt of your YubiKey. On your first backup, RestoreSafe creates your keys first (see [What you will see](#what-you-will-see)).
+
+While the backup runs, the window shows the progress and the log. **Cancel** stops it: backup sets completed so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same.
 
 ### Restore a backup
-Double-click RestoreSafe.exe, choose **Restore backup** from the menu, select the backup(s) and the destination directory, then enter your password and/or touch your YubiKey.
+Click **Restore backup** and choose what to restore: a backup run (all its backup sets) or a single backup set. Then choose the destination folder (**Browse...**, or restore into the backup directory itself), check the preflight, click **Start restore**, and enter your password and/or confirm your YubiKey.
 
 Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically and shows it in the preflight. Files deleted before the differential was created are not restored.
 
-The restore destination must not already exist - RestoreSafe creates it during restore and will abort if the path is already present. If a file does not match its checksum, the restore stops and reports that it is incomplete.
+RestoreSafe creates one folder per backup set in the destination, named like the backed-up folder; these folders must not exist yet (the preflight checks it). If a file does not match its checksum, the restore stops and reports that it is incomplete.
 
 ### Verify a backup
-Double-click RestoreSafe.exe, choose **Verify backup** from the menu, and select the backup(s) to check. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup.
+Click **Verify backup**, choose a backup run or a single backup set, and click **Start verification**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup.
 
 ### Excluding files and unreadable files
 Use `exclude` in `config.yaml` to leave out files and directories (case-insensitive):
@@ -237,12 +235,12 @@ Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_cod
 1. You choose a password (at least `password_min_length` characters, 12 by default) and enter it twice.
 2. You register your YubiKey (two Windows Security prompts).
 3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
-4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Write it down and type it back to confirm.
+4. With `recovery_code: true`: RestoreSafe shows your recovery code once, in a window that does not allow copying it. Write it down on paper and type it back to confirm.
 5. Then every source directory gets a full backup.
 
 **Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
 
-**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, RestoreSafe asks whether to unlock with your password/YubiKey or with the recovery code (`R`).
+**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, RestoreSafe asks whether to unlock with your password/YubiKey or with the recovery code.
 
 ### When RestoreSafe creates new keys
 
@@ -250,7 +248,7 @@ New keys mean: a new master key, new boxes, and a new full backup of every sourc
 
 - you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
 - you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
-- you press `K` in the backup summary, to change your password, replace a lost YubiKey, or get a new recovery code.
+- you click **New keys + full backup** in the backup summary, to change your password, replace a lost YubiKey, or get a new recovery code.
 
 The backup summary always tells you in advance when new keys will be created and why.
 
@@ -271,10 +269,10 @@ The recovery code opens your backups **on its own**, even in password + YubiKey 
 
 | Situation | What to do |
 |---|---|
-| I lost my YubiKey. | Restore with your spare YubiKey or your recovery code. Then press `K` at your next backup to create new keys with a new YubiKey, so you have a spare again. Without spare and recovery code, backups locked with that YubiKey cannot be restored by anyone. |
-| I forgot my password. | Restore with your recovery code; it works alone, no password or YubiKey needed. Then press `K` at your next backup to set a new password. Without a recovery code, the backups cannot be restored by anyone. |
-| I want to change my password. | Press `K` at the next backup. Your older backups keep opening with the old password. |
-| Someone stole my backup drive. | Without your unlock methods, they cannot read anything. If you think your password or recovery code was exposed too, press `K` at your next backup and delete the old backups once the new ones are in place. |
+| I lost my YubiKey. | Restore with your spare YubiKey or your recovery code. Then click **New keys + full backup** at your next backup to create new keys with a new YubiKey, so you have a spare again. Without spare and recovery code, backups locked with that YubiKey cannot be restored by anyone. |
+| I forgot my password. | Restore with your recovery code; it works alone, no password or YubiKey needed. Then click **New keys + full backup** at your next backup to set a new password. Without a recovery code, the backups cannot be restored by anyone. |
+| I want to change my password. | Click **New keys + full backup** at the next backup. Your older backups keep opening with the old password. |
+| Someone stole my backup drive. | Without your unlock methods, they cannot read anything. If you think your password or recovery code was exposed too, click **New keys + full backup** at your next backup and delete the old backups once the new ones are in place. |
 | I deleted all backups. | The next backup creates new keys, like the first time. |
 
 ## Naming scheme of created files
@@ -411,13 +409,13 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 build.bat
 ```
 
-This compiles `RestoreSafe.exe`, creates `RestoreSafe-<version>.zip`, and extracts it to the `test\` directory for local testing.
+This compiles `RestoreSafe.exe` (a Windows application with an embedded manifest) into the `test\` directory for local testing and creates `RestoreSafe-<version>.zip`.
 
-The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-restoresafe-2.0.md](docs/SPEC-restoresafe-2.0.md).
+The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-restoresafe-2.0.md](docs/SPEC-restoresafe-2.0.md), the window application in [docs/SPEC-restoresafe-gui.md](docs/SPEC-restoresafe-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
 
 ### YubiKey diagnostic tool
 
-`cmd/yubidiag` is a developer utility that enumerates YubiKey HID devices, reports firmware version and registry entries, checks Windows WebAuthn API availability, and can optionally run a live FIDO2 hmac-secret test with Windows Security prompts. Use it to investigate YubiKey detection and authentication issues during development and testing. Set `RESTORESAFE_FIDO2_DEBUG=1` to print WebAuthn details in RestoreSafe itself.
+`cmd/yubidiag` is a developer utility that enumerates YubiKey HID devices, reports firmware version and registry entries, checks Windows WebAuthn API availability, and can optionally run a live FIDO2 hmac-secret test with Windows Security prompts. Use it to investigate YubiKey detection and authentication issues during development and testing. Set `RESTORESAFE_FIDO2_DEBUG=1` to print WebAuthn details in yubidiag (RestoreSafe itself has no console for them).
 
 It is not part of the release. To build it:
 
