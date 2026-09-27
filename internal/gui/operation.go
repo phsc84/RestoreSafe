@@ -99,7 +99,7 @@ func (a *app) setOpButtons(buttons []opButton) {
 			win32.Enable(h, true)
 			win32.SetVisible(h, true)
 		} else {
-			win32.SetVisible(h, false)
+			setShown(h, false)
 		}
 	}
 	if len(buttons) > 0 {
@@ -320,7 +320,7 @@ func (a *app) backToHome() {
 	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version)
 	a.showPage(pageHome)
 	a.startHealthCheck()
-	win32.SetFocus(a.home.backup)
+	a.focusHome()
 }
 
 // onClose handles closing the window (docs/SPEC-restoresafe-gui.md, 7.3).

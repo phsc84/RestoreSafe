@@ -65,12 +65,12 @@ func (a *app) onTreeSelection() {
 func (a *app) showDestination(backupDir string, done func(path string, ok bool)) {
 	o := &a.op
 	a.destDefault = backupDir
-	win32.SetText(o.destLabel, "Restore into this folder:")
+	win32.SetText(o.destLabel, "Restore into this &folder:")
 	win32.SetText(o.destEdit, "")
 	win32.Enable(o.destEdit, true)
 	win32.SetText(o.destBrowse, "&Browse...")
 	win32.Enable(o.destBrowse, true)
-	win32.SetText(o.destCheck, "Restore into the &backup directory itself")
+	win32.SetText(o.destCheck, "Restore into the backup &directory itself")
 	win32.SetChecked(o.destCheck, false)
 	win32.SetText(o.destNote, "RestoreSafe creates one folder per backup set in it, named like the backed-up folder (e.g. Documents). These folders must not exist yet; the preflight checks it.")
 

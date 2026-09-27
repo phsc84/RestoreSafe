@@ -289,6 +289,8 @@ Decided on 2026-09-26:
 
 ### 14.2 Manual checklist (per release)
 
+The checklist with the status of the last run is kept in [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md).
+
 - Backup with new keys (password, YubiKey + spare, recovery code), differential backup, full override, new-keys override.
 - Restore of a full and a differential; verify; wrong password and recovery code paths.
 - Cancel during backup, staging, restore, and verify; close the window during a question and during an operation; log off during a backup.
@@ -304,5 +306,5 @@ Decided on 2026-09-26:
 | G3 | Bridge, `gui.UI`, preflight, running and result screens, log pane, progress, cancel, closing and session end. A first version of every question: password, new password, unlock method, recovery code, spare YubiKey, and confirmations (task dialogs and an input dialog); interim run selection (a task dialog with one option per backup run) and destination (text field). Done. |
 | G4 | Dialog refinements: recovery-code dialog in large monospaced type (9.3), password dialogs per 9.1 and 9.2 reviewed (undo buffer emptied). Done. |
 | G5 | Selection tree with single backup sets, destination with folder picker; Enter and Esc on all operation screens. Done. |
-| G6 | Keyboard and accessibility pass, manual checklist, README screenshots. |
+| G6 | Keyboard and accessibility pass (hidden controls are disabled, so their access keys cannot fire; screen-reader names for rich edits, tree, and progress bar), manual checklist ([GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md)), README screenshots. Done. |
 | G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. |

@@ -9,7 +9,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
 ## Table of Contents
 
-- [Screenshot](#screenshot)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Installation & Configuration](#installation--configuration)
 - [Updating](#updating)
@@ -21,9 +21,24 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 - [YubiKey setup](#yubikey-setup)
 - [Development setup](#development-setup)
 
-## Screenshot
+## Screenshots
 
-<img src="assets/Screenshot_v1.0.0.png" alt="RestoreSafe main menu">
+The start screen runs a health check of the configuration, the directories, the YubiKey, and the existing backups:
+
+<img src="assets/Screenshot_v2.0.0_home.png" alt="RestoreSafe start screen with the startup health check">
+
+Before a backup starts, the preflight shows what RestoreSafe will do, including whether each directory gets a full or a differential backup:
+
+<img src="assets/Screenshot_v2.0.0_preflight.png" alt="Backup preflight with differential backups and the start choices">
+
+While it runs, RestoreSafe shows the progress and the log; Cancel stops it and removes the unfinished backup set:
+
+<img src="assets/Screenshot_v2.0.0_running.png" alt="Backup in progress with progress bar and log">
+
+To restore or verify, choose a whole backup run or a single backup set; for a differential, RestoreSafe reads its full backup too:
+
+<img src="assets/Screenshot_v2.0.0_selection.png" alt="Choosing the backup to restore">
+
 
 ## Features
 

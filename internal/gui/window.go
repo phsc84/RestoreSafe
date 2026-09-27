@@ -196,6 +196,7 @@ func (a *app) createWindow() error {
 		return err
 	}
 	a.applyFonts()
+	a.setAccessibleNames()
 	a.showPage(pageHome)
 	a.layout()
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
@@ -302,7 +303,7 @@ func (a *app) createOperation() error {
 	o.report = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
 	o.log = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
 	o.tree = create(win32.WC_TREEVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.TVS_HASBUTTONS|win32.TVS_HASLINES|win32.TVS_LINESATROOT|win32.TVS_SHOWSELALWAYS, idTree)
-	o.destLabel = create("STATIC", win32.SS_NOPREFIX, 0)
+	o.destLabel = create("STATIC", 0, 0) // &-prefix: Alt+F moves to the field after it
 	o.destEdit = create("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idDestEdit)
 	o.destBrowse = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, idDestBrowse)
 	o.destCheck = create("BUTTON", win32.WS_TABSTOP|win32.BS_AUTOCHECKBOX, idDestCheck)
@@ -326,10 +327,21 @@ func (a *app) createOperation() error {
 func (a *app) showPage(page int) {
 	a.page = page
 	for _, c := range a.homeControls() {
-		win32.SetVisible(c, page == pageHome)
+		setShown(c, page == pageHome)
 	}
 	a.applyOpVisibility()
+	if page == pageHome {
+		a.refreshHome() // restores the actions' enabled state
+	}
 	a.layout()
+}
+
+// setShown shows or hides a control. A hidden control is also disabled, so
+// the dialog manager skips it: otherwise its access key (e.g. Alt+B of the
+// hidden "Create backup") would win over the visible one.
+func setShown(c win32.HWND, shown bool) {
+	win32.SetVisible(c, shown)
+	win32.Enable(c, shown)
 }
 
 // applyOpVisibility shows the operation screen's controls that the page,
@@ -338,17 +350,17 @@ func (a *app) applyOpVisibility() {
 	on := a.page == pageOperation
 	o := &a.op
 	c := a.opContent
-	win32.SetVisible(o.title, on)
-	win32.SetVisible(o.detail, on)
-	win32.SetVisible(o.progress, on && a.opShowProgress)
-	win32.SetVisible(o.report, on && (c == contentReport || c == contentReportAndLog))
-	win32.SetVisible(o.log, on && (c == contentLog || c == contentReportAndLog))
-	win32.SetVisible(o.tree, on && c == contentTree)
+	setShown(o.title, on)
+	setShown(o.detail, on)
+	setShown(o.progress, on && a.opShowProgress)
+	setShown(o.report, on && (c == contentReport || c == contentReportAndLog))
+	setShown(o.log, on && (c == contentLog || c == contentReportAndLog))
+	setShown(o.tree, on && c == contentTree)
 	for _, d := range []win32.HWND{o.destLabel, o.destEdit, o.destBrowse, o.destCheck, o.destNote} {
-		win32.SetVisible(d, on && c == contentDestination)
+		setShown(d, on && c == contentDestination)
 	}
 	for i, b := range o.buttons {
-		win32.SetVisible(b, on && i < len(a.opButtons))
+		setShown(b, on && i < len(a.opButtons))
 	}
 }
 
@@ -451,6 +463,9 @@ func (a *app) healthDone() {
 	}
 	a.state = homeState{health: result}
 	a.refreshHome()
+	if a.page == pageHome {
+		a.focusHome()
+	}
 }
 
 func (a *app) refreshHome() {
@@ -469,6 +484,10 @@ func (a *app) refreshHome() {
 }
 
 func (a *app) onCommand(id uint16) {
+	// Commands of the page that is not shown are ignored (see setShown).
+	if (a.page == pageHome) != (id < idOpButton) {
+		return
+	}
 	switch id {
 	case idConfigOpen:
 		a.open(a.opts.ConfigPath, true)
@@ -622,4 +641,31 @@ func appIcon(size int32) windows.Handle {
 		return icon
 	}
 	return win32.LoadIcon(appIconIDFallback, size)
+}
+
+// setAccessibleNames names the controls screen readers cannot name from a
+// label: the rich edits (their window text is the content), the tree, and
+// the progress bar.
+func (a *app) setAccessibleNames() {
+	for hwnd, name := range map[win32.HWND]string{
+		a.home.report: "Startup health check",
+		a.op.report:   "Preflight summary",
+		a.op.log:      "Log",
+		a.op.tree:     "Backups",
+		a.op.progress: "Progress",
+	} {
+		win32.SetAccessibleName(hwnd, name)
+	}
+}
+
+// focusHome puts the keyboard focus on the first home action that can run,
+// or on Recheck.
+func (a *app) focusHome() {
+	h := &a.home
+	for _, b := range []win32.HWND{h.backup, h.restore, h.verify, h.recheck} {
+		if win32.IsEnabled(b) {
+			win32.SetFocus(b)
+			return
+		}
+	}
 }
