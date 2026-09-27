@@ -71,3 +71,56 @@ func layoutHome(s scale, width, height int32) homeLayout {
 	l.recheck = s.rect(w-margin-smallButtonWidth-20, buttonsY, smallButtonWidth+20, buttonHeight)
 	return l
 }
+
+// Sizes of the operation screen, in DIPs.
+const (
+	opTitleHeight    = 28
+	opDetailHeight   = 20
+	opProgressHeight = 16
+	opButtonWidth    = 180
+	opButtons        = 4
+)
+
+// operationLayout places the operation screen's controls.
+type operationLayout struct {
+	title, detail, progress win32.Rect
+	report, log             win32.Rect
+	buttons                 [opButtons]win32.Rect
+}
+
+// layoutOperation lays out the operation screen: heading, detail line,
+// progress bar (when shown), the report and the log (each alone takes the
+// whole content area; together the report gets two thirds), and a row of
+// buttons.
+func layoutOperation(s scale, width, height int32, showReport, showLog, showProgress bool) operationLayout {
+	w := width * 96 / int32(s)
+	h := height * 96 / int32(s)
+	var l operationLayout
+	y := int32(margin)
+	l.title = s.rect(margin, y, w-2*margin, opTitleHeight)
+	y += opTitleHeight
+	l.detail = s.rect(margin, y, w-2*margin, opDetailHeight)
+	y += opDetailHeight + gap
+	if showProgress {
+		l.progress = s.rect(margin, y, w-2*margin, opProgressHeight)
+		y += opProgressHeight + gap
+	}
+	buttonsY := h - margin - buttonHeight
+	content := max(buttonsY-gap-y, 0)
+	if showReport {
+		reportH := content
+		if showLog {
+			reportH = content * 2 / 3
+		}
+		l.report = s.rect(margin, y, w-2*margin, reportH)
+		y += reportH + gap
+		content = max(content-reportH-gap, 0)
+	}
+	l.log = s.rect(margin, y, w-2*margin, content)
+	// Buttons are narrower when the window is too small for all of them.
+	bw := min(int32(opButtonWidth), (w-2*margin-(opButtons-1)*gap)/opButtons)
+	for i := range l.buttons {
+		l.buttons[i] = s.rect(margin+int32(i)*(bw+gap), buttonsY, bw, buttonHeight)
+	}
+	return l
+}

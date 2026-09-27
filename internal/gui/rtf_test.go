@@ -47,13 +47,13 @@ func TestReportRTF(t *testing.T) {
 	}
 	for _, want := range []string{
 		`{\fonttbl{\f0\fswiss Segoe UI;}}`,
-		`\fs18 `,                          // 9 pt base size
-		`{\b\fs24 Backup preflight}`,      // larger title
-		`{\b Source directory(s)}`,        // bold heading
+		`\fs18 `,                                 // 9 pt base size
+		`{\b\fs24 Backup preflight}`,             // larger title
+		`{\b Source directory(s)}`,               // bold heading
 		"{\\cf1 \\u10004?}\\tab C:\\\\Docs\\par", // OK marker, escaped path
-		`\u8594? Full backup`,             // detail with arrow
-		`{\cf4 \u10006?}\tab Pics\par`,    // error marker
-		`\tab 64 MB\par`,                  // field value after the tab stop
+		`\u8594? Full backup`,                    // detail with arrow
+		`{\cf4 \u10006?}\tab Pics\par`,           // error marker
+		`\tab 64 MB\par`,                         // field value after the tab stop
 		`\pard Local staging enabled.\par`,
 		`{\cf3 \u9888?}\tab Slow drive.\par`, // issue with warning marker
 	} {

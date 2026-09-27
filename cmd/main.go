@@ -135,7 +135,7 @@ func reportOperationError(action string, err error) {
 		fmt.Fprintln(os.Stderr)
 		return
 	}
-	if action == "Verification" && strings.HasPrefix(err.Error(), "Verify preflight failed:") {
+	if action == "Verification" && strings.HasPrefix(err.Error(), "Verification preflight failed:") {
 		fmt.Fprintln(os.Stderr, "Verification failed.")
 		fmt.Fprintln(os.Stderr)
 		return

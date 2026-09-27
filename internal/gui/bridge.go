@@ -1,0 +1,193 @@
+package gui
+
+import (
+	"RestoreSafe/internal/ui"
+	"strings"
+	"sync"
+)
+
+// Notifications the bridge posts to the window. The window handles them on
+// the UI thread.
+const (
+	noteQuestion = iota
+	noteOutput
+	noteProgress
+)
+
+// bridge connects the worker goroutine running a workflow with the UI
+// thread (docs/SPEC-restoresafe-gui.md, section 4.2). Questions block the
+// worker until the UI thread answers them; output and progress never block
+// and are coalesced, so the window is posted at most one message of each
+// kind at a time.
+type bridge struct {
+	notify func(kind int)
+
+	mu         sync.Mutex
+	queue      []*question
+	current    *question // shown, not yet answered
+	closed     bool
+	output     strings.Builder
+	outPosted  bool
+	outSeq     int
+	lastLine   string
+	progress   ui.Progress
+	progPosted bool
+	result     *ui.Result
+}
+
+type answer struct {
+	value any
+	err   error
+}
+
+// question is one question of the worker. show runs on the UI thread and
+// must lead to exactly one call of the answer function it receives (later
+// calls are ignored). When the bridge is closed, the question gets the
+// cancel answer instead.
+type question struct {
+	show   func(answer func(value any, err error))
+	cancel answer
+	reply  chan answer
+	once   sync.Once
+}
+
+func newBridge(notify func(kind int)) *bridge {
+	return &bridge{notify: notify}
+}
+
+func (q *question) answer(a answer) {
+	q.once.Do(func() { q.reply <- a })
+}
+
+// ask queues a question for the UI thread and waits for the answer. On a
+// closed bridge it returns the cancel answer immediately.
+func (b *bridge) ask(show func(answer func(any, error)), cancelValue any, cancelErr error) (any, error) {
+	q := &question{show: show, cancel: answer{cancelValue, cancelErr}, reply: make(chan answer, 1)}
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return cancelValue, cancelErr
+	}
+	b.queue = append(b.queue, q)
+	b.mu.Unlock()
+	b.notify(noteQuestion)
+	a := <-q.reply
+	return a.value, a.err
+}
+
+// showNext shows the next queued question; it runs on the UI thread.
+func (b *bridge) showNext() {
+	b.mu.Lock()
+	if len(b.queue) == 0 || b.current != nil {
+		b.mu.Unlock()
+		return
+	}
+	q := b.queue[0]
+	b.queue = b.queue[1:]
+	b.current = q
+	b.mu.Unlock()
+
+	q.show(func(value any, err error) {
+		b.mu.Lock()
+		if b.current == q {
+			b.current = nil
+		}
+		more := len(b.queue) > 0
+		b.mu.Unlock()
+		q.answer(answer{value, err})
+		if more {
+			b.notify(noteQuestion)
+		}
+	})
+}
+
+// close answers the shown and all queued questions with their cancel
+// answers and makes later questions return theirs immediately. It reports
+// whether a question was being shown, so the UI can take it down.
+func (b *bridge) close() (hadCurrent bool) {
+	b.mu.Lock()
+	b.closed = true
+	pending := b.queue
+	b.queue = nil
+	current := b.current
+	b.current = nil
+	b.mu.Unlock()
+	if current != nil {
+		current.answer(current.cancel)
+	}
+	for _, q := range pending {
+		q.answer(q.cancel)
+	}
+	return current != nil
+}
+
+// Write implements io.Writer for ui.UI.Output. It never blocks on the UI.
+func (b *bridge) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	b.output.Write(p)
+	b.outSeq++
+	for _, line := range strings.Split(string(p), "\n") {
+		if l := strings.TrimSpace(line); l != "" {
+			b.lastLine = l
+		}
+	}
+	post := !b.outPosted
+	b.outPosted = true
+	b.mu.Unlock()
+	if post {
+		b.notify(noteOutput)
+	}
+	return len(p), nil
+}
+
+// takeOutput returns the output written since the last call.
+func (b *bridge) takeOutput() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	s := b.output.String()
+	b.output.Reset()
+	b.outPosted = false
+	return s
+}
+
+// outputMark returns a mark of the output so far and its last non-empty
+// line, to tell whether something was written since an earlier mark.
+func (b *bridge) outputMark() (seq int, lastLine string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.outSeq, b.lastLine
+}
+
+// Progress implements ui.ProgressReporter; it keeps only the latest report.
+func (b *bridge) Progress(p ui.Progress) {
+	b.mu.Lock()
+	b.progress = p
+	post := !b.progPosted
+	b.progPosted = true
+	b.mu.Unlock()
+	if post {
+		b.notify(noteProgress)
+	}
+}
+
+// takeProgress returns the latest progress report.
+func (b *bridge) takeProgress() ui.Progress {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.progPosted = false
+	return b.progress
+}
+
+// setResult records the result of a completed operation (ui.UI.ShowResult).
+func (b *bridge) setResult(r ui.Result) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.result = &r
+}
+
+// finalResult returns the recorded result, or nil.
+func (b *bridge) finalResult() *ui.Result {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.result
+}

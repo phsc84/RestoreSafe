@@ -53,7 +53,7 @@ Main topics:
 | G2 | The GUI implements `ui.UI`; the workflows change only by reporting their result through `ShowResult`. | Phases 8-10 built this interface; the console and the GUI stay interchangeable and the workflows keep their tests. |
 | G3 | One main window with screens, plus modal dialogs for credentials. | A backup is a linear flow (preflight, credentials, progress, result); screens keep context visible, dialogs make secrets and decisions stand out. |
 | G4 | The worker blocks on each question; the bridge posts it to the UI thread and waits for the answer. | Matches the synchronous `ui.UI` contract; the UI thread never blocks on the worker. |
-| G5 | Progress is coalesced: the worker stores the latest `ui.Progress`, the UI thread shows it at most every 100 ms. | The window stays responsive regardless of how often progress arrives. |
+| G5 | Progress is coalesced: the worker stores the latest `ui.Progress`, and the window is posted at most one progress message until it has taken it. The workflows report four times per second. | The window stays responsive regardless of how often progress arrives. |
 | G6 | Cancelling cancels the workflow's context and waits for the worker to finish. | The workflows already clean up on cancellation (phase 10): incomplete parts are removed, the lock is released, the log is written. |
 | G7 | Per-monitor DPI awareness (v2) and common controls 6 through an application manifest. | Sharp text on every monitor and modern control visuals. |
 | G8 | Output (log lines) is shown in a read-only log pane, reports as formatted text. | Everything the console shows remains visible; nothing is lost when a message has no dedicated screen. |
@@ -95,7 +95,7 @@ message loop                           backup.Run(ctx, gui.UI, cfg, exeDir)
 - At most one worker runs at a time; the home screen's buttons are disabled while it runs.
 - **Questions:** the bridge puts a request (kind, parameters, reply channel) into a queue and posts `WM_APP_QUESTION`. The UI thread shows the screen or dialog and sends exactly one reply. If the window is closing or the operation is cancelled, pending and later questions are answered with `ui.ErrCancelled`.
 - **Output:** writes are appended to a mutex-protected buffer; `WM_APP_OUTPUT` is posted only when the buffer changes from empty to non-empty. The UI thread takes the whole buffer and appends it to the log pane.
-- **Progress:** the latest `ui.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending; a 100 ms timer limits repaints.
+- **Progress:** the latest `ui.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending; the workflows report four times per second, which bounds the repaints.
 - **Reports:** `ShowReport` is a question without an answer: the worker waits until the preflight screen shows it, so the report and the following `ConfirmStart` appear together.
 
 ## 5. Main window
@@ -301,8 +301,8 @@ Decided on 2026-09-26:
 |---|---|
 | G1 | `startup.CheckHealth` and `HealthCheckResult.Report()`, `ui.ShowResult` (console: the "Log file:" line is now last for restore and verify too), `security.SetParentWindow`, application manifest in the build. Done. |
 | G2 | `internal/win32` wrapper, main window, message loop, fonts, DPI handling, layout helper, home screen. Until G7 the GUI is built from `cmd/gui` as `RestoreSafe-gui.exe`, next to the console version. Done. |
-| G3 | Bridge, `gui.UI`, running and result screens, log pane, progress, cancel, closing and session end. |
-| G4 | Dialogs: password, new password, unlock method, recovery code, spare YubiKey, confirmations. |
-| G5 | Selection tree, destination with folder picker, preflight screen with report view. |
+| G3 | Bridge, `gui.UI`, preflight, running and result screens, log pane, progress, cancel, closing and session end. A first version of every question: password, new password, unlock method, recovery code, spare YubiKey, and confirmations (task dialogs and an input dialog); interim run selection (a task dialog with one option per backup run) and destination (text field). Done. |
+| G4 | Dialog refinements: recovery-code dialog in large monospaced type (9.3), password dialogs per 9.1 and 9.2 reviewed. |
+| G5 | Selection tree with single backup sets, destination with folder picker. |
 | G6 | Keyboard and accessibility pass, manual checklist, README screenshots. |
 | G7 | GUI becomes the only frontend: console menu removed, build switched to the GUI subsystem, CHANGELOG and README updated for 2.0.0. |

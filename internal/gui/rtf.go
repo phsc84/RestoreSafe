@@ -130,3 +130,13 @@ func rtfEscape(s string) string {
 	}
 	return b.String()
 }
+
+// rtfColors are the colors of the color table as COLORREFs, for controls
+// outside the rich edit (e.g. the result line).
+var rtfColors = map[int]uint32{
+	colorOK:    rgb(16, 124, 16),
+	colorInfo:  rgb(0, 95, 184),
+	colorWarn:  rgb(178, 98, 0),
+	colorError: rgb(196, 30, 30),
+	colorMuted: rgb(100, 100, 100),
+}

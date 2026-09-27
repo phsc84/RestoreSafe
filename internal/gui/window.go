@@ -32,8 +32,17 @@ const (
 	idRestore
 	idVerify
 	idRecheck
+	idOpButton // idOpButton+i is button i of the operation screen
 
 	msgHealthDone = win32.WM_APP + 1
+	msgBridge     = win32.WM_APP + 2 // wparam: noteQuestion, noteOutput, noteProgress
+	msgWorkerDone = win32.WM_APP + 3
+)
+
+// Pages of the main window.
+const (
+	pageHome = iota
+	pageOperation
 )
 
 const (
@@ -55,8 +64,26 @@ type app struct {
 	hwnd     win32.HWND
 	dpi      uint32
 	font     windows.Handle
+	boldFont windows.Handle // headings
+	monoFont windows.Handle // log pane
 	fontFace string
 	fontPt   int
+	page     int
+	modal    win32.HWND // open input dialog, if any
+
+	op struct {
+		title, detail, progress win32.HWND
+		report, log             win32.HWND
+		buttons                 [opButtons]win32.HWND
+	}
+	opButtons      []opButton
+	opTitleStatus  ui.Status
+	opShowReport   bool
+	opShowLog      bool
+	opShowProgress bool
+	progressText   string
+	run            *runState
+	opReport       *ui.Report // preflight report on screen, re-rendered on DPI changes
 
 	home struct {
 		configLabel, configPath, configOpen win32.HWND
@@ -149,13 +176,19 @@ func (a *app) createWindow() error {
 	if err := a.createHome(); err != nil {
 		return err
 	}
+	if err := a.createOperation(); err != nil {
+		return err
+	}
+	a.applyFonts()
+	a.showPage(pageHome)
 	a.layout()
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	return nil
 }
 
-// createFonts creates the message font for the current DPI and applies it
-// to every control; the previous font is deleted afterwards.
+// createFonts creates the message font, a bold variant for headings, and a
+// monospaced font for the log, for the current DPI, and applies them; the
+// previous fonts are deleted afterwards.
 func (a *app) createFonts() error {
 	lf, err := win32.MessageFont(a.dpi)
 	if err != nil {
@@ -165,33 +198,62 @@ func (a *app) createFonts() error {
 	if err != nil {
 		return err
 	}
-	old := a.font
-	a.font = font
+	bold := lf
+	bold.Weight = win32.FW_BOLD
+	bold.Height = lf.Height * 6 / 5
+	boldFont, err := win32.CreateFont(&bold)
+	if err != nil {
+		win32.DeleteObject(font)
+		return err
+	}
+	mono := lf
+	copy(mono.FaceName[:], windows.StringToUTF16("Consolas"))
+	monoFont, err := win32.CreateFont(&mono)
+	if err != nil {
+		win32.DeleteObject(font)
+		win32.DeleteObject(boldFont)
+		return err
+	}
+	old := []windows.Handle{a.font, a.boldFont, a.monoFont}
+	a.font, a.boldFont, a.monoFont = font, boldFont, monoFont
 	a.fontFace = lf.Face()
 	a.fontPt = max(int((-lf.Height*72+int32(a.dpi)/2)/int32(a.dpi)), 8)
-	for _, c := range a.controls() {
-		win32.SetFont(c, font)
+	a.applyFonts()
+	for _, h := range old {
+		win32.DeleteObject(h)
 	}
-	win32.DeleteObject(old)
-	a.applyRichEditZoom()
 	return nil
 }
 
-// applyRichEditZoom scales the rich edit's content to the window's DPI (the
-// control lays out RTF point sizes at the system DPI) and sets its inner
-// margins.
-func (a *app) applyRichEditZoom() {
-	if a.home.report == 0 {
-		return
+// applyFonts sets the fonts of all controls and the rich edits' zoom and
+// margins for the current DPI.
+func (a *app) applyFonts() {
+	for _, c := range a.controls() {
+		win32.SetFont(c, a.font)
 	}
-	win32.SendMessage(a.home.report, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
+	if a.op.title != 0 {
+		win32.SetFont(a.op.title, a.boldFont)
+	}
+	if a.op.log != 0 {
+		win32.SetFont(a.op.log, a.monoFont)
+	}
 	pad := uintptr(scale(a.dpi).px(reportPadding))
-	win32.SendMessage(a.home.report, win32.EM_SETMARGINS, win32.EC_LEFTMARGIN|win32.EC_RIGHTMARGIN, pad|pad<<16)
+	for _, re := range []win32.HWND{a.home.report, a.op.report, a.op.log} {
+		if re == 0 {
+			continue
+		}
+		// The rich edit lays out RTF point sizes at the system DPI.
+		win32.SendMessage(re, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
+		win32.SendMessage(re, win32.EM_SETMARGINS, win32.EC_LEFTMARGIN|win32.EC_RIGHTMARGIN, pad|pad<<16)
+	}
 }
 
+// controls returns the controls that use the message font.
 func (a *app) controls() []win32.HWND {
 	h := &a.home
-	all := []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck}
+	all := []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck,
+		a.op.detail, a.op.report}
+	all = append(all, a.op.buttons[:]...)
 	out := all[:0]
 	for _, c := range all {
 		if c != 0 {
@@ -199,6 +261,62 @@ func (a *app) controls() []win32.HWND {
 		}
 	}
 	return out
+}
+
+func (a *app) homeControls() []win32.HWND {
+	h := &a.home
+	return []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck}
+}
+
+// createOperation creates the operation screen's controls, hidden.
+func (a *app) createOperation() error {
+	o := &a.op
+	var err error
+	create := func(class string, style uint32, id uintptr) win32.HWND {
+		if err != nil {
+			return 0
+		}
+		var c win32.HWND
+		c, err = win32.CreateWindow(0, class, "", win32.WS_CHILD|style, 0, 0, 0, 0, a.hwnd, id)
+		return c
+	}
+	o.title = create("STATIC", win32.SS_NOPREFIX|win32.SS_CENTERIMAGE, 0)
+	o.detail = create("STATIC", win32.SS_NOPREFIX|win32.SS_CENTERIMAGE|win32.SS_PATHELLIPSIS, 0)
+	o.progress = create(win32.PROGRESS_CLASS, 0, 0)
+	o.report = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
+	o.log = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
+	for i := range o.buttons {
+		o.buttons[i] = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, uintptr(idOpButton+i))
+	}
+	if err != nil {
+		return err
+	}
+	bg := uintptr(win32.SysColor(win32.COLOR_WINDOW))
+	win32.SendMessage(o.report, win32.EM_SETBKGNDCOLOR, 0, bg)
+	win32.SendMessage(o.log, win32.EM_SETBKGNDCOLOR, 0, bg)
+	win32.SendMessage(o.log, win32.EM_SETTEXTMODE, win32.TM_PLAINTEXT, 0)
+	win32.SendMessage(o.log, win32.EM_EXLIMITTEXT, 0, 64<<20)
+	win32.SendMessage(o.progress, win32.PBM_SETRANGE32, 0, 1000)
+	return nil
+}
+
+// showPage shows the controls of page and hides the others.
+func (a *app) showPage(page int) {
+	a.page = page
+	for _, c := range a.homeControls() {
+		win32.SetVisible(c, page == pageHome)
+	}
+	o := &a.op
+	win32.SetVisible(o.log, page == pageOperation && a.opShowLog)
+	for _, c := range []win32.HWND{o.title, o.detail} {
+		win32.SetVisible(c, page == pageOperation)
+	}
+	win32.SetVisible(o.report, page == pageOperation && a.opShowReport)
+	win32.SetVisible(o.progress, page == pageOperation && a.opShowProgress)
+	for i, b := range o.buttons {
+		win32.SetVisible(b, page == pageOperation && i < len(a.opButtons))
+	}
+	a.layout()
 }
 
 func (a *app) createHome() error {
@@ -242,19 +360,28 @@ func (a *app) createHome() error {
 		return err
 	}
 	win32.SendMessage(h.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
-	for _, c := range a.controls() {
-		win32.SetFont(c, a.font)
-	}
-	a.applyRichEditZoom()
 	return nil
 }
 
+// layout positions the controls of the current page.
 func (a *app) layout() {
-	if a.home.report == 0 {
+	if a.home.report == 0 || a.op.log == 0 {
 		return
 	}
 	client := win32.ClientRect(a.hwnd)
-	l := layoutHome(scale(a.dpi), client.Width(), client.Height())
+	s := scale(a.dpi)
+	if a.page == pageOperation {
+		l := layoutOperation(s, client.Width(), client.Height(), a.opShowReport, a.opShowLog, a.opShowProgress)
+		o := &a.op
+		for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log} {
+			win32.SetWindowPos(c, r)
+		}
+		for i, b := range o.buttons {
+			win32.SetWindowPos(b, l.buttons[i])
+		}
+		return
+	}
+	l := layoutHome(s, client.Width(), client.Height())
 	h := &a.home
 	for c, r := range map[win32.HWND]win32.Rect{
 		h.configLabel: l.configLabel, h.configPath: l.configPath, h.configOpen: l.configOpen,
@@ -315,8 +442,16 @@ func (a *app) onCommand(id uint16) {
 		a.open(a.backupDir, false)
 	case idRecheck:
 		a.startHealthCheck()
-	case idBackup, idRestore, idVerify:
-		win32.MessageBox(a.hwnd, "Running backups, restores, and verifications from the window is being built (GUI phase G3).", "RestoreSafe", win32.MB_OK)
+	case idBackup:
+		a.startOperation(opBackup)
+	case idRestore:
+		a.startOperation(opRestore)
+	case idVerify:
+		a.startOperation(opVerify)
+	default:
+		if i := int(id) - idOpButton; i >= 0 && i < len(a.opButtons) {
+			a.opButtons[i].onClick()
+		}
 	}
 }
 
@@ -354,9 +489,17 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		win32.SetWindowPos(hwnd, *win32.RectParam(lparam))
 		a.layout()
 		a.refreshHome()
+		if a.opReport != nil {
+			win32.SetRichText(a.op.report, reportRTF(*a.opReport, a.fontFace, a.fontPt))
+		}
 		return 0
 	case win32.WM_CTLCOLORSTATIC:
 		win32.SetBkModeTransparent(wparam)
+		if win32.HWND(lparam) == a.op.title {
+			if _, color := statusMarker(a.opTitleStatus); color != 0 {
+				win32.SetTextColor(wparam, rtfColors[color])
+			}
+		}
 		return uintptr(win32.SysColorBrush(win32.COLOR_WINDOW))
 	case win32.WM_COMMAND:
 		if win32.HiWord(wparam) == win32.BN_CLICKED && lparam != 0 {
@@ -366,11 +509,43 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case msgHealthDone:
 		a.healthDone()
 		return 0
+	case msgBridge:
+		if a.run != nil {
+			switch wparam {
+			case noteQuestion:
+				a.run.b.showNext()
+			case noteOutput:
+				a.onOutput()
+			case noteProgress:
+				a.onProgress()
+			}
+		}
+		return 0
+	case msgWorkerDone:
+		a.onWorkerDone()
+		return 0
+	case win32.WM_TIMER:
+		if wparam == elapsedTimerID {
+			a.updateElapsed()
+		}
+		return 0
 	case win32.WM_CLOSE:
-		win32.DestroyWindow(hwnd)
+		a.onClose()
+		return 0
+	case win32.WM_QUERYENDSESSION:
+		if a.onQueryEndSession() {
+			return 1
+		}
+		return 0
+	case win32.WM_ENDSESSION:
+		if wparam != 0 {
+			a.onEndSession()
+		}
 		return 0
 	case win32.WM_DESTROY:
-		win32.DeleteObject(a.font)
+		for _, f := range []windows.Handle{a.font, a.boldFont, a.monoFont} {
+			win32.DeleteObject(f)
+		}
 		win32.PostQuitMessage(0)
 		return 0
 	}

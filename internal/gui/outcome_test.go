@@ -1,0 +1,36 @@
+package gui
+
+import (
+	workflow "RestoreSafe/internal/operation"
+	"RestoreSafe/internal/ui"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func TestOperationOutcome(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		op     operation
+		res    *ui.Result
+		err    error
+		status ui.Status
+		text   string
+		report bool
+	}{
+		{opBackup, &ui.Result{LogPath: "x.log"}, nil, ui.StatusOK, "Backup completed successfully.", false},
+		{opRestore, &ui.Result{Warnings: 2}, nil, ui.StatusWarn, "Restore completed with 2 warning(s). See the log.", false},
+		{opVerify, nil, nil, ui.StatusNone, "Verification not started.", false},
+		{opBackup, nil, fmt.Errorf("unlock: %w", ui.ErrCancelled), ui.StatusNone, "Backup not started.", false},
+		{opBackup, nil, workflow.Cancelled("Backup"), ui.StatusWarn, "Backup cancelled. See the log", false},
+		{opVerify, nil, errors.New("Verification preflight failed: 1 selected item(s) are invalid."), ui.StatusError, "Verification not started", true},
+		{opRestore, nil, errors.New("Wrong password."), ui.StatusError, "Restore failed: Wrong password.", false},
+	}
+	for _, c := range cases {
+		o := operationOutcome(c.op, c.res, c.err)
+		if o.status != c.status || !strings.HasPrefix(o.text, c.text) || o.showReport != c.report {
+			t.Errorf("%s / %v / %v: got %+v, want %v %q report=%v", c.op.name(), c.res, c.err, o, c.status, c.text, c.report)
+		}
+	}
+}

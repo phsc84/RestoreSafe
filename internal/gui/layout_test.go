@@ -51,3 +51,39 @@ func TestLayoutHomeFitsAndDoesNotOverlap(t *testing.T) {
 		}
 	}
 }
+
+func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
+	t.Parallel()
+	for _, dpi := range []uint32{96, 144, 192} {
+		s := scale(dpi)
+		w, h := s.px(windowMinWidth), s.px(windowMinHeight)
+		for _, panes := range [][3]bool{{true, false, false}, {false, true, true}, {true, true, false}} {
+			l := layoutOperation(s, w, h, panes[0], panes[1], panes[2])
+			rects := []win32.Rect{l.title, l.detail}
+			if panes[2] {
+				rects = append(rects, l.progress)
+			}
+			if panes[0] {
+				rects = append(rects, l.report)
+			}
+			if panes[1] {
+				rects = append(rects, l.log)
+			}
+			rects = append(rects, l.buttons[:]...)
+			client := win32.Rect{Right: w, Bottom: h}
+			for i, r := range rects {
+				if !inside(r, client) {
+					t.Fatalf("dpi %d panes %v: control %d %+v outside %+v", dpi, panes, i, r, client)
+				}
+				for j := i + 1; j < len(rects); j++ {
+					if overlap(r, rects[j]) {
+						t.Fatalf("dpi %d panes %v: controls %d and %d overlap", dpi, panes, i, j)
+					}
+				}
+			}
+			if panes[0] && !panes[1] && l.report.Bottom < l.buttons[0].Top-s.px(2*gap) {
+				t.Fatalf("dpi %d: a report without log must fill the content area", dpi)
+			}
+		}
+	}
+}
