@@ -2,9 +2,9 @@ package gui
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/workflow/interact"
 	"path/filepath"
 	"strings"
 )
@@ -12,7 +12,7 @@ import (
 // showSelection shows the backup selection tree (docs/SPEC-restoresafe-gui.md,
 // section 6.2): backup runs, newest first, with their backup sets. done is
 // called with the chosen sets, or with ok=false when the user cancelled.
-func (a *app) showSelection(action string, runs []catalog.BackupRunSummary, done func(entries []util.BackupEntry, ok bool)) {
+func (a *app) showSelection(action string, runs []catalog.BackupRunSummary, done func(entries []naming.BackupEntry, ok bool)) {
 	tree := a.op.tree
 	win32.ClearTree(tree)
 	a.treeNodes = make(map[win32.TreeItem]selectionNode)
@@ -35,7 +35,7 @@ func (a *app) showSelection(action string, runs []catalog.BackupRunSummary, done
 	if action == "verify" {
 		verb = "&Verify"
 	}
-	a.setOpScreen(a.run.op.title(), ui.StatusNone, "", contentTree, false, []opButton{
+	a.setOpScreen(a.run.op.title(), interact.StatusNone, "", contentTree, false, []opButton{
 		{verb + " selected", func() {
 			entries := selectionEntries(a.selectRuns, a.treeNodes[win32.TreeSelection(tree)])
 			if len(entries) == 0 {
@@ -74,7 +74,7 @@ func (a *app) showDestination(backupDir string, done func(path string, ok bool))
 	win32.SetChecked(o.destCheck, false)
 	win32.SetText(o.destNote, "RestoreSafe creates one folder per backup set in it, named like the backed-up folder (e.g. Documents). These folders must not exist yet; the preflight checks it.")
 
-	a.setOpScreen(a.run.op.title(), ui.StatusNone, "Where should the backup be restored?", contentDestination, false, []opButton{
+	a.setOpScreen(a.run.op.title(), interact.StatusNone, "Where should the backup be restored?", contentDestination, false, []opButton{
 		{"&Next", func() {
 			path := a.destinationPath()
 			if path == "" {

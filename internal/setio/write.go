@@ -6,9 +6,11 @@ package setio
 
 import (
 	"RestoreSafe/internal/archive"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/util"
 	"bufio"
 	"context"
 	"errors"
@@ -39,7 +41,7 @@ type SetParams struct {
 	SourceDir   string
 	ExcludeDirs []string
 	// Exclude holds the configured exclude patterns; nil excludes nothing.
-	Exclude *util.ExcludeMatcher
+	Exclude *config.ExcludeMatcher
 	// SkipUnreadable skips unreadable files instead of aborting.
 	SkipUnreadable bool
 	// OnSkip is called for every skipped file or directory; stale marks a
@@ -50,11 +52,11 @@ type SetParams struct {
 	OutputDir string
 	// Entry names the set. For a differential, Entry.ChainID is the base's
 	// chain ID and Entry.DiffNumber the new differential number.
-	Entry util.BackupEntry
+	Entry naming.BackupEntry
 	// Base makes the set a differential of that full backup; nil writes a
 	// full backup.
 	Base   *Base
-	RunID  util.BackupID
+	RunID  naming.BackupID
 	KeySet container.KeySet
 	Master []byte
 	// SplitSizeBytes is the maximum part size.
@@ -108,16 +110,16 @@ func WriteSet(p SetParams) (*Result, error) {
 		h.BaseManifestSHA256 = p.Base.ManifestSHA256
 	}
 
-	sw := util.NewWriter(func(seq int) string {
-		return util.PartFileName(p.OutputDir, p.Entry, seq) + util.TempSuffix
+	sw := container.NewWriter(func(seq int) string {
+		return naming.PartFileName(p.OutputDir, p.Entry, seq) + naming.TempSuffix
 	}, p.SplitSizeBytes)
 	sw.SetSyncOnClose(p.SyncParts)
 	if p.OnPartOpened != nil {
 		sw.SetPartOpenedHook(func(seq int, path string) {
-			p.OnPartOpened(seq, strings.TrimSuffix(path, util.TempSuffix))
+			p.OnPartOpened(seq, strings.TrimSuffix(path, naming.TempSuffix))
 		})
 	}
-	bw := bufio.NewWriterSize(sw, util.SplitWriteBufferSize)
+	bw := bufio.NewWriterSize(sw, container.SplitWriteBufferSize)
 
 	mb := manifest.NewBuilder(manifest.Header{
 		SetType:       setType,
@@ -149,11 +151,11 @@ func WriteSet(p SetParams) (*Result, error) {
 
 	var dataIn io.Reader = pr
 	if p.Counters.In != nil {
-		dataIn = &util.CountingReader{R: pr, Total: p.Counters.In}
+		dataIn = &fsx.CountingReader{R: pr, Total: p.Counters.In}
 	}
 	var out io.Writer = bw
 	if p.Counters.Out != nil {
-		out = &util.CountingWriter{W: bw, Total: p.Counters.Out, Calls: p.Counters.Calls}
+		out = &fsx.CountingWriter{W: bw, Total: p.Counters.Out, Calls: p.Counters.Calls}
 	}
 
 	tarDone := false
@@ -200,7 +202,7 @@ func WriteSet(p SetParams) (*Result, error) {
 func FinalizeParts(tempParts []string) ([]string, error) {
 	final := make([]string, len(tempParts))
 	for i, tmp := range tempParts {
-		dst := strings.TrimSuffix(tmp, util.TempSuffix)
+		dst := strings.TrimSuffix(tmp, naming.TempSuffix)
 		if dst == tmp {
 			return nil, fmt.Errorf("Internal error: part %q has no temporary suffix.", tmp)
 		}

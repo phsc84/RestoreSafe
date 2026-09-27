@@ -2,10 +2,11 @@
 package testutil
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/setio"
-	"RestoreSafe/internal/util"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -19,16 +20,16 @@ const (
 )
 
 // FastArgon2 are the minimum valid Argon2 parameters; tests use them to stay fast.
-var FastArgon2 = security.Argon2Params{Time: security.MinArgonTime, MemoryKB: security.MinArgonMemoryKB, Threads: security.MinArgonThreads}
+var FastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
 
 // FastArgon2Config is FastArgon2 in config.yaml units.
-var FastArgon2Config = util.Argon2Config{Time: util.Argon2MinTime, MemoryMB: util.Argon2MinMemoryMB, Threads: util.Argon2MinThreads}
+var FastArgon2Config = config.Argon2Config{Time: config.Argon2MinTime, MemoryMB: config.Argon2MinMemoryMB, Threads: config.Argon2MinThreads}
 
 // BackupFixture holds workspace paths and metadata for an integration-style backup test.
 type BackupFixture struct {
 	SrcDir    string
 	BackupDir string
-	Entry     util.BackupEntry
+	Entry     naming.BackupEntry
 	Parts     int
 	Password  []byte
 	KeySet    *container.KeySet
@@ -62,7 +63,7 @@ func NewBackupFixture(t testing.TB, password []byte) *BackupFixture {
 	mustWriteFile(t, filepath.Join(srcDir, "large.bin"), bytes.Repeat([]byte("A"), 2*1024*1024+256))
 
 	ks, master := NewPasswordKeySet(t, password)
-	entry := util.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "FIX001", Date: "2026-03-14"}
+	entry := naming.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "FIX001", Date: "2026-03-14"}
 	parts := WriteFullSet(t, srcDir, backupDir, entry, ks, master)
 
 	return &BackupFixture{
@@ -95,7 +96,7 @@ func NewRestoreFixture(t testing.TB, password []byte) *RestoreFixture {
 
 // CreateBackupInDir writes a second, independent full backup set for entry
 // into backupDir with the fixture's key set, using a small synthetic source.
-func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry util.BackupEntry) {
+func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry naming.BackupEntry) {
 	t.Helper()
 
 	srcDir := filepath.Join(t.TempDir(), "_src_"+entry.DirectoryName)
@@ -106,7 +107,7 @@ func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry util.BackupEntry) 
 
 // WriteFullSet writes a full backup of srcDir as entry into backupDir and
 // returns the number of parts.
-func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry, ks *container.KeySet, master []byte) int {
+func WriteFullSet(t testing.TB, srcDir, backupDir string, entry naming.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
 	res, err := setio.WriteSet(setio.SetParams{
@@ -127,7 +128,7 @@ func WriteFullSet(t testing.TB, srcDir, backupDir string, entry util.BackupEntry
 
 // WriteDiffSet writes differential diffNumber of the full backup base (in
 // backupDir) for srcDir, dated date, and returns its entry.
-func WriteDiffSet(t testing.TB, srcDir, backupDir string, base util.BackupEntry, diffNumber int, date string, ks *container.KeySet, master []byte) util.BackupEntry {
+func WriteDiffSet(t testing.TB, srcDir, backupDir string, base naming.BackupEntry, diffNumber int, date string, ks *container.KeySet, master []byte) naming.BackupEntry {
 	t.Helper()
 
 	escape := strings.NewReplacer("[", "[[]", "*", "[*]", "?", "[?]")
@@ -150,8 +151,8 @@ func WriteDiffSet(t testing.TB, srcDir, backupDir string, base util.BackupEntry,
 		t.Fatalf("read base manifest: %v", err)
 	}
 
-	entry := util.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
-	runID, _ := util.NewBackupID()
+	entry := naming.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
+	runID, _ := naming.NewBackupID()
 	_, err = setio.WriteSet(setio.SetParams{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},

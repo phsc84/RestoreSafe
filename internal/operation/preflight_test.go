@@ -1,7 +1,7 @@
 package operation
 
 import (
-	"RestoreSafe/internal/ui"
+	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"strings"
 	"testing"
@@ -46,15 +46,15 @@ func TestAuthRows(t *testing.T) {
 	disconnected := func() error { return errors.New("not connected") }
 
 	rows := AuthRows("password only", false, "backup", disconnected)
-	if len(rows) != 1 || rows[0].Kind != ui.RowField || rows[0].Label != "Authentication" || rows[0].Text != "password only" {
+	if len(rows) != 1 || rows[0].Kind != interact.RowField || rows[0].Label != "Authentication" || rows[0].Text != "password only" {
 		t.Fatalf("without YubiKey expected only the field, got %+v", rows)
 	}
 	rows = AuthRows("YubiKey only", true, "backup", disconnected)
-	if len(rows) != 2 || rows[1].Status != ui.StatusWarn || !strings.Contains(rows[1].Text, "before starting backup") {
+	if len(rows) != 2 || rows[1].Status != interact.StatusWarn || !strings.Contains(rows[1].Text, "before starting backup") {
 		t.Fatalf("disconnected YubiKey expected a warning, got %+v", rows)
 	}
 	rows = AuthRows("YubiKey only", true, "restore", connected)
-	if len(rows) != 2 || rows[1].Status != ui.StatusOK || !strings.Contains(rows[1].Text, "before starting restore") {
+	if len(rows) != 2 || rows[1].Status != interact.StatusOK || !strings.Contains(rows[1].Text, "before starting restore") {
 		t.Fatalf("connected YubiKey expected OK, got %+v", rows)
 	}
 }

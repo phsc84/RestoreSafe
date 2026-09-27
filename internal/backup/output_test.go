@@ -2,8 +2,8 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/util"
 	"context"
 	"os"
 	"path/filepath"
@@ -39,7 +39,7 @@ func TestMoveBackupResultsMovesOnlyPartsAndFinalizesThem(t *testing.T) {
 	createFile(t, filepath.Join(staging, "unrelated.txt"), "not a part")
 
 	output := testutil.CaptureStdout(t, func() {
-		if err := moveBackupResults(context.Background(), nil, staging, target, nil, nil, util.NewConsoleLogger("info", nil)); err != nil {
+		if err := moveBackupResults(context.Background(), nil, staging, target, nil, nil, logging.NewConsoleLogger("info", nil)); err != nil {
 			t.Fatalf("moveBackupResults: %v", err)
 		}
 	})

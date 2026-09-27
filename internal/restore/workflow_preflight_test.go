@@ -2,10 +2,11 @@ package restore
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"math"
 	"os"
@@ -14,16 +15,16 @@ import (
 	"testing"
 )
 
-var docsEntry = util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
+var docsEntry = naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
 
 func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	t.Parallel()
 
 	restorePath := t.TempDir()
-	missing := util.BackupEntry{DirectoryName: "Missing", ChainID: "ABC123", Date: "2026-03-14"}
-	orphan := util.BackupEntry{DirectoryName: "Orphan", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}
-	diff := util.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-20", DiffNumber: 2}
-	full := catalog.SetInfo{Entry: util.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-01"}, Parts: []string{"a", "b"}, SizeBytes: 100, Header: &container.Header{}}
+	missing := naming.BackupEntry{DirectoryName: "Missing", ChainID: "ABC123", Date: "2026-03-14"}
+	orphan := naming.BackupEntry{DirectoryName: "Orphan", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}
+	diff := naming.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-20", DiffNumber: 2}
+	full := catalog.SetInfo{Entry: naming.BackupEntry{DirectoryName: "Pics", ChainID: "PIC001", Date: "2026-03-01"}, Parts: []string{"a", "b"}, SizeBytes: 100, Header: &container.Header{}}
 	if err := os.MkdirAll(filepath.Join(restorePath, docsEntry.DirectoryName), 0o750); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +53,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), restorePath, items[3:], false, false, operation.LocalStagingPlan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
 		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
@@ -71,7 +72,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	output := sb.String()
 
 	selectionLine := "  [OK] " + docsEntry.String() + " (parts: 4)"
@@ -101,7 +102,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	} {
 		var sb strings.Builder
 		connected := tc.connected
-		ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), t.TempDir(), items, true, false, operation.LocalStagingPlan{}, func() error { return connected }))
+		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, true, false, operation.LocalStagingPlan{}, func() error { return connected }))
 		output := sb.String()
 		authIdx := strings.Index(output, "Authentication: password + YubiKey")
 		statusIdx := strings.Index(output, tc.want)
@@ -119,7 +120,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}
 	var sb strings.Builder
-	ui.WriteReport(&sb, restorePreflightReport(&util.Config{}, t.TempDir(), t.TempDir(), items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, false, false, operation.LocalStagingPlan{}, func() error { return nil }))
 	if !strings.Contains(sb.String(), "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", sb.String())
 	}
@@ -128,7 +129,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 func TestValidateRestorePreflight(t *testing.T) {
 	t.Parallel()
 
-	ok := []restorePreflightItem{{Entry: util.BackupEntry{DirectoryName: "A"}, PartCount: 1}, {Entry: util.BackupEntry{DirectoryName: "B"}, PartCount: 2}}
+	ok := []restorePreflightItem{{Entry: naming.BackupEntry{DirectoryName: "A"}, PartCount: 1}, {Entry: naming.BackupEntry{DirectoryName: "B"}, PartCount: 2}}
 	if err := validateRestorePreflight(ok); err != nil {
 		t.Fatalf("expected no error for valid items, got %v", err)
 	}

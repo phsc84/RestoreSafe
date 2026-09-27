@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/ui"
+	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"sync"
 )
@@ -30,9 +30,9 @@ type bridge struct {
 	outPosted  bool
 	outSeq     int
 	lastLine   string
-	progress   ui.Progress
+	progress   interact.Progress
 	progPosted bool
-	result     *ui.Result
+	result     *interact.Result
 }
 
 type answer struct {
@@ -121,7 +121,7 @@ func (b *bridge) close() (hadCurrent bool) {
 	return current != nil
 }
 
-// Write implements io.Writer for ui.UI.Output. It never blocks on the UI.
+// Write implements io.Writer for interact.UI.Output. It never blocks on the UI.
 func (b *bridge) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	b.output.Write(p)
@@ -158,8 +158,8 @@ func (b *bridge) outputMark() (seq int, lastLine string) {
 	return b.outSeq, b.lastLine
 }
 
-// Progress implements ui.ProgressReporter; it keeps only the latest report.
-func (b *bridge) Progress(p ui.Progress) {
+// Progress implements interact.ProgressReporter; it keeps only the latest report.
+func (b *bridge) Progress(p interact.Progress) {
 	b.mu.Lock()
 	b.progress = p
 	post := !b.progPosted
@@ -171,22 +171,22 @@ func (b *bridge) Progress(p ui.Progress) {
 }
 
 // takeProgress returns the latest progress report.
-func (b *bridge) takeProgress() ui.Progress {
+func (b *bridge) takeProgress() interact.Progress {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.progPosted = false
 	return b.progress
 }
 
-// setResult records the result of a completed operation (ui.UI.ShowResult).
-func (b *bridge) setResult(r ui.Result) {
+// setResult records the result of a completed operation (interact.UI.ShowResult).
+func (b *bridge) setResult(r interact.Result) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.result = &r
 }
 
 // finalResult returns the recorded result, or nil.
-func (b *bridge) finalResult() *ui.Result {
+func (b *bridge) finalResult() *interact.Result {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.result

@@ -2,12 +2,14 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/recovery"
+	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -23,7 +25,7 @@ func TestPlanKeys(t *testing.T) {
 	t.Parallel()
 
 	ks, _ := testutil.NewPasswordKeySet(t, []byte("pw"))
-	cfg := &util.Config{AuthenticationMode: util.AuthModePassword}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePassword}
 	infos := []catalog.SetInfo{infoWithKeySet(ks)}
 
 	if p := planKeys(cfg, nil); p.Existing != nil || !strings.Contains(p.NewKeysReason, "No existing keys") {
@@ -33,11 +35,11 @@ func TestPlanKeys(t *testing.T) {
 		t.Fatalf("matching keys not reused: %+v", p)
 	}
 	for _, tc := range []struct {
-		mutate func(*util.Config)
+		mutate func(*config.Config)
 		want   string
 	}{
-		{func(c *util.Config) { c.AuthenticationMode = util.AuthModePasswordYubiKey }, "Authentication_mode changed"},
-		{func(c *util.Config) { c.RecoveryCode = true }, "Recovery_code enabled"},
+		{func(c *config.Config) { c.AuthenticationMode = config.AuthModePasswordYubiKey }, "Authentication_mode changed"},
+		{func(c *config.Config) { c.RecoveryCode = true }, "Recovery_code enabled"},
 	} {
 		c := *cfg
 		tc.mutate(&c)
@@ -52,9 +54,9 @@ type enrollStub struct {
 	lines     []string
 	connected string // "keyA" or "keyB": which YubiKey is plugged in
 	secrets   map[string][]byte
-	code      security.RecoveryCode
+	code      recovery.Code
 	out       bytes.Buffer
-	console   *ui.Console
+	console   *interact.Console
 }
 
 // stubEnrollment scripts the user's answers and replaces the YubiKey and
@@ -70,7 +72,7 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	for _, p := range s.passwords {
 		passwords = append(passwords, p[0], p[1])
 	}
-	s.console = &ui.Console{
+	s.console = &interact.Console{
 		Out: &s.out,
 		ReadPassword: func(string) ([]byte, error) {
 			if len(passwords) == 0 {
@@ -95,34 +97,34 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	}
 	checkYubiKeyConnectedFn = func() error { return nil }
 	challenge := func(key string, noPassword bool) string {
-		raw, _ := json.Marshal(security.ChallengeData{Version: 1, NoPassword: noPassword, CredID: map[string]string{"keyA": "Y3JlZC1h", "keyB": "Y3JlZC1i"}[key], Salt: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="})
+		raw, _ := json.Marshal(yubikey.ChallengeData{Version: 1, NoPassword: noPassword, CredID: map[string]string{"keyA": "Y3JlZC1h", "keyB": "Y3JlZC1i"}[key], Salt: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="})
 		return string(raw)
 	}
 	s.connected = "keyA"
 	combineWithPasswordFn = func(pw []byte, noPassword bool) ([]byte, string, error) {
-		return security.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, noPassword), nil
+		return yubikey.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, noPassword), nil
 	}
-	registerSpareFn = func(pw []byte, primary security.ChallengeData) ([]byte, string, error) {
+	registerSpareFn = func(pw []byte, primary yubikey.ChallengeData) ([]byte, string, error) {
 		if s.connected == "keyA" {
-			return nil, "", security.ErrYubiKeyAlreadyRegistered
+			return nil, "", yubikey.ErrYubiKeyAlreadyRegistered
 		}
-		return security.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, primary.NoPassword), nil
+		return yubikey.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, primary.NoPassword), nil
 	}
-	code, _ := security.GenerateRecoveryCode()
+	code, _ := recovery.Generate()
 	s.code = code
-	generateRecoveryCodeFn = func() (security.RecoveryCode, error) { return code, nil }
+	generateRecoveryCodeFn = func() (recovery.Code, error) { return code, nil }
 }
 
-func enroll(t *testing.T, s *enrollStub, cfg *util.Config) (*container.KeySet, []byte, error, string) {
+func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, error, string) {
 	t.Helper()
-	ks, master, err := enrollKeySet(s.console, cfg, util.NewConsoleLogger("info", &s.out))
+	ks, master, err := enrollKeySet(s.console, cfg, logging.NewConsoleLogger("info", &s.out))
 	return ks, master, err, s.out.String()
 }
 
 func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"short", "short"}, {"long enough pw", "typo"}, {"long enough pw", "long enough pw"}}}
 	stubEnrollment(t, s)
-	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
 	ks, master, err, out := enroll(t, s, cfg)
 	if err != nil {
@@ -139,7 +141,7 @@ func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
 func TestEnrollKeySetGivesUpAfterThreeInvalidPasswords(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a", "a"}, {"b", "b"}, {"c", "c"}}}
 	stubEnrollment(t, s)
-	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
 	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "No valid new password") {
 		t.Fatalf("expected give-up error, got %v", err)
 	}
@@ -149,20 +151,20 @@ func TestEnrollKeySetCountsCharactersNotBytes(t *testing.T) {
 	// 8 characters, 16 bytes in UTF-8.
 	s := &enrollStub{passwords: [][2]string{{"äöüßäöüß", "äöüßäöüß"}}}
 	stubEnrollment(t, s)
-	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
 	if _, _, err, _ := enroll(t, s, cfg); err != nil {
 		t.Fatalf("8-character password must be accepted: %v", err)
 	}
 }
 
 func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
-	for _, mode := range []util.AuthMode{util.AuthModePasswordYubiKey, util.AuthModeYubiKey} {
+	for _, mode := range []config.AuthMode{config.AuthModePasswordYubiKey, config.AuthModeYubiKey} {
 		s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}}
 		stubEnrollment(t, s)
 		// First Enter with YubiKey 1 still connected (refused), then swap to
 		// the spare; then a wrong and the right recovery code.
 		s.lines = []string{"", "<swap>", "WRONG-CODE", s.code.String()}
-		cfg := &util.Config{AuthenticationMode: mode, YubiKeySpare: true, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
+		cfg := &config.Config{AuthenticationMode: mode, YubiKeySpare: true, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
 		ks, master, err, out := enroll(t, s, cfg)
 		if err != nil {
@@ -179,8 +181,8 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		}
 		for i, key := range []string{"keyA", "keyB"} {
 			secret := s.secrets[key]
-			if mode == util.AuthModePasswordYubiKey {
-				secret = security.CombinePasswordWithSecret([]byte("a long password"), secret)
+			if mode == config.AuthModePasswordYubiKey {
+				secret = yubikey.CombinePasswordWithSecret([]byte("a long password"), secret)
 			}
 			if got, err := ks.Unlock(i, secret); err != nil || !bytes.Equal(got, master) {
 				t.Fatalf("mode %d: %s does not unlock slot %d: %v", mode, key, i, err)
@@ -195,7 +197,7 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 func TestEnrollKeySetFailsWhenRecoveryCodeNotConfirmed(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}, lines: []string{"x", "y", "z"}}
 	stubEnrollment(t, s)
-	cfg := &util.Config{AuthenticationMode: util.AuthModePassword, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "Recovery code not confirmed") {
 		t.Fatalf("expected unconfirmed recovery code error, got %v", err)
 	}
@@ -205,8 +207,8 @@ func TestEnrollKeySetRequiresConnectedYubiKey(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}}
 	stubEnrollment(t, s)
 	checkYubiKeyConnectedFn = func() error { return errors.New("not connected") }
-	cfg := &util.Config{AuthenticationMode: util.AuthModePasswordYubiKey, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, security.ErrYubiKeyRequired) {
+	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
+	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, yubikey.ErrYubiKeyRequired) {
 		t.Fatalf("expected ErrYubiKeyRequired, got %v", err)
 	}
 }
@@ -215,14 +217,14 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
 	prev := unlockKeySetFn
 	t.Cleanup(func() { unlockKeySetFn = prev })
-	unlockKeySetFn = func(_ ui.UI, got *container.KeySet, opts operation.UnlockOptions, _ *util.Logger) ([]byte, error) {
+	unlockKeySetFn = func(_ interact.UI, got *container.KeySet, opts operation.UnlockOptions, _ *logging.Logger) ([]byte, error) {
 		if got.ID != ks.ID || opts.AllowRecovery {
 			t.Fatalf("unexpected unlock request (recovery must not be offered for backups)")
 		}
 		return append([]byte(nil), master...), nil
 	}
 
-	gotKS, gotMaster, err := obtainKeys(&ui.Console{}, &util.Config{}, keyPlan{Existing: ks}, util.NewConsoleLogger("info", nil))
+	gotKS, gotMaster, err := obtainKeys(&interact.Console{}, &config.Config{}, keyPlan{Existing: ks}, logging.NewConsoleLogger("info", nil))
 	if err != nil || gotKS.ID != ks.ID || !bytes.Equal(gotMaster, master) {
 		t.Fatalf("existing keys not reused: %v", err)
 	}

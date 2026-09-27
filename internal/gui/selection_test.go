@@ -2,7 +2,7 @@ package gui
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"strings"
 	"testing"
 	"time"
@@ -10,11 +10,11 @@ import (
 
 func selectionRuns() []catalog.BackupRunSummary {
 	return []catalog.BackupRunSummary{
-		{RunID: "RUN002", Created: time.Date(2026, 9, 20, 21, 0, 0, 0, time.Local), Entries: []util.BackupEntry{
+		{RunID: "RUN002", Created: time.Date(2026, 9, 20, 21, 0, 0, 0, time.Local), Entries: []naming.BackupEntry{
 			{DirectoryName: "Docs", ChainID: "RUN001", Date: "2026-09-20", DiffNumber: 2},
 			{DirectoryName: "Pics", ChainID: "RUN002", Date: "2026-09-20"},
 		}},
-		{RunID: "RUN001", Created: time.Date(2026, 9, 1, 8, 30, 0, 0, time.Local), Entries: []util.BackupEntry{
+		{RunID: "RUN001", Created: time.Date(2026, 9, 1, 8, 30, 0, 0, time.Local), Entries: []naming.BackupEntry{
 			{DirectoryName: "Docs", ChainID: "RUN001", Date: "2026-09-01"},
 		}},
 	}

@@ -1,8 +1,8 @@
 package gui
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/startup"
-	"RestoreSafe/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +23,7 @@ func TestHomeStateWhileChecking(t *testing.T) {
 func TestHomeStateBlockedByMissingSource(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	cfg := &util.Config{SourceDirectories: []string{filepath.Join(dir, "missing")}, BackupDirectory: dir, LogLevel: "info"}
+	cfg := &config.Config{SourceDirectories: []string{filepath.Join(dir, "missing")}, BackupDirectory: dir, LogLevel: "info"}
 	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)

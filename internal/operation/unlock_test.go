@@ -3,10 +3,11 @@ package operation
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/security/recovery"
+	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"errors"
 	"strings"
@@ -17,7 +18,7 @@ type unlockStub struct {
 	passwordCalls int
 	lines         []string
 	out           bytes.Buffer
-	console       *ui.Console
+	console       *interact.Console
 }
 
 // stubUnlockInputs scripts the user's answers for one test: passwords for
@@ -30,7 +31,7 @@ func stubUnlockInputs(t *testing.T, passwords []string, yubiIndex int, yubiSecre
 		checkYubiKeyConnectedFn, deriveYubiKeySecretFn = prevCheck, prevDerive
 	})
 	stub := &unlockStub{lines: lines}
-	stub.console = &ui.Console{
+	stub.console = &interact.Console{
 		Out: &stub.out,
 		ReadPassword: func(string) ([]byte, error) {
 			if stub.passwordCalls >= len(passwords) {
@@ -50,7 +51,7 @@ func stubUnlockInputs(t *testing.T, passwords []string, yubiIndex int, yubiSecre
 		},
 	}
 	checkYubiKeyConnectedFn = func() error { return nil }
-	deriveYubiKeySecretFn = func(challenges []security.ChallengeData) (int, []byte, error) {
+	deriveYubiKeySecretFn = func(challenges []yubikey.ChallengeData) (int, []byte, error) {
 		if yubiIndex >= len(challenges) {
 			return 0, nil, errors.New("unknown YubiKey")
 		}
@@ -59,8 +60,8 @@ func stubUnlockInputs(t *testing.T, passwords []string, yubiIndex int, yubiSecre
 	return stub
 }
 
-func testChallenge(noPassword bool, credID string) *security.ChallengeData {
-	return &security.ChallengeData{Version: 1, NoPassword: noPassword, CredID: credID, Salt: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="}
+func testChallenge(noPassword bool, credID string) *yubikey.ChallengeData {
+	return &yubikey.ChallengeData{Version: 1, NoPassword: noPassword, CredID: credID, Salt: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="}
 }
 
 // yubiKeySet creates a key set with one YubiKey slot per secret.
@@ -73,7 +74,7 @@ func yubiKeySet(t *testing.T, mode int, password []byte, yubiSecrets ...[]byte) 
 	for i, ys := range yubiSecrets {
 		secret := ys
 		if mode == container.AuthModePasswordYubiKey {
-			secret = security.CombinePasswordWithSecret(password, ys)
+			secret = yubikey.CombinePasswordWithSecret(password, ys)
 		}
 		cred := []string{"Y3JlZC1h", "Y3JlZC1i"}[i]
 		if err := ks.AddSlot(master, container.RegularSlotType(mode), []string{"YubiKey 1", "YubiKey 2 (spare)"}[i], secret, testutil.FastArgon2, testChallenge(mode == container.AuthModeYubiKey, cred), ""); err != nil {
@@ -159,10 +160,10 @@ func TestUnlockKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
 	}
 }
 
-func keySetWithRecovery(t *testing.T) (*container.KeySet, []byte, security.RecoveryCode) {
+func keySetWithRecovery(t *testing.T) (*container.KeySet, []byte, recovery.Code) {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
-	code, err := security.GenerateRecoveryCode()
+	code, err := recovery.Generate()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +175,7 @@ func keySetWithRecovery(t *testing.T) (*container.KeySet, []byte, security.Recov
 
 func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
 	ks, master, code := keySetWithRecovery(t)
-	other, _ := security.GenerateRecoveryCode()
+	other, _ := recovery.Generate()
 	typo := []byte(code.String())
 	typo[0] ^= 0x01
 
@@ -207,7 +208,7 @@ func TestUnlockKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
 
 func TestUnlockKeySetsAuthenticatesOncePerKeySet(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	fx.CreateBackupInDir(t, util.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
+	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
 	infos, err := catalog.Inventory(fx.BackupDir)
 	if err != nil {
 		t.Fatal(err)

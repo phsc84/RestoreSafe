@@ -1,7 +1,8 @@
 package backup
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/fsx"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -20,10 +21,10 @@ type backupSource struct {
 func resolveBackupSources(sourceDirectories []string, exeDir string) []backupSource {
 	result := make([]backupSource, 0, len(sourceDirectories))
 	for _, src := range sourceDirectories {
-		resolved := util.ResolveDir(src, exeDir)
-		status := backupSource{Resolved: resolved, normalizedPath: util.NormalizePathKey(resolved)}
+		resolved := fsx.ResolveDir(src, exeDir)
+		status := backupSource{Resolved: resolved, normalizedPath: fsx.NormalizePathKey(resolved)}
 
-		status.Err = util.ValidateSourceDirectory(resolved)
+		status.Err = fsx.ValidateSourceDirectory(resolved)
 		result = append(result, status)
 	}
 	markIdenticalSourceDuplicates(result)
@@ -41,7 +42,7 @@ func markIdenticalSourceDuplicates(sources []backupSource) {
 		pathKey := sources[i].normalizedPath
 		if firstIndex, exists := seenByPath[pathKey]; exists {
 			sources[i].Skip = true
-			sources[i].Warning = fmt.Sprintf(util.SourceDuplicateWarningFmt, sources[firstIndex].Resolved)
+			sources[i].Warning = fmt.Sprintf(fsx.SourceDuplicateWarningFmt, sources[firstIndex].Resolved)
 			continue
 		}
 
@@ -62,7 +63,7 @@ func groupSourcesByBasename(sources []backupSource) map[string][]int {
 		if source.Err != nil || source.Skip {
 			continue
 		}
-		baseName := util.DirectoryBaseName(source.Resolved)
+		baseName := naming.DirectoryBaseName(source.Resolved)
 		grouped[baseName] = append(grouped[baseName], i)
 	}
 	return grouped
@@ -107,7 +108,7 @@ func fillMissingBackupNames(sources []backupSource) {
 			continue
 		}
 		if sources[i].BackupName == "" {
-			sources[i].BackupName = util.DirectoryBaseName(sources[i].Resolved)
+			sources[i].BackupName = naming.DirectoryBaseName(sources[i].Resolved)
 		}
 		nameByPath[sources[i].normalizedPath] = sources[i].BackupName
 	}
@@ -122,7 +123,7 @@ func fillMissingBackupNames(sources []backupSource) {
 				continue
 			}
 		}
-		sources[i].BackupName = util.DirectoryBaseName(sources[i].Resolved)
+		sources[i].BackupName = naming.DirectoryBaseName(sources[i].Resolved)
 	}
 }
 

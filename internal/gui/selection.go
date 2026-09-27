@@ -2,7 +2,7 @@ package gui
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"fmt"
 )
 
@@ -23,7 +23,7 @@ func runNodeLabel(run catalog.BackupRunSummary) string {
 }
 
 // setNodeLabel is the tree label of a backup set.
-func setNodeLabel(e util.BackupEntry) string {
+func setNodeLabel(e naming.BackupEntry) string {
 	if e.IsDiff() {
 		return fmt.Sprintf("%s    differential %03d of chain %s", e.DirectoryName, e.DiffNumber, e.ChainID)
 	}
@@ -31,7 +31,7 @@ func setNodeLabel(e util.BackupEntry) string {
 }
 
 // selectionEntries returns the backup sets a node selects.
-func selectionEntries(runs []catalog.BackupRunSummary, n selectionNode) []util.BackupEntry {
+func selectionEntries(runs []catalog.BackupRunSummary, n selectionNode) []naming.BackupEntry {
 	if n.run < 0 || n.run >= len(runs) {
 		return nil
 	}
@@ -42,7 +42,7 @@ func selectionEntries(runs []catalog.BackupRunSummary, n selectionNode) []util.B
 	if n.entry >= len(run.Entries) {
 		return nil
 	}
-	return []util.BackupEntry{run.Entries[n.entry]}
+	return []naming.BackupEntry{run.Entries[n.entry]}
 }
 
 // selectionText explains what choosing a node does (action is "restore" or

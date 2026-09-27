@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/win32"
 
 	"golang.org/x/sys/windows"
@@ -235,7 +235,7 @@ func (ds *dialogState) close(ok bool) {
 		// Clear masked fields so the controls do not keep a typed secret.
 		for i, e := range ds.edits {
 			if ds.fields[i].masked {
-				security.ZeroBytes(win32.ReadSecret(e))
+				cryptox.ZeroBytes(win32.ReadSecret(e))
 			}
 		}
 	}

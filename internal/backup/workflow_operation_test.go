@@ -2,10 +2,12 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"os"
 	"path/filepath"
@@ -17,8 +19,8 @@ type operationEnv struct {
 	srcDir    string
 	backupDir string
 	logPath   string
-	logger    *util.Logger
-	cfg       *util.Config
+	logger    *logging.Logger
+	cfg       *config.Config
 	sources   []backupSource
 }
 
@@ -35,21 +37,21 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	}
 	env.sources = resolveBackupSources([]string{env.srcDir}, "")
 	env.logPath = filepath.Join(env.backupDir, "operation.log")
-	logger, err := util.NewLogger(env.logPath, "info", nil)
+	logger, err := logging.NewLogger(env.logPath, "info", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 	env.logger = logger
-	env.cfg = &util.Config{SplitSizeMB: 1, Argon2: testutil.FastArgon2Config}
+	env.cfg = &config.Config{SplitSizeMB: 1, Argon2: testutil.FastArgon2Config}
 	return env
 }
 
-func (env *operationEnv) run(t *testing.T, plan operation.LocalStagingPlan, id util.BackupID) string {
+func (env *operationEnv) run(t *testing.T, plan operation.LocalStagingPlan, id naming.BackupID) string {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(context.Background(), &ui.Console{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
+		runErr = runBackupOperation(context.Background(), &interact.Console{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
 	})
 	env.logger.Close()
 	if runErr != nil {
@@ -67,7 +69,7 @@ func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
 	if !strings.Contains(output, "Backup completed successfully") {
 		t.Fatalf("expected completion message in output, got: %q", output)
 	}
-	info := catalog.InspectSet(env.backupDir, util.BackupEntry{DirectoryName: "source", ChainID: "OPS001", Date: "2026-05-31"})
+	info := catalog.InspectSet(env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS001", Date: "2026-05-31"})
 	if !info.Complete() {
 		t.Fatalf("expected complete set, got %v", info.Err)
 	}
@@ -108,7 +110,7 @@ func TestRunBackupOperationCleansStagingBeforeSuccessAndPrintsLogFileLast(t *tes
 	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+env.logPath) {
 		t.Fatalf("expected log file line to be last, got: %q", output)
 	}
-	info := catalog.InspectSet(env.backupDir, util.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
+	info := catalog.InspectSet(env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
 	if !info.Complete() {
 		t.Fatalf("staged set not complete in backup directory: %v", info.Err)
 	}
@@ -136,7 +138,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 
 	var failures int
 	testutil.CaptureStdout(t, func() {
-		failures, _ = verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []util.BackupEntry{fx.Entry}, fx.Master, util.NewConsoleLogger("info", nil))
+		failures, _ = verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewConsoleLogger("info", nil))
 	})
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)

@@ -1,10 +1,12 @@
 package backup
 
 import (
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
 	"RestoreSafe/internal/setio"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"fmt"
 	"io"
@@ -14,7 +16,7 @@ import (
 	"sync/atomic"
 )
 
-func logPartSummary(parts []string, directoryName string, ioDiagnostics bool, outBytes, outWriteCalls *atomic.Int64, log *util.Logger) {
+func logPartSummary(parts []string, directoryName string, ioDiagnostics bool, outBytes, outWriteCalls *atomic.Int64, log *logging.Logger) {
 	if ioDiagnostics {
 		avgEncryptWriteKB := 0.0
 		if calls := outWriteCalls.Load(); calls > 0 {
@@ -42,7 +44,7 @@ type stagedFile struct{ name, src, dst string }
 // directoryOrder specifies the directory names in processing order; if nil,
 // directories are sorted alphabetically. directorySourcePaths maps directory
 // name to original source path for display in log output.
-func moveBackupResults(ctx context.Context, rep ui.ProgressReporter, stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *util.Logger) error {
+func moveBackupResults(ctx context.Context, rep interact.ProgressReporter, stagingDir, backupDir string, directoryOrder []string, directorySourcePaths map[string]string, log *logging.Logger) error {
 	entries, err := os.ReadDir(stagingDir)
 	if err != nil {
 		return fmt.Errorf("Failed to list staging directory: %w", err)
@@ -54,7 +56,7 @@ func moveBackupResults(ctx context.Context, rep ui.ProgressReporter, stagingDir,
 			continue
 		}
 		name := entry.Name()
-		if backupEntry, _, ok := util.ParsePartFileName(name); ok {
+		if backupEntry, _, ok := naming.ParsePartFileName(name); ok {
 			fn := backupEntry.DirectoryName
 			filesByDirectory[fn] = append(filesByDirectory[fn], stagedFile{name, filepath.Join(stagingDir, name), filepath.Join(backupDir, name)})
 		}
@@ -100,7 +102,7 @@ func moveBackupResults(ctx context.Context, rep ui.ProgressReporter, stagingDir,
 // moveDirectoryFiles copies a single directory's staged part files to the
 // backup directory under the temporary suffix, then finalizes them. Progress
 // is logged with a deferred stop so the goroutine is always cleaned up.
-func moveDirectoryFiles(ctx context.Context, rep ui.ProgressReporter, log *util.Logger, directoryName string, files []stagedFile) error {
+func moveDirectoryFiles(ctx context.Context, rep interact.ProgressReporter, log *logging.Logger, directoryName string, files []stagedFile) error {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	stopProgress := operation.StartProgressTracking(log, directoryName, "copied", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
@@ -110,7 +112,7 @@ func moveDirectoryFiles(ctx context.Context, rep ui.ProgressReporter, log *util.
 			total += fi.Size()
 		}
 	}
-	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Moving to backup directory", Item: directoryName, Total: total}, &outBytes)
+	stopReport := operation.TrackProgress(rep, interact.Progress{Step: "Moving to backup directory", Item: directoryName, Total: total}, &outBytes)
 	defer stopReport()
 
 	temps := make([]string, 0, len(files))
@@ -118,7 +120,7 @@ func moveDirectoryFiles(ctx context.Context, rep ui.ProgressReporter, log *util.
 		if log != nil {
 			log.Info("  Move: %s", f.name)
 		}
-		tmp := f.dst + util.TempSuffix
+		tmp := f.dst + naming.TempSuffix
 		if err := copyFileWithCounters(ctx, f.src, tmp, &inBytes, &outBytes, &outWriteCalls); err != nil {
 			for _, t := range append(temps, tmp) {
 				_ = os.Remove(t)
@@ -152,10 +154,10 @@ func copyFileWithCounters(ctx context.Context, src, dst string, inBytes, outByte
 	}
 	defer dstFile.Close()
 
-	cr := &util.CountingReader{R: srcFile, Total: inBytes}
-	cw := &util.CountingWriter{W: dstFile, Total: outBytes, Calls: outWriteCalls}
+	cr := &fsx.CountingReader{R: srcFile, Total: inBytes}
+	cw := &fsx.CountingWriter{W: dstFile, Total: outBytes, Calls: outWriteCalls}
 
-	if _, err := io.Copy(&util.ContextWriter{Ctx: ctx, W: cw}, cr); err != nil {
+	if _, err := io.Copy(&fsx.ContextWriter{Ctx: ctx, W: cw}, cr); err != nil {
 		return fmt.Errorf("Failed to copy %q: %w", src, err)
 	}
 	if err := dstFile.Sync(); err != nil {

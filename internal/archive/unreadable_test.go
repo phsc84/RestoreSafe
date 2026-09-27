@@ -1,8 +1,8 @@
 package archive
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/util"
 	"archive/tar"
 	"bytes"
 	"crypto/sha256"
@@ -55,7 +55,7 @@ func TestBuildTarAppliesExcludePatterns(t *testing.T) {
 	mustWrite(t, filepath.Join(src, "Cache", "c.bin"), []byte("x"))
 	mustWrite(t, filepath.Join(src, "sub", "Cache", "kept.bin"), []byte("x"))
 
-	matcher, err := util.NewExcludeMatcher([]string{"*.tmp", "node_modules", "/Cache"})
+	matcher, err := config.NewExcludeMatcher([]string{"*.tmp", "node_modules", "/Cache"})
 	if err != nil {
 		t.Fatal(err)
 	}

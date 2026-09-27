@@ -3,8 +3,8 @@ package operation
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/util"
 	"bytes"
 	"context"
 	"os"
@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-func openSet(t *testing.T, dir string, e util.BackupEntry) *container.Set {
+func openSet(t *testing.T, dir string, e naming.BackupEntry) *container.Set {
 	t.Helper()
 	set, err := catalog.OpenSet(dir, e)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestProcessRestorePointDetectsCorruptedPart(t *testing.T) {
 
 // diffFixture: a full backup, then changes (modified, new, deleted file) and
 // a differential of them.
-func diffFixture(t *testing.T) (*testutil.BackupFixture, util.BackupEntry) {
+func diffFixture(t *testing.T) (*testutil.BackupFixture, naming.BackupEntry) {
 	t.Helper()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("changed after the full backup"), 0o600); err != nil {
@@ -141,7 +141,7 @@ func TestProcessRestorePointRejectsWrongOrMissingBase(t *testing.T) {
 		t.Fatalf("expected missing-base error, got %v", err)
 	}
 
-	other := util.BackupEntry{DirectoryName: "Other", ChainID: "OTH001", Date: "2026-03-14"}
+	other := naming.BackupEntry{DirectoryName: "Other", ChainID: "OTH001", Date: "2026-03-14"}
 	fx.CreateBackupInDir(t, other)
 	wrong := openSet(t, fx.BackupDir, other)
 	if _, err := ProcessRestorePoint(context.Background(), set, wrong, fx.Master, "", true, nil, nil); err == nil || !strings.Contains(err.Error(), "does not belong to differential") {

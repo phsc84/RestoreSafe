@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-27; phases 1-2 done |
+| Status | Agreed 2026-09-27; phases 1-3 done |
 | Branch | `v2` (after GUI phase G7, commit `9f2f21a`) |
 | Scope | Folder and package structure only. No change in behavior, file formats, or the user interface. |
 
@@ -61,11 +61,11 @@ RestoreSafe/
 │   │   └── run/                shared plumbing of a workflow run: logger setup, progress, cancellation, preflight rows
 │   ├── format/
 │   │   ├── archive/            TAR build and extraction, Windows file metadata
-│   │   ├── container/          set header, key set, sections, trailer, parts
+│   │   ├── container/          set header, key set, sections, trailer, parts, multi-part writer
 │   │   ├── manifest/           manifest format
 │   │   ├── catalog/            inventory of the backup directory, selection
 │   │   ├── naming/             backup IDs, backup entries, part and log file names
-│   │   └── setio/              writing a backup set, multi-part writer
+│   │   └── setio/              writing a backup set
 │   ├── security/
 │   │   ├── cryptox/            encryption, Argon2, key sealing, subkeys, random bytes, ZeroBytes
 │   │   ├── recovery/           recovery code: generate, parse, checksum
@@ -99,7 +99,9 @@ cmd/restoresafe → gui → workflow (mainly workflow/interact and the workflows
 workflow        → format, security, config, logging, fsx, buildinfo
 format          → security, fsx, buildinfo
 security        → (standard library, x/crypto, x/sys only; inside the group, recovery → cryptox)
-config, logging, fsx, buildinfo → no group
+config          → security/cryptox (Argon2 bounds)
+logging         → buildinfo
+fsx, buildinfo  → none
 ```
 
 Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that lists the imports of every package with `go list` and fails when a lower group imports a higher one (for example `format` importing `workflow`, or anything below `gui` importing `gui`).
@@ -121,10 +123,10 @@ Enforced by a test (e.g. `internal/architecture/architecture_test.go`) that list
 | `internal/operation/progress.go`, `runtime.go`, `preflight.go`, `source_validation.go` | `internal/workflow/run` |
 | `internal/archive`, `container`, `manifest`, `catalog`, `setio` | `internal/format/...` |
 | `internal/util/naming.go` | `internal/format/naming` |
-| `internal/util/split.go` | `internal/format/setio` (its only user) |
+| `internal/util/split.go` | `internal/format/container` (the multi-part writer; `container`'s own tests use it, and `setio` builds on `container`, so it cannot live in `setio`) |
 | `internal/util/config.go`, `exclude.go` | `internal/config` |
 | `internal/util/logging.go` | `internal/logging` |
-| `internal/util/version.go` | `internal/buildinfo` (today the container imports `util` only for it) |
+| `internal/util/version.go` | `internal/buildinfo` (`util.AppVersion` becomes `buildinfo.Version`; the container imported `util` only for it) |
 | `internal/util/counting.go`, `disk.go`, `file_copy.go`, `file_system.go`, `format.go`, `lock.go`, `path.go` | `internal/fsx` |
 | `internal/security/crypto.go`, `ZeroBytes` | `internal/security/cryptox` |
 | `internal/security/recovery.go` | `internal/security/recovery` (`recovery.Code`, `recovery.Generate`, `recovery.Parse`) |
@@ -145,7 +147,7 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 
 1. **Repository root.** `build/windows/`, `docs/images/` (README links), `assets/icon/`, `scripts/gui-test/`, `dist/` output in `build.bat` (resource paths in `versioninfo.json` and `build.bat`), `test/` → `sandbox/`, `dev_setup.txt` → `docs/DEVELOPMENT.md`, simplified `.gitignore`.
 2. **Entry point.** `cmd/main.go` → `cmd/restoresafe/`; `build.bat` builds `./cmd/restoresafe` and generates `cmd/restoresafe/resource.syso`.
-3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `format/setio`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; rename `ui` to `workflow/interact` and move `ReadPasswordConfirmed` there; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
+3. **Foundation packages.** Split `util` into `config`, `logging`, `fsx`, `buildinfo`, `format/naming`, and `split.go` into `container`; split `security` into `security/cryptox`, `security/recovery`, and `security/yubikey`; rename `ui` to `workflow/interact` and move `ReadPasswordConfirmed` there; switch the stdin-based tests to scripted input and remove the terminal input and `golang.org/x/term`.
 4. **Workflows and frontend.** Split `operation` into `workflow/unlock`, `staging`, `restorepoint`, `run`; move `backup`, `restore`, `verify`, `startup` under `workflow/`; `interact.Console` → `interact/interacttest.Script`; `win32` → `gui/win32`.
 5. **Format and checks.** Move `archive`, `container`, `manifest`, `catalog`, `setio` under `format/`; add the dependency-direction test; update the package tables in both specs, the README development section, and `docs/DEVELOPMENT.md`; mark this plan as done.
 

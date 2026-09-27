@@ -2,11 +2,14 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/security/cryptox"
+	"RestoreSafe/internal/security/recovery"
+	"RestoreSafe/internal/security/yubikey"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"errors"
 	"fmt"
@@ -16,10 +19,10 @@ import (
 
 // Injectable for tests.
 var (
-	checkYubiKeyConnectedFn = security.CheckYubiKeyConnected
-	combineWithPasswordFn   = security.CombineWithPassword
-	registerSpareFn         = security.RegisterSpareYubiKey
-	generateRecoveryCodeFn  = security.GenerateRecoveryCode
+	checkYubiKeyConnectedFn = yubikey.CheckYubiKeyConnected
+	combineWithPasswordFn   = yubikey.CombineWithPassword
+	registerSpareFn         = yubikey.RegisterSpareYubiKey
+	generateRecoveryCodeFn  = recovery.Generate
 	unlockKeySetFn          = operation.UnlockKeySet
 )
 
@@ -38,7 +41,7 @@ type keyPlan struct {
 
 // planKeys selects the key set of the newest complete backup when it matches
 // the configuration; otherwise new keys are needed.
-func planKeys(cfg *util.Config, infos []catalog.SetInfo) keyPlan {
+func planKeys(cfg *config.Config, infos []catalog.SetInfo) keyPlan {
 	ks := catalog.CurrentKeySet(infos)
 	if ks == nil {
 		return keyPlan{NewKeysReason: "No existing keys found in the backup directory"}
@@ -51,7 +54,7 @@ func planKeys(cfg *util.Config, infos []catalog.SetInfo) keyPlan {
 
 // obtainKeys unlocks the planned key set or runs enrollment. The caller must
 // zero the returned master key.
-func obtainKeys(u ui.UI, cfg *util.Config, plan keyPlan, log *util.Logger) (*container.KeySet, []byte, error) {
+func obtainKeys(u interact.UI, cfg *config.Config, plan keyPlan, log *logging.Logger) (*container.KeySet, []byte, error) {
 	if plan.Existing != nil {
 		master, err := unlockKeySetFn(u, plan.Existing, operation.UnlockOptions{PasswordPrompt: "Enter backup password: "}, log)
 		if err != nil {
@@ -68,17 +71,17 @@ type newSlot struct {
 	slotType  string
 	label     string
 	secret    []byte
-	challenge *security.ChallengeData
+	challenge *yubikey.ChallengeData
 	check     string
 }
 
 // enrollKeySet creates a new key set: a new password (unless YubiKey-only),
 // YubiKey registration (plus the spare, if configured), and a recovery code
 // (if configured). Every slot is checked to unlock before anything is written.
-func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySet, []byte, error) {
+func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*container.KeySet, []byte, error) {
 	out := u.Output()
 	mode := int(cfg.AuthenticationMode)
-	params := security.Argon2Params{
+	params := cryptox.Argon2Params{
 		Time:     uint32(cfg.Argon2.Time),
 		MemoryKB: uint32(cfg.Argon2.MemoryMB) * 1024,
 		Threads:  uint8(cfg.Argon2.Threads),
@@ -87,7 +90,7 @@ func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySe
 	var slots []newSlot
 	defer func() {
 		for _, s := range slots {
-			security.ZeroBytes(s.secret)
+			cryptox.ZeroBytes(s.secret)
 		}
 	}()
 
@@ -99,7 +102,7 @@ func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySe
 			return nil, nil, err
 		}
 		password = pw
-		defer security.ZeroBytes(password)
+		defer cryptox.ZeroBytes(password)
 	} else {
 		fmt.Fprintln(out, "YubiKey-only mode: no password required.")
 	}
@@ -128,7 +131,7 @@ func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySe
 	}
 	for _, s := range slots {
 		if err := ks.AddSlot(master, s.slotType, s.label, s.secret, params, s.challenge, s.check); err != nil {
-			security.ZeroBytes(master)
+			cryptox.ZeroBytes(master)
 			return nil, nil, err
 		}
 	}
@@ -137,13 +140,13 @@ func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySe
 	for i, s := range slots {
 		check, err := ks.Unlock(i, s.secret)
 		if err != nil || !bytes.Equal(check, master) {
-			security.ZeroBytes(master)
+			cryptox.ZeroBytes(master)
 			return nil, nil, fmt.Errorf("Internal error: new key slot %d does not unlock. No backup was written.", i)
 		}
-		security.ZeroBytes(check)
+		cryptox.ZeroBytes(check)
 	}
 	if err := ks.Validate(); err != nil {
-		security.ZeroBytes(master)
+		cryptox.ZeroBytes(master)
 		return nil, nil, fmt.Errorf("Internal error: new keys are invalid: %w", err)
 	}
 
@@ -153,22 +156,22 @@ func enrollKeySet(u ui.UI, cfg *util.Config, log *util.Logger) (*container.KeySe
 
 // readNewPassword asks for a new password (entered twice) of at least
 // minLength characters, allowing corrections.
-func readNewPassword(u ui.UI, minLength int) ([]byte, error) {
-	if minLength < util.PasswordMinLengthFloor {
-		minLength = util.DefaultPasswordMinLength
+func readNewPassword(u interact.UI, minLength int) ([]byte, error) {
+	if minLength < config.PasswordMinLengthFloor {
+		minLength = config.DefaultPasswordMinLength
 	}
 	out := u.Output()
 	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
 		pw, err := u.NewPassword(fmt.Sprintf("Enter new backup password (at least %d characters): ", minLength), "Re-enter new backup password: ")
 		if err != nil {
-			if errors.Is(err, security.ErrPasswordMismatch) || errors.Is(err, security.ErrPasswordEmpty) {
+			if errors.Is(err, interact.ErrPasswordMismatch) || errors.Is(err, interact.ErrPasswordEmpty) {
 				fmt.Fprintf(out, "%v Please try again.\n", err)
 				continue
 			}
 			return nil, err
 		}
 		if n := utf8.RuneCount(pw); n < minLength {
-			security.ZeroBytes(pw)
+			cryptox.ZeroBytes(pw)
 			fmt.Fprintf(out, "The password has %d characters; at least %d are required. Please try again.\n", n, minLength)
 			continue
 		}
@@ -180,11 +183,11 @@ func readNewPassword(u ui.UI, minLength int) ([]byte, error) {
 // registerYubiKeys registers YubiKey 1 and, when spare is set, the spare
 // YubiKey. It returns the slots registered so far even on error, so the
 // caller can zero their secrets.
-func registerYubiKeys(u ui.UI, password []byte, mode int, spare bool) ([]newSlot, error) {
+func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]newSlot, error) {
 	out := u.Output()
 	slotType := container.RegularSlotType(mode)
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return nil, security.ErrYubiKeyRequired
+		return nil, yubikey.ErrYubiKeyRequired
 	}
 	fmt.Fprintln(out, "YubiKey 1:")
 	fmt.Fprintln(out, "  1. Windows first asks for your YubiKey PIN to register the backup credential.")
@@ -193,9 +196,9 @@ func registerYubiKeys(u ui.UI, password []byte, mode int, spare bool) ([]newSlot
 	if err != nil {
 		return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
 	}
-	primary, err := security.ParseChallengeJSON(challengeJSON)
+	primary, err := yubikey.ParseChallengeJSON(challengeJSON)
 	if err != nil {
-		security.ZeroBytes(combined)
+		cryptox.ZeroBytes(combined)
 		return nil, fmt.Errorf("YubiKey registration returned invalid data: %w", err)
 	}
 	slots := []newSlot{{slotType: slotType, label: "YubiKey 1", secret: combined, challenge: &primary}}
@@ -219,16 +222,16 @@ func registerYubiKeys(u ui.UI, password []byte, mode int, spare bool) ([]newSlot
 		}
 		fmt.Fprintln(out, "  Windows asks twice for the PIN of the spare YubiKey (register, then derive).")
 		combined, challengeJSON, err := registerSpareFn(password, primary)
-		if errors.Is(err, security.ErrYubiKeyAlreadyRegistered) {
+		if errors.Is(err, yubikey.ErrYubiKeyAlreadyRegistered) {
 			fmt.Fprintln(out, "This is YubiKey 1. Remove it and insert your spare YubiKey.")
 			continue
 		}
 		if err != nil {
 			return slots, fmt.Errorf("Spare YubiKey registration failed: %w", err)
 		}
-		cd, err := security.ParseChallengeJSON(challengeJSON)
+		cd, err := yubikey.ParseChallengeJSON(challengeJSON)
 		if err != nil {
-			security.ZeroBytes(combined)
+			cryptox.ZeroBytes(combined)
 			return slots, fmt.Errorf("Spare YubiKey registration returned invalid data: %w", err)
 		}
 		fmt.Fprintln(out, "Spare YubiKey registered. Keep it in a safe place, separate from YubiKey 1.")
@@ -239,19 +242,19 @@ func registerYubiKeys(u ui.UI, password []byte, mode int, spare bool) ([]newSlot
 
 // createRecoveryCode shows a new recovery code once and asks the user to type
 // it back, so it is only used when it has been written down correctly.
-func createRecoveryCode(u ui.UI) (security.RecoveryCode, error) {
+func createRecoveryCode(u interact.UI) (recovery.Code, error) {
 	code, err := generateRecoveryCodeFn()
 	if err != nil {
-		return security.RecoveryCode{}, err
+		return recovery.Code{}, err
 	}
 	out := u.Output()
 	u.ShowRecoveryCode(code.String())
 	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
 		answer, err := u.RetypeRecoveryCode()
 		if err != nil {
-			return security.RecoveryCode{}, err
+			return recovery.Code{}, err
 		}
-		typed, err := security.ParseRecoveryCode(answer)
+		typed, err := recovery.Parse(answer)
 		if err == nil && typed == code {
 			fmt.Fprintln(out, "Recovery code confirmed.")
 			return code, nil
@@ -261,5 +264,5 @@ func createRecoveryCode(u ui.UI) (security.RecoveryCode, error) {
 		}
 		fmt.Fprintln(out, err)
 	}
-	return security.RecoveryCode{}, fmt.Errorf("Recovery code not confirmed. No backup was written.")
+	return recovery.Code{}, fmt.Errorf("Recovery code not confirmed. No backup was written.")
 }

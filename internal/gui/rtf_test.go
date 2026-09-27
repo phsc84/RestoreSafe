@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/ui"
+	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"testing"
 )
@@ -25,17 +25,17 @@ func TestRTFEscape(t *testing.T) {
 
 func TestReportRTF(t *testing.T) {
 	t.Parallel()
-	r := ui.Report{
+	r := interact.Report{
 		Title: "Backup preflight",
-		Sections: []ui.Section{
-			{Rows: []ui.Row{
-				ui.Heading("Source directory(s)"),
-				ui.Item(ui.StatusOK, `C:\Docs`, "Full backup"),
-				ui.Item(ui.StatusError, "Pics"),
+		Sections: []interact.Section{
+			{Rows: []interact.Row{
+				interact.Heading("Source directory(s)"),
+				interact.Item(interact.StatusOK, `C:\Docs`, "Full backup"),
+				interact.Item(interact.StatusError, "Pics"),
 			}},
-			{Rows: []ui.Row{ui.Field("Split size", "64 MB"), ui.Field("Verify after backup", "enabled"), ui.Note("Local staging enabled.")}},
+			{Rows: []interact.Row{interact.Field("Split size", "64 MB"), interact.Field("Verify after backup", "enabled"), interact.Note("Local staging enabled.")}},
 		},
-		Issues: []ui.Issue{{Status: ui.StatusWarn, Text: "Slow drive."}},
+		Issues: []interact.Issue{{Status: interact.StatusWarn, Text: "Slow drive."}},
 	}
 	got := reportRTF(r, "Segoe UI", 9)
 

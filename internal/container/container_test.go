@@ -2,8 +2,8 @@ package container
 
 import (
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/security/cryptox"
+	"RestoreSafe/internal/security/yubikey"
 	"bytes"
 	"errors"
 	"fmt"
@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-var testParams = security.Argon2Params{Time: security.MinArgonTime, MemoryKB: security.MinArgonMemoryKB, Threads: security.MinArgonThreads}
+var testParams = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
 
 var testHash = strings.Repeat("cd", 32)
 
@@ -49,7 +49,7 @@ func writeTestSet(t *testing.T, dir string, ks *KeySet, master, payload []byte, 
 	if err != nil {
 		t.Fatalf("NewHeader: %v", err)
 	}
-	sw := util.NewWriter(func(seq int) string {
+	sw := NewWriter(func(seq int) string {
 		return filepath.Join(dir, fmt.Sprintf("part-%03d.enc", seq))
 	}, splitSize)
 	res, err := Write(sw, h, master, splitSize, bytes.NewReader(payload), func() ([]byte, error) { return testManifest(t, h, len(payload)), nil })
@@ -141,7 +141,7 @@ func TestUnlockRejectsWrongPassword(t *testing.T) {
 	t.Parallel()
 
 	ks, _ := newPasswordKeySet(t, "right")
-	if _, err := ks.Unlock(0, []byte("wrong")); !errors.Is(err, security.ErrWrongPassword) {
+	if _, err := ks.Unlock(0, []byte("wrong")); !errors.Is(err, cryptox.ErrWrongPassword) {
 		t.Fatalf("expected ErrWrongPassword, got %v", err)
 	}
 }
@@ -161,13 +161,13 @@ func TestSlotSwapFailsAuthentication(t *testing.T) {
 		}
 	}
 	ks.Slots[0], ks.Slots[1] = ks.Slots[1], ks.Slots[0]
-	if _, err := ks.Unlock(0, []byte("secret")); !errors.Is(err, security.ErrWrongPassword) {
+	if _, err := ks.Unlock(0, []byte("secret")); !errors.Is(err, cryptox.ErrWrongPassword) {
 		t.Fatalf("expected swapped slot to fail, got %v", err)
 	}
 }
 
-func testChallenge(noPassword bool) *security.ChallengeData {
-	cd := &security.ChallengeData{
+func testChallenge(noPassword bool) *yubikey.ChallengeData {
+	cd := &yubikey.ChallengeData{
 		Version:    1,
 		NoPassword: noPassword,
 		CredID:     "Y3JlZC1pZA==",
@@ -207,7 +207,7 @@ func TestHeaderTamperingFailsAuthentication(t *testing.T) {
 		t.Fatalf("Unlock: %v", err)
 	}
 	keys, _ := set.SectionKeys(unlocked)
-	if _, _, err := set.ReadManifest(keys); !errors.Is(err, security.ErrCorrupted) {
+	if _, _, err := set.ReadManifest(keys); !errors.Is(err, cryptox.ErrCorrupted) {
 		t.Fatalf("expected ErrCorrupted after header tampering, got %v", err)
 	}
 }
@@ -224,7 +224,7 @@ func TestDataKeyCannotDecryptManifest(t *testing.T) {
 	defer set.Close()
 	keys, _ := set.SectionKeys(master)
 	swapped := &SectionKeys{Data: keys.Manifest, Manifest: keys.Data}
-	if _, _, err := set.ReadManifest(swapped); !errors.Is(err, security.ErrCorrupted) {
+	if _, _, err := set.ReadManifest(swapped); !errors.Is(err, cryptox.ErrCorrupted) {
 		t.Fatalf("expected manifest decryption with data key to fail, got %v", err)
 	}
 }

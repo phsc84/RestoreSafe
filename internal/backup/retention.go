@@ -2,7 +2,8 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log
 
 // chain groups the backup sets of one directory that share a chain ID.
 type chain struct {
-	id          util.BackupID
+	id          naming.BackupID
 	fullCreated time.Time
 	hasFull     bool
 	sets        []catalog.SetInfo
@@ -31,7 +32,7 @@ type chain struct {
 // the RestoreSafe 2 naming scheme (including 1.x backups) are never touched.
 // Directories in hold are left untouched: their newest backup misses files
 // that could not be read, which older backups may still contain.
-func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int, sources []backupSource, hold map[string]bool, log *util.Logger) error {
+func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int, sources []backupSource, hold map[string]bool, log *logging.Logger) error {
 	if retentionKeep <= 0 && keepDifferentials <= 0 {
 		log.Info("Cleanup old data disabled (retention_keep=%d, retention_keep_differentials=%d)", retentionKeep, keepDifferentials)
 		return nil
@@ -44,7 +45,7 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 		}
 		backupName := source.BackupName
 		if backupName == "" {
-			backupName = util.DirectoryBaseName(source.Resolved)
+			backupName = naming.DirectoryBaseName(source.Resolved)
 		}
 		directorySet[backupName] = true
 	}
@@ -121,7 +122,7 @@ func retentionSummary(retentionKeep, keepDifferentials int) string {
 
 // retentionCandidates returns the sets of directory that retention deletes.
 func retentionCandidates(directory string, infos []catalog.SetInfo, retentionKeep, keepDifferentials int) []catalog.SetInfo {
-	chains := make(map[util.BackupID]*chain)
+	chains := make(map[naming.BackupID]*chain)
 	var incomplete []catalog.SetInfo
 	var newestComplete time.Time
 	for _, info := range infos {
@@ -261,7 +262,7 @@ func deleteOrphanLogFiles(backupDir string) ([]string, error) {
 	}
 	legacyLogs := make(map[string]bool)
 	for _, de := range des {
-		if name, ok := util.LegacyLogFileName(de.Name()); ok {
+		if name, ok := naming.LegacyLogFileName(de.Name()); ok {
 			legacyLogs[name] = true
 		}
 	}

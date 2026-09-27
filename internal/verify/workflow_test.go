@@ -2,14 +2,15 @@ package verify
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -33,7 +34,7 @@ func TestBuildVerifyPreflightUsesInventory(t *testing.T) {
 		t.Fatalf("unexpected preflight item: %+v", items)
 	}
 
-	orphan := catalog.SetInfo{Entry: util.BackupEntry{DirectoryName: "D", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}}
+	orphan := catalog.SetInfo{Entry: naming.BackupEntry{DirectoryName: "D", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}}
 	if items := buildVerifyPreflight([]catalog.SetInfo{orphan}, infos); items[0].Err == nil || !strings.Contains(items[0].Err.Error(), "is missing") {
 		t.Fatalf("expected missing-base error, got %+v", items[0])
 	}
@@ -46,7 +47,7 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
 	infos := fixtureInfos(t, fx)
-	selected := catalog.SelectInfos(infos, []util.BackupEntry{diff})
+	selected := catalog.SelectInfos(infos, []naming.BackupEntry{diff})
 
 	items := buildVerifyPreflight(selected, infos)
 	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
@@ -54,7 +55,7 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 	}
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, util.NewConsoleLogger("info", nil))
+		_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatalf("verify differential: %v", err)
@@ -79,13 +80,13 @@ func TestValidateVerifyPreflight(t *testing.T) {
 func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 	t.Parallel()
 
-	entry := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
+	entry := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
 	items := []verifyPreflightItem{
 		{Entry: entry, PartCount: 2, TotalSizeBytes: 2048},
-		{Entry: util.BackupEntry{DirectoryName: "Bad", ChainID: "ABC123", Date: "2026-03-20"}, Err: errors.New("Backup set is incomplete")},
+		{Entry: naming.BackupEntry{DirectoryName: "Bad", ChainID: "ABC123", Date: "2026-03-20"}, Err: errors.New("Backup set is incomplete")},
 	}
 	var sb strings.Builder
-	ui.WriteReport(&sb, verifyPreflightReport(&util.Config{LogLevel: "info"}, t.TempDir(), items, true, false, func() error { return errors.New("absent") }))
+	interact.WriteReport(&sb, verifyPreflightReport(&config.Config{LogLevel: "info"}, t.TempDir(), items, true, false, func() error { return errors.New("absent") }))
 	out := sb.String()
 	for _, want := range []string{
 		"  [OK] Docs_ABC123_2026-03-20_FULL (parts: 2)",
@@ -103,12 +104,12 @@ func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-pw"))
 	logPath := filepath.Join(t.TempDir(), "verify.log")
-	log, _ := util.NewLogger(logPath, "info", nil)
+	log, _ := logging.NewLogger(logPath, "info", nil)
 
 	var err error
 	output := testutil.CaptureStdout(t, func() {
 		infos := fixtureInfos(t, fx)
-		err = runVerifyOperation(context.Background(), &ui.Console{}, infos, infos, fx.BackupDir, logPath, operation.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
+		err = runVerifyOperation(context.Background(), &interact.Console{}, infos, infos, fx.BackupDir, logPath, operation.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
 	})
 	log.Close()
 	if err != nil {
@@ -121,10 +122,10 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 
 func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("right"))
-	wrong, _ := security.RandomBytes(security.KeyLen)
+	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = verifyEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, wrong, util.NewConsoleLogger("info", nil))
+		_, err = verifyEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, wrong, logging.NewConsoleLogger("info", nil))
 	})
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
@@ -133,14 +134,14 @@ func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 
 func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	fx.CreateBackupInDir(t, util.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
+	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
 	infos := fixtureInfos(t, fx)
 	if len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d", len(infos))
 	}
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		_, err = verifySelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, util.NewConsoleLogger("info", nil))
+		_, err = verifySelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, operation.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil || strings.Count(output, "successfully verified") != 2 {
 		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
@@ -149,8 +150,8 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
-	entry := util.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
-	_, err := verifyEntry(context.Background(), nil, entry, nil, t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info", nil))
+	entry := naming.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
+	_, err := verifyEntry(context.Background(), nil, entry, nil, t.TempDir(), make([]byte, 32), logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}
@@ -159,7 +160,7 @@ func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 	t.Parallel()
 	output := testutil.CaptureStdout(t, func() {
-		if err := Run(context.Background(), &ui.Console{}, &util.Config{BackupDirectory: t.TempDir()}, ""); err != nil {
+		if err := Run(context.Background(), &interact.Console{}, &config.Config{BackupDirectory: t.TempDir()}, ""); err != nil {
 			t.Errorf("expected nil for empty target dir, got: %v", err)
 		}
 	})
@@ -170,48 +171,31 @@ func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 
 func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
 	t.Parallel()
-	cfg := &util.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
-	if err := Run(context.Background(), &ui.Console{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
+	cfg := &config.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
+	if err := Run(context.Background(), &interact.Console{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
 		t.Fatalf("expected scan-error message, got: %v", err)
 	}
 }
 
-func pipeStdin(t *testing.T, input string) {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdin pipe: %v", err)
-	}
-	fmt.Fprint(w, input)
-	w.Close()
-	oldStdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		r.Close()
-	})
-}
-
 func TestRunCancelsSelectionWhenUserEntersQ(t *testing.T) {
+	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	pipeStdin(t, "q\n")
-	var runErr error
-	output := testutil.CaptureStdout(t, func() {
-		runErr = Run(context.Background(), &ui.Console{}, &util.Config{BackupDirectory: fx.BackupDir}, "")
-	})
-	if runErr != nil || !strings.Contains(output, "Verification cancelled.") {
-		t.Fatalf("expected cancel, got err=%v output=%q", runErr, output)
+
+	var out strings.Builder
+	runErr := Run(context.Background(), &interact.Console{Out: &out, ReadLine: interact.Answers("q")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
+	if runErr != nil || !strings.Contains(out.String(), "Verification cancelled.") {
+		t.Fatalf("expected cancel, got err=%v output=%q", runErr, out.String())
 	}
 }
 
-func TestRunReturnsErrorWhenStartPromptClosed(t *testing.T) {
+func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
+	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	pipeStdin(t, ".\n")
-	var runErr error
-	testutil.CaptureStdout(t, func() {
-		runErr = Run(context.Background(), &ui.Console{}, &util.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "")
-	})
+
+	// "." selects the newest backup; the start prompt gets no answer.
+	var out strings.Builder
+	runErr := Run(context.Background(), &interact.Console{Out: &out, ReadLine: interact.Answers(".")}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "")
 	if runErr == nil {
-		t.Fatal("expected error when stdin closes before the start prompt, got nil")
+		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}
 }

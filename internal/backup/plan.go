@@ -2,7 +2,8 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
 	"fmt"
 	"time"
 )
@@ -34,7 +35,7 @@ func (p *dirPlan) Label() string {
 // differential backup (spec 6.1). All checks use headers and trailers only,
 // so the complete plan is known before the password is asked. forceFull
 // (the [F] choice) makes every directory a full backup.
-func planBackupTypes(cfg *util.Config, infos []catalog.SetInfo, sources []backupSource, keys keyPlan, forceFull bool, now time.Time) map[string]*dirPlan {
+func planBackupTypes(cfg *config.Config, infos []catalog.SetInfo, sources []backupSource, keys keyPlan, forceFull bool, now time.Time) map[string]*dirPlan {
 	plans := make(map[string]*dirPlan)
 	for _, src := range sources {
 		if src.Err != nil || src.Skip {
@@ -42,14 +43,14 @@ func planBackupTypes(cfg *util.Config, infos []catalog.SetInfo, sources []backup
 		}
 		name := src.BackupName
 		if name == "" {
-			name = util.DirectoryBaseName(src.Resolved)
+			name = naming.DirectoryBaseName(src.Resolved)
 		}
 		plans[name] = planDirectory(cfg, infos, name, keys, forceFull, now)
 	}
 	return plans
 }
 
-func planDirectory(cfg *util.Config, infos []catalog.SetInfo, directory string, keys keyPlan, forceFull bool, now time.Time) *dirPlan {
+func planDirectory(cfg *config.Config, infos []catalog.SetInfo, directory string, keys keyPlan, forceFull bool, now time.Time) *dirPlan {
 	full := func(reason string) *dirPlan { return &dirPlan{Reason: reason} }
 
 	switch {
@@ -99,8 +100,8 @@ func planDirectory(cfg *util.Config, infos []catalog.SetInfo, directory string, 
 			newestDiff = info
 		}
 	}
-	if maxNumber >= util.MaxDiffNumber {
-		return full(fmt.Sprintf("chain %s reached the maximum of %d differentials", base.Entry.ChainID, util.MaxDiffNumber))
+	if maxNumber >= naming.MaxDiffNumber {
+		return full(fmt.Sprintf("chain %s reached the maximum of %d differentials", base.Entry.ChainID, naming.MaxDiffNumber))
 	}
 	if newestDiff != nil && base.Trailer.DataLength > 0 {
 		percent := int(newestDiff.Trailer.DataLength * 100 / base.Trailer.DataLength)

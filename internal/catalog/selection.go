@@ -1,7 +1,7 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,9 +10,9 @@ import (
 
 // BackupRunSummary groups the complete backup sets written by one backup run.
 type BackupRunSummary struct {
-	RunID   util.BackupID
+	RunID   naming.BackupID
 	Date    string
-	Entries []util.BackupEntry
+	Entries []naming.BackupEntry
 	Created time.Time
 }
 
@@ -27,7 +27,7 @@ func BackupRunSummaries(infos []SetInfo) []BackupRunSummary {
 		key := info.Header.RunID
 		run := byRun[key]
 		if run == nil {
-			run = &BackupRunSummary{RunID: util.BackupID(info.Header.RunID), Date: info.Entry.Date}
+			run = &BackupRunSummary{RunID: naming.BackupID(info.Header.RunID), Date: info.Entry.Date}
 			byRun[key] = run
 		}
 		run.Entries = append(run.Entries, info.Entry)
@@ -55,7 +55,7 @@ func BackupRunSummaries(infos []SetInfo) []BackupRunSummary {
 // ResolveSelection maps user input to backup sets: a run ID selects every set
 // written by that run; a full set name (e.g. Docs_ABC123_2026-09-01_FULL)
 // selects that set.
-func ResolveSelection(input string, runs []BackupRunSummary) ([]util.BackupEntry, error) {
+func ResolveSelection(input string, runs []BackupRunSummary) ([]naming.BackupEntry, error) {
 	input = strings.TrimSpace(input)
 	upper := strings.ToUpper(input)
 
@@ -69,7 +69,7 @@ func ResolveSelection(input string, runs []BackupRunSummary) ([]util.BackupEntry
 	for _, run := range runs {
 		for _, e := range run.Entries {
 			if strings.EqualFold(e.String(), input) {
-				return []util.BackupEntry{e}, nil
+				return []naming.BackupEntry{e}, nil
 			}
 		}
 	}

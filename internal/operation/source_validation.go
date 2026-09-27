@@ -1,7 +1,7 @@
 package operation
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/fsx"
 	"fmt"
 )
 
@@ -18,10 +18,10 @@ type SourceValidationStatus struct {
 func InspectSourceDirectoriesForValidation(sourceDirectories []string, exeDir string) []SourceValidationStatus {
 	statuses := make([]SourceValidationStatus, 0, len(sourceDirectories))
 	for _, src := range sourceDirectories {
-		resolved := util.ResolveDir(src, exeDir)
+		resolved := fsx.ResolveDir(src, exeDir)
 		status := SourceValidationStatus{Resolved: resolved}
 
-		status.Err = util.ValidateSourceDirectory(resolved)
+		status.Err = fsx.ValidateSourceDirectory(resolved)
 		statuses = append(statuses, status)
 	}
 
@@ -36,14 +36,13 @@ func markSourceValidationDuplicates(statuses []SourceValidationStatus) {
 			continue
 		}
 
-		pathKey := util.NormalizePathKey(statuses[i].Resolved)
+		pathKey := fsx.NormalizePathKey(statuses[i].Resolved)
 		if firstIndex, exists := seenByPath[pathKey]; exists {
 			statuses[i].Skip = true
-			statuses[i].Warning = fmt.Sprintf(util.SourceDuplicateWarningFmt, statuses[firstIndex].Resolved)
+			statuses[i].Warning = fmt.Sprintf(fsx.SourceDuplicateWarningFmt, statuses[firstIndex].Resolved)
 			continue
 		}
 
 		seenByPath[pathKey] = i
 	}
 }
-

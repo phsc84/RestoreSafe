@@ -1,7 +1,7 @@
 package archive
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/config"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +26,7 @@ func TestSourceSizeFollowsExcludeRules(t *testing.T) {
 	write("sub/skip.tmp", 300)
 	write("inner-backup/part.enc", 5000)
 
-	exclude, err := util.NewExcludeMatcher([]string{"Cache", "*.tmp"})
+	exclude, err := config.NewExcludeMatcher([]string{"Cache", "*.tmp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestMeasureSourceCountsFilesChangedSince(t *testing.T) {
 		}
 		setFileTimes(t, p, times[0], times[1])
 	}
-	exclude, err := util.NewExcludeMatcher([]string{"*.tmp"})
+	exclude, err := config.NewExcludeMatcher([]string{"*.tmp"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,9 +1,10 @@
 package startup
 
 import (
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,8 +33,8 @@ func TestCheckConfigFileHealthErrorForMissingFile(t *testing.T) {
 	}
 }
 
-func passwordConfig() *util.Config {
-	return &util.Config{AuthenticationMode: util.AuthModePassword}
+func passwordConfig() *config.Config {
+	return &config.Config{AuthenticationMode: config.AuthModePassword}
 }
 
 func findItem(items []healthItem, severity healthSeverity, scope, contains string) bool {
@@ -66,7 +67,7 @@ func TestCheckBackupInventoryHealthReportsCompleteSetAndKeys(t *testing.T) {
 		t.Fatalf("expected key summary, got: %#v", items)
 	}
 
-	yubiCfg := &util.Config{AuthenticationMode: util.AuthModePasswordYubiKey}
+	yubiCfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey}
 	if items := checkBackupInventoryHealth(yubiCfg, fx.BackupDir); !findItem(items, healthWarn, healthScopeKeys, "creates new keys") {
 		t.Fatalf("expected warning about new keys after mode change, got: %#v", items)
 	}
@@ -75,8 +76,8 @@ func TestCheckBackupInventoryHealthReportsCompleteSetAndKeys(t *testing.T) {
 func TestCheckBackupInventoryHealthReportsIncompleteAndOrphanSets(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	// A differential part whose full backup does not exist.
-	orphan := util.BackupEntry{DirectoryName: "Other", ChainID: "ORP001", Date: "2026-03-14", DiffNumber: 1}
-	if err := os.WriteFile(util.PartFileName(fx.BackupDir, orphan, 1), []byte("x"), 0o600); err != nil {
+	orphan := naming.BackupEntry{DirectoryName: "Other", ChainID: "ORP001", Date: "2026-03-14", DiffNumber: 1}
+	if err := os.WriteFile(naming.PartFileName(fx.BackupDir, orphan, 1), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	items := checkBackupInventoryHealth(passwordConfig(), fx.BackupDir)
@@ -119,7 +120,7 @@ func TestCheckTempDirHealthReturnsOK(t *testing.T) {
 func TestCheckArgon2HealthWarnsOnClampNotices(t *testing.T) {
 	t.Parallel()
 
-	cfg := &util.Config{
+	cfg := &config.Config{
 		Argon2Notices: []string{
 			"argon2.memory_mb 8192 exceeds the maximum 4096; 4096 will be used.",
 		},
@@ -143,7 +144,7 @@ func TestCheckArgon2HealthWarnsOnClampNotices(t *testing.T) {
 func TestCheckArgon2HealthSilentWithoutNotices(t *testing.T) {
 	t.Parallel()
 
-	if items := checkArgon2Health(&util.Config{}); len(items) != 0 {
+	if items := checkArgon2Health(&config.Config{}); len(items) != 0 {
 		t.Fatalf("expected no argon2 health items without notices, got: %#v", items)
 	}
 }
@@ -156,7 +157,7 @@ func TestHealthReportShowsTempDirItemsWithNote(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
+	interact.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if !strings.Contains(output, "Local staging via temp directory enabled.") {
@@ -178,7 +179,7 @@ func TestHealthReportNoAdviceLineWhenNoErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
+	interact.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if strings.Contains(output, "Review the reported errors") {
@@ -204,7 +205,7 @@ func TestCheckHealthReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 		t.Fatalf("failed to write config: %v", err)
 	}
 
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories: []string{source},
 		BackupDirectory:   backup,
 		SplitSizeMB:       64,
@@ -213,7 +214,7 @@ func TestCheckHealthReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 
 	result := CheckHealth(cfg, exeDir, configPath)
 	var sb strings.Builder
-	ui.WriteReport(&sb, result.Report())
+	interact.WriteReport(&sb, result.Report())
 	output := sb.String()
 
 	if !strings.Contains(output, "Startup health check") {
@@ -324,7 +325,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 		t.Fatalf("failed to create backup directory: %v", err)
 	}
 
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories: []string{shared, shared},
 		BackupDirectory:   target,
 		SplitSizeMB:       64,
@@ -375,7 +376,7 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 		t.Fatalf("failed to create backup directory: %v", err)
 	}
 
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories: []string{first, second, third, fourth, fifth},
 		BackupDirectory:   target,
 		SplitSizeMB:       64,
@@ -411,7 +412,7 @@ func TestHealthReportSummaryAndAdvice(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
+	interact.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 1 error(s)") {
@@ -432,7 +433,7 @@ func TestHealthReportGroupsScopes(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	ui.WriteReport(&sb, buildHealthCheckResult(items).Report())
+	interact.WriteReport(&sb, buildHealthCheckResult(items).Report())
 	output := sb.String()
 
 	if strings.Count(output, "Source directory(s):") != 1 {
@@ -461,7 +462,7 @@ func TestHealthCheckReportGroupsFindingsByScope(t *testing.T) {
 		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
 	})
 	var sb strings.Builder
-	ui.WriteReport(&sb, result.Report())
+	interact.WriteReport(&sb, result.Report())
 	want := `
 Startup health check
 --------------------
@@ -487,7 +488,7 @@ Review the reported errors before running backup, restore, or verify.
 
 func TestCheckHealthDoesNotPrint(t *testing.T) {
 	exeDir := t.TempDir()
-	cfg := &util.Config{BackupDirectory: filepath.Join(exeDir, "Backups"), LogLevel: "info"}
+	cfg := &config.Config{BackupDirectory: filepath.Join(exeDir, "Backups"), LogLevel: "info"}
 	var result HealthCheckResult
 	output := testutil.CaptureStdout(t, func() {
 		result = CheckHealth(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))

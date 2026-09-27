@@ -15,9 +15,10 @@
 package container
 
 import (
+	"RestoreSafe/internal/buildinfo"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
@@ -75,7 +76,7 @@ func (h *Header) Created() time.Time {
 // NewHeader returns a header with the per-set fields (nonce, creation time,
 // app version, chunk size, compression) filled in.
 func NewHeader(setType, chainID, runID, directoryName, date string, keySet KeySet) (*Header, error) {
-	nonce, err := security.RandomBytes(setNonceLen)
+	nonce, err := cryptox.RandomBytes(setNonceLen)
 	if err != nil {
 		return nil, err
 	}
@@ -87,8 +88,8 @@ func NewHeader(setType, chainID, runID, directoryName, date string, keySet KeySe
 		DirectoryName: directoryName,
 		Date:          date,
 		CreatedUTC:    time.Now().UTC().Format(time.RFC3339Nano),
-		AppVersion:    util.AppVersion,
-		ChunkSize:     security.ChunkSize,
+		AppVersion:    buildinfo.Version,
+		ChunkSize:     cryptox.ChunkSize,
 		Compression:   CompressionNone,
 		KeySet:        keySet,
 	}, nil
@@ -120,7 +121,7 @@ func (h *Header) Validate() error {
 	if len(h.SetNonce) != setNonceLen {
 		return headerErr("invalid set nonce")
 	}
-	if err := util.ValidateBackupEntryName(h.DirectoryName); err != nil {
+	if err := naming.ValidateBackupEntryName(h.DirectoryName); err != nil {
 		return err
 	}
 	if !datePattern.MatchString(h.Date) {
@@ -129,7 +130,7 @@ func (h *Header) Validate() error {
 	if _, err := time.Parse(time.RFC3339, h.CreatedUTC); err != nil {
 		return headerErr("invalid creation time %q", h.CreatedUTC)
 	}
-	if h.ChunkSize != security.ChunkSize {
+	if h.ChunkSize != cryptox.ChunkSize {
 		return headerErr("unsupported chunk size %d", h.ChunkSize)
 	}
 	if h.Compression != CompressionNone {

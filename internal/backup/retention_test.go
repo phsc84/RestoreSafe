@@ -2,9 +2,11 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/util"
 	"errors"
 	"fmt"
 	"os"
@@ -27,21 +29,21 @@ func newRetentionEnv(t *testing.T) *retentionEnv {
 }
 
 // writeFull writes a small, complete full backup set and returns its entry.
-func (e *retentionEnv) writeFull(t *testing.T, directory, chainID, date string) util.BackupEntry {
+func (e *retentionEnv) writeFull(t *testing.T, directory, chainID, date string) naming.BackupEntry {
 	t.Helper()
 	src := filepath.Join(t.TempDir(), directory)
 	createFile(t, filepath.Join(src, "f.txt"), "content of "+chainID)
-	entry := util.BackupEntry{DirectoryName: directory, ChainID: util.BackupID(chainID), Date: date}
+	entry := naming.BackupEntry{DirectoryName: directory, ChainID: naming.BackupID(chainID), Date: date}
 	testutil.WriteFullSet(t, src, e.dir, entry, e.ks, e.master)
 	return entry
 }
 
 // writeDiffs writes differentials 1..n of the full backup base (created
 // with writeFull) and returns their entries.
-func (e *retentionEnv) writeDiffs(t *testing.T, base util.BackupEntry, n int) []util.BackupEntry {
+func (e *retentionEnv) writeDiffs(t *testing.T, base naming.BackupEntry, n int) []naming.BackupEntry {
 	t.Helper()
 	src := filepath.Join(t.TempDir(), base.DirectoryName)
-	var out []util.BackupEntry
+	var out []naming.BackupEntry
 	for i := 1; i <= n; i++ {
 		createFile(t, filepath.Join(src, "f.txt"), fmt.Sprintf("content of %s, change %d", base.ChainID, i))
 		out = append(out, testutil.WriteDiffSet(t, src, e.dir, base, i, base.Date, e.ks, e.master))
@@ -49,7 +51,7 @@ func (e *retentionEnv) writeDiffs(t *testing.T, base util.BackupEntry, n int) []
 	return out
 }
 
-func (e *retentionEnv) parts(t *testing.T, entry util.BackupEntry) []string {
+func (e *retentionEnv) parts(t *testing.T, entry naming.BackupEntry) []string {
 	t.Helper()
 	parts, err := catalog.CollectParts(e.dir, entry)
 	if err != nil {
@@ -65,7 +67,7 @@ func docsSources() []backupSource {
 func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	log := util.NewConsoleLogger("info", nil)
+	log := logging.NewConsoleLogger("info", nil)
 	if err := applyRetentionPolicy(dir, 0, 0, []backupSource{{Resolved: dir}}, nil, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
 	}
@@ -75,7 +77,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	sources := []backupSource{{Resolved: dir, Err: errors.New("inaccessible")}}
-	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
@@ -83,7 +85,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
 	env := newRetentionEnv(t)
 	entry := env.writeFull(t, "Docs", "ONE001", "2026-03-14")
-	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, entry) {
@@ -98,7 +100,7 @@ func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	other := env.writeFull(t, "Pics", "AAA001", "2026-03-13")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -115,7 +117,7 @@ func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
 
 // truncateSet damages a set's last part so its trailer is missing (the set
 // becomes incomplete) and sets the part's modification time.
-func (e *retentionEnv) truncateSet(t *testing.T, entry util.BackupEntry, mtime time.Time) string {
+func (e *retentionEnv) truncateSet(t *testing.T, entry naming.BackupEntry, mtime time.Time) string {
 	t.Helper()
 	parts := e.parts(t, entry)
 	last := parts[len(parts)-1]
@@ -141,7 +143,7 @@ func TestApplyRetentionPolicyHandlesIncompleteSets(t *testing.T) {
 	old := env.truncateSet(t, oldEntry, time.Now().Add(-24*time.Hour))
 	recent := env.truncateSet(t, recentEntry, time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	assertNotExists(t, old)
@@ -152,10 +154,10 @@ func TestApplyRetentionPolicySkipsWhenASetIsUnreadable(t *testing.T) {
 	env := newRetentionEnv(t)
 	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
 	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
-	foreign := util.PartFileName(env.dir, util.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
+	foreign := naming.PartFileName(env.dir, naming.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
 	createFile(t, foreign, "not a RestoreSafe backup")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
@@ -174,7 +176,7 @@ func TestApplyRetentionPolicyNeverTouchesLegacyFiles(t *testing.T) {
 		createFile(t, p, "1.x")
 	}
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
@@ -187,19 +189,19 @@ func TestApplyRetentionPolicyDeletesChainWithItsDifferentials(t *testing.T) {
 	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
 	olderDiffs := env.writeDiffs(t, older, 2)
 	var olderParts []string
-	for _, e := range append([]util.BackupEntry{older}, olderDiffs...) {
+	for _, e := range append([]naming.BackupEntry{older}, olderDiffs...) {
 		olderParts = append(olderParts, env.parts(t, e)...)
 	}
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 1)
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
 		assertNotExists(t, p)
 	}
-	for _, e := range append([]util.BackupEntry{newer}, newerDiffs...) {
+	for _, e := range append([]naming.BackupEntry{newer}, newerDiffs...) {
 		for _, p := range env.parts(t, e) {
 			assertExists(t, p)
 		}
@@ -212,19 +214,19 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	// to it, so the next backup is planned as a differential.
 	src := filepath.Join(t.TempDir(), "Docs")
 	createFile(t, filepath.Join(src, "big.bin"), strings.Repeat("x", 200_000))
-	full := util.BackupEntry{DirectoryName: "Docs", ChainID: "AAA001", Date: "2026-03-13"}
+	full := naming.BackupEntry{DirectoryName: "Docs", ChainID: "AAA001", Date: "2026-03-13"}
 	testutil.WriteFullSet(t, src, env.dir, full, env.ks, env.master)
 	diffs := env.writeDiffs(t, full, 3)
 
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, util.NewConsoleLogger("info", nil))
+		err = applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	infos, _ := catalog.Inventory(env.dir)
-	kept := map[util.BackupEntry]bool{}
+	kept := map[naming.BackupEntry]bool{}
 	for _, info := range infos {
 		kept[info.Entry] = true
 	}
@@ -236,7 +238,7 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	}
 
 	// The next differential continues the numbering: numbers are never reused.
-	cfg := &util.Config{}
+	cfg := &config.Config{}
 	p := planDirectory(cfg, infos, "Docs", keyPlan{Existing: env.ks}, false, time.Now())
 	if !p.IsDiff() || p.DiffNumber != 4 {
 		t.Fatalf("expected differential 004 next, got %+v", p)
@@ -250,10 +252,10 @@ func TestApplyRetentionPolicyAppliesDifferentialLimitToEveryKeptChain(t *testing
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 2)
 
-	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, util.NewConsoleLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatal(err)
 	}
-	for _, gone := range []util.BackupEntry{olderDiffs[0], newerDiffs[0]} {
+	for _, gone := range []naming.BackupEntry{olderDiffs[0], newerDiffs[0]} {
 		for _, p := range env.parts(t, gone) {
 			assertNotExists(t, p)
 		}
@@ -271,7 +273,7 @@ func TestApplyRetentionPolicyHoldsDirectoriesWithSkippedFiles(t *testing.T) {
 
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, util.NewConsoleLogger("info", nil))
+		err = applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -288,8 +290,8 @@ func TestDeleteOrphanLogFilesKeepsActiveRunLogs(t *testing.T) {
 	env := newRetentionEnv(t)
 	active := env.writeFull(t, "Docs", "ABC123", "2026-03-14")
 
-	activeLog := util.LogFileName(env.dir, active.Date, active.ChainID)
-	orphanLog := util.LogFileName(env.dir, "2026-03-13", "ZZZ999")
+	activeLog := naming.LogFileName(env.dir, active.Date, active.ChainID)
+	orphanLog := naming.LogFileName(env.dir, "2026-03-13", "ZZZ999")
 	unrelated := filepath.Join(env.dir, "notes.log")
 	createFile(t, activeLog, "active")
 	createFile(t, orphanLog, "orphan")

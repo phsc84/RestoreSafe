@@ -1,8 +1,8 @@
 package operation
 
 import (
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/workflow/interact"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +16,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress.log")
-	logger, err := util.NewLogger(logPath, "debug", nil)
+	logger, err := logging.NewLogger(logPath, "debug", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestLogProgressUntilDoneLogsWhenDoneClosedImmediately(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress2.log")
-	logger, err := util.NewLogger(logPath, "debug", nil)
+	logger, err := logging.NewLogger(logPath, "debug", nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -105,10 +105,10 @@ func TestStartProgressTrackingStopsCleanly(t *testing.T) {
 
 type progressRecorder struct {
 	mu      sync.Mutex
-	reports []ui.Progress
+	reports []interact.Progress
 }
 
-func (r *progressRecorder) Progress(p ui.Progress) {
+func (r *progressRecorder) Progress(p interact.Progress) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.reports = append(r.reports, p)
@@ -118,7 +118,7 @@ func TestTrackProgressReportsStartAndFinalValue(t *testing.T) {
 	t.Parallel()
 	var done atomic.Int64
 	rec := &progressRecorder{}
-	stop := TrackProgress(rec, ui.Progress{Step: "Backing up", Item: "Docs", Total: 100}, &done)
+	stop := TrackProgress(rec, interact.Progress{Step: "Backing up", Item: "Docs", Total: 100}, &done)
 	done.Store(100)
 	stop()
 
@@ -136,5 +136,5 @@ func TestTrackProgressReportsStartAndFinalValue(t *testing.T) {
 func TestTrackProgressWithoutReporterDoesNothing(t *testing.T) {
 	t.Parallel()
 	var done atomic.Int64
-	TrackProgress(nil, ui.Progress{}, &done)()
+	TrackProgress(nil, interact.Progress{}, &done)()
 }

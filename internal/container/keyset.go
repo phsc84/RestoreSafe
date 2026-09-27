@@ -1,8 +1,10 @@
 package container
 
 import (
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/security/cryptox"
+	"RestoreSafe/internal/security/recovery"
+	"RestoreSafe/internal/security/yubikey"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +31,7 @@ const (
 const (
 	keySetIDLen   = 16
 	kdfAlgArgon2  = "argon2id"
-	wrappedKeyLen = security.KeyLen + 16 // master key + GCM tag
+	wrappedKeyLen = cryptox.KeyLen + 16 // master key + GCM tag
 	slotAADLabel  = "RestoreSafe v2 slot"
 	infoData      = "RestoreSafe v2 data"
 	infoManifest  = "RestoreSafe v2 manifest"
@@ -44,20 +46,20 @@ type KDF struct {
 	Threads   uint32 `json:"threads"`
 }
 
-func (k KDF) params() security.Argon2Params {
-	return security.Argon2Params{Time: k.Time, MemoryKB: k.MemoryKiB, Threads: uint8(k.Threads)}
+func (k KDF) params() cryptox.Argon2Params {
+	return cryptox.Argon2Params{Time: k.Time, MemoryKB: k.MemoryKiB, Threads: uint8(k.Threads)}
 }
 
 // Slot is one way to unlock a key set: it holds the key set's master key
 // encrypted with a key derived from one credential.
 type Slot struct {
-	Type      string                  `json:"type"`
-	Label     string                  `json:"label"`
-	KDF       KDF                     `json:"kdf"`
-	Challenge *security.ChallengeData `json:"challenge,omitempty"`
-	Check     string                  `json:"check,omitempty"`
-	Nonce     []byte                  `json:"nonce"`
-	Wrapped   []byte                  `json:"wrapped"`
+	Type      string                 `json:"type"`
+	Label     string                 `json:"label"`
+	KDF       KDF                    `json:"kdf"`
+	Challenge *yubikey.ChallengeData `json:"challenge,omitempty"`
+	Check     string                 `json:"check,omitempty"`
+	Nonce     []byte                 `json:"nonce"`
+	Wrapped   []byte                 `json:"wrapped"`
 }
 
 // UsesYubiKey reports whether unlocking this slot requires a YubiKey.
@@ -83,11 +85,11 @@ type KeySet struct {
 // NewKeySet creates an empty key set and its random master key. The caller
 // adds slots with AddSlot and must zero the master key after use.
 func NewKeySet(authMode int) (*KeySet, []byte, error) {
-	id, err := security.RandomBytes(keySetIDLen)
+	id, err := cryptox.RandomBytes(keySetIDLen)
 	if err != nil {
 		return nil, nil, err
 	}
-	master, err := security.RandomBytes(security.KeyLen)
+	master, err := cryptox.RandomBytes(cryptox.KeyLen)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,23 +110,23 @@ func (ks *KeySet) Created() time.Time {
 // AddSlot wraps master with a key derived from secret and appends the slot.
 // challenge is required for YubiKey slots; check is required for the recovery
 // slot.
-func (ks *KeySet) AddSlot(master []byte, slotType, label string, secret []byte, params security.Argon2Params, challenge *security.ChallengeData, check string) error {
-	salt, err := security.RandomBytes(security.SaltLen)
+func (ks *KeySet) AddSlot(master []byte, slotType, label string, secret []byte, params cryptox.Argon2Params, challenge *yubikey.ChallengeData, check string) error {
+	salt, err := cryptox.RandomBytes(cryptox.SaltLen)
 	if err != nil {
 		return err
 	}
-	nonce, err := security.RandomBytes(security.NonceLen)
+	nonce, err := cryptox.RandomBytes(cryptox.NonceLen)
 	if err != nil {
 		return err
 	}
-	kek, err := security.DeriveKEK(secret, salt, params)
+	kek, err := cryptox.DeriveKEK(secret, salt, params)
 	if err != nil {
 		return err
 	}
-	defer security.ZeroBytes(kek)
+	defer cryptox.ZeroBytes(kek)
 
 	index := len(ks.Slots)
-	wrapped, err := security.SealKey(kek, nonce, master, slotAAD(ks.ID, index, slotType))
+	wrapped, err := cryptox.SealKey(kek, nonce, master, slotAAD(ks.ID, index, slotType))
 	if err != nil {
 		return err
 	}
@@ -141,18 +143,18 @@ func (ks *KeySet) AddSlot(master []byte, slotType, label string, secret []byte, 
 }
 
 // Unlock derives the key-encryption key of slot index from secret and returns
-// the master key. A wrong credential returns security.ErrWrongPassword.
+// the master key. A wrong credential returns cryptox.ErrWrongPassword.
 func (ks *KeySet) Unlock(index int, secret []byte) ([]byte, error) {
 	if index < 0 || index >= len(ks.Slots) {
 		return nil, fmt.Errorf("Internal error: key slot %d does not exist.", index)
 	}
 	slot := ks.Slots[index]
-	kek, err := security.DeriveKEK(secret, slot.KDF.Salt, slot.KDF.params())
+	kek, err := cryptox.DeriveKEK(secret, slot.KDF.Salt, slot.KDF.params())
 	if err != nil {
 		return nil, err
 	}
-	defer security.ZeroBytes(kek)
-	return security.OpenKey(kek, slot.Nonce, slot.Wrapped, slotAAD(ks.ID, index, slot.Type))
+	defer cryptox.ZeroBytes(kek)
+	return cryptox.OpenKey(kek, slot.Nonce, slot.Wrapped, slotAAD(ks.ID, index, slot.Type))
 }
 
 // SlotIndexes returns the indexes of all slots of the given type.
@@ -260,7 +262,7 @@ func (ks *KeySet) Validate() error {
 // "created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code".
 func (ks *KeySet) Summary() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), util.AuthMode(ks.AuthMode).Label())
+	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), config.AuthMode(ks.AuthMode).Label())
 	if n := ks.YubiKeyCount(); n > 0 {
 		fmt.Fprintf(&b, " (%d YubiKey", n)
 		if n > 1 {
@@ -278,13 +280,13 @@ func validateSlot(s Slot) error {
 	if s.Label == "" || len(s.Label) > 100 {
 		return fmt.Errorf("invalid label")
 	}
-	if s.KDF.Alg != kdfAlgArgon2 || len(s.KDF.Salt) != security.SaltLen {
+	if s.KDF.Alg != kdfAlgArgon2 || len(s.KDF.Salt) != cryptox.SaltLen {
 		return fmt.Errorf("invalid key derivation settings")
 	}
-	if err := security.ValidateArgon2Params(s.KDF.Time, s.KDF.MemoryKiB, s.KDF.Threads, "in backup header", "Remedy: Use an unmodified backup created by RestoreSafe."); err != nil {
+	if err := cryptox.ValidateArgon2Params(s.KDF.Time, s.KDF.MemoryKiB, s.KDF.Threads, "in backup header", "Remedy: Use an unmodified backup created by RestoreSafe."); err != nil {
 		return err
 	}
-	if len(s.Nonce) != security.NonceLen || len(s.Wrapped) != wrappedKeyLen {
+	if len(s.Nonce) != cryptox.NonceLen || len(s.Wrapped) != wrappedKeyLen {
 		return fmt.Errorf("invalid wrapped key")
 	}
 	if s.UsesYubiKey() {
@@ -295,7 +297,7 @@ func validateSlot(s Slot) error {
 		if err != nil {
 			return err
 		}
-		if err := security.ValidateChallengeJSON(string(raw)); err != nil {
+		if err := yubikey.ValidateChallengeJSON(string(raw)); err != nil {
 			return err
 		}
 		if s.Challenge.NoPassword != (s.Type == SlotYubiKey) {
@@ -305,7 +307,7 @@ func validateSlot(s Slot) error {
 		return fmt.Errorf("unexpected YubiKey challenge")
 	}
 	if s.Type == SlotRecovery {
-		if !security.ValidRecoveryCheck(s.Check) {
+		if !recovery.ValidCheck(s.Check) {
 			return fmt.Errorf("invalid recovery check field")
 		}
 	} else if s.Check != "" {
@@ -325,20 +327,20 @@ func (k *SectionKeys) Zero() {
 	if k == nil {
 		return
 	}
-	security.ZeroBytes(k.Data)
-	security.ZeroBytes(k.Manifest)
+	cryptox.ZeroBytes(k.Data)
+	cryptox.ZeroBytes(k.Manifest)
 }
 
 // DeriveSectionKeys derives the section keys of one set from the key set
 // master key and the set's header hash.
 func DeriveSectionKeys(master, headerHash []byte) (*SectionKeys, error) {
-	data, err := security.DeriveSubkey(master, headerHash, infoData)
+	data, err := cryptox.DeriveSubkey(master, headerHash, infoData)
 	if err != nil {
 		return nil, err
 	}
-	man, err := security.DeriveSubkey(master, headerHash, infoManifest)
+	man, err := cryptox.DeriveSubkey(master, headerHash, infoManifest)
 	if err != nil {
-		security.ZeroBytes(data)
+		cryptox.ZeroBytes(data)
 		return nil, err
 	}
 	return &SectionKeys{Data: data, Manifest: man}, nil

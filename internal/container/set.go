@@ -2,7 +2,7 @@ package container
 
 import (
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
 	"bufio"
 	"bytes"
 	"crypto/sha256"
@@ -70,7 +70,7 @@ func Write(dst io.Writer, h *Header, master []byte, splitSize int64, data io.Rea
 	}
 
 	dataOffset := cw.n
-	if err := security.EncryptStream(cw, data, keys.Data, sectionAAD(headerHash, sectionData)); err != nil {
+	if err := cryptox.EncryptStream(cw, data, keys.Data, sectionAAD(headerHash, sectionData)); err != nil {
 		return nil, err
 	}
 	dataLength := cw.n - dataOffset
@@ -81,7 +81,7 @@ func Write(dst io.Writer, h *Header, master []byte, splitSize int64, data io.Rea
 	}
 	sum := sha256.Sum256(manifestBytes)
 	manifestOffset := cw.n
-	if err := security.EncryptStream(cw, bytes.NewReader(manifestBytes), keys.Manifest, sectionAAD(headerHash, sectionManifest)); err != nil {
+	if err := cryptox.EncryptStream(cw, bytes.NewReader(manifestBytes), keys.Manifest, sectionAAD(headerHash, sectionManifest)); err != nil {
 		return nil, fmt.Errorf("Failed to write backup manifest: %w", err)
 	}
 	manifestLength := cw.n - manifestOffset
@@ -176,7 +176,7 @@ func (s *Set) sectionReader(offset, length int64) io.Reader {
 // manifest.
 func (s *Set) ReadManifest(keys *SectionKeys) (*manifest.Manifest, string, error) {
 	var buf bytes.Buffer
-	err := security.DecryptStream(&buf, s.sectionReader(s.Trailer.ManifestOffset, s.Trailer.ManifestLength), keys.Manifest, sectionAAD(s.HeaderHash, sectionManifest))
+	err := cryptox.DecryptStream(&buf, s.sectionReader(s.Trailer.ManifestOffset, s.Trailer.ManifestLength), keys.Manifest, sectionAAD(s.HeaderHash, sectionManifest))
 	if err != nil {
 		return nil, "", sectionErr("manifest", err)
 	}
@@ -195,7 +195,7 @@ func (s *Set) ReadManifest(keys *SectionKeys) (*manifest.Manifest, string, error
 
 // DecryptData streams the decrypted data section (a TAR stream) to dst.
 func (s *Set) DecryptData(keys *SectionKeys, dst io.Writer) error {
-	err := security.DecryptStream(dst, s.sectionReader(s.Trailer.DataOffset, s.Trailer.DataLength), keys.Data, sectionAAD(s.HeaderHash, sectionData))
+	err := cryptox.DecryptStream(dst, s.sectionReader(s.Trailer.DataOffset, s.Trailer.DataLength), keys.Data, sectionAAD(s.HeaderHash, sectionData))
 	if err != nil {
 		return sectionErr("data", err)
 	}
@@ -203,8 +203,8 @@ func (s *Set) DecryptData(keys *SectionKeys, dst io.Writer) error {
 }
 
 func sectionErr(section string, err error) error {
-	if errors.Is(err, security.ErrCorrupted) {
-		return fmt.Errorf("%w in the %s section. Remedy: The backup files were damaged or modified; use another backup or a copy of these files.", security.ErrCorrupted, section)
+	if errors.Is(err, cryptox.ErrCorrupted) {
+		return fmt.Errorf("%w in the %s section. Remedy: The backup files were damaged or modified; use another backup or a copy of these files.", cryptox.ErrCorrupted, section)
 	}
 	return err
 }

@@ -4,11 +4,12 @@ package gui
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/startup"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -22,7 +23,7 @@ type Options struct {
 	Version    string
 	ExeDir     string
 	ConfigPath string
-	Config     *util.Config
+	Config     *config.Config
 }
 
 // Control IDs and application messages.
@@ -86,7 +87,7 @@ type app struct {
 		buttons                 [opButtons]win32.HWND
 	}
 	opButtons      []opButton
-	opTitleStatus  ui.Status
+	opTitleStatus  interact.Status
 	opContent      opContent
 	opShowProgress bool
 	// Selection and destination screens.
@@ -96,7 +97,7 @@ type app struct {
 	destDefault  string // the backup directory, for "restore into the backup directory"
 	progressText string
 	run          *runState
-	opReport     *ui.Report // preflight report on screen, re-rendered on DPI changes
+	opReport     *interact.Report // preflight report on screen, re-rendered on DPI changes
 
 	home struct {
 		configLabel, configPath, configOpen win32.HWND
@@ -127,7 +128,7 @@ func Run(opts Options) error {
 	if err := win32.LoadRichEdit(); err != nil {
 		return err
 	}
-	a := &app{opts: opts, backupDir: util.ResolveDir(opts.Config.BackupDirectory, opts.ExeDir)}
+	a := &app{opts: opts, backupDir: fsx.ResolveDir(opts.Config.BackupDirectory, opts.ExeDir)}
 	theApp = a
 	if err := a.createWindow(); err != nil {
 		return err
@@ -184,7 +185,7 @@ func (a *app) createWindow() error {
 	}
 	a.hwnd = hwnd
 	a.dpi = win32.DpiForWindow(hwnd)
-	security.SetParentWindow(uintptr(hwnd))
+	yubikey.SetParentWindow(uintptr(hwnd))
 
 	if err := a.createFonts(); err != nil {
 		return err
@@ -470,7 +471,7 @@ func (a *app) healthDone() {
 
 func (a *app) refreshHome() {
 	h := &a.home
-	report := ui.Report{Title: "Startup health check", Sections: []ui.Section{{Rows: []ui.Row{ui.Note("Checking ...")}}}}
+	report := interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: []interact.Row{interact.Note("Checking ...")}}}}
 	if a.state.health != nil && !a.state.checking {
 		report = a.state.health.Report()
 	}

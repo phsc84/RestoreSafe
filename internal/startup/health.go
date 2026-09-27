@@ -2,10 +2,11 @@ package startup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/security/yubikey"
+	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ func buildHealthCheckResult(items []healthItem) HealthCheckResult {
 
 // CheckHealth performs the startup health check without printing it; the
 // result's Report describes the findings.
-func CheckHealth(cfg *util.Config, exeDir, configPath string) HealthCheckResult {
+func CheckHealth(cfg *config.Config, exeDir, configPath string) HealthCheckResult {
 	return buildHealthCheckResult(collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath))
 }
 
@@ -81,15 +82,15 @@ func CheckHealth(cfg *util.Config, exeDir, configPath string) HealthCheckResult 
 // with its items, then local staging notes and the temp directory, then the
 // summary. The findings are items, not issues; BlocksBackup and
 // BlocksRestoreOrVerify decide what they block.
-func (r HealthCheckResult) Report() ui.Report {
-	var checks, staging []ui.Row
-	scopeRows := make(map[string][]ui.Row)
+func (r HealthCheckResult) Report() interact.Report {
+	var checks, staging []interact.Row
+	scopeRows := make(map[string][]interact.Row)
 	var scopes []string
 	okCount, warnCount, errorCount := 0, 0, 0
 	for _, item := range r.items {
 		switch {
 		case item.isNote:
-			staging = append(staging, ui.Note(item.Detail))
+			staging = append(staging, interact.Note(item.Detail))
 			continue
 		case item.Severity == healthOK:
 			okCount++
@@ -98,14 +99,14 @@ func (r HealthCheckResult) Report() ui.Report {
 		case item.Severity == healthError:
 			errorCount++
 		}
-		row := ui.Item(healthStatus(item.Severity), item.Detail)
+		row := interact.Item(healthStatus(item.Severity), item.Detail)
 		if _, seen := scopeRows[item.Scope]; !seen {
 			scopes = append(scopes, item.Scope)
 		}
 		scopeRows[item.Scope] = append(scopeRows[item.Scope], row)
 	}
 	for _, scope := range scopes {
-		rows := append([]ui.Row{ui.Heading(scope)}, scopeRows[scope]...)
+		rows := append([]interact.Row{interact.Heading(scope)}, scopeRows[scope]...)
 		if scope == healthScopeTempDirectory {
 			staging = append(staging, rows...)
 			continue
@@ -113,31 +114,31 @@ func (r HealthCheckResult) Report() ui.Report {
 		checks = append(checks, rows...)
 	}
 
-	summary := []ui.Row{ui.Note(fmt.Sprintf("Summary: %d OK, %d warning(s), %d error(s)", okCount, warnCount, errorCount))}
+	summary := []interact.Row{interact.Note(fmt.Sprintf("Summary: %d OK, %d warning(s), %d error(s)", okCount, warnCount, errorCount))}
 	if errorCount > 0 {
-		summary = append(summary, ui.Note("Review the reported errors before running backup, restore, or verify."))
+		summary = append(summary, interact.Note("Review the reported errors before running backup, restore, or verify."))
 	}
-	report := ui.Report{Title: "Startup health check", Sections: []ui.Section{{Rows: checks}}}
+	report := interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: checks}}}
 	if len(staging) > 0 {
-		report.Sections = append(report.Sections, ui.Section{Rows: staging})
+		report.Sections = append(report.Sections, interact.Section{Rows: staging})
 	}
-	report.Sections = append(report.Sections, ui.Section{Rows: summary})
+	report.Sections = append(report.Sections, interact.Section{Rows: summary})
 	return report
 }
 
-func healthStatus(severity healthSeverity) ui.Status {
+func healthStatus(severity healthSeverity) interact.Status {
 	switch severity {
 	case healthOK:
-		return ui.StatusOK
+		return interact.StatusOK
 	case healthWarn:
-		return ui.StatusWarn
+		return interact.StatusWarn
 	default:
-		return ui.StatusError
+		return interact.StatusError
 	}
 }
 
-func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPath string) []healthItem {
-	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
+func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configPath string) []healthItem {
+	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
 	items := make([]healthItem, 0)
 
@@ -181,7 +182,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 			if stagingSourceDir == "" {
 				stagingSourceDir = src.Resolved
 			}
-			if util.SameVolume(src.Resolved, backupDir) {
+			if fsx.SameVolume(src.Resolved, backupDir) {
 				stagingSourceDir = src.Resolved
 				break
 			}
@@ -191,7 +192,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 	if stagingPlan.Enabled {
 		items = append(items, healthItem{
 			isNote: true,
-			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", util.VolumeDisplay(backupDir)),
+			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", fsx.VolumeDisplay(backupDir)),
 		})
 		items = append(items, checkTempDirHealth()...)
 	}
@@ -201,7 +202,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *util.Config, exeDir, configPat
 
 // checkArgon2Health surfaces a warning for each argon2 value that Load clamped
 // to its enforced maximum, so the user knows the configured value was capped.
-func checkArgon2Health(cfg *util.Config) []healthItem {
+func checkArgon2Health(cfg *config.Config) []healthItem {
 	items := make([]healthItem, 0, len(cfg.Argon2Notices))
 	for _, notice := range cfg.Argon2Notices {
 		items = append(items, healthItem{
@@ -300,7 +301,7 @@ func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []hea
 	return items
 }
 
-func checkYubiKeyHealth(cfg *util.Config) []healthItem {
+func checkYubiKeyHealth(cfg *config.Config) []healthItem {
 	if !cfg.UseYubiKey() {
 		return []healthItem{{
 			Severity: healthOK,
@@ -309,7 +310,7 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 		}}
 	}
 
-	if err := security.CheckYubiKeyConnected(); err != nil {
+	if err := yubikey.CheckYubiKeyConnected(); err != nil {
 		return []healthItem{{
 			Severity: healthWarn,
 			Scope:    healthScopeYubiKey,
@@ -323,7 +324,7 @@ func checkYubiKeyHealth(cfg *util.Config) []healthItem {
 	}}
 }
 
-func checkBackupInventoryHealth(cfg *util.Config, backupDir string) []healthItem {
+func checkBackupInventoryHealth(cfg *config.Config, backupDir string) []healthItem {
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -426,7 +427,7 @@ func buildBackupInventoryIssueItems(infos []catalog.SetInfo) []healthItem {
 
 // checkKeyHealth summarizes the current keys and whether the configuration
 // requires new keys at the next backup.
-func checkKeyHealth(cfg *util.Config, infos []catalog.SetInfo) []healthItem {
+func checkKeyHealth(cfg *config.Config, infos []catalog.SetInfo) []healthItem {
 	ks := catalog.CurrentKeySet(infos)
 	if ks == nil {
 		return []healthItem{{

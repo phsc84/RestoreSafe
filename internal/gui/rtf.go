@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/ui"
+	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -20,15 +20,15 @@ const (
 const rtfColorTable = `{\colortbl ;\red16\green124\blue16;\red0\green95\blue184;\red178\green98\blue0;\red196\green30\blue30;\red100\green100\blue100;}`
 
 // statusMarker returns the symbol and color index of a status.
-func statusMarker(s ui.Status) (string, int) {
+func statusMarker(s interact.Status) (string, int) {
 	switch s {
-	case ui.StatusOK:
+	case interact.StatusOK:
 		return "✔", colorOK
-	case ui.StatusInfo:
+	case interact.StatusInfo:
 		return "ℹ", colorInfo
-	case ui.StatusWarn:
+	case interact.StatusWarn:
 		return "⚠", colorWarn
-	case ui.StatusError:
+	case interact.StatusError:
 		return "✖", colorError
 	}
 	return "", 0
@@ -46,7 +46,7 @@ const (
 // type, headings bold, items with a colored status marker, details indented,
 // fields in two columns, and the issues at the end. fontPt is the base font
 // size in points.
-func reportRTF(r ui.Report, fontFace string, fontPt int) string {
+func reportRTF(r interact.Report, fontFace string, fontPt int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `{\rtf1\ansi\deff0{\fonttbl{\f0\fswiss %s;}}%s\fs%d `, rtfEscape(fontFace), rtfColorTable, fontPt*2)
 	if r.Title != "" {
@@ -58,7 +58,7 @@ func reportRTF(r ui.Report, fontFace string, fontPt int) string {
 		}
 		fieldTab := indentItem
 		for _, row := range section.Rows {
-			if row.Kind == ui.RowField {
+			if row.Kind == interact.RowField {
 				if w := indentItem + (utf8.RuneCountInString(row.Label)+2)*twipsPerChar; w > fieldTab {
 					fieldTab = w
 				}
@@ -78,22 +78,22 @@ func reportRTF(r ui.Report, fontFace string, fontPt int) string {
 	return b.String()
 }
 
-func writeRTFRow(b *strings.Builder, row ui.Row, fieldTab int) {
+func writeRTFRow(b *strings.Builder, row interact.Row, fieldTab int) {
 	switch row.Kind {
-	case ui.RowHeading:
+	case interact.RowHeading:
 		fmt.Fprintf(b, `\pard\sb60{\b %s}\par `, rtfEscape(row.Label))
-	case ui.RowField:
+	case interact.RowField:
 		fmt.Fprintf(b, `\pard\tx%d{\cf%d %s}\tab %s\par `, fieldTab, colorMuted, rtfEscape(row.Label), rtfEscape(row.Text))
-	case ui.RowNote:
+	case interact.RowNote:
 		fmt.Fprintf(b, `\pard %s\par `, rtfEscape(row.Text))
-	case ui.RowItem:
+	case interact.RowItem:
 		writeRTFItem(b, row.Status, row.Text, row.Details, indentItem)
 	}
 }
 
 // writeRTFItem writes a status marker and text with a hanging indent, so
 // wrapped lines align with the text, followed by the details.
-func writeRTFItem(b *strings.Builder, status ui.Status, text string, details []string, indent int) {
+func writeRTFItem(b *strings.Builder, status interact.Status, text string, details []string, indent int) {
 	marker, color := statusMarker(status)
 	textIndent := indent + indentText - indentItem
 	fmt.Fprintf(b, `\pard\li%d\fi-%d\tx%d`, textIndent, textIndent-indent, textIndent)

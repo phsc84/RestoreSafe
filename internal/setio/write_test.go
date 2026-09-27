@@ -4,8 +4,8 @@ import (
 	"RestoreSafe/internal/archive"
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"io"
 	"os"
@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-var fastArgon2 = security.Argon2Params{Time: security.MinArgonTime, MemoryKB: security.MinArgonMemoryKB, Threads: security.MinArgonThreads}
+var fastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
 
 func newKeySet(t *testing.T) (*container.KeySet, []byte) {
 	t.Helper()
@@ -37,7 +37,7 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	ks, master := newKeySet(t)
-	entry := util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}
+	entry := naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}
 
 	var opened []string
 	res, err := WriteSet(SetParams{
@@ -88,7 +88,7 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 	ks, master := newKeySet(t)
 	_, err := WriteSet(SetParams{
 		SourceDir: filepath.Join(t.TempDir(), "does-not-exist"), OutputDir: backupDir,
-		Entry: util.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}, RunID: "ABC123",
+		Entry: naming.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
 	})
 	if err == nil {
@@ -106,12 +106,12 @@ func TestWriteSetRejectsInconsistentDifferentialParams(t *testing.T) {
 	ks, master := newKeySet(t)
 	base := &Base{Header: &container.Header{ChainID: "ABC123", DirectoryName: "src"}}
 	for _, tc := range []struct {
-		entry util.BackupEntry
+		entry naming.BackupEntry
 		base  *Base
 	}{
-		{util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26", DiffNumber: 1}, nil},
-		{util.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}, base},
-		{util.BackupEntry{DirectoryName: "src", ChainID: "XYZ999", Date: "2026-09-26", DiffNumber: 1}, base},
+		{naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26", DiffNumber: 1}, nil},
+		{naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}, base},
+		{naming.BackupEntry{DirectoryName: "src", ChainID: "XYZ999", Date: "2026-09-26", DiffNumber: 1}, base},
 	} {
 		_, err := WriteSet(SetParams{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
 		if err == nil || !strings.Contains(err.Error(), "Internal error") {
@@ -128,10 +128,10 @@ func TestFinalizePartsRefusesToOverwrite(t *testing.T) {
 	if err := os.WriteFile(final, []byte("existing"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(final+util.TempSuffix, []byte("new"), 0o600); err != nil {
+	if err := os.WriteFile(final+naming.TempSuffix, []byte("new"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FinalizeParts([]string{final + util.TempSuffix}); err == nil {
+	if _, err := FinalizeParts([]string{final + naming.TempSuffix}); err == nil {
 		t.Fatal("expected FinalizeParts to refuse overwriting an existing part")
 	}
 	if data, _ := os.ReadFile(final); string(data) != "existing" {

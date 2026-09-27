@@ -1,8 +1,9 @@
 package catalog
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"errors"
 	"fmt"
 	"os"
@@ -13,19 +14,19 @@ import (
 
 // ScanBackups lists every backup set (complete part-file names only) in
 // backupDir.
-func ScanBackups(backupDir string) ([]util.BackupEntry, error) {
+func ScanBackups(backupDir string) ([]naming.BackupEntry, error) {
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return nil, err
 	}
 
-	seen := make(map[util.BackupEntry]bool)
-	var result []util.BackupEntry
+	seen := make(map[naming.BackupEntry]bool)
+	var result []naming.BackupEntry
 	for _, de := range entries {
 		if de.IsDir() {
 			continue
 		}
-		entry, _, ok := util.ParsePartFileName(de.Name())
+		entry, _, ok := naming.ParsePartFileName(de.Name())
 		if !ok || seen[entry] {
 			continue
 		}
@@ -36,7 +37,7 @@ func ScanBackups(backupDir string) ([]util.BackupEntry, error) {
 }
 
 // CollectParts returns the part file paths of an entry, sorted by part number.
-func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
+func CollectParts(backupDir string, entry naming.BackupEntry) ([]string, error) {
 	des, err := os.ReadDir(backupDir)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read backup directory %q: %w", backupDir, err)
@@ -48,7 +49,7 @@ func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
 	}
 	var parts []seqPath
 	for _, de := range des {
-		e, seq, ok := util.ParsePartFileName(de.Name())
+		e, seq, ok := naming.ParsePartFileName(de.Name())
 		if !ok || e != entry {
 			continue
 		}
@@ -65,7 +66,7 @@ func CollectParts(backupDir string, entry util.BackupEntry) ([]string, error) {
 
 // SetInfo is the password-free inspection result of one backup set.
 type SetInfo struct {
-	Entry     util.BackupEntry
+	Entry     naming.BackupEntry
 	Parts     []string
 	SizeBytes int64
 	Header    *container.Header
@@ -87,7 +88,7 @@ func (s SetInfo) Created() time.Time {
 
 // OpenSet opens a backup set after checking part continuity and that the
 // file names match the set header. The caller must Close the set.
-func OpenSet(backupDir string, entry util.BackupEntry) (*container.Set, error) {
+func OpenSet(backupDir string, entry naming.BackupEntry) (*container.Set, error) {
 	parts, err := CollectParts(backupDir, entry)
 	if err != nil {
 		return nil, err
@@ -107,7 +108,7 @@ func OpenSet(backupDir string, entry util.BackupEntry) (*container.Set, error) {
 }
 
 // InspectSet opens and closes a set to report its status.
-func InspectSet(backupDir string, entry util.BackupEntry) SetInfo {
+func InspectSet(backupDir string, entry naming.BackupEntry) SetInfo {
 	info := SetInfo{Entry: entry}
 	parts, err := CollectParts(backupDir, entry)
 	if err != nil {
@@ -160,8 +161,8 @@ func sortNewestFirst(infos []SetInfo) {
 
 // SelectInfos returns the inventory entries of selected, in selection order.
 // Entries not in infos are skipped.
-func SelectInfos(infos []SetInfo, selected []util.BackupEntry) []SetInfo {
-	byEntry := make(map[util.BackupEntry]SetInfo, len(infos))
+func SelectInfos(infos []SetInfo, selected []naming.BackupEntry) []SetInfo {
+	byEntry := make(map[naming.BackupEntry]SetInfo, len(infos))
 	for _, info := range infos {
 		byEntry[info.Entry] = info
 	}
@@ -176,7 +177,7 @@ func SelectInfos(infos []SetInfo, selected []util.BackupEntry) []SetInfo {
 
 // BaseOf returns the full backup of a differential's chain, or an error that
 // explains why it cannot be used. infos is the inventory.
-func BaseOf(infos []SetInfo, diff util.BackupEntry) (*SetInfo, error) {
+func BaseOf(infos []SetInfo, diff naming.BackupEntry) (*SetInfo, error) {
 	for i := range infos {
 		info := &infos[i]
 		if info.Entry.IsDiff() || info.Entry.DirectoryName != diff.DirectoryName || info.Entry.ChainID != diff.ChainID {
@@ -192,7 +193,7 @@ func BaseOf(infos []SetInfo, diff util.BackupEntry) (*SetInfo, error) {
 
 // KeySetMismatch returns why ks no longer matches the configuration (so the
 // next backup must create new keys), or "" when it matches.
-func KeySetMismatch(cfg *util.Config, ks *container.KeySet) string {
+func KeySetMismatch(cfg *config.Config, ks *container.KeySet) string {
 	switch {
 	case ks.AuthMode != int(cfg.AuthenticationMode):
 		return "authentication_mode changed in config.yaml"
@@ -226,7 +227,7 @@ func checkContinuity(parts []string) error {
 		return fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in the backup directory.")
 	}
 	for i, p := range parts {
-		_, seq, _ := util.ParsePartFileName(filepath.Base(p))
+		_, seq, _ := naming.ParsePartFileName(filepath.Base(p))
 		if seq != i+1 {
 			return fmt.Errorf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", i+1)
 		}
@@ -234,7 +235,7 @@ func checkContinuity(parts []string) error {
 	return nil
 }
 
-func checkNameMatchesHeader(entry util.BackupEntry, h *container.Header) error {
+func checkNameMatchesHeader(entry naming.BackupEntry, h *container.Header) error {
 	if h.DirectoryName != entry.DirectoryName || h.ChainID != string(entry.ChainID) || h.Date != entry.Date || h.DiffNumber != entry.DiffNumber || h.IsDiff() != entry.IsDiff() {
 		return fmt.Errorf("File name does not match the backup header (header: %s_%s_%s, type %s). Remedy: Do not rename backup files; restore the original file names.", h.DirectoryName, h.ChainID, h.Date, h.SetType)
 	}
@@ -260,7 +261,7 @@ func ListTempParts(backupDir string) ([]string, error) {
 		if de.IsDir() {
 			continue
 		}
-		if _, _, ok := util.ParseTempPartFileName(de.Name()); ok {
+		if _, _, ok := naming.ParseTempPartFileName(de.Name()); ok {
 			out = append(out, de.Name())
 		}
 	}
@@ -275,7 +276,7 @@ func ListLegacyFiles(backupDir string) ([]string, error) {
 	}
 	var out []string
 	for _, de := range des {
-		if !de.IsDir() && util.IsLegacyBackupFileName(de.Name()) {
+		if !de.IsDir() && naming.IsLegacyBackupFileName(de.Name()) {
 			out = append(out, de.Name())
 		}
 	}

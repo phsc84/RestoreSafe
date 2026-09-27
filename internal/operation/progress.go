@@ -1,8 +1,8 @@
 package operation
 
 import (
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/workflow/interact"
 	"sync/atomic"
 	"time"
 )
@@ -11,7 +11,7 @@ import (
 // intervals. Pass log=nil to suppress output (the goroutine still runs so that
 // the channels stay in sync — LogProgressUntilDone handles nil gracefully).
 // The returned stop function must be called exactly once; defer it at the call site.
-func StartProgressTracking(log *util.Logger, directoryName, verb string, inBytes, outBytes, calls *atomic.Int64) func() {
+func StartProgressTracking(log *logging.Logger, directoryName, verb string, inBytes, outBytes, calls *atomic.Int64) func() {
 	progressDone := make(chan struct{})
 	progressStopped := make(chan struct{})
 	go func() {
@@ -30,7 +30,7 @@ const (
 )
 
 // LogStreamProgress formats and logs stream I/O progress for backup/restore operations.
-func LogStreamProgress(log *util.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, isFinal bool) {
+func LogStreamProgress(log *logging.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, isFinal bool) {
 	inMB := float64(inBytes.Load()) / (1024 * 1024)
 	outMB := float64(outBytes.Load()) / (1024 * 1024)
 	calls := outWriteCalls.Load()
@@ -48,7 +48,7 @@ func LogStreamProgress(log *util.Logger, directoryName, processedLabel string, i
 }
 
 // LogProgressUntilDone periodically logs stream progress until done is closed.
-func LogProgressUntilDone(log *util.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
+func LogProgressUntilDone(log *logging.Logger, directoryName, processedLabel string, inBytes, outBytes, outWriteCalls *atomic.Int64, done <-chan struct{}) {
 	if log == nil {
 		<-done
 		return
@@ -102,7 +102,7 @@ const progressReportInterval = 250 * time.Millisecond
 // TrackProgress reports p to rep with Done read from done every
 // progressReportInterval, until the returned stop function is called; stop
 // reports the final value. A nil rep reports nothing.
-func TrackProgress(rep ui.ProgressReporter, p ui.Progress, done *atomic.Int64) (stop func()) {
+func TrackProgress(rep interact.ProgressReporter, p interact.Progress, done *atomic.Int64) (stop func()) {
 	if rep == nil {
 		return func() {}
 	}

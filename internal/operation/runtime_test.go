@@ -1,17 +1,17 @@
 package operation
 
 import (
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
 	"io"
 	"testing"
-
-	"RestoreSafe/internal/util"
 )
 
 func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfg := &util.Config{LogLevel: "info"}
+	cfg := &config.Config{LogLevel: "info"}
 
-	log := OpenLogger(cfg, tmpDir, "2026-03-14", util.BackupID("ABC123"), io.Discard)
+	log := OpenLogger(cfg, tmpDir, "2026-03-14", naming.BackupID("ABC123"), io.Discard)
 	if log == nil {
 		t.Fatal("expected non-nil logger for valid target dir")
 	}
@@ -33,4 +33,3 @@ func TestPasswordFailurePrefix(t *testing.T) {
 		t.Fatalf("unexpected prefix for YubiKey-only: %q", got)
 	}
 }
-

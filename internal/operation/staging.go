@@ -1,7 +1,8 @@
 package operation
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/logging"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,8 +25,8 @@ func PlanLocalStaging(sourceDir, destDir, tempDir string) LocalStagingPlan {
 		}
 	}
 
-	sameVolume := util.SameVolume(sourceDir, destDir)
-	tempSharesVolume := resolvedTempDir != "" && util.SameVolume(sourceDir, resolvedTempDir)
+	sameVolume := fsx.SameVolume(sourceDir, destDir)
+	tempSharesVolume := resolvedTempDir != "" && fsx.SameVolume(sourceDir, resolvedTempDir)
 
 	return LocalStagingPlan{
 		Enabled:         sameVolume && resolvedTempDir != "" && !tempSharesVolume,
@@ -44,7 +45,7 @@ func CreateStagingDir(tempDir, pattern string) (string, error) {
 }
 
 // CleanupStagingDir removes a staging directory and logs cleanup failures.
-func CleanupStagingDir(stagingDir string, log *util.Logger) {
+func CleanupStagingDir(stagingDir string, log *logging.Logger) {
 	if stagingDir == "" {
 		return
 	}
@@ -58,7 +59,7 @@ func CleanupStagingDir(stagingDir string, log *util.Logger) {
 }
 
 // CleanupStagingDirDuring removes a staging directory during error recovery.
-func CleanupStagingDirDuring(stagingDir, phase string, log *util.Logger) {
+func CleanupStagingDirDuring(stagingDir, phase string, log *logging.Logger) {
 	if stagingDir == "" {
 		return
 	}
@@ -72,12 +73,12 @@ func CleanupStagingDirDuring(stagingDir, phase string, log *util.Logger) {
 type StagingScope struct {
 	// Dir is the staging directory path; empty when staging is not active.
 	Dir string
-	log *util.Logger
+	log *logging.Logger
 }
 
 // NewStagingScope creates a staging directory when plan.Enabled is true.
 // Returns an inactive StagingScope (Dir="") when staging is disabled.
-func NewStagingScope(plan LocalStagingPlan, pattern string, log *util.Logger) (*StagingScope, error) {
+func NewStagingScope(plan LocalStagingPlan, pattern string, log *logging.Logger) (*StagingScope, error) {
 	if !plan.Enabled {
 		return &StagingScope{log: log}, nil
 	}
@@ -89,7 +90,7 @@ func NewStagingScope(plan LocalStagingPlan, pattern string, log *util.Logger) (*
 }
 
 // ActiveStagingScope wraps an already-created staging directory in a StagingScope.
-func ActiveStagingScope(dir string, log *util.Logger) *StagingScope {
+func ActiveStagingScope(dir string, log *logging.Logger) *StagingScope {
 	return &StagingScope{Dir: dir, log: log}
 }
 

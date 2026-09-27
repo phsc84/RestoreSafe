@@ -9,12 +9,16 @@ package backup
 import (
 	"RestoreSafe/internal/archive"
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
+	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/setio"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"fmt"
 	"os"
@@ -27,15 +31,15 @@ import (
 // and reporting progress to it. Cancelling ctx stops the backup: sets
 // completed before are kept, the interrupted one is removed, and the returned
 // error matches context.Canceled.
-func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
+func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
 	out := u.Output()
 	// Resolve backup directory (may be relative to exe dir).
-	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
+	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if err := os.MkdirAll(backupDir, 0o750); err != nil {
 		return fmt.Errorf("Failed to create backup directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
 	}
 
-	lock, err := util.AcquireBackupLock(backupDir)
+	lock, err := fsx.AcquireBackupLock(backupDir)
 	if err != nil {
 		return err
 	}
@@ -53,11 +57,11 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	if err != nil {
 		return err
 	}
-	date := util.DateString()
+	date := naming.DateString()
 
 	// Set up logger.
-	logPath := util.LogFileName(backupDir, date, runID)
-	log, err := util.NewLogger(logPath, cfg.LogLevel, out)
+	logPath := naming.LogFileName(backupDir, date, runID)
+	log, err := logging.NewLogger(logPath, cfg.LogLevel, out)
 	if err != nil {
 		return err
 	}
@@ -74,7 +78,7 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 			if stagingSourceDir == "" {
 				stagingSourceDir = src.Resolved
 			}
-			if util.SameVolume(src.Resolved, backupDir) {
+			if fsx.SameVolume(src.Resolved, backupDir) {
 				stagingSourceDir = src.Resolved
 				break
 			}
@@ -85,7 +89,7 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
 	est := estimateBackupSpace(cfg, backupDir, sources, plans)
-	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, security.CheckYubiKeyConnected)
+	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, yubikey.CheckYubiKeyConnected)
 	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan, est)
 	report.Issues = issues
 	u.ShowReport(report)
@@ -97,22 +101,22 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	// planned); [K] creates new keys (offered when existing keys would be
 	// reused), to change the password, replace a lost YubiKey, or get a new
 	// recovery code.
-	choice, err := u.ConfirmBackupStart(ui.BackupStartOptions{OfferFull: anyDifferential(plans), OfferNewKeys: keys.Existing != nil})
+	choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{OfferFull: anyDifferential(plans), OfferNewKeys: keys.Existing != nil})
 	if err != nil {
 		return err
 	}
 	switch choice {
-	case ui.BackupCancel:
+	case interact.BackupCancel:
 		log.InfoLogOnly("Backup cancelled by user before start")
 		fmt.Fprintln(out, "Backup cancelled.")
 		return nil
-	case ui.BackupFull:
+	case interact.BackupFull:
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
-	case ui.BackupNewKeys:
+	case interact.BackupNewKeys:
 		keys = keyPlan{NewKeysReason: "New keys requested"}
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
 	}
-	if choice == ui.BackupFull || choice == ui.BackupNewKeys {
+	if choice == interact.BackupFull || choice == interact.BackupNewKeys {
 		if err := checkSpaceForFullBackups(backupDir, stagingPlan, est); err != nil {
 			return err
 		}
@@ -122,14 +126,14 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	if err != nil {
 		return err
 	}
-	defer security.ZeroBytes(master)
+	defer cryptox.ZeroBytes(master)
 
 	return runBackupOperation(ctx, u, cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in
 // the backup directory, so a chain ID always identifies one full backup.
-func newRunID(infos []catalog.SetInfo) (util.BackupID, error) {
+func newRunID(infos []catalog.SetInfo) (naming.BackupID, error) {
 	used := make(map[string]bool)
 	for _, info := range infos {
 		used[string(info.Entry.ChainID)] = true
@@ -138,7 +142,7 @@ func newRunID(infos []catalog.SetInfo) (util.BackupID, error) {
 		}
 	}
 	for attempt := 0; attempt < 100; attempt++ {
-		id, err := util.NewBackupID()
+		id, err := naming.NewBackupID()
 		if err != nil {
 			return "", err
 		}
@@ -152,7 +156,7 @@ func newRunID(infos []catalog.SetInfo) (util.BackupID, error) {
 // removeLeftoverTempParts deletes part files an interrupted backup left
 // behind with the temporary suffix. It runs under the backup lock, so no other
 // backup can be writing them.
-func removeLeftoverTempParts(backupDir string, log *util.Logger) {
+func removeLeftoverTempParts(backupDir string, log *logging.Logger) {
 	names, err := catalog.ListTempParts(backupDir)
 	if err != nil {
 		log.Warn("Failed to look for leftovers of interrupted backups: %v", err)
@@ -174,14 +178,14 @@ func removeLeftoverTempParts(backupDir string, log *util.Logger) {
 // per directory; directories without a plan (or a nil map) get a full backup.
 func runBackupOperation(
 	ctx context.Context,
-	u ui.UI,
-	cfg *util.Config,
-	log *util.Logger,
+	u interact.UI,
+	cfg *config.Config,
+	log *logging.Logger,
 	logPath, backupDir string,
 	sources []backupSource,
 	stagingPlan operation.LocalStagingPlan,
 	date string,
-	runID util.BackupID,
+	runID naming.BackupID,
 	keySet *container.KeySet,
 	master []byte,
 	plans map[string]*dirPlan,
@@ -195,7 +199,7 @@ func runBackupOperation(
 	}
 	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(runID), date, n, dirWord)
 	warningCount := 0
-	var written []util.BackupEntry
+	var written []naming.BackupEntry
 	// retentionHold lists directories whose new backup misses unreadable
 	// files; their older backups are kept because they may still have them.
 	retentionHold := make(map[string]bool)
@@ -226,13 +230,13 @@ func runBackupOperation(
 		srcAbs := source.Resolved
 		directoryName := source.BackupName
 		if directoryName == "" {
-			directoryName = util.DirectoryBaseName(srcAbs)
+			directoryName = naming.DirectoryBaseName(srcAbs)
 		}
 
 		log.Info("Processing source directory: %s", srcAbs)
 		log.Debug("Directory name in archive: %s", directoryName)
 
-		entry := util.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
+		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
 		var base *setio.Base
 		if plan := plans[directoryName]; plan.IsDiff() {
 			loaded, err := loadBase(backupDir, plan.Base, keySet, master)
@@ -241,7 +245,7 @@ func runBackupOperation(
 				warningCount++
 			} else {
 				base = loaded
-				entry = util.BackupEntry{DirectoryName: directoryName, ChainID: plan.Base.Entry.ChainID, Date: date, DiffNumber: plan.DiffNumber}
+				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: plan.Base.Entry.ChainID, Date: date, DiffNumber: plan.DiffNumber}
 				log.Info("  Backup type: differential %03d of chain %s (%s)", plan.DiffNumber, plan.Base.Entry.ChainID, plan.Reason)
 			}
 		} else if plan != nil {
@@ -300,13 +304,13 @@ func runBackupOperation(
 	} else {
 		log.Info("Backup completed successfully")
 	}
-	u.ShowResult(ui.Result{Warnings: warningCount, LogPath: logPath})
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
 	return nil
 }
 
 // backupFailed returns err, or, when the user cancelled the backup, logs what
 // was kept and returns the cancellation.
-func backupFailed(ctx context.Context, log *util.Logger, err error) error {
+func backupFailed(ctx context.Context, log *logging.Logger, err error) error {
 	if ctx.Err() == nil {
 		return err
 	}
@@ -324,7 +328,7 @@ const verifyKeptRemedy = " The backup files were kept; try a manual restore/veri
 // are logged as warnings and the backup files are left in place; the number of
 // sets that failed is returned so the caller can flag the run and skip
 // retention. When ctx is cancelled, it stops with the context's error.
-func verifyBackupAfterWrite(ctx context.Context, rep ui.ProgressReporter, backupDir string, entries []util.BackupEntry, master []byte, log *util.Logger) (int, error) {
+func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, backupDir string, entries []naming.BackupEntry, master []byte, log *logging.Logger) (int, error) {
 	log.Info("Verifying backup integrity")
 
 	failures := 0
@@ -338,7 +342,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep ui.ProgressReporter, backup
 		// A differential's own data is checked; its full backup was
 		// verified when it was written.
 		var done atomic.Int64
-		stop := operation.TrackProgress(rep, ui.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: operation.SectionSize(set, nil)}, &done)
+		stop := operation.TrackProgress(rep, interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: operation.SectionSize(set, nil)}, &done)
 		m, err := operation.VerifyOwnData(ctx, set, master, log, &done)
 		stop()
 		parts := len(set.Paths)
@@ -388,20 +392,20 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 // number of files and directories skipped as unreadable.
 func backupDirectory(
 	ctx context.Context,
-	rep ui.ProgressReporter,
+	rep interact.ProgressReporter,
 	srcDir string,
-	entry util.BackupEntry,
-	runID util.BackupID,
+	entry naming.BackupEntry,
+	runID naming.BackupID,
 	base *setio.Base,
 	workingDir, backupDir string,
 	keySet *container.KeySet,
 	master []byte,
-	cfg *util.Config,
+	cfg *config.Config,
 	syncParts bool,
-	log *util.Logger,
+	log *logging.Logger,
 ) (int, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
-	var progressLog *util.Logger
+	var progressLog *logging.Logger
 	if cfg.IODiagnostics {
 		progressLog = log
 	}
@@ -414,7 +418,7 @@ func backupDirectory(
 	if rep != nil {
 		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: cfg.ExcludeMatcher})
 	}
-	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}, &done)
+	stopReport := operation.TrackProgress(rep, interact.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}, &done)
 	defer stopReport()
 
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
@@ -450,9 +454,9 @@ func backupDirectory(
 	}
 
 	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
-	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, util.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
+	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, fsx.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
 	if base != nil {
-		log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, util.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
+		log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, fsx.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
 	}
 	if n := res.Stats.Excluded; n > 0 {
 		log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)

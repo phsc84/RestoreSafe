@@ -2,11 +2,13 @@ package restore
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"context"
 	"fmt"
@@ -61,11 +63,11 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
 	infos := fixtureInfos(t, fx.BackupFixture)
 	logPath := filepath.Join(t.TempDir(), "restore.log")
-	log, _ := util.NewLogger(logPath, "info", nil)
+	log, _ := logging.NewLogger(logPath, "info", nil)
 
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		err = runRestoreOperation(context.Background(), &ui.Console{}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, operation.LocalStagingPlan{}, 0)
+		err = runRestoreOperation(context.Background(), &interact.Console{}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, operation.LocalStagingPlan{}, 0)
 	})
 	log.Close()
 	if err != nil {
@@ -84,7 +86,7 @@ func TestRestoreSelectedEntriesWithStagingRoundTrip(t *testing.T) {
 
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), util.NewConsoleLogger("info", nil), plan)
+		_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil), plan)
 	})
 	if err != nil {
 		t.Fatalf("restore with staging: %v", err)
@@ -102,12 +104,12 @@ func TestRestoreDifferentialWithStaging(t *testing.T) {
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
 	infos := fixtureInfos(t, fx.BackupFixture)
-	selected := catalog.SelectInfos(infos, []util.BackupEntry{diff})
+	selected := catalog.SelectInfos(infos, []naming.BackupEntry{diff})
 	plan := operation.LocalStagingPlan{Enabled: true, ResolvedTempDir: t.TempDir()}
 
 	var err error
 	out := testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), util.NewConsoleLogger("info", nil), plan)
+		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil), plan)
 	})
 	if err != nil {
 		t.Fatalf("restore differential with staging: %v", err)
@@ -120,11 +122,11 @@ func TestRestoreDifferentialWithStaging(t *testing.T) {
 
 func TestRestoreEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("right"))
-	wrong, _ := security.RandomBytes(security.KeyLen)
+	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, util.NewConsoleLogger("info", nil))
+		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, logging.NewConsoleLogger("info", nil))
 	})
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
@@ -138,7 +140,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 	}
 	var err error
 	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, util.NewConsoleLogger("info", nil))
+		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, logging.NewConsoleLogger("info", nil))
 	})
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("expected existing-destination error, got %v", err)
@@ -147,8 +149,8 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 
 func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
-	entry := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}
-	_, err := restoreEntry(context.Background(), nil, entry, nil, t.TempDir(), t.TempDir(), make([]byte, 32), util.NewConsoleLogger("info", nil))
+	entry := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}
+	_, err := restoreEntry(context.Background(), nil, entry, nil, t.TempDir(), t.TempDir(), make([]byte, 32), logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}
@@ -159,7 +161,7 @@ func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
 	var stageDir string
 	var err error
 	testutil.CaptureStdout(t, func() {
-		stageDir, err = stageBackupEntriesLocally(context.Background(), nil, fx.BackupDir, []util.BackupEntry{fx.Entry}, t.TempDir(), util.NewConsoleLogger("info", nil))
+		stageDir, err = stageBackupEntriesLocally(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, t.TempDir(), logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -171,9 +173,9 @@ func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
 
 func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 	t.Parallel()
-	cfg := &util.Config{BackupDirectory: t.TempDir()}
+	cfg := &config.Config{BackupDirectory: t.TempDir()}
 	output := testutil.CaptureStdout(t, func() {
-		if err := Run(context.Background(), &ui.Console{}, cfg, ""); err != nil {
+		if err := Run(context.Background(), &interact.Console{}, cfg, ""); err != nil {
 			t.Errorf("expected nil for empty target dir, got: %v", err)
 		}
 	})
@@ -184,53 +186,31 @@ func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
 
 func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
 	t.Parallel()
-	cfg := &util.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
-	if err := Run(context.Background(), &ui.Console{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
+	cfg := &config.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
+	if err := Run(context.Background(), &interact.Console{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
 		t.Fatalf("expected scan-error message, got: %v", err)
 	}
 }
 
-func pipeStdin(t *testing.T, input string) {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create stdin pipe: %v", err)
-	}
-	if _, err := fmt.Fprint(w, input); err != nil {
-		t.Fatal(err)
-	}
-	w.Close()
-	oldStdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		r.Close()
-	})
-}
-
 func TestRunCancelsSelectionWhenUserEntersQ(t *testing.T) {
+	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("cancel-pw"))
-	pipeStdin(t, "q\n")
 
-	var runErr error
-	output := testutil.CaptureStdout(t, func() {
-		runErr = Run(context.Background(), &ui.Console{}, &util.Config{BackupDirectory: fx.BackupDir}, "")
-	})
-	if runErr != nil || !strings.Contains(output, "Restore cancelled.") {
-		t.Fatalf("expected cancel, got err=%v output=%q", runErr, output)
+	var out strings.Builder
+	runErr := Run(context.Background(), &interact.Console{Out: &out, ReadLine: interact.Answers("q")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
+	if runErr != nil || !strings.Contains(out.String(), "Restore cancelled.") {
+		t.Fatalf("expected cancel, got err=%v output=%q", runErr, out.String())
 	}
 }
 
-func TestRunReturnsErrorWhenDestinationPromptClosed(t *testing.T) {
+func TestRunReturnsErrorWhenDestinationIsNotAnswered(t *testing.T) {
+	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("prompt-pw"))
-	// "." selects the newest backup; EOF then ends the destination prompt.
-	pipeStdin(t, ".\n")
 
-	var runErr error
-	testutil.CaptureStdout(t, func() {
-		runErr = Run(context.Background(), &ui.Console{}, &util.Config{BackupDirectory: fx.BackupDir}, "")
-	})
+	// "." selects the newest backup; the destination prompt gets no answer.
+	var out strings.Builder
+	runErr := Run(context.Background(), &interact.Console{Out: &out, ReadLine: interact.Answers(".")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
 	if runErr == nil {
-		t.Fatal("expected error when stdin closes before destination prompt, got nil")
+		t.Fatal("expected an error when the destination prompt gets no answer, got nil")
 	}
 }

@@ -2,11 +2,11 @@ package gui
 
 import (
 	"RestoreSafe/internal/backup"
+	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/restore"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
 	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"fmt"
 	"strings"
@@ -29,7 +29,7 @@ type runState struct {
 
 	cancelling    bool
 	closeWhenDone bool
-	report        *ui.Report // last preflight report
+	report        *interact.Report // last preflight report
 }
 
 // Operation screen timer.
@@ -53,7 +53,7 @@ func (a *app) startOperation(op operation) {
 	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version+" - "+op.title())
 	win32.SetRichText(a.op.log, "")
 	a.opReport = nil
-	a.setOpScreen(op.title(), ui.StatusNone, "Preparing ...", contentLog, false, nil)
+	a.setOpScreen(op.title(), interact.StatusNone, "Preparing ...", contentLog, false, nil)
 
 	cfg, exeDir := a.opts.Config, a.opts.ExeDir
 	go func() {
@@ -78,7 +78,7 @@ func (a *app) startOperation(op operation) {
 
 // setOpScreen sets the operation screen's heading, detail line, content
 // area, progress bar, and buttons (nil: none).
-func (a *app) setOpScreen(title string, status ui.Status, detail string, content opContent, showProgress bool, buttons []opButton) {
+func (a *app) setOpScreen(title string, status interact.Status, detail string, content opContent, showProgress bool, buttons []opButton) {
 	a.opTitleStatus = status
 	win32.SetText(a.op.title, title)
 	win32.SetText(a.op.detail, detail)
@@ -108,7 +108,7 @@ func (a *app) setOpButtons(buttons []opButton) {
 }
 
 // showPreflight shows the preflight report.
-func (a *app) showPreflight(r ui.Report) {
+func (a *app) showPreflight(r interact.Report) {
 	if a.run == nil {
 		return
 	}
@@ -119,7 +119,7 @@ func (a *app) showPreflight(r ui.Report) {
 	if r.HasErrors() {
 		detail = "The preflight found errors."
 	}
-	a.setOpScreen(a.run.op.title(), ui.StatusNone, detail, contentReport, false, nil)
+	a.setOpScreen(a.run.op.title(), interact.StatusNone, detail, contentReport, false, nil)
 }
 
 // offerStart shows the start buttons under the preflight.
@@ -138,7 +138,7 @@ func (a *app) startRunning() {
 		return
 	}
 	r.started = time.Now()
-	a.setOpScreen(r.op.name(), ui.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
+	a.setOpScreen(r.op.name(), interact.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
 	a.setMarquee(true)
 	win32.SetTimer(a.hwnd, elapsedTimerID, 1000)
 }
@@ -182,12 +182,12 @@ func (a *app) onProgress() {
 }
 
 // progressText describes p's bytes, e.g. "1.2 GiB of 3.4 GiB (35 %)".
-func progressText(p ui.Progress) string {
+func progressText(p interact.Progress) string {
 	f := p.Fraction()
 	if f < 0 {
-		return util.FormatBytesBinary(uint64(max(p.Done, 0)))
+		return fsx.FormatBytesBinary(uint64(max(p.Done, 0)))
 	}
-	return fmt.Sprintf("%s of %s (%d %%)", util.FormatBytesBinary(uint64(max(p.Done, 0))), util.FormatBytesBinary(uint64(p.Total)), int(f*100))
+	return fmt.Sprintf("%s of %s (%d %%)", fsx.FormatBytesBinary(uint64(max(p.Done, 0))), fsx.FormatBytesBinary(uint64(p.Total)), int(f*100))
 }
 
 // updateElapsed refreshes the detail line with the progress and the elapsed
@@ -307,7 +307,7 @@ func (a *app) onWorkerDone() {
 }
 
 // statusPrefix returns the marker shown before a result line.
-func statusPrefix(s ui.Status) string {
+func statusPrefix(s interact.Status) string {
 	if m, _ := statusMarker(s); m != "" {
 		return m + "  "
 	}

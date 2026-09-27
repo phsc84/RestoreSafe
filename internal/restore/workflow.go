@@ -7,11 +7,14 @@ package restore
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/operation"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/security/yubikey"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
 	"fmt"
@@ -24,9 +27,9 @@ import (
 // Run executes the full restore workflow, asking u for decisions and
 // credentials and reporting progress to it. Cancelling ctx stops the restore;
 // the returned error then matches context.Canceled.
-func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
+func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
 	out := u.Output()
-	backupDir := util.ResolveDir(cfg.BackupDirectory, exeDir)
+	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
 	// Enumerate backups.
 	infos, err := catalog.Inventory(backupDir)
@@ -41,7 +44,7 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 
 	selected, err := u.SelectBackups("restore", runs)
 	if err != nil {
-		if errors.Is(err, ui.ErrCancelled) {
+		if errors.Is(err, interact.ErrCancelled) {
 			fmt.Fprintln(out, "Restore cancelled.")
 			return nil
 		}
@@ -50,8 +53,8 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	selectedInfos := catalog.SelectInfos(infos, selected)
 
 	first := selectedInfos[0].Header
-	logPath := util.LogFileName(backupDir, first.Date, util.BackupID(first.RunID))
-	log := operation.OpenLogger(cfg, backupDir, first.Date, util.BackupID(first.RunID), out)
+	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
+	log := operation.OpenLogger(cfg, backupDir, first.Date, naming.BackupID(first.RunID), out)
 	warningCount := 0
 	if log.IsConsoleOnly() {
 		warningCount++
@@ -60,7 +63,7 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 
 	restorePath, err := u.RestoreDestination(backupDir)
 	if err != nil {
-		if errors.Is(err, ui.ErrCancelled) {
+		if errors.Is(err, interact.ErrCancelled) {
 			fmt.Fprintln(out, "Restore cancelled.")
 			return nil
 		}
@@ -70,7 +73,7 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 	stagingPlan := operation.PlanLocalStaging(backupDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, security.CheckYubiKeyConnected))
+	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, yubikey.CheckYubiKeyConnected))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -105,8 +108,8 @@ func Run(ctx context.Context, u ui.UI, cfg *util.Config, exeDir string) error {
 }
 
 func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
-	mode := util.AuthMode(authMode)
-	return mode == util.AuthModePasswordYubiKey || mode == util.AuthModeYubiKey, mode == util.AuthModeYubiKey
+	mode := config.AuthMode(authMode)
+	return mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey, mode == config.AuthModeYubiKey
 }
 
 // runRestoreOperation performs the restore using already-unlocked keys. It
@@ -114,7 +117,7 @@ func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
 // directly by supplying the master keys; u receives the progress and the
 // summary. inventory is used to find the full backup of each selected
 // differential.
-func runRestoreOperation(ctx context.Context, u ui.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
+func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters operation.MasterKeys, log *logging.Logger, stagingPlan operation.LocalStagingPlan, warningCount int) error {
 	out := u.Output()
 	fmt.Fprintln(out)
 	first := selected[0].Header
@@ -137,12 +140,12 @@ func runRestoreOperation(ctx context.Context, u ui.UI, selected, inventory []cat
 	}
 
 	log.Info("Restore completed successfully.")
-	u.ShowResult(ui.Result{Warnings: warningCount, LogPath: logPath})
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
 	return nil
 }
 
 type restorePreflightItem struct {
-	Entry          util.BackupEntry
+	Entry          naming.BackupEntry
 	PartCount      int
 	TotalSizeBytes int64
 	OutputDir      string
@@ -175,7 +178,7 @@ func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath st
 				item.TotalSizeBytes += base.SizeBytes
 			}
 		}
-		if nameErr := util.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
+		if nameErr := naming.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr = nameErr
 		} else if _, err := os.Stat(item.OutputDir); err == nil {
 			item.OutputDirErr = fmt.Errorf("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory.")
@@ -189,87 +192,87 @@ func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath st
 // the full backup a differential needs), the destination, the directories to
 // be created, and local staging, with the issues that block the restore.
 func restorePreflightReport(
-	cfg *util.Config,
+	cfg *config.Config,
 	backupDir, restorePath string,
 	items []restorePreflightItem,
 	usesYubiKey, yubiKeyOnly bool,
 	stagingPlan operation.LocalStagingPlan,
 	checkYubiKeyConnected func() error,
-) ui.Report {
-	var issues []ui.Issue
-	addError := func(text string) { issues = append(issues, ui.Issue{Status: ui.StatusError, Text: text}) }
+) interact.Report {
+	var issues []interact.Issue
+	addError := func(text string) { issues = append(issues, interact.Issue{Status: interact.StatusError, Text: text}) }
 
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	destDisplay := displayRestoreOutputDir(restorePath)
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 
-	rows := []ui.Row{ui.Heading("Backup selection"), ui.Item(ui.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
+	rows := []interact.Row{interact.Heading("Backup selection"), interact.Item(interact.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
 	for _, item := range items {
-		status := ui.StatusOK
+		status := interact.StatusOK
 		if item.Err != nil {
-			status = ui.StatusError
+			status = interact.StatusError
 			addError(item.Err.Error())
 		}
 		var details []string
 		if item.Base != nil {
 			details = append(details, fmt.Sprintf("with full backup %s (parts: %d)", item.Base.Entry.String(), len(item.Base.Parts)))
 		}
-		rows = append(rows, ui.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
+		rows = append(rows, interact.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
 	}
 
-	rows = append(rows, ui.Heading("Restore destination"))
+	rows = append(rows, interact.Heading("Restore destination"))
 	if restoreFreeErr != nil {
-		rows = append(rows, ui.Item(ui.StatusError, destDisplay))
+		rows = append(rows, interact.Item(interact.StatusError, destDisplay))
 		addError(fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
-		rows = append(rows, ui.Item(ui.StatusOK, destDisplay))
-		if util.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			addError(util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+		rows = append(rows, interact.Item(interact.StatusOK, destDisplay))
+		if fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+			addError(fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
-	rows = append(rows, ui.Heading("Restored directory(s)"))
+	rows = append(rows, interact.Heading("Restored directory(s)"))
 	for _, item := range items {
-		status := ui.StatusOK
+		status := interact.StatusOK
 		if item.OutputDirErr != nil {
-			status = ui.StatusError
+			status = interact.StatusError
 			addError(item.OutputDirErr.Error())
 		}
-		rows = append(rows, ui.Item(status, displayRestoreOutputDir(item.OutputDir)))
+		rows = append(rows, interact.Item(status, displayRestoreOutputDir(item.OutputDir)))
 	}
-	rows = append(rows, operation.AuthRows(util.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "restore", checkYubiKeyConnected)...)
+	rows = append(rows, operation.AuthRows(config.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "restore", checkYubiKeyConnected)...)
 
-	summary := []ui.Row{ui.Field("Backup size", "unknown")}
+	summary := []interact.Row{interact.Field("Backup size", "unknown")}
 	if estimatedRestoreBytes > 0 {
-		summary[0].Text = util.FormatBytesBinary(uint64(estimatedRestoreBytes))
+		summary[0].Text = fsx.FormatBytesBinary(uint64(estimatedRestoreBytes))
 	}
 	if restoreFreeErr != nil {
-		summary = append(summary, ui.Field("Free space", fmt.Sprintf("unknown (%v)", restoreFreeErr)))
+		summary = append(summary, interact.Field("Free space", fmt.Sprintf("unknown (%v)", restoreFreeErr)))
 	} else {
-		summary = append(summary, ui.Field("Free space", util.FormatBytesBinary(restoreFreeBytes)))
+		summary = append(summary, interact.Field("Free space", fsx.FormatBytesBinary(restoreFreeBytes)))
 	}
-	summary = append(summary, ui.Field("Log level", strings.ToLower(cfg.LogLevel)))
+	summary = append(summary, interact.Field("Log level", strings.ToLower(cfg.LogLevel)))
 
-	report := ui.Report{Title: "Restore preflight", Sections: []ui.Section{{Rows: rows}, {Rows: summary}}}
+	report := interact.Report{Title: "Restore preflight", Sections: []interact.Section{{Rows: rows}, {Rows: summary}}}
 	if stagingPlan.Enabled {
 		tempDir := filepath.ToSlash(stagingPlan.ResolvedTempDir)
-		staging := []ui.Row{
-			ui.Note(fmt.Sprintf("Local staging via temp directory enabled, because backup directory and restore directory(s) share the same drive (%s).", util.VolumeDisplay(backupDir))),
-			ui.Heading("Temp directory"),
+		staging := []interact.Row{
+			interact.Note(fmt.Sprintf("Local staging via temp directory enabled, because backup directory and restore directory(s) share the same drive (%s).", fsx.VolumeDisplay(backupDir))),
+			interact.Heading("Temp directory"),
 		}
-		tempFreeBytes, tempFreeErr := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+		tempFreeBytes, tempFreeErr := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 		if tempFreeErr != nil {
-			staging = append(staging, ui.Item(ui.StatusError, tempDir))
+			staging = append(staging, interact.Item(interact.StatusError, tempDir))
 			addError(fmt.Sprintf("Cannot query free space for temp directory: %v", tempFreeErr))
 		} else {
-			staging = append(staging, ui.Item(ui.StatusOK, tempDir), ui.Item(ui.StatusNone, "Free disk space: "+util.FormatBytesBinary(tempFreeBytes)))
+			staging = append(staging, interact.Item(interact.StatusOK, tempDir), interact.Item(interact.StatusNone, "Free disk space: "+fsx.FormatBytesBinary(tempFreeBytes)))
 			if estimatedRestoreBytes > 0 && uint64(estimatedRestoreBytes) > tempFreeBytes {
-				addError(fmt.Sprintf("Insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.", util.FormatBytesBinary(uint64(estimatedRestoreBytes)), util.FormatBytesBinary(tempFreeBytes), tempDir))
+				addError(fmt.Sprintf("Insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.", fsx.FormatBytesBinary(uint64(estimatedRestoreBytes)), fsx.FormatBytesBinary(tempFreeBytes), tempDir))
 			}
 		}
-		report.Sections = append(report.Sections, ui.Section{Rows: staging})
-	} else if stagingPlan.SameVolume && util.IsNetworkVolume(backupDir) {
-		issues = append(issues, ui.Issue{Status: ui.StatusWarn, Text: fmt.Sprintf("Backup directory and restore target are on the same drive/share (%s). This can cause long stalls on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.", util.VolumeDisplay(backupDir))})
+		report.Sections = append(report.Sections, interact.Section{Rows: staging})
+	} else if stagingPlan.SameVolume && fsx.IsNetworkVolume(backupDir) {
+		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Text: fmt.Sprintf("Backup directory and restore target are on the same drive/share (%s). This can cause long stalls on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.", fsx.VolumeDisplay(backupDir))})
 	}
 	report.Issues = issues
 	return report
@@ -302,11 +305,11 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 		return nil
 	}
 
-	if !util.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
+	if !fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
 		return nil
 	}
 
-	return fmt.Errorf("Restore preflight failed: %s", util.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+	return fmt.Errorf("Restore preflight failed: %s", fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 }
 
 func validateStagingSpace(stagingPlan operation.LocalStagingPlan, items []restorePreflightItem) error {
@@ -317,15 +320,15 @@ func validateStagingSpace(stagingPlan operation.LocalStagingPlan, items []restor
 	if estimatedBytes <= 0 {
 		return nil
 	}
-	freeBytes, err := util.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
+	freeBytes, err := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
 	if err != nil {
 		// Fail-open: let the staging copy itself surface the error.
 		return nil
 	}
 	if uint64(estimatedBytes) > freeBytes {
 		return fmt.Errorf("Restore preflight failed: insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.",
-			util.FormatBytesBinary(uint64(estimatedBytes)),
-			util.FormatBytesBinary(freeBytes),
+			fsx.FormatBytesBinary(uint64(estimatedBytes)),
+			fsx.FormatBytesBinary(freeBytes),
 			filepath.ToSlash(stagingPlan.ResolvedTempDir))
 	}
 	return nil
@@ -348,7 +351,7 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 		info, err := os.Stat(probe)
 		if err == nil {
 			if info.IsDir() {
-				return util.QueryFreeSpaceBytes(probe)
+				return fsx.QueryFreeSpaceBytes(probe)
 			}
 			probe = filepath.Dir(probe)
 		} else {
@@ -360,18 +363,18 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 		}
 	}
 
-	return util.QueryFreeSpaceBytes(restorePath)
+	return fsx.QueryFreeSpaceBytes(restorePath)
 }
 
 // restoreSelectedEntries restores each selected set and returns the number of
 // files that are missing from the restore points because they could not be
 // read during backup. It stops when ctx is cancelled and reports its
 // progress to rep.
-func restoreSelectedEntries(ctx context.Context, rep ui.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *util.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
+func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters operation.MasterKeys, log *logging.Logger, stagingPlan operation.LocalStagingPlan) (int, error) {
 	skipped := 0
 	for _, info := range selected {
 		entry := info.Entry
-		var base *util.BackupEntry
+		var base *naming.BackupEntry
 		if entry.IsDiff() {
 			baseInfo, err := catalog.BaseOf(inventory, entry)
 			if err != nil {
@@ -382,7 +385,7 @@ func restoreSelectedEntries(ctx context.Context, rep ui.ProgressReporter, select
 
 		var scope *operation.StagingScope
 		if stagingPlan.Enabled {
-			toStage := []util.BackupEntry{entry}
+			toStage := []naming.BackupEntry{entry}
 			if base != nil {
 				toStage = append(toStage, *base)
 			}
@@ -407,7 +410,7 @@ func restoreSelectedEntries(ctx context.Context, rep ui.ProgressReporter, select
 // stageBackupEntriesLocally copies the parts of entries (a set and, for a
 // differential, its full backup) into one new staging directory. It stops
 // when ctx is cancelled and reports its progress to rep.
-func stageBackupEntriesLocally(ctx context.Context, rep ui.ProgressReporter, backupDir string, entries []util.BackupEntry, tempDir string, log *util.Logger) (string, error) {
+func stageBackupEntriesLocally(ctx context.Context, rep interact.ProgressReporter, backupDir string, entries []naming.BackupEntry, tempDir string, log *logging.Logger) (string, error) {
 	stageDir, err := operation.CreateStagingDir(tempDir, "restoresafe-restore-stage-*")
 	if err != nil {
 		return "", err
@@ -437,7 +440,7 @@ func stageBackupEntriesLocally(ctx context.Context, rep ui.ProgressReporter, bac
 	}
 
 	var done atomic.Int64
-	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Copying to local staging", Item: entries[0].DirectoryName, Total: total}, &done)
+	stopReport := operation.TrackProgress(rep, interact.Progress{Step: "Copying to local staging", Item: entries[0].DirectoryName, Total: total}, &done)
 	defer stopReport()
 	for i, entry := range entries {
 		parts := partsByEntry[i]
@@ -445,7 +448,7 @@ func stageBackupEntriesLocally(ctx context.Context, rep ui.ProgressReporter, bac
 		for _, partPath := range parts {
 			log.Info("  Copy: %s", filepath.Base(partPath))
 			destinationPath := filepath.Join(stageDir, filepath.Base(partPath))
-			if err := util.CopyFile(ctx, partPath, destinationPath, &done); err != nil {
+			if err := fsx.CopyFile(ctx, partPath, destinationPath, &done); err != nil {
 				operation.CleanupStagingDirDuring(stageDir, "error recovery", log)
 				return "", err
 			}
@@ -460,8 +463,8 @@ func stageBackupEntriesLocally(ctx context.Context, rep ui.ProgressReporter, bac
 // full backup base) and extracts it to destDir, checking every file against
 // its manifest hash. It returns the number of files that are not in the
 // restore point because they could not be read during backup.
-func restoreEntry(ctx context.Context, rep ui.ProgressReporter, entry util.BackupEntry, base *util.BackupEntry, backupDir, destDir string, master []byte, log *util.Logger) (int, error) {
-	if err := util.ValidateBackupEntryName(entry.DirectoryName); err != nil {
+func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir, destDir string, master []byte, log *logging.Logger) (int, error) {
+	if err := naming.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
 	set, err := catalog.OpenSet(backupDir, entry)
@@ -497,7 +500,7 @@ func restoreEntry(ctx context.Context, rep ui.ProgressReporter, entry util.Backu
 	}
 
 	var done atomic.Int64
-	stopReport := operation.TrackProgress(rep, ui.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: operation.SectionSize(set, baseSet)}, &done)
+	stopReport := operation.TrackProgress(rep, interact.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: operation.SectionSize(set, baseSet)}, &done)
 	m, err := operation.ProcessRestorePoint(ctx, set, baseSet, master, outDir, false, log, &done)
 	stopReport()
 	if err != nil {

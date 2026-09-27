@@ -1,7 +1,9 @@
 package operation
 
 import (
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"context"
 	"fmt"
 	"io"
@@ -10,12 +12,12 @@ import (
 // OpenLogger opens the log file of the backup run date/runID in backupDir,
 // falling back to a console-only logger when the file cannot be opened.
 // Messages are mirrored to console.
-func OpenLogger(cfg *util.Config, backupDir, date string, runID util.BackupID, console io.Writer) *util.Logger {
-	logPath := util.LogFileName(backupDir, date, runID)
-	log, err := util.NewLogger(logPath, cfg.LogLevel, console)
+func OpenLogger(cfg *config.Config, backupDir, date string, runID naming.BackupID, console io.Writer) *logging.Logger {
+	logPath := naming.LogFileName(backupDir, date, runID)
+	log, err := logging.NewLogger(logPath, cfg.LogLevel, console)
 	if err != nil {
 		fmt.Fprintf(console, "Warning: Failed to open log file: %v. Remedy: Check write permissions in backup directory; operation continues without a log file.\n", err)
-		return util.NewConsoleLogger(cfg.LogLevel, console)
+		return logging.NewConsoleLogger(cfg.LogLevel, console)
 	}
 	return log
 }

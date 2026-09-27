@@ -5,11 +5,11 @@ package e2e
 import (
 	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/restore"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"context"
 	"fmt"
@@ -28,7 +28,7 @@ const password = "correct horse battery"
 var disabled = false
 
 // fullBackupsOnly disables differentials for tests about full backups.
-var fullBackupsOnly = util.DifferentialConfig{Enabled: &disabled}
+var fullBackupsOnly = config.DifferentialConfig{Enabled: &disabled}
 
 // script feeds console answers to the workflows. Running out of answers fails
 // the test, so every prompt of a workflow is accounted for.
@@ -36,13 +36,13 @@ type script struct {
 	t         *testing.T
 	lines     []string
 	passwords []string
-	console   *ui.Console
+	console   *interact.Console
 }
 
 func useScript(t *testing.T, lines []string, passwords ...string) *script {
 	t.Helper()
 	s := &script{t: t, lines: lines, passwords: passwords}
-	s.console = &ui.Console{
+	s.console = &interact.Console{
 		ReadLine: func(prompt string) (string, error) {
 			if len(s.lines) == 0 {
 				return "", fmt.Errorf("unexpected line prompt %q", prompt)
@@ -142,14 +142,14 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	leftover := filepath.Join(backupDir, "[Documents]_ZZZ999_2025-01-01_FULL-001.enc.tmp")
 	writeFile(t, leftover, "partial")
 
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories:  []string{docs},
 		BackupDirectory:    backupDir,
 		SplitSizeMB:        1,
 		RetentionKeep:      2,
 		LogLevel:           "info",
 		VerifyAfterBackup:  true,
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		Argon2:             testutil.FastArgon2Config,
 	}
 
@@ -276,21 +276,21 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	locked := filepath.Join(docs, "Mail", "archive.pst")
 	writeFile(t, locked, "mail")
 
-	matcher, err := util.NewExcludeMatcher([]string{"*.tmp", "/Cache"})
+	matcher, err := config.NewExcludeMatcher([]string{"*.tmp", "/Cache"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories:  []string{docs},
 		BackupDirectory:    backupDir,
 		SplitSizeMB:        1,
 		RetentionKeep:      1,
 		LogLevel:           "info",
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		Differential:       fullBackupsOnly,
 		Exclude:            []string{"*.tmp", "/Cache"},
 		ExcludeMatcher:     matcher,
-		OnUnreadableFile:   util.OnUnreadableSkip,
+		OnUnreadableFile:   config.OnUnreadableSkip,
 		Argon2:             testutil.FastArgon2Config,
 	}
 
@@ -351,7 +351,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	}
 }
 
-func runBackup(t *testing.T, cfg *util.Config, lines []string, passwords ...string) string {
+func runBackup(t *testing.T, cfg *config.Config, lines []string, passwords ...string) string {
 	t.Helper()
 	s := useScript(t, lines, passwords...)
 	out := testutil.CaptureStdout(t, func() {
@@ -375,14 +375,14 @@ func TestDifferentialChain(t *testing.T) {
 	writeFile(t, filepath.Join(docs, "stable.txt"), strings.Repeat("never changes ", 20000))
 	writeFile(t, filepath.Join(docs, "notes.txt"), "v1")
 	writeFile(t, filepath.Join(docs, "old.txt"), "will be deleted")
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories:  []string{docs},
 		BackupDirectory:    backupDir,
 		SplitSizeMB:        1,
 		RetentionKeep:      1,
 		LogLevel:           "info",
 		VerifyAfterBackup:  true,
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		Argon2:             testutil.FastArgon2Config,
 	}
 
@@ -452,12 +452,12 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 	docs := filepath.Join(root, "Documents")
 	backupDir := filepath.Join(root, "Backups")
 	writeFile(t, filepath.Join(docs, "a.txt"), "version 1")
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories:  []string{docs},
 		BackupDirectory:    backupDir,
 		SplitSizeMB:        1,
 		LogLevel:           "info",
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		PasswordMinLength:  12,
 		Argon2:             testutil.FastArgon2Config,
 	}
@@ -528,12 +528,12 @@ func TestExistingKeysRejectAnotherPassword(t *testing.T) {
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	writeFile(t, filepath.Join(docs, "a.txt"), "a")
-	cfg := &util.Config{
+	cfg := &config.Config{
 		SourceDirectories:  []string{docs},
 		BackupDirectory:    filepath.Join(root, "Backups"),
 		SplitSizeMB:        1,
 		LogLevel:           "info",
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		Argon2:             testutil.FastArgon2Config,
 	}
 

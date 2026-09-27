@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"RestoreSafe/internal/ui"
+	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"sync"
 	"testing"
@@ -59,10 +59,10 @@ func TestBridgeCloseAnswersShownAndLaterQuestions(t *testing.T) {
 	go func() {
 		// Shown but never answered by the UI (e.g. buttons under the
 		// preflight).
-		_, err := u.b.ask(func(func(any, error)) {}, nil, ui.ErrCancelled)
+		_, err := u.b.ask(func(func(any, error)) {}, nil, interact.ErrCancelled)
 		errs <- err
 		// Asked after the close: answered immediately.
-		_, err = u.b.ask(func(answer func(any, error)) { answer(nil, nil) }, nil, ui.ErrCancelled)
+		_, err = u.b.ask(func(answer func(any, error)) { answer(nil, nil) }, nil, interact.ErrCancelled)
 		errs <- err
 	}()
 	u.next(t)
@@ -71,7 +71,7 @@ func TestBridgeCloseAnswersShownAndLaterQuestions(t *testing.T) {
 		t.Fatal("close must report the shown question")
 	}
 	for i := 0; i < 2; i++ {
-		if err := <-errs; !errors.Is(err, ui.ErrCancelled) {
+		if err := <-errs; !errors.Is(err, interact.ErrCancelled) {
 			t.Fatalf("question %d: got %v, want the cancel answer", i, err)
 		}
 	}
@@ -107,10 +107,10 @@ func TestBridgeProgressKeepsTheLatestReport(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 1; i <= 50; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); u.b.Progress(ui.Progress{Done: int64(i)}) }()
+		go func() { defer wg.Done(); u.b.Progress(interact.Progress{Done: int64(i)}) }()
 	}
 	wg.Wait()
-	u.b.Progress(ui.Progress{Step: "Backing up", Done: 99, Total: 100})
+	u.b.Progress(interact.Progress{Step: "Backing up", Done: 99, Total: 100})
 	if k := u.next(t); k != noteProgress {
 		t.Fatalf("expected a progress notification, got %d", k)
 	}

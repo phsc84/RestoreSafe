@@ -3,8 +3,8 @@ package operation
 import (
 	"RestoreSafe/internal/archive"
 	"RestoreSafe/internal/container"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/util"
 	"context"
 	"fmt"
 	"io"
@@ -19,7 +19,7 @@ import (
 // returns the target manifest so the caller can report skipped files. It
 // stops when ctx is cancelled and adds the decrypted bytes to done (may be
 // nil).
-func ProcessRestorePoint(ctx context.Context, set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *util.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
+func ProcessRestorePoint(ctx context.Context, set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *logging.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
 	if set.Header.IsDiff() && base == nil {
 		return nil, fmt.Errorf("The full backup of chain %s is required to restore %s_%s. Remedy: Put the FULL files of %s into the backup directory.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date, set.Header.ChainID)
 	}
@@ -105,7 +105,7 @@ func checkBaseLink(diff, base *container.Header, baseManifestSHA256 string) erro
 // covers the new and changed files without reading the full backup, which is
 // what verify_after_backup needs right after writing it. ctx and done work as
 // in ProcessRestorePoint.
-func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *util.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
+func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *logging.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
 	keys, err := set.SectionKeys(master)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *
 
 // ReportSkippedFiles logs the files that could not be read during the backup
 // and are therefore missing from the restore point. It returns their count.
-func ReportSkippedFiles(m *manifest.Manifest, directoryName string, log *util.Logger) int {
+func ReportSkippedFiles(m *manifest.Manifest, directoryName string, log *logging.Logger) int {
 	skipped := archive.SkippedFiles(m)
 	if len(skipped) == 0 {
 		return 0

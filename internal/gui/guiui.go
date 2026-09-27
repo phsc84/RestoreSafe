@@ -2,16 +2,16 @@ package gui
 
 import (
 	"RestoreSafe/internal/catalog"
-	"RestoreSafe/internal/security"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/win32"
+	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"io"
 	"strings"
 )
 
-// guiUI implements ui.UI for one operation: every question is forwarded to
+// guiUI implements interact.UI for one operation: every question is forwarded to
 // the UI thread through the bridge.
 type guiUI struct {
 	app *app
@@ -26,11 +26,11 @@ type guiUI struct {
 	retypeAsked        bool
 }
 
-var _ ui.UI = (*guiUI)(nil)
+var _ interact.UI = (*guiUI)(nil)
 
-func (g *guiUI) Output() io.Writer      { return g.b }
-func (g *guiUI) Progress(p ui.Progress) { g.b.Progress(p) }
-func (g *guiUI) ShowResult(r ui.Result) { g.b.setResult(r) }
+func (g *guiUI) Output() io.Writer            { return g.b }
+func (g *guiUI) Progress(p interact.Progress) { g.b.Progress(p) }
+func (g *guiUI) ShowResult(r interact.Result) { g.b.setResult(r) }
 
 // ShowRecoveryCode shows the new recovery code once, in a dialog that cannot
 // copy it (docs/SPEC-restoresafe-gui.md, section 9.3).
@@ -50,7 +50,7 @@ func (g *guiUI) ShowRecoveryCode(code string) {
 }
 
 // ShowReport shows the preflight; it returns once the report is on screen.
-func (g *guiUI) ShowReport(r ui.Report) {
+func (g *guiUI) ShowReport(r interact.Report) {
 	g.b.ask(func(answer func(any, error)) {
 		g.app.showPreflight(r)
 		answer(nil, nil)
@@ -59,20 +59,20 @@ func (g *guiUI) ShowReport(r ui.Report) {
 
 // SelectBackups shows the selection tree: a whole backup run or a single
 // backup set.
-func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([]util.BackupEntry, error) {
+func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
-		g.app.showSelection(action, runs, func(entries []util.BackupEntry, ok bool) {
+		g.app.showSelection(action, runs, func(entries []naming.BackupEntry, ok bool) {
 			if !ok {
-				answer(nil, ui.ErrCancelled)
+				answer(nil, interact.ErrCancelled)
 				return
 			}
 			answer(entries, nil)
 		})
-	}, nil, ui.ErrCancelled)
+	}, nil, interact.ErrCancelled)
 	if err != nil {
 		return nil, err
 	}
-	return v.([]util.BackupEntry), nil
+	return v.([]naming.BackupEntry), nil
 }
 
 // RestoreDestination shows the destination screen.
@@ -80,12 +80,12 @@ func (g *guiUI) RestoreDestination(backupDir string) (string, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
 		g.app.showDestination(backupDir, func(path string, ok bool) {
 			if !ok {
-				answer(nil, ui.ErrCancelled)
+				answer(nil, interact.ErrCancelled)
 				return
 			}
 			answer(path, nil)
 		})
-	}, nil, ui.ErrCancelled)
+	}, nil, interact.ErrCancelled)
 	if err != nil {
 		return "", err
 	}
@@ -108,14 +108,14 @@ func (g *guiUI) ConfirmStart(action string) (bool, error) {
 }
 
 // ConfirmBackupStart offers Start, the alternatives in opts, and Cancel.
-func (g *guiUI) ConfirmBackupStart(opts ui.BackupStartOptions) (ui.BackupStart, error) {
+func (g *guiUI) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.BackupStart, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
-		start := func(choice ui.BackupStart) func() {
+		start := func(choice interact.BackupStart) func() {
 			return func() { g.app.startRunning(); answer(choice, nil) }
 		}
-		buttons := []opButton{{"&Start backup", start(ui.BackupAsPlanned)}}
+		buttons := []opButton{{"&Start backup", start(interact.BackupAsPlanned)}}
 		if opts.OfferNewKeys && opts.OfferFull {
-			buttons = append(buttons, opButton{"&Full backup", start(ui.BackupFull)})
+			buttons = append(buttons, opButton{"&Full backup", start(interact.BackupFull)})
 		}
 		if opts.OfferNewKeys {
 			buttons = append(buttons, opButton{"&New keys + full backup", func() {
@@ -127,14 +127,14 @@ func (g *guiUI) ConfirmBackupStart(opts ui.BackupStartOptions) (ui.BackupStart, 
 					Buttons: []win32.TaskButton{{ID: win32.IDOK, Text: "Create new keys"}, {ID: win32.IDCANCEL, Text: "Back"}},
 				})
 				if button == win32.IDOK {
-					start(ui.BackupNewKeys)()
+					start(interact.BackupNewKeys)()
 				}
 			}})
 		}
-		buttons = append(buttons, opButton{"Cancel", func() { answer(ui.BackupCancel, nil) }})
+		buttons = append(buttons, opButton{"Cancel", func() { answer(interact.BackupCancel, nil) }})
 		g.app.offerStart(buttons)
-	}, ui.BackupCancel, nil)
-	return v.(ui.BackupStart), err
+	}, interact.BackupCancel, nil)
+	return v.(interact.BackupStart), err
 }
 
 // ChooseUnlockMethod offers the regular credentials and the recovery code.
@@ -151,9 +151,9 @@ func (g *guiUI) ChooseUnlockMethod(regular string) (bool, error) {
 		case 101:
 			answer(true, nil)
 		default:
-			answer(false, ui.ErrCancelled)
+			answer(false, interact.ErrCancelled)
 		}
-	}, false, ui.ErrCancelled)
+	}, false, interact.ErrCancelled)
 	return v.(bool), err
 }
 
@@ -190,11 +190,11 @@ func (g *guiUI) Password(prompt string) ([]byte, error) {
 			fields:         []inputField{{label: label, masked: true}},
 		})
 		if !ok {
-			answer(nil, ui.ErrCancelled)
+			answer(nil, interact.ErrCancelled)
 			return
 		}
 		answer(values[0], nil)
-	}, nil, ui.ErrCancelled)
+	}, nil, interact.ErrCancelled)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (g *guiUI) Password(prompt string) ([]byte, error) {
 }
 
 // NewPassword asks for a new password and its confirmation in one dialog,
-// with the rules and errors of security.ReadPasswordConfirmed.
+// with the rules and errors of interact.ReadPasswordConfirmed.
 func (g *guiUI) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
 	retry := g.newPasswordAsked
 	g.newPasswordAsked = true
@@ -219,22 +219,22 @@ func (g *guiUI) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
 			},
 		})
 		if !ok {
-			answer(nil, ui.ErrCancelled)
+			answer(nil, interact.ErrCancelled)
 			return
 		}
 		pw, confirm := values[0], values[1]
-		defer security.ZeroBytes(confirm)
+		defer cryptox.ZeroBytes(confirm)
 		switch {
 		case len(pw) == 0:
-			security.ZeroBytes(pw)
-			answer(nil, security.ErrPasswordEmpty)
+			cryptox.ZeroBytes(pw)
+			answer(nil, interact.ErrPasswordEmpty)
 		case !bytes.Equal(pw, confirm):
-			security.ZeroBytes(pw)
-			answer(nil, security.ErrPasswordMismatch)
+			cryptox.ZeroBytes(pw)
+			answer(nil, interact.ErrPasswordMismatch)
 		default:
 			answer(pw, nil)
 		}
-	}, nil, ui.ErrCancelled)
+	}, nil, interact.ErrCancelled)
 	if err != nil {
 		return nil, err
 	}
@@ -255,11 +255,11 @@ func (g *guiUI) RetypeRecoveryCode() (string, error) {
 			fields:         []inputField{{label: "Type the code you wrote down, to confirm it is correct:"}},
 		})
 		if !ok {
-			answer(nil, ui.ErrCancelled)
+			answer(nil, interact.ErrCancelled)
 			return
 		}
 		answer(string(values[0]), nil)
-	}, nil, ui.ErrCancelled)
+	}, nil, interact.ErrCancelled)
 	if err != nil {
 		return "", err
 	}

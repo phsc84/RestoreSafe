@@ -4,8 +4,9 @@
 package main
 
 import (
+	"RestoreSafe/internal/buildinfo"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/gui"
-	"RestoreSafe/internal/util"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,8 +35,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	util.AppVersion = Version
-	cfg, err := util.Load(configPath)
+	buildinfo.Version = Version
+	cfg, err := config.Load(configPath)
 	if err != nil {
 		gui.ShowError("Configuration error", fmt.Sprintf("Error loading configuration from %s:\n\n%v", filepath.ToSlash(configPath), err))
 		os.Exit(1)

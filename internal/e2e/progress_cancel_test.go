@@ -3,11 +3,11 @@ package e2e
 import (
 	"RestoreSafe/internal/backup"
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/restore"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
 	"RestoreSafe/internal/verify"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
 	"os"
@@ -20,13 +20,13 @@ import (
 // observedUI is a scripted console that also records progress reports and
 // can react to them.
 type observedUI struct {
-	*ui.Console
+	*interact.Console
 	mu         sync.Mutex
-	reports    []ui.Progress
-	onProgress func(ui.Progress)
+	reports    []interact.Progress
+	onProgress func(interact.Progress)
 }
 
-func (o *observedUI) Progress(p ui.Progress) {
+func (o *observedUI) Progress(p interact.Progress) {
 	o.mu.Lock()
 	o.reports = append(o.reports, p)
 	o.mu.Unlock()
@@ -36,7 +36,7 @@ func (o *observedUI) Progress(p ui.Progress) {
 }
 
 // last returns the last report of step for item.
-func (o *observedUI) last(step, item string) (ui.Progress, bool) {
+func (o *observedUI) last(step, item string) (interact.Progress, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for i := len(o.reports) - 1; i >= 0; i-- {
@@ -44,17 +44,17 @@ func (o *observedUI) last(step, item string) (ui.Progress, bool) {
 			return p, true
 		}
 	}
-	return ui.Progress{}, false
+	return interact.Progress{}, false
 }
 
-func progressConfig(sources []string, backupDir string) *util.Config {
-	return &util.Config{
+func progressConfig(sources []string, backupDir string) *config.Config {
+	return &config.Config{
 		SourceDirectories:  sources,
 		BackupDirectory:    backupDir,
 		SplitSizeMB:        1,
 		LogLevel:           "info",
 		VerifyAfterBackup:  true,
-		AuthenticationMode: util.AuthModePassword,
+		AuthenticationMode: config.AuthModePassword,
 		Argon2:             testutil.FastArgon2Config,
 		Differential:       fullBackupsOnly,
 	}
@@ -113,7 +113,7 @@ func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
 	defer cancel()
 	s := useScript(t, []string{"y"}, password, password)
 	// Cancel as soon as the second directory starts.
-	o := &observedUI{Console: s.console, onProgress: func(p ui.Progress) {
+	o := &observedUI{Console: s.console, onProgress: func(p interact.Progress) {
 		if p.Item == "Second" {
 			cancel()
 		}

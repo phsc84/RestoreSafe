@@ -2,9 +2,11 @@ package backup
 
 import (
 	"RestoreSafe/internal/catalog"
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/ui"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"fmt"
 	"os"
@@ -27,14 +29,14 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 	}
 
 	logPath := filepath.Join(backupDir, fmt.Sprintf("test-%d.log", time.Now().UnixNano()))
-	logger, err := util.NewLogger(logPath, level, nil)
+	logger, err := logging.NewLogger(logPath, level, nil)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
-	cfg := &util.Config{SplitSizeMB: 1, IODiagnostics: ioDiagnostics}
-	entry := util.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
+	cfg := &config.Config{SplitSizeMB: 1, IODiagnostics: ioDiagnostics}
+	entry := naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
 	_, backupErr := backupDirectory(context.Background(), nil, sourceDir, entry, "ORD123", nil, backupDir, backupDir, ks, master, cfg, true, logger)
 	logger.Close()
 	if backupErr != nil {
@@ -50,7 +52,7 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 
 func TestBackupDirectoryWritesCompleteSet(t *testing.T) {
 	_, backupDir := runBackupDirectory(t, "info", false)
-	info := catalog.InspectSet(backupDir, util.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
+	info := catalog.InspectSet(backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
 	if !info.Complete() {
 		t.Fatalf("expected a complete set, got %v", info.Err)
 	}
@@ -98,8 +100,8 @@ func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 		t.Fatalf("failed to create file: %v", err)
 	}
 	// Append a subdir to the file path — MkdirAll will fail.
-	cfg := &util.Config{BackupDirectory: filepath.Join(filePath, "sub")}
-	err := Run(context.Background(), &ui.Console{}, cfg, "")
+	cfg := &config.Config{BackupDirectory: filepath.Join(filePath, "sub")}
+	err := Run(context.Background(), &interact.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when target dir cannot be created, got nil")
 	}
@@ -111,11 +113,11 @@ func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
 func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 	t.Parallel()
 	backupDir := t.TempDir()
-	cfg := &util.Config{
+	cfg := &config.Config{
 		BackupDirectory:   backupDir,
 		SourceDirectories: []string{filepath.Join(backupDir, "nonexistent-source")},
 	}
-	err := Run(context.Background(), &ui.Console{}, cfg, "")
+	err := Run(context.Background(), &interact.Console{}, cfg, "")
 	if err == nil {
 		t.Fatal("expected error when all sources fail, got nil")
 	}
@@ -125,31 +127,20 @@ func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
 }
 
 func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
-	// NOT parallel — modifies os.Stdin.
+	t.Parallel()
 	sourceDir := t.TempDir()
 	backupDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(sourceDir, "f.txt"), []byte("data"), 0o600); err != nil {
 		t.Fatalf("failed to create source file: %v", err)
 	}
 
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
-	}
-	fmt.Fprintln(w, "n")
-	w.Close()
-	origStdin := os.Stdin
-	os.Stdin = r
-	t.Cleanup(func() { os.Stdin = origStdin; r.Close() })
-
-	cfg := &util.Config{
+	cfg := &config.Config{
 		BackupDirectory:   backupDir,
 		SourceDirectories: []string{sourceDir},
 	}
-	var runErr error
-	output := testutil.CaptureStdout(t, func() {
-		runErr = Run(context.Background(), &ui.Console{}, cfg, "")
-	})
+	var out strings.Builder
+	runErr := Run(context.Background(), &interact.Console{Out: &out, ReadLine: interact.Answers("n")}, cfg, "")
+	output := out.String()
 	if runErr != nil {
 		t.Fatalf("expected nil error on cancel, got: %v", runErr)
 	}
@@ -169,7 +160,7 @@ func TestRemoveLeftoverTempPartsDeletesOnlyTempParts(t *testing.T) {
 	for _, p := range []string{temp, keep, other} {
 		createFile(t, p, "x")
 	}
-	removeLeftoverTempParts(dir, util.NewConsoleLogger("info", nil))
+	removeLeftoverTempParts(dir, logging.NewConsoleLogger("info", nil))
 	assertNotExists(t, temp)
 	assertExists(t, keep)
 	assertExists(t, other)
@@ -179,8 +170,8 @@ func TestNewRunIDAvoidsUsedIDs(t *testing.T) {
 	t.Parallel()
 	used := make([]catalog.SetInfo, 0)
 	for i := 0; i < 5; i++ {
-		id, _ := util.NewBackupID()
-		used = append(used, catalog.SetInfo{Entry: util.BackupEntry{ChainID: id}})
+		id, _ := naming.NewBackupID()
+		used = append(used, catalog.SetInfo{Entry: naming.BackupEntry{ChainID: id}})
 	}
 	id, err := newRunID(used)
 	if err != nil {

@@ -1,8 +1,9 @@
 package archive
 
 import (
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/manifest"
-	"RestoreSafe/internal/util"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
@@ -29,7 +30,7 @@ type BuildOptions struct {
 	// when it lies inside the source).
 	ExcludeDirs []string
 	// Exclude holds the configured exclude patterns; nil excludes nothing.
-	Exclude *util.ExcludeMatcher
+	Exclude *config.ExcludeMatcher
 	// SkipUnreadable records files that cannot be read as skipped instead of
 	// aborting (on_unreadable_file: skip).
 	SkipUnreadable bool
@@ -96,7 +97,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cw := &countingWriter{w: &util.ContextWriter{Ctx: ctx, W: w}}
+	cw := &countingWriter{w: &fsx.ContextWriter{Ctx: ctx, W: w}}
 	tw := tar.NewWriter(cw)
 	stats := opts.Stats
 	if stats == nil {
@@ -331,7 +332,7 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, pro
 	}
 
 	hasher := sha256.New()
-	src := &sourceReader{r: &util.CountingReader{R: f, Total: progress}}
+	src := &sourceReader{r: &fsx.CountingReader{R: f, Total: progress}}
 	copied, err := io.CopyN(io.MultiWriter(tw, hasher), src, size)
 	if err != nil {
 		readFailed := src.err != nil || errors.Is(err, io.EOF)

@@ -2,7 +2,7 @@ package catalog
 
 import (
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/format/naming"
 	"strings"
 	"testing"
 	"time"
@@ -10,7 +10,7 @@ import (
 
 func completeInfo(dir, chain, run, date string, created time.Time) SetInfo {
 	return SetInfo{
-		Entry:  util.BackupEntry{DirectoryName: dir, ChainID: util.BackupID(chain), Date: date},
+		Entry:  naming.BackupEntry{DirectoryName: dir, ChainID: naming.BackupID(chain), Date: date},
 		Header: &container.Header{RunID: run, Date: date, CreatedUTC: created.UTC().Format(time.RFC3339)},
 	}
 }
@@ -23,7 +23,7 @@ func TestBackupRunSummariesGroupsByRunNewestFirst(t *testing.T) {
 		completeInfo("Docs", "OLD001", "OLD001", "2026-03-15", t0),
 		completeInfo("Pics", "OLD001", "OLD001", "2026-03-15", t0.Add(time.Minute)),
 		completeInfo("Docs", "NEW001", "NEW001", "2026-03-16", t0.Add(24*time.Hour)),
-		{Entry: util.BackupEntry{DirectoryName: "Broken", ChainID: "BRK001", Date: "2026-03-17"}, Err: &container.ErrIncomplete{Reason: "x"}},
+		{Entry: naming.BackupEntry{DirectoryName: "Broken", ChainID: "BRK001", Date: "2026-03-17"}, Err: &container.ErrIncomplete{Reason: "x"}},
 	}
 
 	runs := BackupRunSummaries(infos)

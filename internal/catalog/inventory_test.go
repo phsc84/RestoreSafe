@@ -1,17 +1,17 @@
 package catalog
 
 import (
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/util"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func writePart(t *testing.T, dir string, e util.BackupEntry, seq int) string {
+func writePart(t *testing.T, dir string, e naming.BackupEntry, seq int) string {
 	t.Helper()
-	p := util.PartFileName(dir, e, seq)
+	p := naming.PartFileName(dir, e, seq)
 	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -22,8 +22,8 @@ func TestScanBackupsIndexesDistinctEntriesAndIgnoresOtherFiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	a := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"}
-	b := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20", DiffNumber: 1}
+	a := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"}
+	b := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20", DiffNumber: 1}
 	writePart(t, dir, a, 1)
 	writePart(t, dir, a, 2)
 	writePart(t, dir, b, 1)
@@ -46,7 +46,7 @@ func TestCollectPartsReturnsSortedPaths(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	e := util.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"}
+	e := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-15"}
 	p3 := writePart(t, dir, e, 3)
 	p1 := writePart(t, dir, e, 1)
 	p2 := writePart(t, dir, e, 2)
@@ -64,7 +64,7 @@ func TestInventoryReportsCompleteAndIncompleteSets(t *testing.T) {
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	// A set with only a stray part is incomplete.
-	broken := util.BackupEntry{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-15"}
+	broken := naming.BackupEntry{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-15"}
 	writePart(t, fx.BackupDir, broken, 1)
 
 	infos, err := Inventory(fx.BackupDir)
@@ -97,7 +97,7 @@ func TestInventorySortsNewestFirst(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	newer := util.BackupEntry{DirectoryName: "Second", ChainID: "NEW001", Date: "2026-03-20"}
+	newer := naming.BackupEntry{DirectoryName: "Second", ChainID: "NEW001", Date: "2026-03-20"}
 	fx.CreateBackupInDir(t, newer)
 
 	infos, err := Inventory(fx.BackupDir)
@@ -119,7 +119,7 @@ func TestOpenSetRejectsRenamedFiles(t *testing.T) {
 	renamed := fx.Entry
 	renamed.Date = "2026-01-01"
 	for i, p := range parts {
-		if err := os.Rename(p, util.PartFileName(fx.BackupDir, renamed, i+1)); err != nil {
+		if err := os.Rename(p, naming.PartFileName(fx.BackupDir, renamed, i+1)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -185,9 +185,9 @@ func TestListTempPartsAndLegacyFiles(t *testing.T) {
 func TestSelectInfosKeepsSelectionOrder(t *testing.T) {
 	t.Parallel()
 
-	a := SetInfo{Entry: util.BackupEntry{DirectoryName: "A", ChainID: "ABC123", Date: "2026-03-15"}}
-	b := SetInfo{Entry: util.BackupEntry{DirectoryName: "B", ChainID: "ABC123", Date: "2026-03-15"}}
-	got := SelectInfos([]SetInfo{a, b}, []util.BackupEntry{b.Entry, a.Entry, {DirectoryName: "missing"}})
+	a := SetInfo{Entry: naming.BackupEntry{DirectoryName: "A", ChainID: "ABC123", Date: "2026-03-15"}}
+	b := SetInfo{Entry: naming.BackupEntry{DirectoryName: "B", ChainID: "ABC123", Date: "2026-03-15"}}
+	got := SelectInfos([]SetInfo{a, b}, []naming.BackupEntry{b.Entry, a.Entry, {DirectoryName: "missing"}})
 	if len(got) != 2 || got[0].Entry != b.Entry || got[1].Entry != a.Entry {
 		t.Fatalf("unexpected selection: %+v", got)
 	}

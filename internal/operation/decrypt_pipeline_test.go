@@ -3,7 +3,7 @@ package operation
 import (
 	"RestoreSafe/internal/catalog"
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/security"
+	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/testutil"
 	"context"
 	"errors"
@@ -80,13 +80,13 @@ func TestRunSectionPipelineWrongKeyReportsCorruption(t *testing.T) {
 	t.Parallel()
 
 	fx, set, _ := openFixtureSet(t)
-	wrong, _ := security.RandomBytes(security.KeyLen)
+	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 	keys, _ := set.SectionKeys(wrong)
 	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	})
-	if !errors.Is(err, security.ErrCorrupted) || !strings.Contains(err.Error(), "Decryption failed") {
+	if !errors.Is(err, cryptox.ErrCorrupted) || !strings.Contains(err.Error(), "Decryption failed") {
 		t.Fatalf("expected decryption failure, got %v", err)
 	}
 }

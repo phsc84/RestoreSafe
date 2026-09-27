@@ -2,7 +2,8 @@ package operation
 
 import (
 	"RestoreSafe/internal/container"
-	"RestoreSafe/internal/util"
+	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/logging"
 	"context"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ func RunSectionPipeline(
 	ctx context.Context,
 	set *container.Set,
 	keys *container.SectionKeys,
-	log *util.Logger,
+	log *logging.Logger,
 	directoryName string,
 	progressVerb string,
 	consumeFailurePrefix string,
@@ -52,7 +53,7 @@ func RunSectionPipeline(
 	rw := &recordingWriter{w: pw}
 	decErrCh := make(chan error, 1)
 	go func() {
-		dst := &util.ContextWriter{Ctx: ctx, W: &util.CountingWriter{W: &util.CountingWriter{W: rw, Total: done}, Total: &outBytes, Calls: &outWriteCalls}}
+		dst := &fsx.ContextWriter{Ctx: ctx, W: &fsx.CountingWriter{W: &fsx.CountingWriter{W: rw, Total: done}, Total: &outBytes, Calls: &outWriteCalls}}
 		err := set.DecryptData(keys, dst)
 		pw.CloseWithError(err) //nolint:errcheck
 		decErrCh <- err
