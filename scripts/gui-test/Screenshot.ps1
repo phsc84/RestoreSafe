@@ -2,7 +2,7 @@
 # window, cropped to the visible frame and optionally scaled (e.g. 0.667 for
 # the README screenshots, taken at 150 %).
 #
-# .\Screenshot.ps1 -Exe ..\..\dist\RestoreSafe.exe -ExeArgs '-config="C:\path\config.yaml"' -Out home.png [-Wait 5] [-Scale 0.667]
+# .\Screenshot.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -ExeArgs '-config="C:\path\config.yaml"' -Out home.png [-Wait 5] [-Scale 0.667]
 
 param(
   [Parameter(Mandatory)][string]$Exe,

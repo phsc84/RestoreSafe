@@ -409,7 +409,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 build.bat
 ```
 
-This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\windows\`) and creates `RestoreSafe-<version>.zip`, both in `dist\`.
+This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\windows\`) and creates `RestoreSafe-<version>.zip` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
 
 ### Project layout
 

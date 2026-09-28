@@ -19,17 +19,17 @@ Run them from Windows PowerShell 5.1 in an interactive session (the window must 
 cd scripts\gui-test
 
 # Smoke test with screenshots of every step.
-.\Smoke-BackupRestore.ps1 -Exe ..\..\dist\RestoreSafe.exe -Config C:\dev\RestoreSafe\sandbox\gui-test\config.yaml `
+.\Smoke-BackupRestore.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\dev\RestoreSafe\sandbox\gui-test\config.yaml `
     -Password "correct horse battery" -RestoreTo C:\dev\RestoreSafe\sandbox\gui-test\restored `
     -ScreenshotDir C:\dev\RestoreSafe\sandbox\gui-test\shots
 
 # Screenshot of the start screen for the README.
-.\Screenshot.ps1 -Exe ..\..\dist\RestoreSafe.exe -ExeArgs '-config="C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"' `
+.\Screenshot.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -ExeArgs '-config="C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"' `
     -Out ..\..\docs\images\Screenshot_v2.0.0_home.png -Scale 0.667
 
 # Accessibility of the start screen.
 . .\GuiDriver.ps1; . .\Accessibility.ps1
-$p = Start-Process ..\..\dist\RestoreSafe.exe -PassThru
+$p = Start-Process ..\..\sandbox\RestoreSafe.exe -PassThru
 $main = Wait-Until { Find-Window $p.Id "RestoreSafeMainWindow" } 20 "window"
 Show-Accessibility $main
 Stop-Process $p

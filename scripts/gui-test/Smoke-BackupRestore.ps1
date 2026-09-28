@@ -6,7 +6,7 @@
 # script cannot answer YubiKey prompts. It answers new-key setup (password
 # twice) and a recovery code (reads it from the dialog and types it back).
 #
-# .\Smoke-BackupRestore.ps1 -Exe ..\..\dist\RestoreSafe.exe -Config C:\...\config.yaml `
+# .\Smoke-BackupRestore.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\...\config.yaml `
 #     -Password "correct horse battery" -RestoreTo C:\...\restored [-ScreenshotDir C:\...\shots]
 #
 # Exit code 0 when every step succeeded and the restored files match.

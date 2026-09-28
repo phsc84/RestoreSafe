@@ -1,7 +1,8 @@
 @echo off
 REM ============================================================
 REM  RestoreSafe build script
-REM  Builds dist\RestoreSafe.exe and dist\RestoreSafe-<version>.zip
+REM  Builds dist\RestoreSafe-<version>.zip and moves the compiled
+REM  RestoreSafe.exe to sandbox\ for manual testing
 REM  The version is managed manually in build\windows\versioninfo.json
 REM ============================================================
 
@@ -9,6 +10,7 @@ setlocal
 
 set VERSIONINFO=build\windows\versioninfo.json
 set DIST_DIR=dist
+set SANDBOX_DIR=sandbox
 
 echo [BUILD] Load dependencies...
 go mod tidy
@@ -66,9 +68,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Move RestoreSafe.exe to %SANDBOX_DIR%...
+if not exist %SANDBOX_DIR%\ (
+    mkdir %SANDBOX_DIR%
+)
+move /y "%DIST_DIR%\RestoreSafe.exe" "%SANDBOX_DIR%\RestoreSafe.exe" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to move RestoreSafe.exe to %SANDBOX_DIR%
+    exit /b 1
+)
+
 echo.
-echo [OK] Successfully compiled: %CD%\%DIST_DIR%\RestoreSafe.exe
 echo [OK] Successfully created: %CD%\%DIST_DIR%\%ZIP_NAME%
+echo [OK] Successfully compiled: %CD%\%SANDBOX_DIR%\RestoreSafe.exe
 echo.
 
 endlocal
