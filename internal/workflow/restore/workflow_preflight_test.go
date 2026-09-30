@@ -6,7 +6,6 @@ import (
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/staging"
 	"errors"
 	"math"
 	"os"
@@ -53,7 +52,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], false, false, staging.Plan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], false, false, func() error { return nil }))
 	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
 		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
@@ -72,7 +71,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, false, false, staging.Plan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, false, false, func() error { return nil }))
 	output := sb.String()
 
 	selectionLine := "  [OK] " + docsEntry.String() + " (parts: 4)"
@@ -102,7 +101,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	} {
 		var sb strings.Builder
 		connected := tc.connected
-		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, true, false, staging.Plan{}, func() error { return connected }))
+		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, true, false, func() error { return connected }))
 		output := sb.String()
 		authIdx := strings.Index(output, "Authentication: password + YubiKey")
 		statusIdx := strings.Index(output, tc.want)
@@ -120,7 +119,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, false, false, staging.Plan{}, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, false, false, func() error { return nil }))
 	if !strings.Contains(sb.String(), "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", sb.String())
 	}
@@ -140,22 +139,6 @@ func TestValidateRestorePreflight(t *testing.T) {
 	dirErr := []restorePreflightItem{{PartCount: 1, OutputDirErr: errors.New("already exists")}}
 	if err := validateRestorePreflight(dirErr); err == nil {
 		t.Fatal("expected error for item with OutputDirErr set, got nil")
-	}
-}
-
-func TestValidateStagingSpace(t *testing.T) {
-	t.Parallel()
-
-	if err := validateStagingSpace(staging.Plan{Enabled: false}, []restorePreflightItem{{TotalSizeBytes: math.MaxInt64}}); err != nil {
-		t.Fatalf("expected no error when staging is disabled, got: %v", err)
-	}
-	plan := staging.Plan{Enabled: true, ResolvedTempDir: t.TempDir()}
-	if err := validateStagingSpace(plan, []restorePreflightItem{{TotalSizeBytes: 1}}); err != nil {
-		t.Fatalf("expected no error when space is sufficient, got: %v", err)
-	}
-	err := validateStagingSpace(plan, []restorePreflightItem{{TotalSizeBytes: math.MaxInt64}})
-	if err == nil || !strings.Contains(err.Error(), "insufficient free space at temp directory") {
-		t.Fatalf("expected insufficient-staging-space error, got: %v", err)
 	}
 }
 

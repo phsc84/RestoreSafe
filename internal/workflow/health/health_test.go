@@ -106,17 +106,6 @@ func TestCheckBackupInventoryHealthWarnsAboutLegacyAndTempFiles(t *testing.T) {
 	}
 }
 
-func TestCheckTempDirHealthReturnsOK(t *testing.T) {
-	t.Parallel()
-	items := checkTempDirHealth()
-	if len(items) == 0 {
-		t.Fatal("expected at least one health item from temp dir check")
-	}
-	if items[0].Severity != healthOK {
-		t.Fatalf("expected temp dir health to be OK, got severity %v with detail: %s", items[0].Severity, items[0].Detail)
-	}
-}
-
 func TestCheckArgon2HealthWarnsOnClampNotices(t *testing.T) {
 	t.Parallel()
 
@@ -146,28 +135,6 @@ func TestCheckArgon2HealthSilentWithoutNotices(t *testing.T) {
 
 	if items := checkArgon2Health(&config.Config{}); len(items) != 0 {
 		t.Fatalf("expected no argon2 health items without notices, got: %#v", items)
-	}
-}
-
-func TestHealthReportShowsTempDirItemsWithNote(t *testing.T) {
-	t.Parallel()
-	items := []healthItem{
-		{isNote: true, Detail: "Local staging via temp directory enabled."},
-		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
-	}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, buildResult(items).Report())
-	output := sb.String()
-
-	if !strings.Contains(output, "Local staging via temp directory enabled.") {
-		t.Fatalf("expected note text in output, got: %q", output)
-	}
-	if !strings.Contains(output, "Temp directory:") {
-		t.Fatalf("expected Temp directory section in output, got: %q", output)
-	}
-	if !strings.Contains(output, "  [OK] C:/Temp") {
-		t.Fatalf("expected temp dir OK line in output, got: %q", output)
 	}
 }
 
@@ -239,7 +206,6 @@ func TestBuildResultRecordsOnlyErrorScopes(t *testing.T) {
 		{Severity: healthOK, Scope: healthScopeConfig},
 		{Severity: healthWarn, Scope: healthScopeSourceDirectory},
 		{Severity: healthError, Scope: healthScopeBackupDirectory},
-		{Severity: healthError, Scope: healthScopeYubiKey, isNote: true}, // notes excluded
 	}
 
 	result := buildResult(items)
@@ -252,9 +218,6 @@ func TestBuildResultRecordsOnlyErrorScopes(t *testing.T) {
 	if result.errorScopes[healthScopeSourceDirectory] {
 		t.Fatal("did not expect WARN scope to be recorded as error")
 	}
-	if result.errorScopes[healthScopeYubiKey] {
-		t.Fatal("did not expect note item to be recorded as error")
-	}
 }
 
 func TestBlocksBackup(t *testing.T) {
@@ -265,7 +228,6 @@ func TestBlocksBackup(t *testing.T) {
 		healthScopeSourceDirectory,
 		healthScopeBackupDirectory,
 		healthScopeYubiKey,
-		healthScopeTempDirectory,
 	}
 	for _, scope := range blockingScopes {
 		result := Result{errorScopes: map[string]bool{scope: true}}
@@ -302,12 +264,9 @@ func TestBlocksRestoreOrVerify(t *testing.T) {
 	if (Result{}).BlocksRestoreOrVerify() {
 		t.Fatal("expected no error scopes to allow restore/verify")
 	}
-	// Source and temp directory errors are irrelevant to restore/verify.
-	for _, scope := range []string{healthScopeSourceDirectory, healthScopeTempDirectory} {
-		result := Result{errorScopes: map[string]bool{scope: true}}
-		if result.BlocksRestoreOrVerify() {
-			t.Fatalf("did not expect error in scope %q to block restore/verify", scope)
-		}
+	// Source directory errors are irrelevant to restore/verify.
+	if (Result{errorScopes: map[string]bool{healthScopeSourceDirectory: true}}).BlocksRestoreOrVerify() {
+		t.Fatal("did not expect source directory error to block restore/verify")
 	}
 }
 
@@ -458,8 +417,6 @@ func TestHealthCheckReportGroupsFindingsByScope(t *testing.T) {
 		{Severity: healthWarn, Scope: healthScopeSourceDirectory, Detail: "Docs is empty"},
 		{Severity: healthOK, Scope: healthScopeSourceDirectory, Detail: "Pics"},
 		{Severity: healthError, Scope: healthScopeYubiKey, Detail: "not connected"},
-		{isNote: true, Detail: "Local staging enabled."},
-		{Severity: healthOK, Scope: healthScopeTempDirectory, Detail: "C:/Temp"},
 	})
 	var sb strings.Builder
 	interact.WriteReport(&sb, result.Report())
@@ -474,11 +431,7 @@ Source directory(s):
 YubiKey:
   [ERROR] not connected
 
-Local staging enabled.
-Temp directory:
-  [OK] C:/Temp
-
-Summary: 3 OK, 1 warning(s), 1 error(s)
+Summary: 2 OK, 1 warning(s), 1 error(s)
 Review the reported errors before running backup, restore, or verify.
 `
 	if got := sb.String(); got != want {

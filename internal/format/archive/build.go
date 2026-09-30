@@ -99,6 +99,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	}
 	cw := &countingWriter{w: &fsx.ContextWriter{Ctx: ctx, W: w}}
 	tw := tar.NewWriter(cw)
+	buf := make([]byte, copyBufferSize)
 	stats := opts.Stats
 	if stats == nil {
 		stats = &BuildStats{}
@@ -227,7 +228,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			}
 		}
 
-		entry, err := writeFile(tw, cw, path, rel, origin, opts.Progress)
+		entry, err := writeFile(tw, cw, path, rel, origin, opts.Progress, buf)
 		var unreadable *unreadableError
 		if errors.As(err, &unreadable) {
 			if errors.Is(unreadable.err, fs.ErrNotExist) && !unreadable.headerWritten {
@@ -283,6 +284,12 @@ func skipDirOrNil(d fs.DirEntry) error {
 	return nil
 }
 
+// copyBufferSize is the size of the reads from source files and the writes of
+// restored files. Restoring to an SMB share is more than twice as fast with
+// 1 MB writes than with the 32 KB of io.Copy; reads are served by the Windows
+// read-ahead either way.
+const copyBufferSize = 1 << 20
+
 // sourceReader records read errors so they can be told apart from errors
 // writing the backup.
 type sourceReader struct {
@@ -302,8 +309,8 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 // entry. The file must keep its size while it is copied. Problems reading the
 // file are returned as *unreadableError; when the TAR header was already
 // written, the entry is completed with zeros so the stream stays valid, and
-// the caller marks it void.
-func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64) (manifest.Entry, error) {
+// the caller marks it void. buf is the copy buffer.
+func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64, buf []byte) (manifest.Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return manifest.Entry{}, &unreadableError{path: path, err: err}
@@ -333,7 +340,10 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, pro
 
 	hasher := sha256.New()
 	src := &sourceReader{r: &fsx.CountingReader{R: f, Total: progress}}
-	copied, err := io.CopyN(io.MultiWriter(tw, hasher), src, size)
+	copied, err := io.CopyBuffer(io.MultiWriter(tw, hasher), io.LimitReader(src, size), buf)
+	if err == nil && copied < size {
+		err = io.EOF
+	}
 	if err != nil {
 		readFailed := src.err != nil || errors.Is(err, io.EOF)
 		if !readFailed {

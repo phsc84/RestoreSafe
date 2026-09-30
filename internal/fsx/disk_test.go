@@ -23,19 +23,3 @@ func TestQueryFreeSpaceBytesRejectsPathWithNulByte(t *testing.T) {
 		t.Fatal("expected QueryFreeSpaceBytes to fail for path with NUL byte")
 	}
 }
-
-func TestIsNetworkVolumeLocalTempDir(t *testing.T) {
-	t.Parallel()
-
-	if IsNetworkVolume(t.TempDir()) {
-		t.Fatal("expected local temp directory to be classified as local volume")
-	}
-}
-
-func TestIsNetworkVolumeUNCPath(t *testing.T) {
-	t.Parallel()
-
-	if !IsNetworkVolume(`\\server\share\directory`) {
-		t.Fatal("expected UNC path to be classified as network volume")
-	}
-}

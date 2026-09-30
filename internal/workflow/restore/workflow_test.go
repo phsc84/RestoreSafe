@@ -8,7 +8,6 @@ import (
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/staging"
 	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"context"
@@ -68,7 +67,7 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 
 	var err error
 	output := testutil.CaptureStdout(t, func() {
-		err = runRestoreOperation(context.Background(), &interacttest.Script{}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, staging.Plan{}, 0)
+		err = runRestoreOperation(context.Background(), &interacttest.Script{}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, 0)
 	})
 	log.Close()
 	if err != nil {
@@ -80,25 +79,7 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
 }
 
-func TestRestoreSelectedEntriesWithStagingRoundTrip(t *testing.T) {
-	fx := testutil.NewRestoreFixture(t, []byte("staging-pw"))
-	infos := fixtureInfos(t, fx.BackupFixture)
-	plan := staging.Plan{Enabled: true, ResolvedTempDir: t.TempDir()}
-
-	var err error
-	testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil), plan)
-	})
-	if err != nil {
-		t.Fatalf("restore with staging: %v", err)
-	}
-	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
-	if entries, _ := os.ReadDir(plan.ResolvedTempDir); len(entries) != 0 {
-		t.Fatalf("staging directory not cleaned up: %d entries left", len(entries))
-	}
-}
-
-func TestRestoreDifferentialWithStaging(t *testing.T) {
+func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("edited"), 0o600); err != nil {
 		t.Fatal(err)
@@ -106,17 +87,13 @@ func TestRestoreDifferentialWithStaging(t *testing.T) {
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
 	infos := fixtureInfos(t, fx.BackupFixture)
 	selected := catalog.SelectInfos(infos, []naming.BackupEntry{diff})
-	plan := staging.Plan{Enabled: true, ResolvedTempDir: t.TempDir()}
 
 	var err error
-	out := testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil), plan)
+	testutil.CaptureStdout(t, func() {
+		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil))
 	})
 	if err != nil {
-		t.Fatalf("restore differential with staging: %v", err)
-	}
-	if !strings.Contains(out, "Copying backup files of "+diff.String()) || !strings.Contains(out, "Copying backup files of "+fx.Entry.String()) {
-		t.Fatalf("expected differential and full backup to be staged: %q", out)
+		t.Fatalf("restore differential: %v", err)
 	}
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
 }
@@ -154,21 +131,6 @@ func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	_, err := restoreEntry(context.Background(), nil, entry, nil, t.TempDir(), t.TempDir(), make([]byte, 32), logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
-	}
-}
-
-func TestStageBackupEntryLocallyCopiesParts(t *testing.T) {
-	fx := testutil.NewBackupFixture(t, []byte("pw"))
-	var stageDir string
-	var err error
-	testutil.CaptureStdout(t, func() {
-		stageDir, err = stageBackupEntriesLocally(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, t.TempDir(), logging.NewConsoleLogger("info", nil))
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !catalog.InspectSet(stageDir, fx.Entry).Complete() {
-		t.Fatal("staged set is not complete")
 	}
 }
 

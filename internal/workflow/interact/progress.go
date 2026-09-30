@@ -3,7 +3,7 @@ package interact
 // Progress describes the step a running operation is working on.
 type Progress struct {
 	// Step is what is being done, e.g. "Backing up", "Restoring",
-	// "Verifying", "Copying to local staging", "Moving to backup directory".
+	// "Verifying".
 	Step string
 	// Item is the backup directory the step works on.
 	Item string

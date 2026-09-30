@@ -7,7 +7,6 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/staging"
 	"errors"
 	"os"
 	"path/filepath"
@@ -169,7 +168,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []backupSource{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, staging.Plan{}, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -190,10 +189,9 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 		{Resolved: filepath.Join(backupDir, "Docs"), BackupName: "CustomDocs", Err: errors.New("access denied")},
 		{Resolved: filepath.Join(backupDir, "Photos"), Warning: "Large source"},
 	}
-	stagingPlan := staging.Plan{}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -213,49 +211,6 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightSuppressesSameVolumeWarningOnLocalDrive(t *testing.T) {
-	t.Parallel()
-	tempRoot := t.TempDir()
-	backupDir := filepath.Join(tempRoot, "target")
-	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		t.Fatalf("failed to create target dir: %v", err)
-	}
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-
-	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{Enabled: false, SameVolume: true}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
-	output := sb.String()
-
-	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
-	if strings.Contains(output, warnLinePrefix) {
-		t.Fatalf("did not expect same-volume warning on local drive/share, got output: %q", output)
-	}
-}
-
-func TestPrintBackupPreflightShowsSameVolumeWarningForNetworkShare(t *testing.T) {
-	t.Parallel()
-	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
-	backupDir := `\\server\share\target`
-	sources := []backupSource{{Resolved: `\\server\share\source`}}
-	stagingPlan := staging.Plan{Enabled: false, SameVolume: true}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
-	output := sb.String()
-
-	warnLinePrefix := "→ Source and backup directories are on the same drive/share"
-	if !strings.Contains(output, warnLinePrefix) {
-		t.Fatalf("expected same-volume warning line for network share, got: %q", output)
-	}
-}
-
 func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
@@ -270,10 +225,9 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: config.AuthModePasswordYubiKey, LogLevel: "debug"}
 	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -307,10 +261,9 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: config.AuthModePasswordYubiKey, LogLevel: "debug"}
 	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -327,71 +280,6 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 	if strings.Contains(output, "[OK] YubiKey connected") {
 		t.Fatalf("did not expect OK when YubiKey is not detected, got: %q", output)
-	}
-}
-
-func TestPrintBackupPreflightShowsLocalFreeSpaceWhenStagingEnabled(t *testing.T) {
-	t.Parallel()
-	tempRoot := t.TempDir()
-	backupDir := filepath.Join(tempRoot, "target")
-	sourceDir := filepath.Join(tempRoot, "source")
-	localStagingDir := filepath.Join(tempRoot, "local-staging")
-	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		t.Fatalf("failed to create target dir: %v", err)
-	}
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-	if err := os.MkdirAll(localStagingDir, 0o750); err != nil {
-		t.Fatalf("failed to create local staging dir: %v", err)
-	}
-
-	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{Enabled: true, SameVolume: true, ResolvedTempDir: localStagingDir}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
-	output := sb.String()
-
-	localStagingLine := "Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive"
-	tempDirLine := "Temp directory:"
-	localStagingIdx := strings.Index(output, localStagingLine)
-	tempDirIdx := strings.Index(output, tempDirLine)
-	if localStagingIdx < 0 || tempDirIdx < 0 {
-		t.Fatalf("expected local staging and temp directory lines in output, got: %q", output)
-	}
-	if localStagingIdx >= tempDirIdx {
-		t.Fatalf("expected local staging line before temp directory line, got: %q", output)
-	}
-	freeSpaceAfterTempDir := strings.Index(output[tempDirIdx:], "  Free disk space:")
-	if freeSpaceAfterTempDir < 0 {
-		t.Fatalf("expected free-space line under Temp directory section, got: %q", output)
-	}
-}
-
-func TestPrintBackupPreflightOmitsLocalFreeSpaceWhenStagingDisabled(t *testing.T) {
-	t.Parallel()
-	tempRoot := t.TempDir()
-	backupDir := filepath.Join(tempRoot, "target")
-	sourceDir := filepath.Join(tempRoot, "source")
-	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		t.Fatalf("failed to create target dir: %v", err)
-	}
-	if err := os.MkdirAll(sourceDir, 0o750); err != nil {
-		t.Fatalf("failed to create source dir: %v", err)
-	}
-
-	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{Enabled: false}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
-	output := sb.String()
-
-	if strings.Contains(output, "Temp directory:") {
-		t.Fatalf("did not expect Temp directory section when local staging is disabled, got: %q", output)
 	}
 }
 
@@ -414,10 +302,9 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
 	sources := []backupSource{{Resolved: sourceDir}}
-	stagingPlan := staging.Plan{Enabled: false}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, stagingPlan, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
@@ -462,7 +349,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 1}
 	sources := []backupSource{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	issues, err := backupPreflightIssues(cfg, root, sources, staging.Plan{}, estimateBackupSpace(cfg, root, sources, nil))
+	issues, err := backupPreflightIssues(cfg, root, sources, estimateBackupSpace(cfg, root, sources, nil))
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
 		t.Fatalf("expected the source error first, got %v", err)
 	}
@@ -473,7 +360,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 		t.Fatalf("issue text must not repeat the error prefix: %q", issues[0].Text)
 	}
 
-	if issues, err := backupPreflightIssues(cfg, root, nil, staging.Plan{}, spaceEstimate{}); err != nil || len(issues) != 0 {
+	if issues, err := backupPreflightIssues(cfg, root, nil, spaceEstimate{}); err != nil || len(issues) != 0 {
 		t.Fatalf("no sources to check: got %+v, %v", issues, err)
 	}
 }
@@ -484,7 +371,7 @@ func TestBackupPreflightReportStructure(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 64, AuthenticationMode: config.AuthModeYubiKey, LogLevel: "info"}
 	sources := []backupSource{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	r := backupPreflightReport(cfg, root, sources, staging.Plan{}, keyPlan{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
+	r := backupPreflightReport(cfg, root, sources, keyPlan{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
 	if r.Title != "Backup preflight" || len(r.Sections) != 2 {
 		t.Fatalf("unexpected report: %+v", r)
 	}
@@ -579,7 +466,6 @@ func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
 	if err != nil {
 		t.Skip("free space unknown")
 	}
-	plan := staging.Plan{Enabled: true, ResolvedTempDir: dir}
 	tooMuch := int64(free) + 1<<30
 
 	cases := []struct {
@@ -595,8 +481,7 @@ func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
 	}
 	for _, c := range cases {
 		for where, check := range map[string]func() (string, error){
-			"target":  func() (string, error) { return validateTargetSpaceForBackup(dir, c.est) },
-			"staging": func() (string, error) { return validateStagingSpaceForBackup(plan, c.est) },
+			"target": func() (string, error) { return validateTargetSpaceForBackup(dir, c.est) },
 		} {
 			warning, err := check()
 			if (err != nil) != c.wantErr || (warning != "") != c.wantWarn {
@@ -608,12 +493,9 @@ func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
 		}
 	}
 
-	// Unknown free space and disabled staging never block.
+	// Unknown free space never blocks.
 	if w, err := validateTargetSpaceForBackup(filepath.Join(dir, "missing"), spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil || w != "" {
 		t.Fatalf("unknown free space: %q, %v", w, err)
-	}
-	if w, err := validateStagingSpaceForBackup(staging.Plan{}, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil || w != "" {
-		t.Fatalf("staging disabled: %q, %v", w, err)
 	}
 }
 
@@ -625,7 +507,7 @@ func TestBackupPreflightIssuesWarnsForALargeDifferential(t *testing.T) {
 		t.Skip("free space unknown")
 	}
 	est := spaceEstimate{full: int64(free) + 1<<30, likely: 1, anyDiff: true}
-	issues, err := backupPreflightIssues(&config.Config{}, dir, nil, staging.Plan{}, est)
+	issues, err := backupPreflightIssues(&config.Config{}, dir, nil, est)
 	if err != nil || len(issues) != 1 || issues[0].Status != interact.StatusWarn {
 		t.Fatalf("expected one warning and no error, got %+v, %v", issues, err)
 	}
@@ -639,13 +521,13 @@ func TestCheckSpaceForFullBackups(t *testing.T) {
 		t.Skip("free space unknown")
 	}
 	tooMuch := int64(free) + 1<<30
-	if err := checkSpaceForFullBackups(dir, staging.Plan{}, spaceEstimate{full: tooMuch, likely: 1, anyDiff: true}); err == nil || !strings.HasPrefix(err.Error(), "Full backup not started: Insufficient free space") {
+	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: tooMuch, likely: 1, anyDiff: true}); err == nil || !strings.HasPrefix(err.Error(), "Full backup not started: Insufficient free space") {
 		t.Fatalf("a full backup that does not fit must be refused, got %v", err)
 	}
-	if err := checkSpaceForFullBackups(dir, staging.Plan{}, spaceEstimate{full: 1, likely: 1, anyDiff: true}); err != nil {
+	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: 1, likely: 1, anyDiff: true}); err != nil {
 		t.Fatalf("a full backup that fits: %v", err)
 	}
-	if err := checkSpaceForFullBackups(dir, staging.Plan{}, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil {
+	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil {
 		t.Fatalf("without differentials the preflight already checked the full size: %v", err)
 	}
 }

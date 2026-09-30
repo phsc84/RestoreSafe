@@ -39,6 +39,7 @@ type Restorer struct {
 	target     *manifest.Manifest
 	done       map[string]bool
 	failures   []string
+	buf        []byte
 }
 
 // ExpectOwnContentOnly makes Finish require only the files whose content is
@@ -48,7 +49,7 @@ func (r *Restorer) ExpectOwnContentOnly() { r.ownOnly = true }
 // NewRestorer prepares a restore of target into destDir. In verify mode
 // (verifyOnly) nothing is written; every file's content is hashed and checked.
 func NewRestorer(target *manifest.Manifest, destDir string, verifyOnly bool) *Restorer {
-	return &Restorer{destDir: destDir, verifyOnly: verifyOnly, target: target, done: make(map[string]bool)}
+	return &Restorer{destDir: destDir, verifyOnly: verifyOnly, target: target, done: make(map[string]bool), buf: make([]byte, copyBufferSize)}
 }
 
 func (r *Restorer) targetPath(rel string) (string, error) {
@@ -128,7 +129,7 @@ func (r *Restorer) ExtractSection(tarStream io.Reader, decide Decide) error {
 func (r *Restorer) extractFile(content io.Reader, e *manifest.Entry) error {
 	hasher := sha256.New()
 	if r.verifyOnly {
-		if _, err := io.Copy(hasher, content); err != nil {
+		if _, err := io.CopyBuffer(hasher, content, r.buf); err != nil {
 			return fmt.Errorf("Failed to read %q from the backup: %w", e.Path, err)
 		}
 		return r.checkHash(e, hasher.Sum(nil))
@@ -142,7 +143,7 @@ func (r *Restorer) extractFile(content io.Reader, e *manifest.Entry) error {
 	if err != nil {
 		return fmt.Errorf("Failed to create file %q: %w. Remedy: Check write permissions in the restore destination.", p, err)
 	}
-	_, copyErr := io.Copy(io.MultiWriter(f, hasher), content)
+	_, copyErr := io.CopyBuffer(io.MultiWriter(f, hasher), content, r.buf)
 	closeErr := f.Close()
 	if copyErr != nil {
 		return fmt.Errorf("Failed to write file %q: %w", p, copyErr)

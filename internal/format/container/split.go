@@ -64,9 +64,8 @@ func (s *Writer) SetPartOpenedHook(hook func(seq int, path string)) {
 }
 
 // SetSyncOnClose controls whether each finalized part is flushed to disk with
-// Sync before it is closed. It defaults to true. Disable it when parts are
-// written to a temporary staging area whose contents are later copied (and
-// synced) to their durable destination, to avoid fsync'ing throwaway files.
+// Sync before it is closed. It defaults to true. Disable it only where
+// durability does not matter, such as in tests.
 func (s *Writer) SetSyncOnClose(enabled bool) {
 	if s == nil {
 		return

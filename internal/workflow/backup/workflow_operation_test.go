@@ -7,7 +7,6 @@ import (
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/staging"
 	"context"
 	"os"
 	"path/filepath"
@@ -46,12 +45,12 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	return env
 }
 
-func (env *operationEnv) run(t *testing.T, plan staging.Plan, id naming.BackupID) string {
+func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	var runErr error
 	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(context.Background(), &interacttest.Script{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, plan, "2026-05-31", id, ks, master, nil)
+		runErr = runBackupOperation(context.Background(), &interacttest.Script{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, "2026-05-31", id, ks, master, nil)
 	})
 	env.logger.Close()
 	if runErr != nil {
@@ -65,7 +64,7 @@ func (env *operationEnv) run(t *testing.T, plan staging.Plan, id naming.BackupID
 // stdin mocking is required.
 func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
 	env := newOperationEnv(t, "operation payload")
-	output := env.run(t, staging.Plan{}, "OPS001")
+	output := env.run(t, "OPS001")
 	if !strings.Contains(output, "Backup completed successfully") {
 		t.Fatalf("expected completion message in output, got: %q", output)
 	}
@@ -81,7 +80,7 @@ func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
 func TestRunBackupOperationVerifiesAfterBackup(t *testing.T) {
 	env := newOperationEnv(t, "verify payload")
 	env.cfg.VerifyAfterBackup = true
-	output := env.run(t, staging.Plan{}, "OPS002")
+	output := env.run(t, "OPS002")
 	if !strings.Contains(output, "Post-backup verification successful") {
 		t.Fatalf("expected verification success message in output, got: %q", output)
 	}
@@ -90,29 +89,24 @@ func TestRunBackupOperationVerifiesAfterBackup(t *testing.T) {
 	}
 }
 
-func TestRunBackupOperationCleansStagingBeforeSuccessAndPrintsLogFileLast(t *testing.T) {
-	env := newOperationEnv(t, "staged payload")
-	stagingTempDir := filepath.Join(filepath.Dir(env.srcDir), "temp")
-	if err := os.MkdirAll(stagingTempDir, 0o750); err != nil {
-		t.Fatal(err)
-	}
-	output := env.run(t, staging.Plan{Enabled: true, ResolvedTempDir: stagingTempDir}, "OPS004")
+func TestRunBackupOperationPrintsLogFileLast(t *testing.T) {
+	env := newOperationEnv(t, "operation payload")
+	output := env.run(t, "OPS004")
 
-	cleanupIndex := strings.Index(output, "Removed staging directory:")
 	successIndex := strings.Index(output, "Backup completed successfully")
 	logFileIndex := strings.LastIndex(output, "Log file:")
-	if cleanupIndex == -1 || successIndex == -1 || logFileIndex == -1 {
-		t.Fatalf("expected cleanup, completion, and log file lines, got: %q", output)
+	if successIndex == -1 || logFileIndex == -1 {
+		t.Fatalf("expected completion and log file lines, got: %q", output)
 	}
-	if !(cleanupIndex < successIndex && successIndex < logFileIndex) {
-		t.Fatalf("expected cleanup before success and success before log file, got: %q", output)
+	if successIndex > logFileIndex {
+		t.Fatalf("expected success before log file, got: %q", output)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+env.logPath) {
 		t.Fatalf("expected log file line to be last, got: %q", output)
 	}
 	info := catalog.InspectSet(env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
 	if !info.Complete() {
-		t.Fatalf("staged set not complete in backup directory: %v", info.Err)
+		t.Fatalf("set not complete in backup directory: %v", info.Err)
 	}
 	if temps, _ := catalog.ListTempParts(env.backupDir); len(temps) != 0 {
 		t.Fatalf("temporary parts left behind: %v", temps)

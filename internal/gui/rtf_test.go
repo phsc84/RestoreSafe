@@ -33,7 +33,7 @@ func TestReportRTF(t *testing.T) {
 				interact.Item(interact.StatusOK, `C:\Docs`, "Full backup"),
 				interact.Item(interact.StatusError, "Pics"),
 			}},
-			{Rows: []interact.Row{interact.Field("Split size", "64 MB"), interact.Field("Verify after backup", "enabled"), interact.Note("Local staging enabled.")}},
+			{Rows: []interact.Row{interact.Field("Split size", "64 MB"), interact.Field("Verify after backup", "enabled"), interact.Note("Sample note.")}},
 		},
 		Issues: []interact.Issue{{Status: interact.StatusWarn, Text: "Slow drive."}},
 	}
@@ -54,7 +54,7 @@ func TestReportRTF(t *testing.T) {
 		`\u8594? Full backup`,                    // detail with arrow
 		`{\cf4 \u10006?}\tab Pics\par`,           // error marker
 		`\tab 64 MB\par`,                         // field value after the tab stop
-		`\pard Local staging enabled.\par`,
+		`\pard Sample note.\par`,
 		`{\cf3 \u9888?}\tab Slow drive.\par`, // issue with warning marker
 	} {
 		if !strings.Contains(got, want) {

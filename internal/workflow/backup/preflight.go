@@ -7,22 +7,19 @@ import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/staging"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 // backupPreflightReport describes what the backup will do: each source
-// directory with its backup type, the backup directory, the keys, the
-// settings, and local staging. The issues that block the backup are added by
+// directory with its backup type, the backup directory, the keys, and the
+// settings. The issues that block the backup are added by
 // backupPreflightIssues.
 func backupPreflightReport(
 	cfg *config.Config,
 	backupDir string,
 	sources []backupSource,
-	stagingPlan staging.Plan,
 	keys keyPlan,
 	plans map[string]*dirPlan,
 	est spaceEstimate,
@@ -36,7 +33,6 @@ func backupPreflightReport(
 		}
 	}
 	freeBytes, freeErr := fsx.QueryFreeSpaceBytes(backupDir)
-	sameVolumeNetworkWarning := !stagingPlan.Enabled && stagingPlan.SameVolume && fsx.IsNetworkVolume(backupDir)
 
 	directories := []interact.Row{interact.Heading("Source directory(s)")}
 	for _, src := range sources {
@@ -65,9 +61,6 @@ func backupPreflightReport(
 				reasonLabel = ""
 			}
 			details = append(details, fmt.Sprintf("%s backup (%s%s)", plan.Label(), reasonLabel, plan.Reason))
-		}
-		if sameVolumeNetworkWarning && !src.Skip && fsx.SameVolume(src.Resolved, backupDir) {
-			details = append(details, fmt.Sprintf("Source and backup directories are on the same drive/share (%s). This can cause long stalls, especially on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different backup drive/share or point TEMP/TMP to a local drive.", fsx.VolumeDisplay(backupDir)))
 		}
 		directories = append(directories, interact.Item(status, src.Resolved, details...))
 	}
@@ -114,21 +107,7 @@ func backupPreflightReport(
 		interact.Field("Log level", strings.ToLower(cfg.LogLevel)),
 	)
 
-	report := interact.Report{Title: "Backup preflight", Sections: []interact.Section{{Rows: directories}, {Rows: settings}}}
-	if stagingPlan.Enabled {
-		stagingRows := []interact.Row{
-			interact.Note(fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", fsx.VolumeDisplay(backupDir))),
-			interact.Heading("Temp directory"),
-			interact.Item(interact.StatusOK, filepath.ToSlash(stagingPlan.ResolvedTempDir)),
-		}
-		if localFreeBytes, err := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir); err != nil {
-			stagingRows = append(stagingRows, interact.Item(interact.StatusNone, fmt.Sprintf("Free disk space: unknown (%v)", err)))
-		} else {
-			stagingRows = append(stagingRows, interact.Item(interact.StatusNone, "Free disk space: "+fsx.FormatBytesBinary(localFreeBytes)))
-		}
-		report.Sections = append(report.Sections, interact.Section{Rows: stagingRows})
-	}
-	return report
+	return interact.Report{Title: "Backup preflight", Sections: []interact.Section{{Rows: directories}, {Rows: settings}}}
 }
 
 // keyPlanRows state whether the run reuses the existing keys or creates new
@@ -148,15 +127,13 @@ func keyPlanRows(keys keyPlan) []interact.Row {
 // as report issues, together with the error of the first failed check. A
 // differential whose estimate fits, but that would not fit if it stored
 // every file again, gets a warning instead of an error.
-func backupPreflightIssues(cfg *config.Config, backupDir string, sources []backupSource, stagingPlan staging.Plan, est spaceEstimate) ([]interact.Issue, error) {
+func backupPreflightIssues(cfg *config.Config, backupDir string, sources []backupSource, est spaceEstimate) ([]interact.Issue, error) {
 	var issues []interact.Issue
 	var first error
 	targetWarn, targetErr := validateTargetSpaceForBackup(backupDir, est)
-	stagingWarn, stagingErr := validateStagingSpaceForBackup(stagingPlan, est)
 	for _, err := range []error{
 		validateSourceDirectories(sources),
 		targetErr,
-		stagingErr,
 		validateBackupPartCount(cfg, sources),
 	} {
 		if err == nil {
@@ -167,10 +144,8 @@ func backupPreflightIssues(cfg *config.Config, backupDir string, sources []backu
 		}
 		issues = append(issues, interact.Issue{Status: interact.StatusError, Text: strings.TrimPrefix(err.Error(), "Backup preflight failed: ")})
 	}
-	for _, warning := range []string{targetWarn, stagingWarn} {
-		if warning != "" {
-			issues = append(issues, interact.Issue{Status: interact.StatusWarn, Text: warning})
-		}
+	if targetWarn != "" {
+		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Text: targetWarn})
 	}
 	return issues, first
 }
@@ -203,30 +178,6 @@ func validateTargetSpaceForBackup(backupDir string, est spaceEstimate) (warning 
 	}
 	if est.anyDiff && fsx.IsSpaceInsufficient(est.full, freeBytes) {
 		return spaceWarning("in the backup directory", est, freeBytes), nil
-	}
-	return "", nil
-}
-
-// validateStagingSpaceForBackup checks the free space in the temp directory
-// used for local staging, like validateTargetSpaceForBackup.
-func validateStagingSpaceForBackup(stagingPlan staging.Plan, est spaceEstimate) (warning string, err error) {
-	if !stagingPlan.Enabled {
-		return "", nil
-	}
-	freeBytes, err := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-	if err != nil {
-		return "", nil
-	}
-	if fsx.IsSpaceInsufficient(est.likely, freeBytes) {
-		return "", fmt.Errorf(
-			"Backup preflight failed: Insufficient free space in temp directory for local staging: needed %s, available %s. Remedy: Free disk space in %s or set TEMP/TMP to a different drive.",
-			fsx.FormatBytesBinary(uint64(est.likely)),
-			fsx.FormatBytesBinary(freeBytes),
-			filepath.ToSlash(stagingPlan.ResolvedTempDir),
-		)
-	}
-	if est.anyDiff && fsx.IsSpaceInsufficient(est.full, freeBytes) {
-		return spaceWarning("in the temp directory for local staging", est, freeBytes), nil
 	}
 	return "", nil
 }
@@ -388,15 +339,12 @@ func (est spaceEstimate) neededText() string {
 // checkSpaceForFullBackups checks the free space again when the user chose
 // full backups over the planned differentials: the preflight only required
 // the estimate of the changes to fit. Nothing is written before it passes.
-func checkSpaceForFullBackups(backupDir string, stagingPlan staging.Plan, est spaceEstimate) error {
+func checkSpaceForFullBackups(backupDir string, est spaceEstimate) error {
 	if !est.anyDiff {
 		return nil
 	}
 	full := spaceEstimate{full: est.full, likely: est.full}
 	if _, err := validateTargetSpaceForBackup(backupDir, full); err != nil {
-		return fmt.Errorf("Full backup not started: %s", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
-	}
-	if _, err := validateStagingSpaceForBackup(stagingPlan, full); err != nil {
 		return fmt.Errorf("Full backup not started: %s", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
 	}
 	return nil

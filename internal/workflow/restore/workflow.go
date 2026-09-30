@@ -16,7 +16,6 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/restorepoint"
-	"RestoreSafe/internal/workflow/staging"
 	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"errors"
@@ -73,17 +72,13 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		return err
 	}
 
-	stagingPlan := staging.PlanLocal(backupDir, restorePath, os.TempDir())
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, stagingPlan, yubikey.CheckConnected))
+	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
 	if err := validateRestoreTargetSpace(restorePath, preflight); err != nil {
-		return err
-	}
-	if err := validateStagingSpace(stagingPlan, preflight); err != nil {
 		return err
 	}
 
@@ -97,17 +92,13 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		return nil
 	}
 
-	if stagingPlan.Enabled {
-		log.InfoLogOnly("Local staging enabled: selected backup parts will be copied to temp storage at %s before restore", filepath.ToSlash(stagingPlan.ResolvedTempDir))
-	}
-
 	masters, err := unlock.KeySets(u, selectedInfos, "Enter restore password: ", log)
 	if err != nil {
 		return err
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, stagingPlan, warningCount)
+	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, warningCount)
 }
 
 func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
@@ -120,7 +111,7 @@ func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
 // directly by supplying the master keys; u receives the progress and the
 // summary. inventory is used to find the full backup of each selected
 // differential.
-func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters unlock.MasterKeys, log *logging.Logger, stagingPlan staging.Plan, warningCount int) error {
+func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
 	out := u.Output()
 	fmt.Fprintln(out)
 	first := selected[0].Header
@@ -130,7 +121,7 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log, stagingPlan)
+	skipped, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
 	if err != nil {
 		if ctx.Err() != nil {
 			log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
@@ -192,14 +183,13 @@ func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath st
 }
 
 // restorePreflightReport describes the restore: the selected backups (with
-// the full backup a differential needs), the destination, the directories to
-// be created, and local staging, with the issues that block the restore.
+// the full backup a differential needs), the destination, and the directories
+// to be created, with the issues that block the restore.
 func restorePreflightReport(
 	cfg *config.Config,
 	backupDir, restorePath string,
 	items []restorePreflightItem,
 	usesYubiKey, yubiKeyOnly bool,
-	stagingPlan staging.Plan,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
 	var issues []interact.Issue
@@ -256,29 +246,7 @@ func restorePreflightReport(
 	}
 	summary = append(summary, interact.Field("Log level", strings.ToLower(cfg.LogLevel)))
 
-	report := interact.Report{Title: "Restore preflight", Sections: []interact.Section{{Rows: rows}, {Rows: summary}}}
-	if stagingPlan.Enabled {
-		tempDir := filepath.ToSlash(stagingPlan.ResolvedTempDir)
-		stagingRows := []interact.Row{
-			interact.Note(fmt.Sprintf("Local staging via temp directory enabled, because backup directory and restore directory(s) share the same drive (%s).", fsx.VolumeDisplay(backupDir))),
-			interact.Heading("Temp directory"),
-		}
-		tempFreeBytes, tempFreeErr := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-		if tempFreeErr != nil {
-			stagingRows = append(stagingRows, interact.Item(interact.StatusError, tempDir))
-			addError(fmt.Sprintf("Cannot query free space for temp directory: %v", tempFreeErr))
-		} else {
-			stagingRows = append(stagingRows, interact.Item(interact.StatusOK, tempDir), interact.Item(interact.StatusNone, "Free disk space: "+fsx.FormatBytesBinary(tempFreeBytes)))
-			if estimatedRestoreBytes > 0 && uint64(estimatedRestoreBytes) > tempFreeBytes {
-				addError(fmt.Sprintf("Insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.", fsx.FormatBytesBinary(uint64(estimatedRestoreBytes)), fsx.FormatBytesBinary(tempFreeBytes), tempDir))
-			}
-		}
-		report.Sections = append(report.Sections, interact.Section{Rows: stagingRows})
-	} else if stagingPlan.SameVolume && fsx.IsNetworkVolume(backupDir) {
-		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Text: fmt.Sprintf("Backup directory and restore target are on the same drive/share (%s). This can cause long stalls on network/NAS storage. Local staging is unavailable because TEMP is on the same drive/share. Remedy: Prefer a different destination or point TEMP/TMP to a local drive.", fsx.VolumeDisplay(backupDir))})
-	}
-	report.Issues = issues
-	return report
+	return interact.Report{Title: "Restore preflight", Sections: []interact.Section{{Rows: rows}, {Rows: summary}}, Issues: issues}
 }
 
 func displayRestoreOutputDir(outputDir string) string {
@@ -313,28 +281,6 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 	}
 
 	return fmt.Errorf("Restore preflight failed: %s", fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
-}
-
-func validateStagingSpace(stagingPlan staging.Plan, items []restorePreflightItem) error {
-	if !stagingPlan.Enabled {
-		return nil
-	}
-	estimatedBytes := estimateRestoreBytes(items)
-	if estimatedBytes <= 0 {
-		return nil
-	}
-	freeBytes, err := fsx.QueryFreeSpaceBytes(stagingPlan.ResolvedTempDir)
-	if err != nil {
-		// Fail-open: let the staging copy itself surface the error.
-		return nil
-	}
-	if uint64(estimatedBytes) > freeBytes {
-		return fmt.Errorf("Restore preflight failed: insufficient free space at temp directory for local staging: need %s, have %s. Remedy: Free up space in %s or point TEMP/TMP to a local drive with more space.",
-			fsx.FormatBytesBinary(uint64(estimatedBytes)),
-			fsx.FormatBytesBinary(freeBytes),
-			filepath.ToSlash(stagingPlan.ResolvedTempDir))
-	}
-	return nil
 }
 
 func estimateRestoreBytes(items []restorePreflightItem) int64 {
@@ -373,7 +319,7 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 // files that are missing from the restore points because they could not be
 // read during backup. It stops when ctx is cancelled and reports its
 // progress to rep.
-func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters unlock.MasterKeys, log *logging.Logger, stagingPlan staging.Plan) (int, error) {
+func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
 	skipped := 0
 	for _, info := range selected {
 		entry := info.Entry
@@ -386,80 +332,14 @@ func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, 
 			base = &baseInfo.Entry
 		}
 
-		var scope *staging.Scope
-		if stagingPlan.Enabled {
-			toStage := []naming.BackupEntry{entry}
-			if base != nil {
-				toStage = append(toStage, *base)
-			}
-			stagedDir, err := stageBackupEntriesLocally(ctx, rep, backupDir, toStage, stagingPlan.ResolvedTempDir, log)
-			if err != nil {
-				return 0, fmt.Errorf("Local staging failed for %q: %w", entry.String(), err)
-			}
-			scope = staging.ActiveScope(stagedDir, log)
-		}
-
 		master := masters[info.Header.KeySet.ID]
-		n, err := restoreEntry(ctx, rep, entry, base, scope.ActiveDir(backupDir), restorePath, master, log)
-		scope.Cleanup()
+		n, err := restoreEntry(ctx, rep, entry, base, backupDir, restorePath, master, log)
 		if err != nil {
 			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
 		}
 		skipped += n
 	}
 	return skipped, nil
-}
-
-// stageBackupEntriesLocally copies the parts of entries (a set and, for a
-// differential, its full backup) into one new staging directory. It stops
-// when ctx is cancelled and reports its progress to rep.
-func stageBackupEntriesLocally(ctx context.Context, rep interact.ProgressReporter, backupDir string, entries []naming.BackupEntry, tempDir string, log *logging.Logger) (string, error) {
-	stageDir, err := staging.CreateDir(tempDir, "restoresafe-restore-stage-*")
-	if err != nil {
-		return "", err
-	}
-
-	log.Info("Copy backup files to local staging directory.")
-	log.Info("  From: %s", filepath.ToSlash(backupDir))
-	log.Info("  To: %s", filepath.ToSlash(stageDir))
-
-	partsByEntry := make([][]string, len(entries))
-	var total int64
-	for i, entry := range entries {
-		parts, err := catalog.CollectParts(backupDir, entry)
-		if err == nil && len(parts) == 0 {
-			err = fmt.Errorf("No part files found for %s. Remedy: Ensure all .enc files for this backup are in the same backup directory.", entry.String())
-		}
-		if err != nil {
-			staging.CleanupDirDuring(stageDir, "error recovery", log)
-			return "", err
-		}
-		partsByEntry[i] = parts
-		for _, p := range parts {
-			if fi, err := os.Stat(p); err == nil {
-				total += fi.Size()
-			}
-		}
-	}
-
-	var done atomic.Int64
-	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Copying to local staging", Item: entries[0].DirectoryName, Total: total}, &done)
-	defer stopReport()
-	for i, entry := range entries {
-		parts := partsByEntry[i]
-		log.Info("Copying backup files of %s", entry.String())
-		for _, partPath := range parts {
-			log.Info("  Copy: %s", filepath.Base(partPath))
-			destinationPath := filepath.Join(stageDir, filepath.Base(partPath))
-			if err := fsx.CopyFile(ctx, partPath, destinationPath, &done); err != nil {
-				staging.CleanupDirDuring(stageDir, "error recovery", log)
-				return "", err
-			}
-		}
-		log.Info("  Copied: %d part file(s) - [%s] successfully copied", len(parts), entry.DirectoryName)
-	}
-
-	return stageDir, nil
 }
 
 // restoreEntry decrypts one backup set (for a differential together with its

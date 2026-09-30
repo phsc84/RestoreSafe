@@ -61,7 +61,6 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 - A backup appears under its final file names only when it is complete; an interrupted backup never looks like a valid backup
 - Startup health check: validates directories, YubiKey, keys, and the structural integrity of existing backups at launch
 - Streaming pipeline: low CPU/RAM footprint
-- Local staging: when source and backup directory share the same drive (e.g. NAS), parts are written to local TEMP first, then moved
 - Optional post-backup verification (`verify_after_backup: true`): each new backup is re-read and checked right after it is written
 
 ### Usability
@@ -418,7 +417,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 | `cmd/restoresafe` | Entry point of `RestoreSafe.exe` |
 | `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
 | `internal/gui` | The window application; `internal/gui/win32` wraps the Windows API it uses |
-| `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, staging, restore points); `workflow/interact` is the contract between the workflows and the GUI |
+| `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, restore points); `workflow/interact` is the contract between the workflows and the GUI |
 | `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
 | `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
 | `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |

@@ -47,8 +47,7 @@ type Params struct {
 	// OnSkip is called for every skipped file or directory; stale marks a
 	// differential entry that keeps the full backup's older version.
 	OnSkip func(rel, reason string, stale bool)
-	// OutputDir receives the part files (the backup directory or a staging
-	// directory).
+	// OutputDir is the backup directory that receives the part files.
 	OutputDir string
 	// Entry names the set. For a differential, Entry.ChainID is the base's
 	// chain ID and Entry.DiffNumber the new differential number.

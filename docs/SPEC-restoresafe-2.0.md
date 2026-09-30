@@ -251,7 +251,7 @@ The trailer is a locator and a completeness marker, not a security boundary: a t
 
 ### 4.7 Atomic finalization
 
-1. Write all parts as `<name>.enc.tmp` (in staging or the backup directory).
+1. Write all parts as `<name>.enc.tmp` in the backup directory.
 2. After the trailer is written, sync and close the last part.
 3. Rename parts `.tmp` -> `.enc` in ascending order.
 4. A set is considered complete only if the checks of 4.6 pass. A set with a missing or invalid trailer is reported as incomplete, is never offered as a restore point, and is never used as a base or as the source of the current key set.
@@ -357,7 +357,7 @@ Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] c
 
 **Needed space.** The exact changes of a differential are known only after the password is entered (the full backup's manifest is encrypted), so the preflight estimates them from the directory listing: files whose last-write or creation time is at or after the full backup's creation count as changed. It shows `about <changed> (files changed since the full backup); up to <all files> if everything is stored again`. The estimate misses files moved or renamed since the full backup (they keep their times but get a new path) and files whose times a tool set back; the differential stores them anyway.
 
-- The free-space check (backup directory, and the temp directory when staging) fails only when even the estimate does not fit. When only the estimate fits, the preflight shows a warning; if the space then runs out, the backup stops and removes the unfinished set (4.7).
+- The free-space check of the backup directory fails only when even the estimate does not fit. When only the estimate fits, the preflight shows a warning; if the space then runs out, the backup stops and removes the unfinished set (4.7).
 - Choosing `F` or `K` when the estimate was used checks the free space again against all files, before anything is written.
 
 ### 6.3 Credentials
@@ -460,7 +460,7 @@ Possible later improvement: a per-directory view with restore sizes and entry co
 
 ### 7.2 Preflight
 
-Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. The destination must not exist (unchanged). Staging copies the differential and its full backup into one staging directory.
+Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. The destination must not exist (unchanged).
 
 ### 7.3 Credentials
 

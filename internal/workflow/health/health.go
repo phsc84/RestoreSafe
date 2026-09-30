@@ -9,7 +9,6 @@ import (
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/staging"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,7 +27,6 @@ const (
 	healthScopeArgon2          = "Argon2 settings"
 	healthScopeSourceDirectory = "Source directory(s)"
 	healthScopeBackupDirectory = "Backup directory"
-	healthScopeTempDirectory   = "Temp directory"
 	healthScopeYubiKey         = "YubiKey"
 	healthScopeBackupInventory = "Backup inventory"
 	healthScopeBackupSet       = "Backup set"
@@ -39,7 +37,6 @@ type healthItem struct {
 	Severity healthSeverity
 	Scope    string
 	Detail   string
-	isNote   bool // printed as plain unindented text; skipped in OK/WARN/ERROR counts
 }
 
 // Result captures the findings of the startup health check and
@@ -54,8 +51,7 @@ func (r Result) BlocksBackup() bool {
 	return r.errorScopes[healthScopeConfig] ||
 		r.errorScopes[healthScopeSourceDirectory] ||
 		r.errorScopes[healthScopeBackupDirectory] ||
-		r.errorScopes[healthScopeYubiKey] ||
-		r.errorScopes[healthScopeTempDirectory]
+		r.errorScopes[healthScopeYubiKey]
 }
 
 // BlocksRestoreOrVerify reports whether any health check error prevents restore or verify.
@@ -68,7 +64,7 @@ func (r Result) BlocksRestoreOrVerify() bool {
 func buildResult(items []healthItem) Result {
 	scopes := make(map[string]bool)
 	for _, item := range items {
-		if item.Severity == healthError && !item.isNote {
+		if item.Severity == healthError {
 			scopes[item.Scope] = true
 		}
 	}
@@ -82,24 +78,20 @@ func Check(cfg *config.Config, exeDir, configPath string) Result {
 }
 
 // Report describes the findings as a report: one heading per checked scope
-// with its items, then local staging notes and the temp directory, then the
-// summary. The findings are items, not issues; BlocksBackup and
-// BlocksRestoreOrVerify decide what they block.
+// with its items, then the summary. The findings are items, not issues;
+// BlocksBackup and BlocksRestoreOrVerify decide what they block.
 func (r Result) Report() interact.Report {
-	var checks, staging []interact.Row
+	var checks []interact.Row
 	scopeRows := make(map[string][]interact.Row)
 	var scopes []string
 	okCount, warnCount, errorCount := 0, 0, 0
 	for _, item := range r.items {
-		switch {
-		case item.isNote:
-			staging = append(staging, interact.Note(item.Detail))
-			continue
-		case item.Severity == healthOK:
+		switch item.Severity {
+		case healthOK:
 			okCount++
-		case item.Severity == healthWarn:
+		case healthWarn:
 			warnCount++
-		case item.Severity == healthError:
+		case healthError:
 			errorCount++
 		}
 		row := interact.Item(healthStatus(item.Severity), item.Detail)
@@ -109,24 +101,15 @@ func (r Result) Report() interact.Report {
 		scopeRows[item.Scope] = append(scopeRows[item.Scope], row)
 	}
 	for _, scope := range scopes {
-		rows := append([]interact.Row{interact.Heading(scope)}, scopeRows[scope]...)
-		if scope == healthScopeTempDirectory {
-			staging = append(staging, rows...)
-			continue
-		}
-		checks = append(checks, rows...)
+		checks = append(checks, interact.Heading(scope))
+		checks = append(checks, scopeRows[scope]...)
 	}
 
 	summary := []interact.Row{interact.Note(fmt.Sprintf("Summary: %d OK, %d warning(s), %d error(s)", okCount, warnCount, errorCount))}
 	if errorCount > 0 {
 		summary = append(summary, interact.Note("Review the reported errors before running backup, restore, or verify."))
 	}
-	report := interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: checks}}}
-	if len(staging) > 0 {
-		report.Sections = append(report.Sections, interact.Section{Rows: staging})
-	}
-	report.Sections = append(report.Sections, interact.Section{Rows: summary})
-	return report
+	return interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: checks}, {Rows: summary}}}
 }
 
 func healthStatus(severity healthSeverity) interact.Status {
@@ -176,30 +159,6 @@ func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configP
 	items = append(items, checkBackupDirectoryHealth(backupDir)...)
 	items = append(items, checkYubiKeyHealth(cfg)...)
 	items = append(items, checkBackupInventoryHealth(cfg, backupDir)...)
-
-	// Prefer a source that shares the target volume so staging is detected when
-	// only some sources are on the same drive as the target (mirrors backup/workflow.go).
-	stagingSourceDir := ""
-	for _, src := range sourceStatuses {
-		if src.Err == nil && !src.Skip {
-			if stagingSourceDir == "" {
-				stagingSourceDir = src.Resolved
-			}
-			if fsx.SameVolume(src.Resolved, backupDir) {
-				stagingSourceDir = src.Resolved
-				break
-			}
-		}
-	}
-	stagingPlan := staging.PlanLocal(stagingSourceDir, backupDir, os.TempDir())
-	if stagingPlan.Enabled {
-		items = append(items, healthItem{
-			isNote: true,
-			Detail: fmt.Sprintf("Local staging via temp directory enabled, because source directory(s) and backup directory share the same drive (%s).", fsx.VolumeDisplay(backupDir)),
-		})
-		items = append(items, checkTempDirHealth()...)
-	}
-
 	return items
 }
 
@@ -262,15 +221,6 @@ func checkBackupDirectoryHealth(backupDir string) []healthItem {
 		healthScopeBackupDirectory,
 		"Adjust write permissions or choose a different backup_directory.",
 		"Check delete permissions in backup_directory.",
-	)
-}
-
-func checkTempDirHealth() []healthItem {
-	return probeWriteAccess(
-		os.TempDir(),
-		healthScopeTempDirectory,
-		"Point TEMP/TMP to a writable directory or adjust permissions.",
-		"Check delete permissions for TEMP/TMP.",
 	)
 }
 

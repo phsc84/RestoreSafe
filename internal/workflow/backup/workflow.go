@@ -20,7 +20,6 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/restorepoint"
-	"RestoreSafe/internal/workflow/staging"
 	"context"
 	"fmt"
 	"os"
@@ -71,28 +70,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	removeLeftoverTempParts(backupDir, log)
 
-	// Plan local staging to mitigate same-volume read+write contention.
-	// Prefer a source that shares the backup volume so the plan correctly detects contention
-	// when only some sources are on the same drive as the backup directory.
-	stagingSourceDir := ""
-	for _, src := range sources {
-		if src.Err == nil && !src.Skip {
-			if stagingSourceDir == "" {
-				stagingSourceDir = src.Resolved
-			}
-			if fsx.SameVolume(src.Resolved, backupDir) {
-				stagingSourceDir = src.Resolved
-				break
-			}
-		}
-	}
-	stagingPlan := staging.PlanLocal(stagingSourceDir, backupDir, os.TempDir())
 	keys := planKeys(cfg, infos)
 	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
 
 	est := estimateBackupSpace(cfg, backupDir, sources, plans)
-	report := backupPreflightReport(cfg, backupDir, sources, stagingPlan, keys, plans, est, yubikey.CheckConnected)
-	issues, err := backupPreflightIssues(cfg, backupDir, sources, stagingPlan, est)
+	report := backupPreflightReport(cfg, backupDir, sources, keys, plans, est, yubikey.CheckConnected)
+	issues, err := backupPreflightIssues(cfg, backupDir, sources, est)
 	report.Issues = issues
 	u.ShowReport(report)
 	if err != nil {
@@ -119,7 +102,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
 	}
 	if choice == interact.BackupFull || choice == interact.BackupNewKeys {
-		if err := checkSpaceForFullBackups(backupDir, stagingPlan, est); err != nil {
+		if err := checkSpaceForFullBackups(backupDir, est); err != nil {
 			return err
 		}
 	}
@@ -130,7 +113,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	}
 	defer cryptox.ZeroBytes(master)
 
-	return runBackupOperation(ctx, u, cfg, log, logPath, backupDir, sources, stagingPlan, date, runID, keySet, master, plans)
+	return runBackupOperation(ctx, u, cfg, log, logPath, backupDir, sources, date, runID, keySet, master, plans)
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in
@@ -185,7 +168,6 @@ func runBackupOperation(
 	log *logging.Logger,
 	logPath, backupDir string,
 	sources []backupSource,
-	stagingPlan staging.Plan,
 	date string,
 	runID naming.BackupID,
 	keySet *container.KeySet,
@@ -205,19 +187,6 @@ func runBackupOperation(
 	// retentionHold lists directories whose new backup misses unreadable
 	// files; their older backups are kept because they may still have them.
 	retentionHold := make(map[string]bool)
-	processedDirectories := make([]string, 0)
-	directorySourcePaths := make(map[string]string)
-
-	// Determine actual working directory (staging or backup directory).
-	scope, err := staging.NewScope(stagingPlan, "restoresafe-backup-stage-*", log)
-	if err != nil {
-		return err
-	}
-	if scope.Dir != "" {
-		log.InfoLogOnly("Local staging enabled: backup will write to %s before finalizing to %s", filepath.ToSlash(scope.Dir), filepath.ToSlash(backupDir))
-	}
-	workingDir := scope.ActiveDir(backupDir)
-	defer scope.Cleanup()
 
 	// Back up each source directory.
 	for _, source := range sources {
@@ -253,7 +222,7 @@ func runBackupOperation(
 		} else if plan != nil {
 			log.Info("  Backup type: full (%s)", plan.Reason)
 		}
-		skipped, err := backupDirectory(ctx, u, srcAbs, entry, runID, base, workingDir, backupDir, keySet, master, cfg, scope.Dir == "", log)
+		skipped, err := backupDirectory(ctx, u, srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
 		if err != nil {
 			return backupFailed(ctx, log, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
@@ -262,15 +231,6 @@ func runBackupOperation(
 			retentionHold[directoryName] = true
 		}
 		written = append(written, entry)
-		processedDirectories = append(processedDirectories, directoryName)
-		directorySourcePaths[directoryName] = srcAbs
-	}
-
-	// Move results from staging to backup directory if needed.
-	if scope.Dir != "" {
-		if err := moveBackupResults(ctx, u, workingDir, backupDir, processedDirectories, directorySourcePaths, log); err != nil {
-			return backupFailed(ctx, log, fmt.Errorf("Failed to move staged backup to backup directory: %w", err))
-		}
 	}
 
 	// Optionally verify the freshly written sets before pruning old backups.
@@ -300,7 +260,6 @@ func runBackupOperation(
 		warningCount++
 	}
 
-	scope.Cleanup()
 	if len(retentionHold) > 0 {
 		log.Warn("Backup completed with warnings: some files could not be read and are not in this backup (see the warnings above).")
 	} else {
@@ -389,7 +348,7 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 	return &setwriter.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
 }
 
-// backupDirectory writes one backup set of srcDir into workingDir: a
+// backupDirectory writes one backup set of srcDir into backupDir: a
 // differential of base, or a full backup when base is nil. It returns the
 // number of files and directories skipped as unreadable.
 func backupDirectory(
@@ -399,11 +358,10 @@ func backupDirectory(
 	entry naming.BackupEntry,
 	runID naming.BackupID,
 	base *setwriter.Base,
-	workingDir, backupDir string,
+	backupDir string,
 	keySet *container.KeySet,
 	master []byte,
 	cfg *config.Config,
-	syncParts bool,
 	log *logging.Logger,
 ) (int, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
@@ -414,7 +372,7 @@ func backupDirectory(
 	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
-	excludeDirs := []string{backupDir, workingDir}
+	excludeDirs := []string{backupDir}
 	var done atomic.Int64
 	var total int64
 	if rep != nil {
@@ -427,14 +385,14 @@ func backupDirectory(
 	res, err := setwriter.Write(setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    excludeDirs,
-		OutputDir:      workingDir,
+		OutputDir:      backupDir,
 		Entry:          entry,
 		Base:           base,
 		RunID:          runID,
 		KeySet:         *keySet,
 		Master:         master,
 		SplitSizeBytes: cfg.SplitSizeMB * 1024 * 1024,
-		SyncParts:      syncParts,
+		SyncParts:      true,
 		Exclude:        cfg.ExcludeMatcher,
 		SkipUnreadable: cfg.SkipUnreadableFiles(),
 		OnSkip: func(rel, reason string, stale bool) {

@@ -13,33 +13,6 @@ func ResolveDir(path, base string) string {
 	return filepath.Join(base, path)
 }
 
-// VolumeKey returns a normalized drive/share identifier for absolute paths.
-// Examples on Windows: "c:", "m:", "\\server\share".
-func VolumeKey(path string) string {
-	cleaned := filepath.Clean(path)
-	volume := filepath.VolumeName(cleaned)
-	if volume == "" {
-		return ""
-	}
-	return strings.ToLower(volume)
-}
-
-// VolumeDisplay returns the drive/share part in a normalized display form.
-func VolumeDisplay(path string) string {
-	volume := filepath.VolumeName(filepath.Clean(path))
-	if volume == "" {
-		return ""
-	}
-	return filepath.ToSlash(volume)
-}
-
-// SameVolume reports whether both paths resolve to the same drive/share root.
-func SameVolume(pathA, pathB string) bool {
-	keyA := VolumeKey(pathA)
-	keyB := VolumeKey(pathB)
-	return keyA != "" && keyA == keyB
-}
-
 // SourceDuplicateWarningFmt is the warning shown when a source directory
 // resolves to the same normalized path as an earlier entry. The single %s is
 // the resolved path of the first (kept) occurrence.
