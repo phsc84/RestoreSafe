@@ -33,7 +33,7 @@ func (g *guiUI) Progress(p interact.Progress) { g.b.Progress(p) }
 func (g *guiUI) ShowResult(r interact.Result) { g.b.setResult(r) }
 
 // ShowRecoveryCode shows the new recovery code once, in a dialog that cannot
-// copy it (docs/SPEC-restoresafe-gui.md, section 9.3).
+// copy it (docs/SPEC-restoresafe-gui.md, section 13.3).
 func (g *guiUI) ShowRecoveryCode(code string) {
 	g.b.ask(func(answer func(any, error)) {
 		g.app.runInputDialog(inputDialog{

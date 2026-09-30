@@ -2,7 +2,7 @@
 
 PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, press keys, read control texts, and take screenshots. They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
 
-They rely on the GUI's control texts (e.g. `Create &backup`) and window classes (`RestoreSafeMainWindow`, `RestoreSafeInputDialog`). When the GUI changes, update them.
+They rely on the first GUI's control texts (e.g. `Create &backup`) and window classes (`RestoreSafeMainWindow`, `RestoreSafeInputDialog`). The status-first UI replaces that GUI; section 16.4 of [docs/SPEC-restoresafe-gui.md](../../docs/SPEC-restoresafe-gui.md) specifies the updated scripts, which find controls by `AutomationId` instead of text.
 
 | Script | Use |
 |---|---|

@@ -9,8 +9,9 @@ import (
 	"strings"
 )
 
-// showSelection shows the backup selection tree (docs/SPEC-restoresafe-gui.md,
-// section 6.2): backup runs, newest first, with their backup sets. done is
+// showSelection shows the backup selection tree: backup runs, newest first,
+// with their backup sets (replaced by the restore wizard, pages 1 and 2 in
+// docs/SPEC-restoresafe-gui.md, section 8). done is
 // called with the chosen sets, or with ok=false when the user cancelled.
 func (a *app) showSelection(action string, runs []catalog.BackupRunSummary, done func(entries []naming.BackupEntry, ok bool)) {
 	tree := a.op.tree

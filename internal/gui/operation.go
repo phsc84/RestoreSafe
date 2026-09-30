@@ -323,7 +323,7 @@ func (a *app) backToHome() {
 	a.focusHome()
 }
 
-// onClose handles closing the window (docs/SPEC-restoresafe-gui.md, 7.3).
+// onClose handles closing the window (docs/SPEC-restoresafe-gui.md, 12.4).
 func (a *app) onClose() {
 	r := a.run
 	switch {

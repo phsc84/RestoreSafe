@@ -49,7 +49,7 @@ type outcome struct {
 }
 
 // operationOutcome maps the end of a workflow to the result screen
-// (docs/SPEC-restoresafe-gui.md, section 7.4). res is the result reported
+// (docs/SPEC-restoresafe-gui.md, section 6.3). res is the result reported
 // through ShowResult, or nil.
 func operationOutcome(op operation, res *interact.Result, err error) outcome {
 	name := op.name()
