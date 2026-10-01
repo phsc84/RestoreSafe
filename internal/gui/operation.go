@@ -2,6 +2,7 @@ package gui
 
 import (
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
@@ -20,7 +21,7 @@ type opButton struct {
 // runState is the operation in progress.
 type runState struct {
 	op      operation
-	b       *bridge
+	b       *flow.Bridge
 	cancel  context.CancelFunc
 	doneCh  chan error
 	started time.Time // when the running screen appeared; zero before
@@ -41,7 +42,7 @@ func (a *app) startOperation(op operation) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &runState{op: op, cancel: cancel, doneCh: make(chan error, 1)}
-	r.b = newBridge(func(kind int) {
+	r.b = flow.NewBridge(func(kind int) {
 		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
 	})
 	a.run = r
@@ -164,7 +165,7 @@ func (a *app) onProgress() {
 	if r == nil || r.started.IsZero() || r.cancelling {
 		return
 	}
-	p := r.b.takeProgress()
+	p := r.b.TakeProgress()
 	title := p.Step
 	if p.Item != "" {
 		title += " - " + p.Item
@@ -215,7 +216,7 @@ func (a *app) onOutput() {
 	if a.run == nil {
 		return
 	}
-	text := a.run.b.takeOutput()
+	text := a.run.b.TakeOutput()
 	if text != "" {
 		win32.AppendText(a.op.log, strings.ReplaceAll(text, "\n", "\r\n"))
 	}
@@ -258,7 +259,7 @@ func (a *app) cancelRun() {
 	}
 	r.cancelling = true
 	r.cancel()
-	r.b.close()
+	r.b.Close()
 	a.closeModal()
 	win32.SetText(a.op.detail, "Cancelling ... RestoreSafe finishes the current step and cleans up.")
 	a.setMarquee(true)
@@ -286,7 +287,7 @@ func (a *app) onWorkerDone() {
 		return
 	}
 
-	res := r.b.finalResult()
+	res := r.b.FinalResult()
 	o := operationOutcome(r.op, res, err)
 	detail := ""
 	var buttons []opButton

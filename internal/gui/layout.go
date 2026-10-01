@@ -1,19 +1,9 @@
 package gui
 
-import "RestoreSafe/internal/gui/win32"
-
-// scale converts device-independent pixels (1/96 inch) to pixels at dpi.
-type scale uint32
-
-// px returns dip scaled to the DPI, rounded to the nearest pixel.
-func (s scale) px(dip int32) int32 {
-	return (dip*int32(s) + 48) / 96
-}
-
-// rect returns a rectangle from DIP coordinates.
-func (s scale) rect(x, y, w, h int32) win32.Rect {
-	return win32.Rect{Left: s.px(x), Top: s.px(y), Right: s.px(x + w), Bottom: s.px(y + h)}
-}
+import (
+	"RestoreSafe/internal/gui/widget"
+	"RestoreSafe/internal/gui/win32"
+)
 
 // Sizes of the main window and its controls, in DIPs.
 const (
@@ -42,7 +32,7 @@ type homeLayout struct {
 	backup, restore, verify, recheck    win32.Rect
 }
 
-func layoutHome(s scale, width, height int32) homeLayout {
+func layoutHome(s widget.Scale, width, height int32) homeLayout {
 	// Work in DIPs, then scale; the client size arrives in pixels.
 	w := width * 96 / int32(s)
 	h := height * 96 / int32(s)
@@ -52,9 +42,9 @@ func layoutHome(s scale, width, height int32) homeLayout {
 	openX := w - margin - smallButtonWidth
 	pathW := max(openX-gap-pathX, 0)
 	row := func(y int32) (label, path, open win32.Rect) {
-		return s.rect(margin, y, labelWidth, rowHeight),
-			s.rect(pathX, y, pathW, rowHeight),
-			s.rect(openX, y-1, smallButtonWidth, rowHeight+2)
+		return s.Rect(margin, y, labelWidth, rowHeight),
+			s.Rect(pathX, y, pathW, rowHeight),
+			s.Rect(openX, y-1, smallButtonWidth, rowHeight+2)
 	}
 	l.configLabel, l.configPath, l.configOpen = row(margin)
 	l.backupLabel, l.backupPath, l.backupOpen = row(margin + rowHeight + gap)
@@ -62,13 +52,13 @@ func layoutHome(s scale, width, height int32) homeLayout {
 	buttonsY := h - margin - buttonHeight
 	blockedY := buttonsY - gap - noteHeight
 	reportY := int32(margin + 2*(rowHeight+gap) + gap)
-	l.report = s.rect(margin, reportY, w-2*margin, max(blockedY-gap-reportY, 0))
-	l.blocked = s.rect(margin, blockedY, w-2*margin, noteHeight)
+	l.report = s.Rect(margin, reportY, w-2*margin, max(blockedY-gap-reportY, 0))
+	l.blocked = s.Rect(margin, blockedY, w-2*margin, noteHeight)
 
-	l.backup = s.rect(margin, buttonsY, actionWidth, buttonHeight)
-	l.restore = s.rect(margin+actionWidth+gap, buttonsY, actionWidth, buttonHeight)
-	l.verify = s.rect(margin+2*(actionWidth+gap), buttonsY, actionWidth, buttonHeight)
-	l.recheck = s.rect(w-margin-smallButtonWidth-20, buttonsY, smallButtonWidth+20, buttonHeight)
+	l.backup = s.Rect(margin, buttonsY, actionWidth, buttonHeight)
+	l.restore = s.Rect(margin+actionWidth+gap, buttonsY, actionWidth, buttonHeight)
+	l.verify = s.Rect(margin+2*(actionWidth+gap), buttonsY, actionWidth, buttonHeight)
+	l.recheck = s.Rect(w-margin-smallButtonWidth-20, buttonsY, smallButtonWidth+20, buttonHeight)
 	return l
 }
 
@@ -110,22 +100,22 @@ type operationLayout struct {
 // progress bar (when shown), the content area, and a row of buttons. In the
 // content area, the report and the log each alone take all of it; together
 // the report gets two thirds.
-func layoutOperation(s scale, width, height int32, content opContent, showProgress bool) operationLayout {
+func layoutOperation(s widget.Scale, width, height int32, content opContent, showProgress bool) operationLayout {
 	w := width * 96 / int32(s)
 	h := height * 96 / int32(s)
 	var l operationLayout
 	y := int32(margin)
-	l.title = s.rect(margin, y, w-2*margin, opTitleHeight)
+	l.title = s.Rect(margin, y, w-2*margin, opTitleHeight)
 	y += opTitleHeight
-	l.detail = s.rect(margin, y, w-2*margin, opDetailHeight)
+	l.detail = s.Rect(margin, y, w-2*margin, opDetailHeight)
 	y += opDetailHeight + gap
 	if showProgress {
-		l.progress = s.rect(margin, y, w-2*margin, opProgressHeight)
+		l.progress = s.Rect(margin, y, w-2*margin, opProgressHeight)
 		y += opProgressHeight + gap
 	}
 	buttonsY := h - margin - buttonHeight
 	area := max(buttonsY-gap-y, 0)
-	full := s.rect(margin, y, w-2*margin, area)
+	full := s.Rect(margin, y, w-2*margin, area)
 
 	switch content {
 	case contentLog:
@@ -134,25 +124,25 @@ func layoutOperation(s scale, width, height int32, content opContent, showProgre
 		l.report = full
 	case contentReportAndLog:
 		reportH := area * 2 / 3
-		l.report = s.rect(margin, y, w-2*margin, reportH)
-		l.log = s.rect(margin, y+reportH+gap, w-2*margin, max(area-reportH-gap, 0))
+		l.report = s.Rect(margin, y, w-2*margin, reportH)
+		l.log = s.Rect(margin, y+reportH+gap, w-2*margin, max(area-reportH-gap, 0))
 	case contentTree:
 		l.tree = full
 	case contentDestination:
-		l.destLabel = s.rect(margin, y, w-2*margin, fieldLabel)
+		l.destLabel = s.Rect(margin, y, w-2*margin, fieldLabel)
 		y += fieldLabel
-		l.destEdit = s.rect(margin, y, max(w-2*margin-gap-browseWidth, 0), fieldHeight)
-		l.destBrowse = s.rect(w-margin-browseWidth, y, browseWidth, fieldHeight)
+		l.destEdit = s.Rect(margin, y, max(w-2*margin-gap-browseWidth, 0), fieldHeight)
+		l.destBrowse = s.Rect(w-margin-browseWidth, y, browseWidth, fieldHeight)
 		y += fieldHeight + gap
-		l.destCheck = s.rect(margin, y, w-2*margin, checkHeight)
+		l.destCheck = s.Rect(margin, y, w-2*margin, checkHeight)
 		y += checkHeight + gap
-		l.destNote = s.rect(margin, y, w-2*margin, destNoteHeight)
+		l.destNote = s.Rect(margin, y, w-2*margin, destNoteHeight)
 	}
 
 	// Buttons are narrower when the window is too small for all of them.
 	bw := min(int32(opButtonWidth), (w-2*margin-(opButtons-1)*gap)/opButtons)
 	for i := range l.buttons {
-		l.buttons[i] = s.rect(margin+int32(i)*(bw+gap), buttonsY, bw, buttonHeight)
+		l.buttons[i] = s.Rect(margin+int32(i)*(bw+gap), buttonsY, bw, buttonHeight)
 	}
 	return l
 }

@@ -1,19 +1,20 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"testing"
 )
 
 func TestScale(t *testing.T) {
 	t.Parallel()
-	if got := scale(96).px(16); got != 16 {
+	if got := widget.Scale(96).Px(16); got != 16 {
 		t.Fatalf("100%%: %d", got)
 	}
-	if got := scale(144).px(16); got != 24 {
+	if got := widget.Scale(144).Px(16); got != 24 {
 		t.Fatalf("150%%: %d", got)
 	}
-	if got := scale(120).px(15); got != 19 { // 18.75 rounds to 19
+	if got := widget.Scale(120).Px(15); got != 19 { // 18.75 rounds to 19
 		t.Fatalf("125%%: %d", got)
 	}
 }
@@ -29,9 +30,9 @@ func overlap(a, b win32.Rect) bool {
 func TestLayoutHomeFitsAndDoesNotOverlap(t *testing.T) {
 	t.Parallel()
 	for _, dpi := range []uint32{96, 120, 144, 192} {
-		s := scale(dpi)
+		s := widget.Scale(dpi)
 		for _, size := range [][2]int32{{windowMinWidth, windowMinHeight}, {windowWidth, windowHeight}, {1600, 1000}} {
-			w, h := s.px(size[0]), s.px(size[1])
+			w, h := s.Px(size[0]), s.Px(size[1])
 			l := layoutHome(s, w, h)
 			rects := []win32.Rect{l.configLabel, l.configPath, l.configOpen, l.backupLabel, l.backupPath, l.backupOpen, l.report, l.blocked, l.backup, l.restore, l.verify, l.recheck}
 			client := win32.Rect{Right: w, Bottom: h}
@@ -45,7 +46,7 @@ func TestLayoutHomeFitsAndDoesNotOverlap(t *testing.T) {
 					}
 				}
 			}
-			if l.report.Height() < s.px(150) {
+			if l.report.Height() < s.Px(150) {
 				t.Fatalf("dpi %d size %v: report too small (%d px)", dpi, size, l.report.Height())
 			}
 		}
@@ -56,8 +57,8 @@ func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
 	t.Parallel()
 	empty := win32.Rect{}
 	for _, dpi := range []uint32{96, 144, 192} {
-		s := scale(dpi)
-		w, h := s.px(windowMinWidth), s.px(windowMinHeight)
+		s := widget.Scale(dpi)
+		w, h := s.Px(windowMinWidth), s.Px(windowMinHeight)
 		for content := contentLog; content <= contentDestination; content++ {
 			for _, progress := range []bool{false, true} {
 				l := layoutOperation(s, w, h, content, progress)
@@ -79,10 +80,10 @@ func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
 						}
 					}
 				}
-				if content == contentReport && l.report.Bottom < l.buttons[0].Top-s.px(2*gap) {
+				if content == contentReport && l.report.Bottom < l.buttons[0].Top-s.Px(2*gap) {
 					t.Fatalf("dpi %d: the report must fill the content area", dpi)
 				}
-				if content == contentTree && l.tree.Height() < s.px(200) {
+				if content == contentTree && l.tree.Height() < s.Px(200) {
 					t.Fatalf("dpi %d: tree too small (%d px)", dpi, l.tree.Height())
 				}
 			}

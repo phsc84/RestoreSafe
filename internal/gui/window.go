@@ -6,6 +6,8 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/health"
@@ -42,7 +44,7 @@ const (
 	idDestCheck  = 204
 
 	msgHealthDone = win32.WM_APP + 1
-	msgBridge     = win32.WM_APP + 2 // wparam: noteQuestion, noteOutput, noteProgress
+	msgBridge     = win32.WM_APP + 2 // wparam: flow.NoteQuestion, flow.NoteOutput, flow.NoteProgress
 	msgWorkerDone = win32.WM_APP + 3
 )
 
@@ -158,7 +160,7 @@ func ShowError(title, message string) {
 
 func (a *app) createWindow() error {
 	work, dpi := win32.CursorMonitor()
-	s := scale(dpi)
+	s := widget.Scale(dpi)
 	wc := win32.WndClassEx{
 		WndProc:    windows.NewCallback(wndProc),
 		Instance:   win32.ModuleHandle(),
@@ -173,7 +175,7 @@ func (a *app) createWindow() error {
 	}
 
 	// Default size, centered in the work area of the monitor with the cursor.
-	frame := win32.WindowRectForClient(win32.Rect{Right: s.px(windowWidth), Bottom: s.px(windowHeight)}, windowStyle, windowExStyle, dpi)
+	frame := win32.WindowRectForClient(win32.Rect{Right: s.Px(windowWidth), Bottom: s.Px(windowHeight)}, windowStyle, windowExStyle, dpi)
 	w := min(frame.Width(), work.Width())
 	h := min(frame.Height(), work.Height())
 	x := work.Left + (work.Width()-w)/2
@@ -255,7 +257,7 @@ func (a *app) applyFonts() {
 	if a.op.log != 0 {
 		win32.SetFont(a.op.log, a.monoFont)
 	}
-	pad := uintptr(scale(a.dpi).px(reportPadding))
+	pad := uintptr(widget.Scale(a.dpi).Px(reportPadding))
 	for _, re := range []win32.HWND{a.home.report, a.op.report, a.op.log} {
 		if re == 0 {
 			continue
@@ -415,7 +417,7 @@ func (a *app) layout() {
 		return
 	}
 	client := win32.ClientRect(a.hwnd)
-	s := scale(a.dpi)
+	s := widget.Scale(a.dpi)
 	if a.page == pageOperation {
 		l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
 		o := &a.op
@@ -525,8 +527,8 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	a := theApp
 	switch msg {
 	case win32.WM_GETMINMAXINFO:
-		s := scale(win32.DpiForWindow(hwnd))
-		minRect := win32.WindowRectForClient(win32.Rect{Right: s.px(windowMinWidth), Bottom: s.px(windowMinHeight)}, windowStyle, windowExStyle, uint32(s))
+		s := widget.Scale(win32.DpiForWindow(hwnd))
+		minRect := win32.WindowRectForClient(win32.Rect{Right: s.Px(windowMinWidth), Bottom: s.Px(windowMinHeight)}, windowStyle, windowExStyle, uint32(s))
 		win32.MinMaxInfoParam(lparam).MinTrackSize = win32.Point{X: minRect.Width(), Y: minRect.Height()}
 		return 0
 	}
@@ -596,11 +598,11 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case msgBridge:
 		if a.run != nil {
 			switch wparam {
-			case noteQuestion:
-				a.run.b.showNext()
-			case noteOutput:
+			case flow.NoteQuestion:
+				a.run.b.ShowNext()
+			case flow.NoteOutput:
 				a.onOutput()
-			case noteProgress:
+			case flow.NoteProgress:
 				a.onProgress()
 			}
 		}

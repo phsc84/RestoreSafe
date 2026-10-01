@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/cryptox"
 
@@ -86,7 +87,7 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 		dialogClassExists = true
 	}
 
-	s := scale(a.dpi)
+	s := widget.Scale(a.dpi)
 	height := int32(dialogMargin + headingHeight + gap)
 	if d.message != "" {
 		height += messageHeight + gap
@@ -102,7 +103,7 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 
 	const style = win32.WS_POPUP | win32.WS_CAPTION | win32.WS_SYSMENU
 	const exStyle = win32.WS_EX_DLGMODALFRAME | win32.WS_EX_CONTROLPARENT
-	frame := win32.WindowRectForClient(win32.Rect{Right: s.px(dialogWidth), Bottom: s.px(height)}, style, exStyle, a.dpi)
+	frame := win32.WindowRectForClient(win32.Rect{Right: s.Px(dialogWidth), Bottom: s.Px(height)}, style, exStyle, a.dpi)
 	owner := win32.WindowRect(a.hwnd)
 	x := owner.Left + (owner.Width()-frame.Width())/2
 	y := owner.Top + (owner.Height()-frame.Height())/3
@@ -122,15 +123,15 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	}
 	w := int32(dialogWidth - 2*dialogMargin)
 	yy := int32(dialogMargin)
-	ds.heading = child("STATIC", d.heading, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, headingHeight), 0)
+	ds.heading = child("STATIC", d.heading, win32.SS_NOPREFIX, s.Rect(dialogMargin, yy, w, headingHeight), 0)
 	win32.SetFont(ds.heading, a.boldFont)
 	yy += headingHeight + gap
 	if d.message != "" {
-		ds.message = child("STATIC", d.message, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, messageHeight), 0)
+		ds.message = child("STATIC", d.message, win32.SS_NOPREFIX, s.Rect(dialogMargin, yy, w, messageHeight), 0)
 		yy += messageHeight + gap
 	}
 	if d.code != "" {
-		ds.code = child("STATIC", d.code, win32.SS_NOPREFIX|win32.SS_CENTER, s.rect(dialogMargin, yy, w, codeHeight), 0)
+		ds.code = child("STATIC", d.code, win32.SS_NOPREFIX|win32.SS_CENTER, s.Rect(dialogMargin, yy, w, codeHeight), 0)
 		if font, err := a.codeFont(); err == nil {
 			ds.codeFont = font
 			win32.SetFont(ds.code, font)
@@ -138,17 +139,17 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 		yy += codeHeight + gap
 	}
 	if d.note != "" {
-		child("STATIC", d.note, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, codeNoteHeight), 0)
+		child("STATIC", d.note, win32.SS_NOPREFIX, s.Rect(dialogMargin, yy, w, codeNoteHeight), 0)
 		yy += codeNoteHeight + gap
 	}
 	for _, f := range d.fields {
-		child("STATIC", f.label, win32.SS_NOPREFIX, s.rect(dialogMargin, yy, w, fieldLabel), 0)
+		child("STATIC", f.label, win32.SS_NOPREFIX, s.Rect(dialogMargin, yy, w, fieldLabel), 0)
 		yy += fieldLabel
 		st := uint32(win32.WS_TABSTOP | win32.WS_BORDER | win32.ES_AUTOHSCROLL)
 		if f.masked {
 			st |= win32.ES_PASSWORD
 		}
-		ds.edits = append(ds.edits, child("EDIT", "", st, s.rect(dialogMargin, yy, w, fieldHeight), 0))
+		ds.edits = append(ds.edits, child("EDIT", "", st, s.Rect(dialogMargin, yy, w, fieldHeight), 0))
 		yy += fieldHeight + gap
 	}
 	yy += gap
@@ -159,10 +160,10 @@ func (a *app) runInputDialog(d inputDialog) (values [][]byte, ok bool) {
 	var okButton win32.HWND
 	if d.noCancel {
 		width := int32(2*dialogButton + gap)
-		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.rect(dialogWidth-dialogMargin-width, yy, width, buttonHeight), win32.IDOK)
+		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.Rect(dialogWidth-dialogMargin-width, yy, width, buttonHeight), win32.IDOK)
 	} else {
-		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.rect(dialogWidth-dialogMargin-2*dialogButton-gap, yy, dialogButton, buttonHeight), win32.IDOK)
-		child("BUTTON", "Cancel", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, s.rect(dialogWidth-dialogMargin-dialogButton, yy, dialogButton, buttonHeight), win32.IDCANCEL)
+		okButton = child("BUTTON", okText, win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, s.Rect(dialogWidth-dialogMargin-2*dialogButton-gap, yy, dialogButton, buttonHeight), win32.IDOK)
+		child("BUTTON", "Cancel", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, s.Rect(dialogWidth-dialogMargin-dialogButton, yy, dialogButton, buttonHeight), win32.IDCANCEL)
 	}
 
 	win32.Enable(a.hwnd, false)

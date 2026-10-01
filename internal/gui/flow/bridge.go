@@ -1,4 +1,4 @@
-package gui
+package flow
 
 import (
 	"RestoreSafe/internal/workflow/interact"
@@ -9,17 +9,17 @@ import (
 // Notifications the bridge posts to the window. The window handles them on
 // the UI thread.
 const (
-	noteQuestion = iota
-	noteOutput
-	noteProgress
+	NoteQuestion = iota
+	NoteOutput
+	NoteProgress
 )
 
-// bridge connects the worker goroutine running a workflow with the UI
+// Bridge connects the worker goroutine running a workflow with the UI
 // thread (docs/SPEC-restoresafe-gui.md, section 12.2). Questions block the
 // worker until the UI thread answers them; output and progress never block
 // and are coalesced, so the window is posted at most one message of each
 // kind at a time.
-type bridge struct {
+type Bridge struct {
 	notify func(kind int)
 
 	mu         sync.Mutex
@@ -51,17 +51,17 @@ type question struct {
 	once   sync.Once
 }
 
-func newBridge(notify func(kind int)) *bridge {
-	return &bridge{notify: notify}
+func NewBridge(notify func(kind int)) *Bridge {
+	return &Bridge{notify: notify}
 }
 
 func (q *question) answer(a answer) {
 	q.once.Do(func() { q.reply <- a })
 }
 
-// ask queues a question for the UI thread and waits for the answer. On a
+// Ask queues a question for the UI thread and waits for the answer. On a
 // closed bridge it returns the cancel answer immediately.
-func (b *bridge) ask(show func(answer func(any, error)), cancelValue any, cancelErr error) (any, error) {
+func (b *Bridge) Ask(show func(answer func(any, error)), cancelValue any, cancelErr error) (any, error) {
 	q := &question{show: show, cancel: answer{cancelValue, cancelErr}, reply: make(chan answer, 1)}
 	b.mu.Lock()
 	if b.closed {
@@ -70,13 +70,13 @@ func (b *bridge) ask(show func(answer func(any, error)), cancelValue any, cancel
 	}
 	b.queue = append(b.queue, q)
 	b.mu.Unlock()
-	b.notify(noteQuestion)
+	b.notify(NoteQuestion)
 	a := <-q.reply
 	return a.value, a.err
 }
 
-// showNext shows the next queued question; it runs on the UI thread.
-func (b *bridge) showNext() {
+// ShowNext shows the next queued question; it runs on the UI thread.
+func (b *Bridge) ShowNext() {
 	b.mu.Lock()
 	if len(b.queue) == 0 || b.current != nil {
 		b.mu.Unlock()
@@ -96,15 +96,15 @@ func (b *bridge) showNext() {
 		b.mu.Unlock()
 		q.answer(answer{value, err})
 		if more {
-			b.notify(noteQuestion)
+			b.notify(NoteQuestion)
 		}
 	})
 }
 
-// close answers the shown and all queued questions with their cancel
+// Close answers the shown and all queued questions with their cancel
 // answers and makes later questions return theirs immediately. It reports
 // whether a question was being shown, so the UI can take it down.
-func (b *bridge) close() (hadCurrent bool) {
+func (b *Bridge) Close() (hadCurrent bool) {
 	b.mu.Lock()
 	b.closed = true
 	pending := b.queue
@@ -122,7 +122,7 @@ func (b *bridge) close() (hadCurrent bool) {
 }
 
 // Write implements io.Writer for interact.UI.Output. It never blocks on the UI.
-func (b *bridge) Write(p []byte) (int, error) {
+func (b *Bridge) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	b.output.Write(p)
 	b.outSeq++
@@ -135,13 +135,13 @@ func (b *bridge) Write(p []byte) (int, error) {
 	b.outPosted = true
 	b.mu.Unlock()
 	if post {
-		b.notify(noteOutput)
+		b.notify(NoteOutput)
 	}
 	return len(p), nil
 }
 
-// takeOutput returns the output written since the last call.
-func (b *bridge) takeOutput() string {
+// TakeOutput returns the output written since the last call.
+func (b *Bridge) TakeOutput() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	s := b.output.String()
@@ -150,43 +150,43 @@ func (b *bridge) takeOutput() string {
 	return s
 }
 
-// outputMark returns a mark of the output so far and its last non-empty
+// OutputMark returns a mark of the output so far and its last non-empty
 // line, to tell whether something was written since an earlier mark.
-func (b *bridge) outputMark() (seq int, lastLine string) {
+func (b *Bridge) OutputMark() (seq int, lastLine string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.outSeq, b.lastLine
 }
 
 // Progress implements interact.ProgressReporter; it keeps only the latest report.
-func (b *bridge) Progress(p interact.Progress) {
+func (b *Bridge) Progress(p interact.Progress) {
 	b.mu.Lock()
 	b.progress = p
 	post := !b.progPosted
 	b.progPosted = true
 	b.mu.Unlock()
 	if post {
-		b.notify(noteProgress)
+		b.notify(NoteProgress)
 	}
 }
 
-// takeProgress returns the latest progress report.
-func (b *bridge) takeProgress() interact.Progress {
+// TakeProgress returns the latest progress report.
+func (b *Bridge) TakeProgress() interact.Progress {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.progPosted = false
 	return b.progress
 }
 
-// setResult records the result of a completed operation (interact.UI.ShowResult).
-func (b *bridge) setResult(r interact.Result) {
+// SetResult records the result of a completed operation (interact.UI.ShowResult).
+func (b *Bridge) SetResult(r interact.Result) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.result = &r
 }
 
-// finalResult returns the recorded result, or nil.
-func (b *bridge) finalResult() *interact.Result {
+// FinalResult returns the recorded result, or nil.
+func (b *Bridge) FinalResult() *interact.Result {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.result

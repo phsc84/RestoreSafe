@@ -3,6 +3,7 @@ package gui
 import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/workflow/interact"
@@ -15,7 +16,7 @@ import (
 // the UI thread through the bridge.
 type guiUI struct {
 	app *app
-	b   *bridge
+	b   *flow.Bridge
 	op  operation
 	// seenOutput marks the output already shown next to a question, so a
 	// dialog only repeats a message written since the previous one.
@@ -30,12 +31,12 @@ var _ interact.UI = (*guiUI)(nil)
 
 func (g *guiUI) Output() io.Writer            { return g.b }
 func (g *guiUI) Progress(p interact.Progress) { g.b.Progress(p) }
-func (g *guiUI) ShowResult(r interact.Result) { g.b.setResult(r) }
+func (g *guiUI) ShowResult(r interact.Result) { g.b.SetResult(r) }
 
 // ShowRecoveryCode shows the new recovery code once, in a dialog that cannot
 // copy it (docs/SPEC-restoresafe-gui.md, section 13.3).
 func (g *guiUI) ShowRecoveryCode(code string) {
-	g.b.ask(func(answer func(any, error)) {
+	g.b.Ask(func(answer func(any, error)) {
 		g.app.runInputDialog(inputDialog{
 			title:   "RestoreSafe - recovery code",
 			heading: "Your recovery code",
@@ -57,7 +58,7 @@ func (g *guiUI) ShowVerifyPlan(p interact.VerifyPlan)   { g.showReport(p.Details
 
 // showReport shows the preflight; it returns once the report is on screen.
 func (g *guiUI) showReport(r interact.Report) {
-	g.b.ask(func(answer func(any, error)) {
+	g.b.Ask(func(answer func(any, error)) {
 		g.app.showPreflight(r)
 		answer(nil, nil)
 	}, nil, nil)
@@ -66,7 +67,7 @@ func (g *guiUI) showReport(r interact.Report) {
 // selectBackups shows the selection tree: a whole backup run or a single
 // backup set. It returns ErrCancelled when the user cancels.
 func (g *guiUI) selectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error) {
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		g.app.showSelection(action, runs, func(entries []naming.BackupEntry, ok bool) {
 			if !ok {
 				answer(nil, interact.ErrCancelled)
@@ -84,7 +85,7 @@ func (g *guiUI) selectBackups(action string, runs []catalog.BackupRunSummary) ([
 // restoreDestination shows the destination screen. It returns ErrCancelled
 // when the user cancels.
 func (g *guiUI) restoreDestination(backupDir string) (string, error) {
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		g.app.showDestination(backupDir, func(path string, ok bool) {
 			if !ok {
 				answer(nil, interact.ErrCancelled)
@@ -101,7 +102,7 @@ func (g *guiUI) restoreDestination(backupDir string) (string, error) {
 
 // ConfirmStart offers Start and Cancel under the preflight.
 func (g *guiUI) ConfirmStart(action string) (bool, error) {
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		label := "&Start restore"
 		if action == "verification" {
 			label = "&Start verification"
@@ -118,7 +119,7 @@ func (g *guiUI) ConfirmStart(action string) (bool, error) {
 // plans in opts, and Cancel. Choosing another plan shows it, and this
 // question is asked again.
 func (g *guiUI) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.BackupStart, error) {
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		choose := func(choice interact.BackupStart) func() { return func() { answer(choice, nil) } }
 		var buttons []opButton
 		if !opts.Blocked {
@@ -152,7 +153,7 @@ func (g *guiUI) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.B
 
 // ChooseUnlockMethod offers the regular credentials and the recovery code.
 func (g *guiUI) ChooseUnlockMethod(regular string) (bool, error) {
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		button, _ := g.app.taskDialog(win32.TaskDialog{
 			Instruction:  "How do you want to unlock the backup?",
 			Buttons:      []win32.TaskButton{{ID: 100, Text: "Unlock with " + regular}, {ID: 101, Text: "Unlock with the recovery code"}},
@@ -175,7 +176,7 @@ func (g *guiUI) ChooseUnlockMethod(regular string) (bool, error) {
 // attempt(s) remaining."). Log lines (starting with a timestamp) are left
 // out.
 func (g *guiUI) recentMessage() string {
-	seq, last := g.b.outputMark()
+	seq, last := g.b.OutputMark()
 	if seq == g.seenOutput || strings.HasPrefix(last, "[") {
 		g.seenOutput = seq
 		return ""
@@ -189,7 +190,7 @@ func (g *guiUI) Password(prompt string) ([]byte, error) {
 	retry := g.lastPasswordPrompt == prompt
 	g.lastPasswordPrompt = prompt
 	message := g.recentMessage()
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		heading := strings.TrimRight(strings.TrimSpace(prompt), ":")
 		label := "Password:"
 		if strings.Contains(strings.ToLower(prompt), "recovery code") {
@@ -220,7 +221,7 @@ func (g *guiUI) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
 	retry := g.newPasswordAsked
 	g.newPasswordAsked = true
 	message := g.recentMessage()
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		values, ok := g.app.runInputDialog(inputDialog{
 			title:          "RestoreSafe - new keys",
 			heading:        "Choose the backup password",
@@ -259,7 +260,7 @@ func (g *guiUI) RetypeRecoveryCode() (string, error) {
 	retry := g.retypeAsked
 	g.retypeAsked = true
 	message := g.recentMessage()
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		values, ok := g.app.runInputDialog(inputDialog{
 			title:          "RestoreSafe - recovery code",
 			heading:        "Type the recovery code",
@@ -283,7 +284,7 @@ func (g *guiUI) RetypeRecoveryCode() (string, error) {
 // connected.
 func (g *guiUI) WaitForSpareYubiKey() (bool, error) {
 	message := g.recentMessage()
-	v, err := g.b.ask(func(answer func(any, error)) {
+	v, err := g.b.Ask(func(answer func(any, error)) {
 		content := "Remove YubiKey 1 and insert your spare YubiKey, then click Continue."
 		if message != "" {
 			content = message + "\n\n" + content

@@ -161,7 +161,8 @@ If several Error or Warning triggers apply, the hero shows the most urgent one (
 - No exclamation marks, no "successfully", no "please". Relative dates ("today, 09:12", "Sun 27 Sep, 20:05") with the exact timestamp in a tooltip.
 - Folders are named by their backup name (`Documents`, or the alias `Documents__from__C_RootA` when two folders share a name) with the full path in the tooltip and on Settings.
 - A backup set is referred to as "Documents, differential 3 of 27 Sep" in text; the set name (`Documents_ABC123_2026-09-27_DIFF003`) appears only in details, logs and tooltips.
-- Sizes use binary units labeled KB, MB, GB like Explorer, with one decimal below 10. This changes the labels of `fsx.FormatBytesBinary` (today `GiB`); logs change with it.
+- Sizes use binary units labeled KB, MB, GB like Explorer, with one decimal below 10 (`view.Size`; the logs use `fsx.FormatBytesBinary`, which has the same labels).
+- Dates, times and numbers use fixed English formats, matching the English-only text: "today, 09:12", "yesterday, 18:40", "Sun 27 Sep, 20:05", "Tue 1 Sep 2025, 17:45", a 24-hour clock, and "1,240" (`view/format.go`).
 - All user-visible strings live in one place in `internal/gui`. Sentences with variable parts use format strings, never concatenation. English only.
 
 ## 4. Operation lifecycle

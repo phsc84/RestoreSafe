@@ -25,6 +25,10 @@
 //   - workflow/plan imports no other workflow package: backup and health
 //     act on its decisions, so it sits below them.
 //   - gui/win32 has no internal imports.
+//   - gui/view and gui/flow import neither gui/win32 nor gui/widget nor the
+//     Windows API directly: what decides what the user sees is plain Go.
+//   - gui/widget imports only gui/win32 from the module: widgets know nothing
+//     about backups.
 //   - testutil, e2e, and architecture are test support: exempt from the
 //     layers, never imported by production code.
 //

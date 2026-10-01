@@ -63,6 +63,28 @@ var goList = sync.OnceValues(func() ([]byte, error) {
 	return exec.Command("go", "list", "-f", `{{.ImportPath}}|{{join .Imports ","}}`, module+"...").Output()
 })
 
+// allImports returns every production (non-test) import of every package,
+// keyed by the path relative to the module root; imports within the module
+// are relative too.
+func allImports(t *testing.T) map[string][]string {
+	t.Helper()
+	out, err := goList()
+	if err != nil {
+		t.Fatalf("go list: %v", err)
+	}
+	pkgs := make(map[string][]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		path, imports, _ := strings.Cut(strings.TrimSpace(line), "|")
+		pkg := strings.TrimPrefix(path, module)
+		for _, imp := range strings.Split(imports, ",") {
+			if imp != "" {
+				pkgs[pkg] = append(pkgs[pkg], strings.TrimPrefix(imp, module))
+			}
+		}
+	}
+	return pkgs
+}
+
 // moduleImports returns the production (non-test) imports within the module
 // of every package, keyed by the path relative to the module root.
 func moduleImports(t *testing.T) map[string][]string {
@@ -135,5 +157,39 @@ func TestWorkflowPackagesStayIndependent(t *testing.T) {
 func TestWin32WrapperHasNoInternalImports(t *testing.T) {
 	if imports := moduleImports(t)["internal/gui/win32"]; len(imports) > 0 {
 		t.Errorf("internal/gui/win32 must only wrap the Windows API, but imports %v", imports)
+	}
+}
+
+// TestGUILogicHasNoWin32 keeps what decides what the user sees testable
+// without a window: gui/view and gui/flow import neither the Win32 wrapper
+// nor the widgets nor the Windows API directly.
+func TestGUILogicHasNoWin32(t *testing.T) {
+	forbidden := []string{"internal/gui/win32", "internal/gui/widget", "golang.org/x/sys/windows", "syscall", "unsafe"}
+	for pkg, imports := range allImports(t) {
+		if !under(pkg, "internal/gui/view") && !under(pkg, "internal/gui/flow") {
+			continue
+		}
+		for _, imp := range imports {
+			for _, f := range forbidden {
+				if under(imp, f) {
+					t.Errorf("%s imports %s; view and flow are plain Go", pkg, imp)
+				}
+			}
+		}
+	}
+}
+
+// TestWidgetsKnowNoBackups keeps the widgets reusable: within the module,
+// gui/widget imports only the Win32 wrapper.
+func TestWidgetsKnowNoBackups(t *testing.T) {
+	for pkg, imports := range moduleImports(t) {
+		if !under(pkg, "internal/gui/widget") {
+			continue
+		}
+		for _, imp := range imports {
+			if !under(imp, "internal/gui/win32") {
+				t.Errorf("%s imports %s; widgets may import only internal/gui/win32", pkg, imp)
+			}
+		}
 	}
 }
