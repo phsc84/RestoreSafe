@@ -5,8 +5,6 @@ import (
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"fmt"
 	"strings"
@@ -69,9 +67,9 @@ func (a *app) startOperation(op operation) {
 		case opBackup:
 			err = backup.Run(ctx, g, cfg, exeDir)
 		case opRestore:
-			err = restore.Run(ctx, g, cfg, exeDir)
+			err = g.runRestore(ctx, cfg, exeDir)
 		case opVerify:
-			err = verify.Run(ctx, g, cfg, exeDir)
+			err = g.runVerify(ctx, cfg, exeDir)
 		}
 	}()
 }

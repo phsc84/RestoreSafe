@@ -26,33 +26,34 @@ import (
 	"sync/atomic"
 )
 
-// Run executes the full restore workflow, asking u for decisions and
-// credentials and reporting progress to it. Cancelling ctx stops the restore;
-// the returned error then matches context.Canceled.
-func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
+// Request is what the user chose to restore.
+type Request struct {
+	// Sets are the backup sets to restore; each is restored into its own
+	// folder, named like the backed-up folder.
+	Sets []naming.BackupEntry
+	// Destination is the folder the sets are restored into.
+	Destination string
+}
+
+// Run executes the restore of req, asking u for confirmation and credentials
+// and reporting progress to it. Cancelling ctx stops the restore; the
+// returned error then matches context.Canceled.
+func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, req Request) error {
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
+	if strings.TrimSpace(req.Destination) == "" {
+		return errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
+	}
+	restorePath := req.Destination
 
-	// Enumerate backups.
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory exists and is readable.", backupDir, err)
 	}
-	runs := catalog.BackupRunSummaries(infos)
-	if len(runs) == 0 {
-		fmt.Fprintln(out, "No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is configured.")
-		return nil
-	}
-
-	selected, err := u.SelectBackups("restore", runs)
+	selectedInfos, err := job.SelectSets(infos, req.Sets)
 	if err != nil {
-		if errors.Is(err, interact.ErrCancelled) {
-			fmt.Fprintln(out, "Restore cancelled.")
-			return nil
-		}
 		return err
 	}
-	selectedInfos := catalog.SelectInfos(infos, selected)
 
 	first := selectedInfos[0].Header
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
@@ -62,15 +63,6 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		warningCount++
 	}
 	defer log.Close()
-
-	restorePath, err := u.RestoreDestination(backupDir)
-	if err != nil {
-		if errors.Is(err, interact.ErrCancelled) {
-			fmt.Fprintln(out, "Restore cancelled.")
-			return nil
-		}
-		return err
-	}
 
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)

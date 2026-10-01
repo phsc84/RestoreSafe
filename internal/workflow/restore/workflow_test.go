@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"context"
@@ -86,9 +87,11 @@ func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
 	infos := fixtureInfos(t, fx.BackupFixture)
-	selected := catalog.SelectInfos(infos, []naming.BackupEntry{diff})
+	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	var err error
 	testutil.CaptureStdout(t, func() {
 		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil))
 	})
@@ -134,46 +137,48 @@ func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	}
 }
 
-func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
-	t.Parallel()
-	cfg := &config.Config{BackupDirectory: t.TempDir()}
-	output := testutil.CaptureStdout(t, func() {
-		if err := Run(context.Background(), &interacttest.Script{}, cfg, ""); err != nil {
-			t.Errorf("expected nil for empty target dir, got: %v", err)
-		}
-	})
-	if !strings.Contains(output, "No complete backups found") {
-		t.Fatalf("expected no-backups message in output, got: %q", output)
-	}
-}
-
 func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
-	if err := Run(context.Background(), &interacttest.Script{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
+	req := Request{Sets: []naming.BackupEntry{{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}}, Destination: t.TempDir()}
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", req); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
 		t.Fatalf("expected scan-error message, got: %v", err)
 	}
 }
 
-func TestRunCancelsSelectionWhenUserEntersQ(t *testing.T) {
+func TestRunRejectsIncompleteRequests(t *testing.T) {
 	t.Parallel()
-	fx := testutil.NewBackupFixture(t, []byte("cancel-pw"))
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	cfg := &config.Config{BackupDirectory: fx.BackupDir}
+	dest := filepath.Join(t.TempDir(), "restore")
 
-	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("q")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
-	if runErr != nil || !strings.Contains(out.String(), "Restore cancelled.") {
-		t.Fatalf("expected cancel, got err=%v output=%q", runErr, out.String())
+	for _, tc := range []struct {
+		name string
+		req  Request
+		want string
+	}{
+		{"no destination", Request{Sets: []naming.BackupEntry{fx.Entry}}, "No restore destination chosen"},
+		{"no backup", Request{Destination: dest}, "No backup chosen"},
+		{"unknown backup", Request{Sets: []naming.BackupEntry{{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-14"}}, Destination: dest}, "no longer in the backup directory"},
+	} {
+		err := Run(context.Background(), &interacttest.Script{Out: &bytes.Buffer{}}, cfg, "", tc.req)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s: expected an error with %q, got %v", tc.name, tc.want, err)
+		}
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatal("nothing may be written for a rejected request")
 	}
 }
 
-func TestRunReturnsErrorWhenDestinationIsNotAnswered(t *testing.T) {
+func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("prompt-pw"))
 
-	// "." selects the newest backup; the destination prompt gets no answer.
 	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers(".")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
+	req := Request{Sets: []naming.BackupEntry{fx.Entry}, Destination: filepath.Join(t.TempDir(), "restore")}
+	runErr := Run(context.Background(), &interacttest.Script{Out: &out}, &config.Config{BackupDirectory: fx.BackupDir}, "", req)
 	if runErr == nil {
-		t.Fatal("expected an error when the destination prompt gets no answer, got nil")
+		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}
 }

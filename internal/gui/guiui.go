@@ -57,9 +57,9 @@ func (g *guiUI) ShowReport(r interact.Report) {
 	}, nil, nil)
 }
 
-// SelectBackups shows the selection tree: a whole backup run or a single
-// backup set.
-func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error) {
+// selectBackups shows the selection tree: a whole backup run or a single
+// backup set. It returns ErrCancelled when the user cancels.
+func (g *guiUI) selectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
 		g.app.showSelection(action, runs, func(entries []naming.BackupEntry, ok bool) {
 			if !ok {
@@ -75,8 +75,9 @@ func (g *guiUI) SelectBackups(action string, runs []catalog.BackupRunSummary) ([
 	return v.([]naming.BackupEntry), nil
 }
 
-// RestoreDestination shows the destination screen.
-func (g *guiUI) RestoreDestination(backupDir string) (string, error) {
+// restoreDestination shows the destination screen. It returns ErrCancelled
+// when the user cancels.
+func (g *guiUI) restoreDestination(backupDir string) (string, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
 		g.app.showDestination(backupDir, func(path string, ok bool) {
 			if !ok {

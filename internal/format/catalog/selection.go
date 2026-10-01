@@ -2,9 +2,7 @@ package catalog
 
 import (
 	"RestoreSafe/internal/format/naming"
-	"fmt"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -50,41 +48,4 @@ func BackupRunSummaries(infos []SetInfo) []BackupRunSummary {
 		return string(runs[i].RunID) > string(runs[j].RunID)
 	})
 	return runs
-}
-
-// ResolveSelection maps user input to backup sets: a run ID selects every set
-// written by that run; a full set name (e.g. Docs_ABC123_2026-09-01_FULL)
-// selects that set.
-func ResolveSelection(input string, runs []BackupRunSummary) ([]naming.BackupEntry, error) {
-	input = strings.TrimSpace(input)
-	upper := strings.ToUpper(input)
-
-	if IsRawBackupID(upper) {
-		for _, run := range runs {
-			if string(run.RunID) == upper {
-				return run.Entries, nil
-			}
-		}
-	}
-	for _, run := range runs {
-		for _, e := range run.Entries {
-			if strings.EqualFold(e.String(), input) {
-				return []naming.BackupEntry{e}, nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("Backup %q not found.", input)
-}
-
-// IsRawBackupID reports whether input has the form of a 6-character backup ID.
-func IsRawBackupID(input string) bool {
-	if len(input) != 6 {
-		return false
-	}
-	for _, r := range input {
-		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
-			return false
-		}
-	}
-	return true
 }

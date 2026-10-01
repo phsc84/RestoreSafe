@@ -181,14 +181,3 @@ func TestListTempPartsAndLegacyFiles(t *testing.T) {
 		t.Fatalf("temps=%v legacy=%v", temps, legacy)
 	}
 }
-
-func TestSelectInfosKeepsSelectionOrder(t *testing.T) {
-	t.Parallel()
-
-	a := SetInfo{Entry: naming.BackupEntry{DirectoryName: "A", ChainID: "ABC123", Date: "2026-03-15"}}
-	b := SetInfo{Entry: naming.BackupEntry{DirectoryName: "B", ChainID: "ABC123", Date: "2026-03-15"}}
-	got := SelectInfos([]SetInfo{a, b}, []naming.BackupEntry{b.Entry, a.Entry, {DirectoryName: "missing"}})
-	if len(got) != 2 || got[0].Entry != b.Entry || got[1].Entry != a.Entry {
-		t.Fatalf("unexpected selection: %+v", got)
-	}
-}

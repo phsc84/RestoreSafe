@@ -15,19 +15,25 @@ import (
 	"RestoreSafe/internal/workflow/restorepoint"
 	"RestoreSafe/internal/workflow/unlock"
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 )
 
-// Run verifies selected backup sets without restoring them to disk: every
+// Request is what the user chose to verify.
+type Request struct {
+	// Sets are the backup sets to verify; a differential is verified together
+	// with its full backup.
+	Sets []naming.BackupEntry
+}
+
+// Run verifies the backup sets of req without restoring them to disk: every
 // part is decrypted and every file is checked against its manifest hash. u is
-// asked for decisions and credentials and receives the progress. Cancelling
-// ctx stops the verification; the returned error then matches
+// asked for confirmation and credentials and receives the progress.
+// Cancelling ctx stops the verification; the returned error then matches
 // context.Canceled.
-func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
+func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, req Request) error {
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
@@ -35,21 +41,10 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
 	}
-	runs := catalog.BackupRunSummaries(infos)
-	if len(runs) == 0 {
-		fmt.Fprintln(out, "No complete backups found in backup directory. Remedy: Check whether .enc files are in the backup directory and whether the correct directory is selected.")
-		return nil
-	}
-
-	selected, err := u.SelectBackups("verify", runs)
+	selectedInfos, err := job.SelectSets(infos, req.Sets)
 	if err != nil {
-		if errors.Is(err, interact.ErrCancelled) {
-			fmt.Fprintln(out, "Verification cancelled.")
-			return nil
-		}
 		return err
 	}
-	selectedInfos := catalog.SelectInfos(infos, selected)
 
 	first := selectedInfos[0].Header
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))

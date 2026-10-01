@@ -5,6 +5,7 @@ package e2e
 import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact/interacttest"
@@ -68,6 +69,38 @@ func (s *script) done() {
 	if len(s.lines) != 0 || len(s.passwords) != 0 {
 		s.t.Fatalf("not all scripted input was used: lines=%v passwords=%d", s.lines, len(s.passwords))
 	}
+}
+
+// newestRun returns the backup sets of the newest backup run, as the user
+// chooses them for a restore or verify.
+func newestRun(t *testing.T, cfg *config.Config) []naming.BackupEntry {
+	t.Helper()
+	runs := backupRuns(t, cfg)
+	if len(runs) == 0 {
+		t.Fatal("no backup run to choose")
+	}
+	return runs[0].Entries
+}
+
+// runSets returns the backup sets written by the backup run runID.
+func runSets(t *testing.T, cfg *config.Config, runID string) []naming.BackupEntry {
+	t.Helper()
+	for _, run := range backupRuns(t, cfg) {
+		if string(run.RunID) == runID {
+			return run.Entries
+		}
+	}
+	t.Fatalf("no backup run %s", runID)
+	return nil
+}
+
+func backupRuns(t *testing.T, cfg *config.Config) []catalog.BackupRunSummary {
+	t.Helper()
+	infos, err := catalog.Inventory(cfg.BackupDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return catalog.BackupRunSummaries(infos)
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -209,9 +242,9 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 
 	// Verify the newest backup.
-	s = useScript(t, []string{".", "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	out = testutil.CaptureStdout(t, func() {
-		if err := verify.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
 			t.Fatalf("verify: %v", err)
 		}
 	})
@@ -222,9 +255,11 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 
 	// A wrong password three times ends the restore without writing anything.
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{".", dest, "y"}, "wrong", "wrong", "wrong")
+	s = useScript(t, []string{"y"}, "wrong", "wrong", "wrong")
 	var err error
-	testutil.CaptureStdout(t, func() { err = restore.Run(context.Background(), s.ui, cfg, "") })
+	testutil.CaptureStdout(t, func() {
+		err = restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest})
+	})
 	s.done()
 	if err == nil || !strings.Contains(err.Error(), "Too many wrong password attempts") {
 		t.Fatalf("expected wrong-password failure, got %v", err)
@@ -234,9 +269,9 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 
 	// Restore the newest backup and compare with the source.
-	s = useScript(t, []string{".", dest, "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	out = testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 			t.Fatalf("restore: %v", err)
 		}
 	})
@@ -248,9 +283,9 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 
 	// The full backup still restores the state of run 1.
 	fullDest := filepath.Join(root, "RestoreFull")
-	s = useScript(t, []string{string(infos[len(infos)-1].Header.RunID), fullDest, "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, string(infos[len(infos)-1].Header.RunID)), Destination: fullDest}); err != nil {
 			t.Fatalf("restore full: %v", err)
 		}
 	})
@@ -330,9 +365,9 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	// Restoring the newest backup reports the skipped file; excluded files
 	// were never backed up.
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{".", dest, "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	out = testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 			t.Fatalf("restore: %v", err)
 		}
 	})
@@ -492,16 +527,18 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 
 	// The old backup: the new password is rejected, the old one works.
 	oldDest := filepath.Join(root, "RestoreOld")
-	s = useScript(t, []string{oldRun, oldDest, "y"}, newPassword, newPassword, newPassword)
+	s = useScript(t, []string{"y"}, newPassword, newPassword, newPassword)
 	var err error
-	testutil.CaptureStdout(t, func() { err = restore.Run(context.Background(), s.ui, cfg, "") })
+	testutil.CaptureStdout(t, func() {
+		err = restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, oldRun), Destination: oldDest})
+	})
 	s.done()
 	if err == nil {
 		t.Fatal("new password must not open the old backup")
 	}
-	s = useScript(t, []string{oldRun, oldDest, "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, oldRun), Destination: oldDest}); err != nil {
 			t.Fatalf("restore old: %v", err)
 		}
 	})
@@ -512,9 +549,9 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 
 	// The newest backup opens with the new password.
 	newDest := filepath.Join(root, "RestoreNew")
-	s = useScript(t, []string{".", newDest, "y"}, newPassword)
+	s = useScript(t, []string{"y"}, newPassword)
 	testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: newDest}); err != nil {
 			t.Fatalf("restore new: %v", err)
 		}
 	})

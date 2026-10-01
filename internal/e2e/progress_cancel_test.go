@@ -85,10 +85,10 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	}
 
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{".", dest, "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	o = &observedUI{Script: s.ui}
 	testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), o, cfg, ""); err != nil {
+		if err := restore.Run(context.Background(), o, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 			t.Fatalf("restore: %v", err)
 		}
 	})
@@ -159,16 +159,18 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	s = useScript(t, []string{".", filepath.Join(root, "Restore"), "y"}, password)
+	s = useScript(t, []string{"y"}, password)
 	var err error
-	testutil.CaptureStdout(t, func() { err = restore.Run(cancelled, s.ui, cfg, "") })
+	testutil.CaptureStdout(t, func() {
+		err = restore.Run(cancelled, s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")})
+	})
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Restore cancelled." {
 		t.Fatalf("restore: expected the cancellation, got %v", err)
 	}
 
-	s = useScript(t, []string{".", "y"}, password)
-	testutil.CaptureStdout(t, func() { err = verify.Run(cancelled, s.ui, cfg, "") })
+	s = useScript(t, []string{"y"}, password)
+	testutil.CaptureStdout(t, func() { err = verify.Run(cancelled, s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)}) })
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Verification cancelled." {
 		t.Fatalf("verify: expected the cancellation, got %v", err)

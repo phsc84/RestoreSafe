@@ -1,8 +1,8 @@
 // Package interact defines the interface between the backup, restore, and
 // verify workflows and the user. The workflows never read input or write to the
 // console directly: every question goes through a UI method, and every
-// message is written to UI.Output. Console implements it for the terminal; a
-// graphical frontend implements the same interface.
+// message is written to UI.Output. The window application implements it;
+// interacttest.Script implements it for the tests of the workflows.
 //
 // The workflows call a UI from the goroutine that runs the operation, and each
 // question method blocks until the user has answered. A graphical
@@ -14,14 +14,12 @@
 package interact
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
 	"errors"
 	"io"
 )
 
-// ErrCancelled indicates that the user cancelled a selection.
-var ErrCancelled = errors.New("selection cancelled")
+// ErrCancelled indicates that the user cancelled a question.
+var ErrCancelled = errors.New("cancelled")
 
 // BackupStart is the answer to the question whether to start a backup.
 type BackupStart int
@@ -62,14 +60,6 @@ type UI interface {
 	// ShowResult shows the outcome of an operation that completed. It is
 	// called last, before the workflow returns without error.
 	ShowResult(r Result)
-
-	// SelectBackups asks which backups to restore or verify (action is
-	// "restore" or "verify"). runs is newest first and not empty. It returns
-	// ErrCancelled when the user cancels.
-	SelectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error)
-	// RestoreDestination asks for the directory to restore into. It returns
-	// ErrCancelled when the user cancels.
-	RestoreDestination(backupDir string) (string, error)
 
 	// ConfirmStart asks whether to start the action ("restore" or
 	// "verification") shown in the preflight.

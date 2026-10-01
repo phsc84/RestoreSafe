@@ -159,22 +159,6 @@ func sortNewestFirst(infos []SetInfo) {
 	})
 }
 
-// SelectInfos returns the inventory entries of selected, in selection order.
-// Entries not in infos are skipped.
-func SelectInfos(infos []SetInfo, selected []naming.BackupEntry) []SetInfo {
-	byEntry := make(map[naming.BackupEntry]SetInfo, len(infos))
-	for _, info := range infos {
-		byEntry[info.Entry] = info
-	}
-	out := make([]SetInfo, 0, len(selected))
-	for _, e := range selected {
-		if info, ok := byEntry[e]; ok {
-			out = append(out, info)
-		}
-	}
-	return out
-}
-
 // BaseOf returns the full backup of a differential's chain, or an error that
 // explains why it cannot be used. infos is the inventory.
 func BaseOf(infos []SetInfo, diff naming.BackupEntry) (*SetInfo, error) {

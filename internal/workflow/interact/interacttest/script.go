@@ -3,14 +3,11 @@
 package interacttest
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"time"
 )
 
 // Script is a text UI for tests: questions are text prompts whose answers
@@ -67,107 +64,6 @@ func (s *Script) Password(prompt string) ([]byte, error) {
 // NewPassword reads a new password twice.
 func (s *Script) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
 	return interact.ReadPasswordConfirmed(s.Password, prompt, confirmPrompt)
-}
-
-// SelectBackups lists the backups and reads a run ID, a set name, "." for
-// the newest run, or "q" to cancel.
-func (s *Script) SelectBackups(action string, runs []catalog.BackupRunSummary) ([]naming.BackupEntry, error) {
-	for {
-		s.printBackupSelectionPrompt(action, runs)
-
-		selection, err := s.readLine("Selection: ")
-		if err != nil {
-			return nil, err
-		}
-		s.println()
-		selection = strings.TrimSpace(selection)
-		if selection == "" {
-			s.println("Selection must not be empty.")
-			s.println()
-			continue
-		}
-
-		switch strings.ToLower(selection) {
-		case "q":
-			return nil, interact.ErrCancelled
-		case ".":
-			return runs[0].Entries, nil
-		}
-
-		selected, err := catalog.ResolveSelection(selection, runs)
-		if err != nil {
-			s.printf("%v Remedy: Check the ID or name in the list above.\n\n", err)
-			continue
-		}
-		return selected, nil
-	}
-}
-
-func (s *Script) printBackupSelectionPrompt(action string, runs []catalog.BackupRunSummary) {
-	s.println("Available backups:")
-	for _, run := range runs {
-		s.printf("  - Backup ID: %s / Timestamp (local): %s\n", run.RunID, formatBackupRunTimestamp(run.Created))
-		for _, entry := range run.Entries {
-			if entry.IsDiff() {
-				s.printf("    - %s (differential: full backup %s + changes)\n", entry.String(), entry.ChainID)
-				continue
-			}
-			s.printf("    - %s\n", entry.String())
-		}
-	}
-	s.println()
-
-	completedAction := completedActionLabel(action)
-	s.printf("Select backup(s) to %s:\n", action)
-	s.printf("  - Enter a dot (.) → newest backup run [backup ID %s]\n", runs[0].RunID)
-	s.printf("  - Enter backup ID only (e.g. ABC123) → all directories of this backup run will be %s\n", completedAction)
-	s.printf("  - Enter specific backup (e.g. MyDirectory_ABC123_2024-01-15_FULL) → only this directory will be %s\n", completedAction)
-	s.printf("  - Enter q → cancel\n")
-	s.println()
-}
-
-func completedActionLabel(action string) string {
-	switch action {
-	case "restore":
-		return "restored"
-	case "verify":
-		return "verified"
-	default:
-		return action + "ed"
-	}
-}
-
-func formatBackupRunTimestamp(ts time.Time) string {
-	return ts.Local().Format("2006-01-02 15:04:05 MST")
-}
-
-// RestoreDestination reads a path, "." for the backup directory, or "q" to
-// cancel.
-func (s *Script) RestoreDestination(backupDir string) (string, error) {
-	for {
-		s.printf("Enter restore destination:\n")
-		s.printf("  - Enter a dot (.) → restore in the backup directory itself [%s]\n", backupDir)
-		s.printf("  - Enter a specific path (e.g. C:\\Restore) → restore to this directory\n")
-		s.printf("  - Enter q → cancel\n")
-		s.println()
-
-		restorePath, err := s.readLine("Restore destination: ")
-		if err != nil {
-			return "", err
-		}
-		s.println()
-		restorePath = strings.TrimSpace(restorePath)
-
-		switch restorePath {
-		case "":
-			continue
-		case "q":
-			return "", interact.ErrCancelled
-		case ".":
-			return backupDir, nil
-		}
-		return restorePath, nil
-	}
 }
 
 // ConfirmStart asks a yes/no question; yes is the default.

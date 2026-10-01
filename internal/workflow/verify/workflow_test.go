@@ -9,6 +9,7 @@ import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"errors"
@@ -48,13 +49,15 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
 	infos := fixtureInfos(t, fx)
-	selected := catalog.SelectInfos(infos, []naming.BackupEntry{diff})
+	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	items := buildVerifyPreflight(selected, infos)
 	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
 		t.Fatalf("differential must find its full backup: %+v", items[0])
 	}
-	var err error
 	out := testutil.CaptureStdout(t, func() {
 		_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", nil))
 	})
@@ -158,34 +161,26 @@ func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	}
 }
 
-func TestRunReturnsNilWhenNoBackupsFound(t *testing.T) {
-	t.Parallel()
-	output := testutil.CaptureStdout(t, func() {
-		if err := Run(context.Background(), &interacttest.Script{}, &config.Config{BackupDirectory: t.TempDir()}, ""); err != nil {
-			t.Errorf("expected nil for empty target dir, got: %v", err)
-		}
-	})
-	if !strings.Contains(output, "No complete backups found") {
-		t.Fatalf("expected no-backups message, got: %q", output)
-	}
-}
-
 func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
-	if err := Run(context.Background(), &interacttest.Script{}, cfg, ""); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
+	req := Request{Sets: []naming.BackupEntry{{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}}}
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", req); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
 		t.Fatalf("expected scan-error message, got: %v", err)
 	}
 }
 
-func TestRunCancelsSelectionWhenUserEntersQ(t *testing.T) {
+func TestRunRejectsEmptyAndUnknownRequests(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	cfg := &config.Config{BackupDirectory: fx.BackupDir}
 
-	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("q")}, &config.Config{BackupDirectory: fx.BackupDir}, "")
-	if runErr != nil || !strings.Contains(out.String(), "Verification cancelled.") {
-		t.Fatalf("expected cancel, got err=%v output=%q", runErr, out.String())
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", Request{}); err == nil || !strings.Contains(err.Error(), "No backup chosen") {
+		t.Fatalf("empty request: got %v", err)
+	}
+	unknown := Request{Sets: []naming.BackupEntry{{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-14"}}}
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", unknown); err == nil || !strings.Contains(err.Error(), "no longer in the backup directory") {
+		t.Fatalf("unknown backup: got %v", err)
 	}
 }
 
@@ -193,9 +188,8 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
-	// "." selects the newest backup; the start prompt gets no answer.
 	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers(".")}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "")
+	runErr := Run(context.Background(), &interacttest.Script{Out: &out}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "", Request{Sets: []naming.BackupEntry{fx.Entry}})
 	if runErr == nil {
 		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}
