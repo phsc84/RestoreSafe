@@ -49,8 +49,14 @@ func (g *guiUI) ShowRecoveryCode(code string) {
 	}, nil, nil)
 }
 
-// ShowReport shows the preflight; it returns once the report is on screen.
-func (g *guiUI) ShowReport(r interact.Report) {
+// ShowBackupPlan, ShowRestorePlan and ShowVerifyPlan show the plan as its
+// preflight report.
+func (g *guiUI) ShowBackupPlan(p interact.BackupPlan)   { g.showReport(p.Details) }
+func (g *guiUI) ShowRestorePlan(p interact.RestorePlan) { g.showReport(p.Details) }
+func (g *guiUI) ShowVerifyPlan(p interact.VerifyPlan)   { g.showReport(p.Details) }
+
+// showReport shows the preflight; it returns once the report is on screen.
+func (g *guiUI) showReport(r interact.Report) {
 	g.b.ask(func(answer func(any, error)) {
 		g.app.showPreflight(r)
 		answer(nil, nil)
@@ -108,15 +114,18 @@ func (g *guiUI) ConfirmStart(action string) (bool, error) {
 	return v.(bool), err
 }
 
-// ConfirmBackupStart offers Start, the alternatives in opts, and Cancel.
+// ConfirmBackupStart offers Start (unless the plan is blocked), the other
+// plans in opts, and Cancel. Choosing another plan shows it, and this
+// question is asked again.
 func (g *guiUI) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.BackupStart, error) {
 	v, err := g.b.ask(func(answer func(any, error)) {
-		start := func(choice interact.BackupStart) func() {
-			return func() { g.app.startRunning(); answer(choice, nil) }
+		choose := func(choice interact.BackupStart) func() { return func() { answer(choice, nil) } }
+		var buttons []opButton
+		if !opts.Blocked {
+			buttons = append(buttons, opButton{"&Start backup", func() { g.app.startRunning(); answer(interact.BackupAsPlanned, nil) }})
 		}
-		buttons := []opButton{{"&Start backup", start(interact.BackupAsPlanned)}}
-		if opts.OfferNewKeys && opts.OfferFull {
-			buttons = append(buttons, opButton{"&Full backup", start(interact.BackupFull)})
+		if opts.OfferFull {
+			buttons = append(buttons, opButton{"&Full backup", choose(interact.BackupFull)})
 		}
 		if opts.OfferNewKeys {
 			buttons = append(buttons, opButton{"&New keys + full backup", func() {
@@ -128,11 +137,14 @@ func (g *guiUI) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.B
 					Buttons: []win32.TaskButton{{ID: win32.IDOK, Text: "Create new keys"}, {ID: win32.IDCANCEL, Text: "Back"}},
 				})
 				if button == win32.IDOK {
-					start(interact.BackupNewKeys)()
+					answer(interact.BackupNewKeys, nil)
 				}
 			}})
 		}
-		buttons = append(buttons, opButton{"Cancel", func() { answer(interact.BackupCancel, nil) }})
+		if opts.OfferAutomatic {
+			buttons = append(buttons, opButton{"&Automatic plan", choose(interact.BackupAutomatic)})
+		}
+		buttons = append(buttons, opButton{"Cancel", choose(interact.BackupCancel)})
 		g.app.offerStart(buttons)
 	}, interact.BackupCancel, nil)
 	return v.(interact.BackupStart), err

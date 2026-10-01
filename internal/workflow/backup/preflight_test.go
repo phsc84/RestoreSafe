@@ -350,18 +350,21 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 1}
 	sources := []plan.Source{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	issues, err := backupPreflightIssues(cfg, root, sources, estimateBackupSpace(cfg, root, sources, nil))
+	issues, err := backupPreflightIssues(root, sources, estimateBackupSpace(cfg, root, sources, nil), validateBackupPartCount(cfg, sources))
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
 		t.Fatalf("expected the source error first, got %v", err)
 	}
 	if len(issues) != 2 || issues[0].Status != interact.StatusError || !strings.Contains(issues[1].Text, "part files") {
 		t.Fatalf("expected source and part count issues, got %+v", issues)
 	}
+	if issues[0].Code != interact.CodeSourceInvalid || issues[1].Code != interact.CodePartLimit {
+		t.Fatalf("expected codes %s and %s, got %+v", interact.CodeSourceInvalid, interact.CodePartLimit, issues)
+	}
 	if strings.HasPrefix(issues[0].Text, "Backup preflight failed") {
 		t.Fatalf("issue text must not repeat the error prefix: %q", issues[0].Text)
 	}
 
-	if issues, err := backupPreflightIssues(cfg, root, nil, spaceEstimate{}); err != nil || len(issues) != 0 {
+	if issues, err := backupPreflightIssues(root, nil, spaceEstimate{}, nil); err != nil || len(issues) != 0 {
 		t.Fatalf("no sources to check: got %+v, %v", issues, err)
 	}
 }
@@ -458,6 +461,13 @@ func TestEstimateBackupSpaceCountsOnlyChangedFilesForDifferentials(t *testing.T)
 	if got := est.neededText(); got != "about 10 B (files changed since the full backup); up to 10 B if everything is stored again" {
 		t.Fatalf("unexpected text %q", got)
 	}
+
+	// The user chose a full backup: the measurement is reused, counting all
+	// files.
+	sizes := measureSources(&config.Config{}, root, sources, base(time.Now().Add(time.Hour)))
+	if est := sizes.estimate(map[string]*plan.Folder{"Docs": {}}); est.anyDiff || est.likely != 10 || est.folders["Docs"] != (folderSize{full: 10, likely: 10}) {
+		t.Fatalf("full backup instead of the differential: %+v", est)
+	}
 }
 
 func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
@@ -508,27 +518,19 @@ func TestBackupPreflightIssuesWarnsForALargeDifferential(t *testing.T) {
 		t.Skip("free space unknown")
 	}
 	est := spaceEstimate{full: int64(free) + 1<<30, likely: 1, anyDiff: true}
-	issues, err := backupPreflightIssues(&config.Config{}, dir, nil, est)
-	if err != nil || len(issues) != 1 || issues[0].Status != interact.StatusWarn {
+	issues, err := backupPreflightIssues(dir, nil, est, nil)
+	if err != nil || len(issues) != 1 || issues[0].Status != interact.StatusWarn || issues[0].Code != interact.CodeSpaceEstimateOnly {
 		t.Fatalf("expected one warning and no error, got %+v, %v", issues, err)
 	}
 }
 
-func TestCheckSpaceForFullBackups(t *testing.T) {
+func TestSourceProblemCode(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	free, err := fsx.QueryFreeSpaceBytes(dir)
-	if err != nil {
-		t.Skip("free space unknown")
+	missing := plan.ResolveSources([]string{filepath.Join(t.TempDir(), "gone")}, "")
+	if got := sourceProblemCode(missing); got != interact.CodeSourceMissing {
+		t.Fatalf("missing directory: got %s", got)
 	}
-	tooMuch := int64(free) + 1<<30
-	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: tooMuch, likely: 1, anyDiff: true}); err == nil || !strings.HasPrefix(err.Error(), "Full backup not started: Insufficient free space") {
-		t.Fatalf("a full backup that does not fit must be refused, got %v", err)
-	}
-	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: 1, likely: 1, anyDiff: true}); err != nil {
-		t.Fatalf("a full backup that fits: %v", err)
-	}
-	if err := checkSpaceForFullBackups(dir, spaceEstimate{full: tooMuch, likely: tooMuch}); err != nil {
-		t.Fatalf("without differentials the preflight already checked the full size: %v", err)
+	if got := sourceProblemCode([]plan.Source{{Err: errors.New("not a directory")}}); got != interact.CodeSourceInvalid {
+		t.Fatalf("other problem: got %s", got)
 	}
 }

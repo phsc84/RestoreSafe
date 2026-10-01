@@ -66,7 +66,8 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	u.ShowReport(restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected))
+	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected)
+	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
 	}
@@ -137,8 +138,10 @@ type restorePreflightItem struct {
 	OutputDir      string
 	// Base is the full backup a differential needs.
 	Base         *catalog.SetInfo
-	Err          error // set-level error (incomplete, missing base)
-	OutputDirErr error // output directory error (already exists)
+	Err          error // set-level error (missing base)
+	OutputDirErr error // output directory error (already exists, invalid name)
+	// OutputDirCode classifies OutputDirErr.
+	OutputDirCode interact.Code
 }
 
 // buildRestorePreflight checks the selected sets. A differential also needs
@@ -165,9 +168,9 @@ func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath st
 			}
 		}
 		if nameErr := naming.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
-			item.OutputDirErr = nameErr
+			item.OutputDirErr, item.OutputDirCode = nameErr, interact.CodeRestoreTargetInvalid
 		} else if _, err := os.Stat(item.OutputDir); err == nil {
-			item.OutputDirErr = fmt.Errorf("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory.")
+			item.OutputDirErr, item.OutputDirCode = fmt.Errorf("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory."), interact.CodeRestoreTargetExists
 		}
 		items = append(items, item)
 	}
@@ -185,7 +188,9 @@ func restorePreflightReport(
 	checkYubiKeyConnected func() error,
 ) interact.Report {
 	var issues []interact.Issue
-	addError := func(text string) { issues = append(issues, interact.Issue{Status: interact.StatusError, Text: text}) }
+	addError := func(code interact.Code, text string) {
+		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: code, Text: text})
+	}
 
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	destDisplay := displayRestoreOutputDir(restorePath)
@@ -196,7 +201,7 @@ func restorePreflightReport(
 		status := interact.StatusOK
 		if item.Err != nil {
 			status = interact.StatusError
-			addError(item.Err.Error())
+			addError(interact.CodeBaseMissing, item.Err.Error())
 		}
 		var details []string
 		if item.Base != nil {
@@ -208,11 +213,11 @@ func restorePreflightReport(
 	rows = append(rows, interact.Heading("Restore destination"))
 	if restoreFreeErr != nil {
 		rows = append(rows, interact.Item(interact.StatusError, destDisplay))
-		addError(fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
+		addError(interact.CodeFreeSpaceUnknown, fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
 		rows = append(rows, interact.Item(interact.StatusOK, destDisplay))
 		if fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			addError(fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+			addError(interact.CodeSpaceInsufficient, fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
@@ -221,7 +226,7 @@ func restorePreflightReport(
 		status := interact.StatusOK
 		if item.OutputDirErr != nil {
 			status = interact.StatusError
-			addError(item.OutputDirErr.Error())
+			addError(item.OutputDirCode, item.OutputDirErr.Error())
 		}
 		rows = append(rows, interact.Item(status, displayRestoreOutputDir(item.OutputDir)))
 	}
@@ -391,4 +396,28 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 		log.Warn("  [%s] %d file(s) are restored in the older version of the full backup, because they could not be read when this differential was created.", entry.DirectoryName, n)
 	}
 	return restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log), nil
+}
+
+// restorePlan describes the restore for the user, from the values the
+// details report was built from.
+func restorePlan(items []restorePreflightItem, restorePath string, ks *container.KeySet, details interact.Report) interact.RestorePlan {
+	p := interact.RestorePlan{
+		Destination: restorePath,
+		NeededBytes: estimateRestoreBytes(items),
+		FreeBytes:   -1,
+		Unlock:      job.UnlockPlan(ks),
+		Issues:      details.Issues,
+		Details:     details,
+	}
+	if free, err := queryRestoreTargetFreeBytes(restorePath); err == nil {
+		p.FreeBytes = int64(free)
+	}
+	for _, item := range items {
+		sp := interact.RestoreSetPlan{SetPlan: job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err), OutputDir: item.OutputDir}
+		if item.OutputDirErr != nil {
+			sp.OutputProblem = item.OutputDirErr.Error()
+		}
+		p.Sets = append(p.Sets, sp)
+	}
+	return p
 }

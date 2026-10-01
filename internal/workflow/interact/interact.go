@@ -27,21 +27,30 @@ type BackupStart int
 const (
 	// BackupCancel cancels the backup.
 	BackupCancel BackupStart = iota
-	// BackupAsPlanned starts the backup as shown in the preflight.
+	// BackupAsPlanned starts the backup of the plan shown.
 	BackupAsPlanned
 	// BackupFull makes every directory a full backup with the current keys.
 	BackupFull
 	// BackupNewKeys creates new keys and makes every directory a full backup.
 	BackupNewKeys
+	// BackupAutomatic returns to the automatic plan after BackupFull or
+	// BackupNewKeys.
+	BackupAutomatic
 )
 
-// BackupStartOptions says which alternatives the backup start question
-// offers besides starting as planned and cancelling.
+// BackupStartOptions says which answers the backup start question offers
+// besides cancelling. BackupFull and BackupNewKeys show a new plan and ask
+// again.
 type BackupStartOptions struct {
+	// Blocked is set when the plan has errors: BackupAsPlanned is not offered.
+	Blocked bool
 	// OfferFull offers BackupFull; set when a differential is planned.
 	OfferFull bool
 	// OfferNewKeys offers BackupNewKeys; set when existing keys are reused.
 	OfferNewKeys bool
+	// OfferAutomatic offers BackupAutomatic; set after the user chose
+	// BackupFull or BackupNewKeys.
+	OfferAutomatic bool
 }
 
 // UI is what the workflows need from the user. Secrets are returned as byte
@@ -53,19 +62,21 @@ type UI interface {
 	// questions: log lines, notices, and results.
 	Output() io.Writer
 
-	// ShowReport shows the preflight summary of an operation before its
-	// start is confirmed.
-	ShowReport(r Report)
+	// ShowBackupPlan, ShowRestorePlan and ShowVerifyPlan show what the
+	// operation will do, before its start is confirmed.
+	ShowBackupPlan(p BackupPlan)
+	ShowRestorePlan(p RestorePlan)
+	ShowVerifyPlan(p VerifyPlan)
 
 	// ShowResult shows the outcome of an operation that completed. It is
 	// called last, before the workflow returns without error.
 	ShowResult(r Result)
 
 	// ConfirmStart asks whether to start the action ("restore" or
-	// "verification") shown in the preflight.
+	// "verification") of the plan shown.
 	ConfirmStart(action string) (bool, error)
-	// ConfirmBackupStart asks whether to start the backup shown in the
-	// preflight, offering the alternatives in opts.
+	// ConfirmBackupStart asks whether to start the backup of the plan shown,
+	// offering the answers in opts.
 	ConfirmBackupStart(opts BackupStartOptions) (BackupStart, error)
 
 	// ChooseUnlockMethod asks whether to unlock with the regular credentials

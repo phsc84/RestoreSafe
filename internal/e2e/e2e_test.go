@@ -465,7 +465,7 @@ func TestDifferentialChain(t *testing.T) {
 
 	// [F] starts a new chain; retention (keep 1) deletes the old chain with
 	// its differentials and their logs.
-	out = runBackup(t, cfg, []string{"f"}, password)
+	out = runBackup(t, cfg, []string{"f", "y"}, password)
 	if !strings.Contains(out, "Backup type: full (full backup requested)") {
 		t.Fatalf("expected forced full backup: %q", out)
 	}
@@ -510,7 +510,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 	oldKeys := infos[0].Header.KeySet.ID
 
 	writeFile(t, filepath.Join(docs, "a.txt"), "version 2")
-	s = useScript(t, []string{"k"}, newPassword, newPassword)
+	s = useScript(t, []string{"k", "y"}, newPassword, newPassword)
 	out := testutil.CaptureStdout(t, func() {
 		if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 			t.Fatalf("backup 2: %v", err)

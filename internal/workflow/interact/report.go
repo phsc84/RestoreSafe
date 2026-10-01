@@ -78,7 +78,18 @@ type Row struct {
 // Issue is a problem found by the preflight.
 type Issue struct {
 	Status Status // StatusWarn or StatusError
+	Code   Code
 	Text   string
+}
+
+// hasErrors reports whether an issue blocks the operation.
+func hasErrors(issues []Issue) bool {
+	for _, issue := range issues {
+		if issue.Status == StatusError {
+			return true
+		}
+	}
+	return false
 }
 
 // Heading returns a heading row.
@@ -96,14 +107,7 @@ func Field(label, value string) Row { return Row{Kind: RowField, Label: label, T
 func Note(text string) Row { return Row{Kind: RowNote, Text: text} }
 
 // HasErrors reports whether an issue blocks the operation.
-func (r Report) HasErrors() bool {
-	for _, issue := range r.Issues {
-		if issue.Status == StatusError {
-			return true
-		}
-	}
-	return false
-}
+func (r Report) HasErrors() bool { return hasErrors(r.Issues) }
 
 // minFieldLabelWidth is the narrowest label column of a section's fields, so
 // short summaries line up with the "Authentication" field.

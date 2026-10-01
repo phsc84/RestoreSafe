@@ -1,6 +1,10 @@
 package job
 
 import (
+	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 )
@@ -32,4 +36,27 @@ func AuthRows(authLabel string, requiresYubiKey bool, action string, checkYubiKe
 		return append(rows, interact.Item(interact.StatusWarn, fmt.Sprintf("YubiKey not connected. Remedy: Connect the YubiKey before starting %s.", action)))
 	}
 	return append(rows, interact.Item(interact.StatusOK, fmt.Sprintf("YubiKey connected. Keep it connected before starting %s.", action)))
+}
+
+// UnlockPlan describes how ks is unlocked: its regular way and whether the
+// recovery code opens it too.
+func UnlockPlan(ks *container.KeySet) interact.UnlockPlan {
+	return interact.UnlockPlan{
+		Methods:      config.AuthMode(ks.AuthMode).Label(),
+		RecoveryCode: ks.HasSlotType(container.SlotRecovery),
+	}
+}
+
+// SetPlan describes a chosen backup set of a restore or verify: base is the
+// full backup read with a differential (nil for a full backup), bytes the
+// size read, and err the problem that keeps the set from being used.
+func SetPlan(entry naming.BackupEntry, base *catalog.SetInfo, bytes int64, err error) interact.SetPlan {
+	p := interact.SetPlan{Set: entry, Bytes: bytes}
+	if base != nil {
+		p.Base = base.Entry
+	}
+	if err != nil {
+		p.Problem = err.Error()
+	}
+	return p
 }

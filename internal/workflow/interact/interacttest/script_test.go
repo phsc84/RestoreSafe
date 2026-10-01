@@ -58,8 +58,11 @@ func TestConfirmStartPrintsSingleBlankLineOnRetry(t *testing.T) {
 func TestConfirmBackupStart(t *testing.T) {
 	both := interact.BackupStartOptions{OfferFull: true, OfferNewKeys: true}
 	newKeys := interact.BackupStartOptions{OfferNewKeys: true}
-	const hintNewKeys = "Please enter y (yes), k (new keys), or n (no)."
-	const hintBoth = "Please enter y (yes), f (full backup), k (new keys), or n (no)."
+	blockedFull := interact.BackupStartOptions{Blocked: true, OfferAutomatic: true}
+	afterFull := interact.BackupStartOptions{OfferNewKeys: true, OfferAutomatic: true}
+	const hintNewKeys = "Please enter y (yes), k (new keys), n (no)."
+	const hintBoth = "Please enter y (yes), f (full backup), k (new keys), n (no)."
+	const hintBlocked = "Please enter a (automatic plan), n (no)."
 	cases := []struct {
 		name    string
 		opts    interact.BackupStartOptions
@@ -75,6 +78,9 @@ func TestConfirmBackupStart(t *testing.T) {
 		{"invalid answer is repeated", newKeys, []string{"maybe", "k"}, interact.BackupNewKeys, hintNewKeys},
 		{"k creates new keys", both, []string{"K"}, interact.BackupNewKeys, ""},
 		{"n cancels", both, []string{"x", "no"}, interact.BackupCancel, hintBoth},
+		{"a returns to the automatic plan", afterFull, []string{"a"}, interact.BackupAutomatic, ""},
+		{"a not offered is invalid", both, []string{"a", "y"}, interact.BackupAsPlanned, hintBoth},
+		{"a blocked plan cannot start", blockedFull, []string{"y", "a"}, interact.BackupAutomatic, hintBlocked},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -88,45 +88,60 @@ func (s *Script) ConfirmStart(action string) (bool, error) {
 
 // ConfirmBackupStart asks whether to start the backup. [F] makes every
 // directory a full backup; [K] creates new keys, to change the password,
-// replace a lost YubiKey, or get a new recovery code.
+// replace a lost YubiKey, or get a new recovery code; [A] returns to the
+// automatic plan. A plan with errors offers no start.
 func (s *Script) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.BackupStart, error) {
-	if !opts.OfferNewKeys {
+	if !opts.Blocked && !opts.OfferFull && !opts.OfferNewKeys && !opts.OfferAutomatic {
 		ok, err := s.ConfirmStart("backup")
 		if !ok || err != nil {
 			return interact.BackupCancel, err
 		}
 		return interact.BackupAsPlanned, nil
 	}
-	options := "[Y] yes"
-	valid := "y (yes)"
-	if opts.OfferFull {
-		options += " / [F] full backup"
-		valid += ", f (full backup)"
+	var options, valid []string
+	if !opts.Blocked {
+		options, valid = append(options, "[Y] yes"), append(valid, "y (yes)")
 	}
-	options += " / [K] new keys + full backup / [N] cancel"
-	valid += ", k (new keys), or n (no)"
+	if opts.OfferFull {
+		options, valid = append(options, "[F] full backup"), append(valid, "f (full backup)")
+	}
+	if opts.OfferNewKeys {
+		options, valid = append(options, "[K] new keys + full backup"), append(valid, "k (new keys)")
+	}
+	if opts.OfferAutomatic {
+		options, valid = append(options, "[A] automatic plan"), append(valid, "a (automatic plan)")
+	}
+	options, valid = append(options, "[N] cancel"), append(valid, "n (no)")
 	for {
 		s.println()
-		answer, err := s.readLine("Start backup now? " + options + ": ")
+		answer, err := s.readLine("Start backup now? " + strings.Join(options, " / ") + ": ")
 		s.println()
 		if err != nil {
 			return interact.BackupCancel, err
 		}
 		switch strings.ToLower(strings.TrimSpace(answer)) {
 		case "", "y", "yes":
-			return interact.BackupAsPlanned, nil
+			if !opts.Blocked {
+				return interact.BackupAsPlanned, nil
+			}
 		case "f":
 			if opts.OfferFull {
 				s.println("Every source directory gets a full backup with the current keys.")
 				return interact.BackupFull, nil
 			}
 		case "k":
-			s.println("New keys will be created and every source directory gets a full backup. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
-			return interact.BackupNewKeys, nil
+			if opts.OfferNewKeys {
+				s.println("New keys will be created and every source directory gets a full backup. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
+				return interact.BackupNewKeys, nil
+			}
+		case "a":
+			if opts.OfferAutomatic {
+				return interact.BackupAutomatic, nil
+			}
 		case "n", "no":
 			return interact.BackupCancel, nil
 		}
-		s.printf("Please enter %s.\n", valid)
+		s.printf("Please enter %s.\n", strings.Join(valid, ", "))
 	}
 }
 
@@ -177,10 +192,14 @@ func (s *Script) WaitForSpareYubiKey() (bool, error) {
 	return !strings.EqualFold(strings.TrimSpace(answer), "q"), nil
 }
 
-// ShowReport prints the preflight summary.
-func (s *Script) ShowReport(r interact.Report) {
-	interact.WriteReport(s.Output(), r)
-}
+// ShowBackupPlan prints the preflight summary of the plan.
+func (s *Script) ShowBackupPlan(p interact.BackupPlan) { interact.WriteReport(s.Output(), p.Details) }
+
+// ShowRestorePlan prints the preflight summary of the plan.
+func (s *Script) ShowRestorePlan(p interact.RestorePlan) { interact.WriteReport(s.Output(), p.Details) }
+
+// ShowVerifyPlan prints the preflight summary of the plan.
+func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { interact.WriteReport(s.Output(), p.Details) }
 
 // Progress is ignored: the script shows the log lines of each step instead.
 func (s *Script) Progress(interact.Progress) {}

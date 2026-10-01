@@ -58,7 +58,8 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	preflight := buildVerifyPreflight(selectedInfos, infos)
 	mode := config.AuthMode(first.KeySet.AuthMode)
 	usesYubiKey := mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey
-	u.ShowReport(verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == config.AuthModeYubiKey, yubikey.CheckConnected))
+	details := verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == config.AuthModeYubiKey, yubikey.CheckConnected)
+	u.ShowVerifyPlan(verifyPlan(preflight, &first.KeySet, details))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func verifyPreflightReport(
 		status := interact.StatusOK
 		if item.Err != nil {
 			status = interact.StatusError
-			issues = append(issues, interact.Issue{Status: interact.StatusError, Text: item.Err.Error()})
+			issues = append(issues, interact.Issue{Status: interact.StatusError, Code: interact.CodeBaseMissing, Text: item.Err.Error()})
 		}
 		var details []string
 		if item.Base != nil {
@@ -252,4 +253,14 @@ func verifyEntry(ctx context.Context, rep interact.ProgressReporter, entry namin
 	}
 	log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
 	return restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log), nil
+}
+
+// verifyPlan describes the verification for the user, from the values the
+// details report was built from.
+func verifyPlan(items []verifyPreflightItem, ks *container.KeySet, details interact.Report) interact.VerifyPlan {
+	p := interact.VerifyPlan{Bytes: estimateVerifyBytes(items), Unlock: job.UnlockPlan(ks), Issues: details.Issues, Details: details}
+	for _, item := range items {
+		p.Sets = append(p.Sets, job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err))
+	}
+	return p
 }

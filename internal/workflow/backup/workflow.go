@@ -16,7 +16,6 @@ import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
@@ -26,7 +25,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
-	"time"
 )
 
 // Run executes the full backup workflow, asking u for decisions and credentials
@@ -71,41 +69,14 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	removeLeftoverTempParts(backupDir, log)
 
-	keys := plan.KeysFor(cfg, infos)
-	plans := plan.Folders(cfg, infos, sources, keys, false, time.Now())
-
-	est := estimateBackupSpace(cfg, backupDir, sources, plans)
-	report := backupPreflightReport(cfg, backupDir, sources, keys, plans, est, yubikey.CheckConnected)
-	issues, err := backupPreflightIssues(cfg, backupDir, sources, est)
-	report.Issues = issues
-	u.ShowReport(report)
+	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos)
 	if err != nil {
 		return err
 	}
-
-	// [F] makes every directory a full backup (offered when a differential is
-	// planned); [K] creates new keys (offered when existing keys would be
-	// reused), to change the password, replace a lost YubiKey, or get a new
-	// recovery code.
-	choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{OfferFull: plan.AnyDifferential(plans), OfferNewKeys: keys.Existing != nil})
-	if err != nil {
-		return err
-	}
-	switch choice {
-	case interact.BackupCancel:
+	if !start {
 		log.InfoLogOnly("Backup cancelled by user before start")
 		fmt.Fprintln(out, "Backup cancelled.")
 		return nil
-	case interact.BackupFull:
-		plans = plan.Folders(cfg, infos, sources, keys, true, time.Now())
-	case interact.BackupNewKeys:
-		keys = plan.Keys{NewKeysReason: "New keys requested"}
-		plans = plan.Folders(cfg, infos, sources, keys, true, time.Now())
-	}
-	if choice == interact.BackupFull || choice == interact.BackupNewKeys {
-		if err := checkSpaceForFullBackups(backupDir, est); err != nil {
-			return err
-		}
 	}
 
 	keySet, master, err := obtainKeys(u, cfg, keys, log)

@@ -63,6 +63,15 @@ func (e *previewEnv) setNames(t *testing.T) []string {
 	return out
 }
 
+// startAnswers are the answers to the start question: "f" shows the full
+// plan, which is then started with "y".
+func startAnswers(answer string) []string {
+	if answer == "f" {
+		return []string{"f", "y"}
+	}
+	return []string{answer}
+}
+
 // previewAndRun computes the retention preview the way the backup plan does,
 // runs the backup with answer to the start question, and returns the
 // previewed and the actually deleted set names, sorted.
@@ -84,7 +93,7 @@ func (e *previewEnv) previewAndRun(t *testing.T, answer string) (previewed, dele
 
 	before := e.setNames(t)
 	ui := &interacttest.Script{
-		ReadLine:     interacttest.Answers(answer),
+		ReadLine:     interacttest.Answers(startAnswers(answer)...),
 		ReadPassword: func(string) ([]byte, error) { return []byte("pw"), nil },
 	}
 	var runErr error

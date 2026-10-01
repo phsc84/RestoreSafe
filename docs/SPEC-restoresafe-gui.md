@@ -809,7 +809,7 @@ type Snapshot struct {
 
 type Problem struct {
     Code     interact.Code // stable, 11.8
-    Severity interact.Severity
+    Status   interact.Status // StatusError, StatusWarn or StatusInfo
     Message  string // plain language, one sentence (3.6)
     Hint     string // what the user can do
     Detail   string // the health check's full text with Remedy, for "Show details"
@@ -897,7 +897,7 @@ The UI computes speed and time left (BR-3). The current file isn't shown (not re
 
 ### 11.8 Problem codes
 
-Every health check finding and every preflight issue gets a stable code. The UI shows Message and Hint; Detail (the current text with `Remedy:`) goes into "Show details" and the log.
+Every health check finding and every preflight issue gets a stable code. The UI shows Message and Hint; Detail (the current text with `Remedy:`) goes into "Show details" and the log. The codes are the `interact.Code` constants in `internal/workflow/interact/code.go`; the severity is an `interact.Status`.
 
 | Code | Severity | Message (UI) | Hint and action |
 |---|---|---|---|
@@ -905,7 +905,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `BACKUP_DIR_UNREACHABLE` | Error | The backup directory isn't reachable | Check the drive or network connection. Actions: Check again, Edit config. |
 | `BACKUP_DIR_NOT_WRITABLE` | Error | RestoreSafe can't write to the backup directory | Check the permissions. Action: Open in Explorer. |
 | `SOURCE_MISSING` | Error | A folder to back up can't be found | Connect the drive, or remove the folder from config.yaml. Actions: Check again, Edit config. |
-| `SOURCE_UNREADABLE` | Error | A folder to back up can't be read | Check the permissions. |
+| `SOURCE_INVALID` | Error | A folder to back up can't be used | It isn't a folder, can't be read, or its backup name collides with another folder's. The detail says which. |
 | `BASE_MISSING` | Error | Backups of a folder can't be restored | Their full backup is missing or incomplete. Restore its FULL files from your copy, or delete the DIFF files of that chain. Action: Show in Backups. |
 | `LAST_BACKUP_FAILED` | Error (session) | Your last backup failed | The reason from the workflow. Action: Back up now. |
 | `VERIFY_FAILED` | Error (session or log) | A backup is damaged | Create a new backup; don't rely on the damaged one. Action: Back up now. |
@@ -918,6 +918,12 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `NEW_KEYS_NEEDED` | Info | Your next backup creates new keys | The reason from `KeySetMismatch`. |
 | `LEGACY_1X` | Info | RestoreSafe 1.x backups found | Keep RestoreSafe 1.0.2 to restore them. |
 | `LEFTOVER_TMP` | Info | Leftovers of an interrupted backup | Removed by the next backup. |
+| `BASE_MISSING`, `SET_INCOMPLETE` | Error (preflight) | This backup can't be used | Its full backup is missing, or the set is incomplete. |
+| `SPACE_INSUFFICIENT` | Error (preflight) | There isn't enough space | Free up space, or choose another place. |
+| `SPACE_ESTIMATE_ONLY` | Warning (preflight) | The differential fits only by its estimate | If everything is stored again, the space runs out and the backup stops. |
+| `PART_LIMIT` | Error (preflight) | A folder is too large for the split size | Increase `split_size_mb`. |
+| `FREE_SPACE_UNKNOWN` | Error (preflight) | The free space at the destination is unknown | Check the destination. |
+| `RESTORE_TARGET_EXISTS`, `RESTORE_TARGET_INVALID` | Error (preflight) | The folder to restore into exists already, or its name isn't valid | Choose another place, or rename or move that folder. |
 
 ### 11.9 State computation
 

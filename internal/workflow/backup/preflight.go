@@ -3,12 +3,15 @@ package backup
 import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/archive"
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"time"
 )
@@ -125,30 +128,45 @@ func keyPlanRows(keys plan.Keys) []interact.Row {
 }
 
 // backupPreflightIssues runs the checks that block a backup and returns them
-// as report issues, together with the error of the first failed check. A
-// differential whose estimate fits, but that would not fit if it stored
-// every file again, gets a warning instead of an error.
-func backupPreflightIssues(cfg *config.Config, backupDir string, sources []plan.Source, est spaceEstimate) ([]interact.Issue, error) {
+// as report issues, together with the error of the first failed check.
+// partErr is the result of validateBackupPartCount, which does not depend on
+// the plan. A differential whose estimate fits, but that would not fit if it
+// stored every file again, gets a warning instead of an error.
+func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEstimate, partErr error) ([]interact.Issue, error) {
 	var issues []interact.Issue
 	var first error
 	targetWarn, targetErr := validateTargetSpaceForBackup(backupDir, est)
-	for _, err := range []error{
-		validateSourceDirectories(sources),
-		targetErr,
-		validateBackupPartCount(cfg, sources),
+	for _, check := range []struct {
+		err  error
+		code interact.Code
+	}{
+		{validateSourceDirectories(sources), sourceProblemCode(sources)},
+		{targetErr, interact.CodeSpaceInsufficient},
+		{partErr, interact.CodePartLimit},
 	} {
-		if err == nil {
+		if check.err == nil {
 			continue
 		}
 		if first == nil {
-			first = err
+			first = check.err
 		}
-		issues = append(issues, interact.Issue{Status: interact.StatusError, Text: strings.TrimPrefix(err.Error(), "Backup preflight failed: ")})
+		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: check.code, Text: strings.TrimPrefix(check.err.Error(), "Backup preflight failed: ")})
 	}
 	if targetWarn != "" {
-		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Text: targetWarn})
+		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Code: interact.CodeSpaceEstimateOnly, Text: targetWarn})
 	}
 	return issues, first
+}
+
+// sourceProblemCode is CodeSourceMissing when a source directory does not
+// exist, CodeSourceInvalid for any other problem with the sources.
+func sourceProblemCode(sources []plan.Source) interact.Code {
+	for _, src := range sources {
+		if errors.Is(src.Err, fs.ErrNotExist) {
+			return interact.CodeSourceMissing
+		}
+	}
+	return interact.CodeSourceInvalid
 }
 
 func validateSourceDirectories(sources []plan.Source) error {
@@ -295,14 +313,33 @@ type spaceEstimate struct {
 	// sizes are the sizes of all files per measured source, for the part
 	// count.
 	sizes []int64
+	// folders are full and likely per backup name.
+	folders map[string]folderSize
 	// warnings name sources that could not be measured.
 	warnings []string
 }
 
-// estimateBackupSpace measures every source that will be backed up, once,
-// following the exclude patterns.
-func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
-	var est spaceEstimate
+// folderSize is the measured size of one source directory.
+type folderSize struct{ full, likely int64 }
+
+// sourceSizes are the sizes of the source directories, measured once and
+// reused for every plan the user looks at.
+type sourceSizes struct {
+	// names are the measured backup names, in source order.
+	names []string
+	// measures hold the size of all files and of those changed since the
+	// base of the differential planned when they were measured.
+	measures map[string]archive.SourceMeasure
+	// diffs are the backup names whose Changed is relative to a base.
+	diffs    map[string]bool
+	warnings []string
+}
+
+// measureSources measures every source that will be backed up, once,
+// following the exclude patterns. For a directory that gets a differential
+// in plans, it also counts the files changed since the full backup.
+func measureSources(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) sourceSizes {
+	sizes := sourceSizes{measures: make(map[string]archive.SourceMeasure), diffs: make(map[string]bool)}
 	for _, src := range sources {
 		if src.Err != nil || src.Skip {
 			continue
@@ -314,18 +351,42 @@ func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.So
 		var since time.Time
 		if folder := plans[name]; folder.IsDiff() {
 			since = folder.Base.Created()
-			est.anyDiff = true
+			sizes.diffs[name] = true
 		}
 		m, err := archive.MeasureSource(archive.BuildOptions{SourceDir: src.Resolved, ExcludeDirs: []string{backupDir}, Exclude: cfg.ExcludeMatcher}, since)
 		if err != nil {
-			est.warnings = append(est.warnings, fmt.Sprintf("%s (%v)", src.Resolved, err))
+			sizes.warnings = append(sizes.warnings, fmt.Sprintf("%s (%v)", src.Resolved, err))
 			continue
 		}
-		est.full += m.Total
-		est.likely += m.Changed
+		sizes.names = append(sizes.names, name)
+		sizes.measures[name] = m
+	}
+	return sizes
+}
+
+// estimate returns the space needed by plans: a differential is expected to
+// store its changed files, a full backup all files.
+func (s sourceSizes) estimate(plans map[string]*plan.Folder) spaceEstimate {
+	est := spaceEstimate{folders: make(map[string]folderSize), warnings: s.warnings}
+	for _, name := range s.names {
+		m := s.measures[name]
+		size := folderSize{full: m.Total, likely: m.Total}
+		if plans[name].IsDiff() && s.diffs[name] {
+			size.likely = m.Changed
+			est.anyDiff = true
+		}
+		est.full += size.full
+		est.likely += size.likely
 		est.sizes = append(est.sizes, m.Total)
+		est.folders[name] = size
 	}
 	return est
+}
+
+// estimateBackupSpace measures the sources and estimates the space plans
+// need.
+func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
+	return measureSources(cfg, backupDir, sources, plans).estimate(plans)
 }
 
 // neededText describes the needed space for the preflight.
@@ -337,16 +398,62 @@ func (est spaceEstimate) neededText() string {
 		fsx.FormatBytesBinary(uint64(est.likely)), fsx.FormatBytesBinary(uint64(est.full)))
 }
 
-// checkSpaceForFullBackups checks the free space again when the user chose
-// full backups over the planned differentials: the preflight only required
-// the estimate of the changes to fit. Nothing is written before it passes.
-func checkSpaceForFullBackups(backupDir string, est spaceEstimate) error {
-	if !est.anyDiff {
-		return nil
+// backupPlan describes the plan for the user: what happens to each source
+// directory, the space, the keys, and what retention removes afterwards. It
+// uses the values the details report was built from.
+func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, keys plan.Keys, folders map[string]*plan.Folder, est spaceEstimate, removes []catalog.SetInfo, fullRequested bool, details interact.Report) interact.BackupPlan {
+	p := interact.BackupPlan{
+		BackupDir:     backupDir,
+		NeededBytes:   est.likely,
+		AllBytes:      est.full,
+		FreeBytes:     -1,
+		Keys:          keyPlanFor(cfg, keys),
+		VerifyAfter:   cfg.VerifyAfterBackup,
+		Removes:       removes,
+		FullRequested: fullRequested,
+		Issues:        details.Issues,
+		Details:       details,
 	}
-	full := spaceEstimate{full: est.full, likely: est.full}
-	if _, err := validateTargetSpaceForBackup(backupDir, full); err != nil {
-		return fmt.Errorf("Full backup not started: %s", strings.TrimPrefix(err.Error(), "Backup preflight failed: "))
+	if free, err := fsx.QueryFreeSpaceBytes(backupDir); err == nil {
+		p.FreeBytes = int64(free)
 	}
-	return nil
+	for _, src := range sources {
+		fp := interact.FolderPlan{Name: src.BackupName, Path: src.Resolved, Skipped: src.Skip, Warning: src.Warning}
+		if src.Err != nil {
+			fp.Problem = src.Err.Error()
+		} else if folder := folders[src.BackupName]; folder != nil && !src.Skip {
+			fp.Reason = folder.Reason
+			if folder.IsDiff() {
+				fp.Differential = true
+				fp.DiffNumber = folder.DiffNumber
+				fp.Base = folder.Base.Entry
+				fp.BaseCreated = folder.Base.Created()
+			}
+			size := est.folders[src.BackupName]
+			fp.EstimatedBytes, fp.AllBytes = size.likely, size.full
+		}
+		p.Folders = append(p.Folders, fp)
+	}
+	return p
+}
+
+// keyPlanFor says which keys lock the new backups and which prompts unlock
+// or create them.
+func keyPlanFor(cfg *config.Config, keys plan.Keys) interact.KeyPlan {
+	if ks := keys.Existing; ks != nil {
+		mode := config.AuthMode(ks.AuthMode)
+		kp := interact.KeyPlan{Created: ks.Created(), Summary: ks.Summary(), Password: mode != config.AuthModeYubiKey}
+		if mode != config.AuthModePassword {
+			kp.YubiKeys = 1
+		}
+		return kp
+	}
+	kp := interact.KeyPlan{New: true, NewKeysReason: keys.NewKeysReason, Password: !cfg.IsYubiKeyOnly(), RecoveryCode: cfg.RecoveryCode}
+	if cfg.UseYubiKey() {
+		kp.YubiKeys = 1
+		if cfg.YubiKeySpare {
+			kp.YubiKeys = 2
+		}
+	}
+	return kp
 }

@@ -25,7 +25,7 @@ func TestWriteReport(t *testing.T) {
 			}},
 			{Rows: []Row{Note("Sample note."), Heading("Empty")}},
 		},
-		Issues: []Issue{{StatusError, "Pics is broken."}, {StatusWarn, "Slow drive."}},
+		Issues: []Issue{{Status: StatusError, Text: "Pics is broken."}, {Status: StatusWarn, Text: "Slow drive."}},
 	}
 	want := `
 Test preflight
@@ -57,10 +57,10 @@ Empty:
 
 func TestReportHasErrors(t *testing.T) {
 	t.Parallel()
-	if (Report{Issues: []Issue{{StatusWarn, "w"}}}).HasErrors() {
+	if (Report{Issues: []Issue{{Status: StatusWarn, Text: "w"}}}).HasErrors() {
 		t.Fatal("a warning must not block")
 	}
-	if !(Report{Issues: []Issue{{StatusWarn, "w"}, {StatusError, "e"}}}).HasErrors() {
+	if !(Report{Issues: []Issue{{Status: StatusWarn, Text: "w"}, {Status: StatusError, Text: "e"}}}).HasErrors() {
 		t.Fatal("an error must block")
 	}
 }
