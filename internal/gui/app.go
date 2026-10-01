@@ -6,7 +6,6 @@ package gui
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
@@ -39,7 +38,6 @@ type Options struct {
 const (
 	idOpButton = 120 // idOpButton+i is button i of the operation screen
 
-	idTree       = 201
 	idDestEdit   = 202
 	idDestBrowse = 203
 	idDestCheck  = 204
@@ -51,6 +49,8 @@ const (
 	msgSnapshot   = win32.WM_APP + 1
 	msgBridge     = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone = win32.WM_APP + 3
+	msgLogLoaded  = win32.WM_APP + 4 // a log file for the Backups page was read
+	msgListFocus  = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
 )
 
 // Pages of the main window: the pages of the navigation (view.Page*) and,
@@ -90,6 +90,8 @@ type app struct {
 	taskbarCreated uint32
 	// logText is what the operation wrote, for "Show log".
 	logText strings.Builder
+	// verifyWhat names the verified selection in the confirmation.
+	verifyWhat string
 
 	// The shell of the new interface.
 	shell shell
@@ -104,7 +106,7 @@ type app struct {
 
 	op struct {
 		title, detail, progress win32.HWND
-		report, log, tree       win32.HWND
+		report, log             win32.HWND
 		destLabel, destEdit     win32.HWND
 		destBrowse, destCheck   win32.HWND
 		destNote                win32.HWND
@@ -114,10 +116,7 @@ type app struct {
 	opTitleStatus  interact.Status
 	opContent      opContent
 	opShowProgress bool
-	// Selection and destination screens.
-	treeNodes    map[win32.TreeItem]selectionNode
-	selectRuns   []catalog.BackupRunSummary
-	selectAction string // "restore" or "verify"
+	// Destination screen.
 	destDefault  string // the backup directory, for "restore into the backup directory"
 	progressText string
 	machine      flow.Machine     // the stage of the operation
@@ -125,11 +124,12 @@ type app struct {
 	opReport     *interact.Report // preflight report on screen, re-rendered on DPI changes
 
 	// The state of the backups.
-	checker   health.Checker
-	snapshot  *health.Snapshot
-	checking  bool
-	mu        sync.Mutex
-	pendingSn *health.Snapshot
+	checker    health.Checker
+	snapshot   *health.Snapshot
+	checking   bool
+	mu         sync.Mutex
+	pendingSn  *health.Snapshot
+	pendingLog *loadedLog
 }
 
 var theApp *app
@@ -305,7 +305,7 @@ func (a *app) applyFonts() {
 
 // controls returns the operation screen's controls that use the message font.
 func (a *app) controls() []win32.HWND {
-	all := []win32.HWND{a.op.detail, a.op.report, a.op.tree, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
+	all := []win32.HWND{a.op.detail, a.op.report, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
 	all = append(all, a.op.buttons[:]...)
 	out := all[:0]
 	for _, c := range all {
@@ -333,7 +333,6 @@ func (a *app) createOperation() error {
 	o.progress = create(win32.PROGRESS_CLASS, 0, 0)
 	o.report = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
 	o.log = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
-	o.tree = create(win32.WC_TREEVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.TVS_HASBUTTONS|win32.TVS_HASLINES|win32.TVS_LINESATROOT|win32.TVS_SHOWSELALWAYS, idTree)
 	o.destLabel = create("STATIC", 0, 0) // &-prefix: Alt+F moves to the field after it
 	o.destEdit = create("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idDestEdit)
 	o.destBrowse = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, idDestBrowse)
@@ -373,7 +372,6 @@ func (a *app) applyOpVisibility() {
 	setShown(o.progress, on && a.opShowProgress)
 	setShown(o.report, on && (c == contentReport || c == contentReportAndLog))
 	setShown(o.log, on && (c == contentLog || c == contentReportAndLog))
-	setShown(o.tree, on && c == contentTree)
 	for _, d := range []win32.HWND{o.destLabel, o.destEdit, o.destBrowse, o.destCheck, o.destNote} {
 		setShown(d, on && c == contentDestination)
 	}
@@ -395,7 +393,7 @@ func (a *app) layout() {
 	s := widget.Scale(a.dpi)
 	l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
 	o := &a.op
-	for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log, o.tree: l.tree,
+	for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log,
 		o.destLabel: l.destLabel, o.destEdit: l.destEdit, o.destBrowse: l.destBrowse, o.destCheck: l.destCheck, o.destNote: l.destNote} {
 		win32.SetWindowPos(c, r)
 	}
@@ -505,6 +503,12 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case win32.WM_COMMAND:
 		id, code := win32.LoWord(wparam), win32.HiWord(wparam)
 		switch {
+		case id == win32.IDOK && a.page == view.PageBackups && win32.Focus() == a.shell.backups.list:
+			// Enter in the list restores the selection (spec BK-4).
+			if a.shell.backups.bar.Restore.Enabled {
+				a.do(view.ActionRestore)
+			}
+			return 0
 		case id == win32.IDCANCEL && a.page == pageOperation:
 			a.clickCancel() // Esc
 			return 0
@@ -529,16 +533,6 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 			return win32.DC_HASDEFID<<16 | uintptr(idOpButton)
 		}
 		return 0
-	case win32.WM_NOTIFY:
-		if nm := win32.NMHdrParam(lparam); nm.HwndFrom == a.op.tree {
-			switch nm.Code {
-			case win32.TVN_SELCHANGEDW:
-				a.onTreeSelection()
-			case win32.NM_DBLCLK, win32.NM_RETURN:
-				a.clickDefault()
-			}
-		}
-		return 0
 	case msgSnapshot:
 		a.snapshotDone()
 		return 0
@@ -553,6 +547,16 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 				a.onProgress()
 			}
 		}
+		return 0
+	case msgLogLoaded:
+		a.mu.Lock()
+		l := a.pendingLog
+		a.pendingLog = nil
+		a.mu.Unlock()
+		a.shell.backups.logLoaded(l)
+		return 0
+	case msgListFocus:
+		a.shell.backups.focusChanged()
 		return 0
 	case msgWorkerDone:
 		a.onWorkerDone()
@@ -610,12 +614,11 @@ func appIcon(size int32) windows.Handle {
 
 // setAccessibleNames names the operation screen's controls screen readers
 // cannot name from a label: the rich edits (their window text is the
-// content), the tree, and the progress bar.
+// content) and the progress bar.
 func (a *app) setAccessibleNames() {
 	for hwnd, name := range map[win32.HWND]string{
 		a.op.report:   "Preflight summary",
 		a.op.log:      "Log",
-		a.op.tree:     "Backups",
 		a.op.progress: "Progress",
 	} {
 		win32.SetAccessibleName(hwnd, name)

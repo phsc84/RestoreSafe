@@ -202,7 +202,11 @@ func cleanupLine(f *logging.Fact) string {
 }
 
 func verifiedLine(r *flow.Run) string {
+	// The run's log also holds earlier verifications: count this one's sets.
 	n := len(r.Facts.Verify)
+	if r.Verify != nil {
+		n = len(r.Verify.Sets)
+	}
 	d := Duration(r.Ended.Sub(r.Started))
 	if n == 1 {
 		return fmt.Sprintf(resultVerifiedOne, d)

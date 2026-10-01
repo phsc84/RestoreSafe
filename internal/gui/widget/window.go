@@ -160,3 +160,6 @@ func text(hdc uintptr, t *Theme, s string, r win32.Rect, style TextStyle, color 
 	win32.DrawText(hdc, s, r, flags)
 	win32.SelectFont(hdc, old)
 }
+
+// FillRect fills r of hdc with color: for cells that other controls draw.
+func FillRect(hdc uintptr, r win32.Rect, color Color) { fill(hdc, r, color) }

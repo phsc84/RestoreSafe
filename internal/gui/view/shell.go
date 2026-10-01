@@ -1,7 +1,6 @@
 package view
 
 import (
-	"RestoreSafe/internal/workflow/health"
 	"fmt"
 )
 
@@ -30,28 +29,6 @@ func Activity(checking bool) string {
 		return statusChecking
 	}
 	return statusReady
-}
-
-// BackupsInterim is the Backups page until the run list replaces it
-// (plan phase 7): restore and verify through the first GUI's screens.
-type BackupsInterim struct {
-	Title, Line     string
-	Restore, Verify Button
-}
-
-// BackupsInterimOf computes the interim Backups page.
-func BackupsInterimOf(s *health.Snapshot) BackupsInterim {
-	enabled := s != nil && len(s.Runs) > 0 && !s.Check.BlocksRestoreOrVerify()
-	v := BackupsInterim{
-		Title:   navBackups,
-		Line:    backupsInterimLine,
-		Restore: Button{Text: buttonRestoreOld, Action: ActionRestore, Enabled: enabled},
-		Verify:  Button{Text: buttonVerifyOld, Action: ActionVerify, Enabled: enabled},
-	}
-	if s != nil && len(s.Runs) == 0 {
-		v.Line = lastBackupNone
-	}
-	return v
 }
 
 // SettingsInterim is the Settings page until its cards replace it (plan

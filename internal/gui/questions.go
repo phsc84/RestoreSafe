@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/workflow/interact"
+	"time"
 )
 
 // questions shows the questions of an operation: the backup plan dialog
@@ -39,13 +40,23 @@ func (q questions) RestorePlan(p interact.RestorePlan, answer func()) {
 	answer()
 }
 
+// VerifyPlan records the plan; ConfirmStart asks with it.
 func (q questions) VerifyPlan(p interact.VerifyPlan, answer func()) {
-	q.a.showPreflight(p.Details)
+	q.a.machine.VerifyPlanShown(p)
 	answer()
 }
 
-// ConfirmStart offers Start and Cancel under the preflight.
+// ConfirmStart asks to verify (figure 7.3), or offers Start and Cancel
+// under the restore preflight.
 func (q questions) ConfirmStart(action string, answer func(bool, error)) {
+	if r := q.a.machine.Current(); r != nil && r.Op == flow.OpVerify && r.Verify != nil {
+		ok := q.a.confirmInfo(view.VerifyConfirm(*r.Verify, q.a.verifyWhat, time.Now()))
+		if ok {
+			q.a.runStarted()
+		}
+		answer(ok, nil)
+		return
+	}
 	label := "&Start restore"
 	if action == "verification" {
 		label = "&Start verification"

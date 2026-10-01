@@ -71,6 +71,9 @@ type RunGroup struct {
 	LogPath string
 	// When is the run's date in words, for the selection and the log title.
 	When string
+	// Placeholder is the text of the only row of a run without sets: a list
+	// does not show an empty group.
+	Placeholder string
 }
 
 // BackupsPage is everything the Backups page shows (spec 7).
@@ -284,6 +287,7 @@ func groupsOf(s *health.Snapshot, r *flow.Run, folder string, now time.Time) []R
 				at = b.Time
 			}
 			g := RunGroup{RunID: l.RunID, LogPath: l.Path, When: When(at, now)}
+			g.Placeholder = runNoSets
 			if b.Result == logging.ResultFailed {
 				g.Header, g.Tone, g.Glyph = fmt.Sprintf(runFailed, capitalize(g.When)), ToneError, GlyphError
 			} else {
@@ -464,7 +468,7 @@ func SelectionOf(p BackupsPage, runID naming.BackupID, set string) ActionBar {
 				bar.Text = fmt.Sprintf(selectionLogOnly, capitalize(g.When))
 				return bar
 			}
-			bar.Text = fmt.Sprintf(selectionRun, capitalize(g.When), folderPhrase(len(g.Rows)))
+			bar.Text = fmt.Sprintf(selectionRun, g.When, folderPhrase(len(g.Rows)))
 			bar.What = g.When
 			unusable := ""
 			for _, row := range g.Rows {
@@ -616,4 +620,24 @@ func LogPaneTitle(when, file string) string {
 		return logPaneTitle
 	}
 	return fmt.Sprintf(logTitleOf, when, file)
+}
+
+// LogPane are the labels of the log pane's buttons.
+type LogPane struct {
+	All, Warnings, Open, Hide, Show string
+}
+
+// LogPaneOf returns the labels of the log pane.
+func LogPaneOf() LogPane {
+	return LogPane{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog, Hide: buttonHideLog, Show: buttonShowLog}
+}
+
+// Menu are the items of the list's context menu (spec BK-4).
+type Menu struct {
+	Restore, Verify, CopyName, OpenFolder string
+}
+
+// BackupsMenu returns the context menu of the list.
+func BackupsMenu() Menu {
+	return Menu{Restore: menuRestoreText, Verify: menuVerifyText, CopyName: menuCopyName, OpenFolder: menuOpenFolder}
 }

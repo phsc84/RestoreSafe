@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
@@ -40,10 +41,10 @@ func runFacts(logPath string) logging.RunFacts {
 	return facts
 }
 
-// startOperation runs op in a worker goroutine. A backup opens its plan
-// dialog and shows its progress on the Overview; restore and verify use
-// the operation screen.
-func (a *app) startOperation(op flow.Op) {
+// startOperation runs op on sets (restore and verify) in a worker
+// goroutine. Backup and verify show their progress on the Overview, a
+// backup after its plan dialog; restore uses the operation screen.
+func (a *app) startOperation(op flow.Op, sets []naming.BackupEntry) {
 	if !a.machine.Start(op) {
 		return
 	}
@@ -56,10 +57,12 @@ func (a *app) startOperation(op flow.Op) {
 	a.logText.Reset()
 	u := flow.NewUI(r.b, questions{a})
 
-	if op == flow.OpBackup {
+	if op != flow.OpRestore {
 		a.showPage(view.PageOverview)
 		a.refreshRun()
-		a.openPlanDialog()
+		if op == flow.OpBackup {
+			a.openPlanDialog()
+		}
 	} else {
 		a.showOpScreen(op)
 	}
@@ -79,9 +82,9 @@ func (a *app) startOperation(op flow.Op) {
 		case flow.OpBackup:
 			err = backup.Run(ctx, u, cfg, exeDir)
 		case flow.OpRestore:
-			err = a.runRestore(ctx, u, cfg, exeDir)
+			err = a.runRestore(ctx, u, cfg, exeDir, sets)
 		case flow.OpVerify:
-			err = a.runVerify(ctx, u, cfg, exeDir)
+			err = a.runVerify(ctx, u, cfg, exeDir, sets)
 		}
 	}()
 }
@@ -90,7 +93,7 @@ func (a *app) startOperation(op flow.Op) {
 // operation screen.
 func (a *app) onScreen() bool {
 	r := a.machine.Current()
-	return r != nil && r.Op != flow.OpBackup
+	return r != nil && r.Op == flow.OpRestore
 }
 
 // runStarted records that the user started the backup in the plan dialog.
@@ -104,6 +107,9 @@ func (a *app) runStarted() {
 // bar and on the taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
+	if a.page == view.PageBackups {
+		a.shell.backups.update()
+	}
 	a.refreshActivity()
 	a.updateTaskbar()
 }
@@ -143,6 +149,7 @@ func (a *app) onOutput() {
 	text := a.run.b.TakeOutput()
 	if text != "" {
 		a.logText.WriteString(text)
+		a.shell.backups.appendLive(text)
 		win32.AppendText(a.op.log, strings.ReplaceAll(text, "\n", "\r\n"))
 	}
 }
@@ -232,9 +239,21 @@ func (a *app) dismiss() {
 	a.focusPage()
 }
 
-// showRunLog shows what the operation wrote so far.
+// showRunLog shows the log of the operation on the Backups page (spec
+// BR-7): the run selected, its log in the pane, live while it runs.
 func (a *app) showRunLog() {
-	a.showText(a.hwnd, view.LogTitle, a.logText.String())
+	path := ""
+	if a.run != nil {
+		path = a.run.b.LogPath()
+	} else if r := a.machine.Current(); r != nil {
+		path = r.LogPath
+	}
+	if path == "" {
+		return
+	}
+	a.showPage(view.PageBackups)
+	a.shell.backups.showLogOf(path)
+	a.focusPage()
 }
 
 // showResultDetails shows the workflow's message of the result card: the

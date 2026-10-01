@@ -350,3 +350,25 @@ func ListSubItemRect(lv HWND, i, sub int) Rect {
 	SendMessage(lv, LVM_GETSUBITEMRECT, uintptr(i), uintptr(unsafe.Pointer(&r)))
 	return r
 }
+
+// Custom-draw stages after painting.
+const (
+	CDDS_POSTPAINT       = 0x00000002
+	CDDS_ITEMPOSTPAINT   = CDDS_ITEM | CDDS_POSTPAINT
+	CDRF_NOTIFYPOSTPAINT = 0x00000010
+	BS_AUTORADIOBUTTON   = 0x00000009
+	BS_PUSHLIKE          = 0x00001000
+	WS_GROUP             = 0x00020000
+	WM_SETREDRAW         = 0x000B
+)
+
+// The notifications of a list view, from the header the parent received.
+
+// ListChangeOf returns the NMLISTVIEW behind hdr.
+func ListChangeOf(hdr *NMHdr) *NMListView { return (*NMListView)(unsafe.Pointer(hdr)) }
+
+// ListKeyOf returns the NMLVKEYDOWN behind hdr.
+func ListKeyOf(hdr *NMHdr) *NMLVKeyDown { return (*NMLVKeyDown)(unsafe.Pointer(hdr)) }
+
+// ListDrawOf returns the NMLVCUSTOMDRAW behind hdr.
+func ListDrawOf(hdr *NMHdr) *NMLVCustomDraw { return (*NMLVCustomDraw)(unsafe.Pointer(hdr)) }

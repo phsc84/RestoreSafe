@@ -161,3 +161,11 @@ func ComboSelected(cb HWND) int { return int(int32(SendMessage(cb, CB_GETCURSEL,
 func PointParam(lparam uintptr) Point {
 	return Point{X: int32(int16(lparam & 0xFFFF)), Y: int32(int16(lparam >> 16 & 0xFFFF))}
 }
+
+var procGetFocus = user32.NewProc("GetFocus")
+
+// Focus returns the window with the keyboard focus on this thread.
+func Focus() HWND {
+	r, _, _ := procGetFocus.Call()
+	return HWND(r)
+}

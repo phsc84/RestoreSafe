@@ -266,3 +266,16 @@ func (a *app) confirm(owner win32.HWND, c view.Confirm) bool {
 	})
 	return button == win32.IDOK
 }
+
+// confirmInfo asks c in an information task dialog owned by the main
+// window; Yes is the default. It reports whether the user chose Yes.
+func (a *app) confirmInfo(c view.Confirm) bool {
+	button, _ := a.taskDialog(a.hwnd, win32.TaskDialog{
+		Instruction: c.Instruction,
+		Content:     c.Content,
+		Icon:        win32.TD_INFORMATION_ICON,
+		Buttons:     []win32.TaskButton{{ID: win32.IDCANCEL, Text: c.No}, {ID: win32.IDOK, Text: c.Yes}},
+		Default:     win32.IDOK,
+	})
+	return button == win32.IDOK
+}

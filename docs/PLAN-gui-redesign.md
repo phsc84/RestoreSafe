@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-6 done |
+| Status | Agreed 2026-09-30; phases 0-7 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -224,6 +224,13 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **6b (done):** view models without windows: `view/plan.go` (plan dialog, new-keys confirmation), `view/run.go` (progress card, Folders card states, status bar, cancel and close confirmations), `view/result.go` (result card, BR-7), `view/credentials.go` (spec 9). The backup writes the size of each set and a `cleanup` fact (spec 11.4) for the result card; the worker reads the run's facts before it reports the end.
 - **6c (done):** the windows: plan dialog (`plandialog.go`, modal to the main window but answered from the main message loop), the run card in place of the hero with progress and result (`runcard.go`), folder states on the Folders card, credential dialogs in the theme (`dialogs.go`), spec-worded cancel and close task dialogs, taskbar progress (`ITaskbarList3`) and flashing. Shared dialog frame and vertical layout: `dialogwin.go`, `stack.go`. Backup no longer uses the operation screen; restore and verify keep it (`opscreen.go`, removed with phases 7 and 8).
 - **Left for later phases:** what phase 6 left open is part of the rows of phases 7, 8 and 10 in section 6.
+
+## 6c. State after phase 7
+
+- **7a:** the snapshot reads every run log (`health.Snapshot.Logs`), so failed and cancelled runs without sets are listed; the workflows report their log as soon as it is open (`interact.UI.LogStarted`), so "Show log" works after a failure too.
+- **7b:** `view/backups.go` (runs, rows, statuses, filter, retention and problem lines, selection, verify confirmation, log lines); the Last backup card marks cancelled and failed runs; the unlock dialog offers the recovery code (CR-1), and the password typed in it reaches the next password question through `flow.UI`.
+- **7c:** list view with groups and custom draw, drop-down list, context menu, clipboard, splitter.
+- **7d:** the Backups page (`backups.go`) replaces the interim page. Verify starts from it and runs on the Overview's run card; "Show log" of the cards opens the page with the run selected. A click on a run's group header selects the run (comctl32 sends no click for headers, so the page checks which group has the focus). Restore starts from the page with the chosen sets and still goes through the first GUI's destination and operation screens until phase 8; the selection tree is deleted.
 
 ## 7. Risks
 

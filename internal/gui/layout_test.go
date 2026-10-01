@@ -16,7 +16,7 @@ func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
 			for _, progress := range []bool{false, true} {
 				l := layoutOperation(s, w, h, content, progress)
 				var rects []win32.Rect
-				for _, r := range []win32.Rect{l.title, l.detail, l.progress, l.report, l.log, l.tree, l.destLabel, l.destEdit, l.destBrowse, l.destCheck, l.destNote} {
+				for _, r := range []win32.Rect{l.title, l.detail, l.progress, l.report, l.log, l.destLabel, l.destEdit, l.destBrowse, l.destCheck, l.destNote} {
 					if r != empty {
 						rects = append(rects, r)
 					}
@@ -35,9 +35,6 @@ func TestLayoutOperationFitsAndDoesNotOverlap(t *testing.T) {
 				}
 				if content == contentReport && l.report.Bottom < l.buttons[0].Top-s.Px(2*gap) {
 					t.Fatalf("dpi %d: the report must fill the content area", dpi)
-				}
-				if content == contentTree && l.tree.Height() < s.Px(200) {
-					t.Fatalf("dpi %d: tree too small (%d px)", dpi, l.tree.Height())
 				}
 			}
 		}

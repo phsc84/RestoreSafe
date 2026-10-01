@@ -120,12 +120,12 @@ func (o *overviewPage) update() {
 	o.layout()
 }
 
-// backupRun returns the backup the Overview shows: running, or finished
-// with a result card; nil otherwise. Restore and verify still use the
-// first GUI's operation screen.
+// backupRun returns the backup or verification the Overview shows:
+// running, or finished with a result card; nil otherwise. Restore still
+// uses the first GUI's operation screen.
 func (o *overviewPage) backupRun() *flow.Run {
 	r := o.a.machine.Current()
-	if r == nil || r.Op != flow.OpBackup {
+	if r == nil || r.Op == flow.OpRestore {
 		return nil
 	}
 	return r

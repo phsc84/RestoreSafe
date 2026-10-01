@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"testing"
@@ -64,5 +65,15 @@ func TestReportRTF(t *testing.T) {
 	// The field tab stop leaves room for the longest label of its section.
 	if !strings.Contains(got, `\tx2510`) {
 		t.Errorf("expected the field tab stop for \"Verify after backup\" at 2510 twips in\n%s", got)
+	}
+}
+
+func TestLogRTFColorsWarningsAndErrors(t *testing.T) {
+	t.Parallel()
+	got := logRTF([]view.LogLine{{Text: "ok"}, {Text: "WARN  - x", Tone: view.ToneWarning}, {Text: "ERROR - {y}", Tone: view.ToneError}}, 9)
+	for _, want := range []string{`{\cf0 ok}\par`, `{\cf3 WARN  - x}\par`, `{\cf4 ERROR - \{y\}}\par`, `\fs18`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("RTF %q lacks %q", got, want)
+		}
 	}
 }

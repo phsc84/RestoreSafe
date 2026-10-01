@@ -15,7 +15,7 @@ type shell struct {
 	activity win32.HWND
 	info     win32.HWND
 	overview *overviewPage
-	backups  *backupsInterim
+	backups  *backupsPage
 	settings *settingsInterim
 }
 
@@ -46,7 +46,7 @@ func (a *app) createShell() error {
 	if a.shell.overview, err = newOverviewPage(a); err != nil {
 		return err
 	}
-	if a.shell.backups, err = newBackupsInterim(a); err != nil {
+	if a.shell.backups, err = newBackupsPage(a); err != nil {
 		return err
 	}
 	if a.shell.settings, err = newSettingsInterim(a); err != nil {
@@ -73,6 +73,7 @@ func (a *app) showPage(page int) {
 	if shellShown {
 		a.shell.sidebar.Select(page)
 		win32.SetText(a.hwnd, a.title())
+		a.refreshInfo()
 	}
 	a.applyOpVisibility()
 	a.layout()
@@ -105,8 +106,18 @@ func (a *app) refreshShell() {
 	a.shell.overview.update()
 	a.shell.backups.update()
 	a.refreshActivity()
-	win32.SetText(a.shell.info, a.shell.overview.view.Status)
+	a.refreshInfo()
 	a.layout()
+}
+
+// refreshInfo shows the right part of the status bar: the free space on
+// the Overview, the runs and their size on Backups.
+func (a *app) refreshInfo() {
+	info := a.shell.overview.view.Status
+	if a.page == view.PageBackups {
+		info = a.shell.backups.view.Status
+	}
+	win32.SetText(a.shell.info, info)
 }
 
 // restyleShell applies the theme's fonts after a DPI change.
@@ -114,7 +125,8 @@ func (a *app) restyleShell() {
 	a.shell.status.Restyle()
 	win32.Invalidate(a.shell.sidebar.HWND())
 	a.shell.overview.restyle()
-	a.shell.backups.panel.Restyle()
+	a.shell.backups.restyle()
+	a.shell.backups.update()
 	a.shell.settings.panel.Restyle()
 }
 
@@ -143,12 +155,17 @@ func (a *app) do(action view.Action) {
 	switch action {
 	case view.ActionBackUp:
 		if a.snapshot != nil && !a.snapshot.Check.BlocksBackup() {
-			a.startOperation(flow.OpBackup)
+			a.startOperation(flow.OpBackup, nil)
 		}
 	case view.ActionRestore:
-		a.startOperation(flow.OpRestore)
+		if sets := a.shell.backups.chosen(); len(sets) > 0 {
+			a.startOperation(flow.OpRestore, sets)
+		}
 	case view.ActionVerify:
-		a.startOperation(flow.OpVerify)
+		if sets := a.shell.backups.chosen(); len(sets) > 0 {
+			a.verifyWhat = a.shell.backups.bar.What
+			a.startOperation(flow.OpVerify, sets)
+		}
 	case view.ActionCheckAgain:
 		a.startCheck()
 	case view.ActionCheckDetails:
@@ -176,11 +193,14 @@ func (a *app) do(action view.Action) {
 
 // focusPage puts the keyboard focus on the shown page's first action.
 func (a *app) focusPage() {
-	if a.page == view.PageOverview {
+	switch a.page {
+	case view.PageOverview:
 		a.shell.overview.focus()
-		return
+	case view.PageBackups:
+		a.shell.backups.focus()
+	default:
+		win32.SetFocus(a.shell.sidebar.HWND())
 	}
-	win32.SetFocus(a.shell.sidebar.HWND())
 }
 
 // actions maps the control IDs of a page's buttons and links to actions.

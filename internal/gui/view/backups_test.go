@@ -214,7 +214,7 @@ func TestVerifyConfirm(t *testing.T) {
 		Bytes: 97 << 30,
 	}
 	c := VerifyConfirm(p, "today, 09:12", now)
-	want := "RestoreSafe reads 2 folders, decrypts them and checks every file against its checksum. For the differentials it also reads their full backup of 1 Sep. Nothing is written. About 97 GB to read."
+	want := "RestoreSafe reads 2 folders, decrypts the backups and checks every file against its checksum. For the differentials it also reads their full backup of 1 Sep. Nothing is written. About 97 GB to read."
 	if c.Instruction != "Verify today, 09:12?" || c.Content != want || c.Yes != "Verify…" {
 		t.Fatalf("confirm %+v", c)
 	}

@@ -34,7 +34,6 @@ const (
 	contentLog          opContent = iota // running and result screens
 	contentReport                        // preflight
 	contentReportAndLog                  // result after a blocking preflight
-	contentTree                          // backup selection
 	contentDestination                   // restore destination
 )
 
@@ -42,7 +41,7 @@ const (
 // controls the content mode does not show are empty.
 type operationLayout struct {
 	title, detail, progress win32.Rect
-	report, log, tree       win32.Rect
+	report, log             win32.Rect
 	destLabel, destEdit     win32.Rect
 	destBrowse, destCheck   win32.Rect
 	destNote                win32.Rect
@@ -79,8 +78,6 @@ func layoutOperation(s widget.Scale, width, height int32, content opContent, sho
 		reportH := area * 2 / 3
 		l.report = s.Rect(margin, y, w-2*margin, reportH)
 		l.log = s.Rect(margin, y+reportH+gap, w-2*margin, max(area-reportH-gap, 0))
-	case contentTree:
-		l.tree = full
 	case contentDestination:
 		l.destLabel = s.Rect(margin, y, w-2*margin, fieldLabel)
 		y += fieldLabel

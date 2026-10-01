@@ -113,9 +113,6 @@ const (
 const (
 	titleFormat          = "%s %s"
 	titleWithConfig      = "%s %s · %s"
-	backupsInterimLine   = "Choose a backup to restore or verify."
-	buttonRestoreOld     = "&Restore backup…"
-	buttonVerifyOld      = "&Verify backup…"
 	settingsConfigFile   = "Configuration file"
 	settingsBackupDir    = "Backup directory"
 	buttonEditConfigFile = "&Edit config.yaml"
@@ -345,6 +342,7 @@ const (
 	runFailed            = "%s · Backup failed"
 	runCancelled         = "%s · Backup cancelled before a folder was backed up"
 	runIncomplete        = "Unfinished backups of %s"
+	runNoSets            = "No folder was backed up. The log says why."
 	runPartCancelled     = "cancelled"
 	runPartFailed        = "failed"
 	runPartNewKeys       = "new keys"
@@ -372,7 +370,7 @@ const (
 	buttonVerify         = "&Verify…"
 	buttonVerifyStart    = "Verify…"
 	verifyInstruction    = "Verify %s?"
-	verifyReads          = "RestoreSafe reads %s, decrypts them and checks every file against its checksum."
+	verifyReads          = "RestoreSafe reads %s, decrypts the backups and checks every file against its checksum."
 	verifyReadsBase      = "For the differentials it also reads their full backup of %s."
 	verifyReadsBases     = "For the differentials it also reads their full backups."
 	verifyNothingWritten = "Nothing is written. About %s to read."
@@ -381,4 +379,17 @@ const (
 	logFilterAll         = "&All"
 	logFilterWarnings    = "&Warnings and errors"
 	buttonOpenLog        = "Op&en"
+)
+
+// Names screen readers announce, and the list's menu.
+const (
+	FilterName      = "Folder filter"
+	BackupsListName = "Backups"
+	LogPaneName     = "Log"
+	buttonHideLog   = "&Hide log"
+	buttonShowLog   = "Show &log"
+	menuRestoreText = "&Restore…"
+	menuVerifyText  = "&Verify…"
+	menuCopyName    = "&Copy set name"
+	menuOpenFolder  = "&Open backup folder"
 )
