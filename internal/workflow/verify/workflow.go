@@ -74,6 +74,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 		return nil
 	}
 
+	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
 	masters, err := unlock.KeySets(u, selectedInfos, "Enter verification password: ", log)
 	if err != nil {
 		return err
@@ -206,7 +207,7 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 // during backup.
 func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
 	skipped := 0
-	for _, info := range selected {
+	for i, info := range selected {
 		var base *naming.BackupEntry
 		if info.Entry.IsDiff() {
 			baseInfo, err := catalog.BaseOf(inventory, info.Entry)
@@ -215,7 +216,7 @@ func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, s
 			}
 			base = &baseInfo.Entry
 		}
-		n, err := verifyEntry(ctx, rep, info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
+		n, err := verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, i+1, len(selected)), info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
 			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phase 0 done |
+| Status | Agreed 2026-09-30; phases 0-2 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |

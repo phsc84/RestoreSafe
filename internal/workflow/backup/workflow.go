@@ -79,6 +79,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		return nil
 	}
 
+	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
 	keySet, master, err := obtainKeys(u, cfg, keys, log)
 	if err != nil {
 		return err
@@ -161,6 +162,7 @@ func runBackupOperation(
 	retentionHold := make(map[string]bool)
 
 	// Back up each source directory.
+	index := 0
 	for _, source := range sources {
 		if source.Warning != "" {
 			log.Warn("Source directory warning: %s → %s", source.Resolved, source.Warning)
@@ -194,7 +196,8 @@ func runBackupOperation(
 		} else if folder != nil {
 			log.Info("  Backup type: full (%s)", folder.Reason)
 		}
-		skipped, err := backupDirectory(ctx, u, srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
+		index++
+		skipped, err := backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
 		if err != nil {
 			return backupFailed(ctx, log, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
@@ -227,9 +230,12 @@ func runBackupOperation(
 	// set is never pruned in favour of an unverified new one.
 	if verifyFailed {
 		log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
-	} else if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, log); err != nil {
-		log.Warn("  Cleanup old data failed: %v", err)
-		warningCount++
+	} else {
+		job.ReportPhase(u, interact.PhaseCleaningUp, "Cleaning up")
+		if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, log); err != nil {
+			log.Warn("  Cleanup old data failed: %v", err)
+			warningCount++
+		}
 	}
 
 	if len(retentionHold) > 0 {
@@ -265,7 +271,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 	log.Info("Verifying backup integrity")
 
 	failures := 0
-	for _, entry := range entries {
+	for i, entry := range entries {
 		set, err := catalog.OpenSet(backupDir, entry)
 		if err != nil {
 			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
@@ -275,7 +281,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 		// A differential's own data is checked; its full backup was
 		// verified when it was written.
 		var done atomic.Int64
-		stop := job.TrackProgress(rep, interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, nil)}, &done)
+		stop := job.TrackProgress(job.Stamp(rep, interact.PhaseVerifying, i+1, len(entries)), interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, nil)}, &done)
 		m, err := restorepoint.VerifyOwnData(ctx, set, master, log, &done)
 		stop()
 		parts := len(set.Paths)

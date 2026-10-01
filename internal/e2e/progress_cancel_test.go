@@ -11,8 +11,10 @@ import (
 	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -175,4 +177,85 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 	if !errors.Is(err, context.Canceled) || err.Error() != "Verification cancelled." {
 		t.Fatalf("verify: expected the cancellation, got %v", err)
 	}
+}
+
+// phases returns the sequence of phase steps reported (each phase and
+// position once, in order) and fails when Done decreases within a step or a
+// step's Count changes.
+func (o *observedUI) phases(t *testing.T) []string {
+	t.Helper()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	var out []string
+	var last interact.Progress
+	for i, p := range o.reports {
+		if p.Phase == interact.PhaseNone {
+			t.Fatalf("report without a phase: %+v", p)
+		}
+		if i > 0 && p.Phase == last.Phase && p.Index == last.Index {
+			if p.Done < last.Done || p.Count != last.Count {
+				t.Fatalf("within a step, Done must not decrease and Count must not change: %+v after %+v", p, last)
+			}
+			last = p
+			continue
+		}
+		out = append(out, fmt.Sprintf("%d %d/%d", p.Phase, p.Index, p.Count))
+		last = p
+	}
+	return out
+}
+
+func TestProgressPhasesFollowTheRun(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "First")
+	second := filepath.Join(root, "Second")
+	writeFile(t, filepath.Join(first, "a.txt"), strings.Repeat("a", 100_000))
+	writeFile(t, filepath.Join(second, "b.txt"), strings.Repeat("b", 100_000))
+	cfg := progressConfig([]string{first, second}, filepath.Join(root, "Backups"))
+	cfg.RetentionKeep = 1
+
+	step := func(phase interact.Phase, index, count int) string {
+		return fmt.Sprintf("%d %d/%d", phase, index, count)
+	}
+	check := func(name string, o *observedUI, want ...string) {
+		t.Helper()
+		if got := o.phases(t); !slices.Equal(got, want) {
+			t.Fatalf("%s phases %v, want %v", name, got, want)
+		}
+	}
+
+	s := useScript(t, []string{"y"}, password, password)
+	o := &observedUI{Script: s.ui}
+	testutil.CaptureStdout(t, func() {
+		if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
+			t.Fatalf("backup: %v", err)
+		}
+	})
+	s.done()
+	check("backup", o,
+		step(interact.PhaseUnlocking, 0, 0),
+		step(interact.PhaseBackingUp, 1, 2), step(interact.PhaseBackingUp, 2, 2),
+		step(interact.PhaseVerifying, 1, 2), step(interact.PhaseVerifying, 2, 2),
+		step(interact.PhaseCleaningUp, 0, 0))
+
+	s = useScript(t, []string{"y"}, password)
+	o = &observedUI{Script: s.ui}
+	testutil.CaptureStdout(t, func() {
+		req := restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")}
+		if err := restore.Run(context.Background(), o, cfg, "", req); err != nil {
+			t.Fatalf("restore: %v", err)
+		}
+	})
+	s.done()
+	check("restore", o, step(interact.PhaseUnlocking, 0, 0), step(interact.PhaseRestoring, 1, 2), step(interact.PhaseRestoring, 2, 2))
+
+	s = useScript(t, []string{"y"}, password)
+	o = &observedUI{Script: s.ui}
+	testutil.CaptureStdout(t, func() {
+		if err := verify.Run(context.Background(), o, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+	})
+	s.done()
+	check("verify", o, step(interact.PhaseUnlocking, 0, 0), step(interact.PhaseVerifying, 1, 2), step(interact.PhaseVerifying, 2, 2))
 }

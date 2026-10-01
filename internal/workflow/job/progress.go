@@ -132,3 +132,32 @@ func TrackProgress(rep interact.ProgressReporter, p interact.Progress, done *ato
 		report()
 	}
 }
+
+// Stamp returns a reporter that sets phase and the position of the item
+// (index of count, from 1) on every report before passing it to rep. A nil
+// rep stays nil.
+func Stamp(rep interact.ProgressReporter, phase interact.Phase, index, count int) interact.ProgressReporter {
+	if rep == nil {
+		return nil
+	}
+	return stamped{rep: rep, phase: phase, index: index, count: count}
+}
+
+type stamped struct {
+	rep          interact.ProgressReporter
+	phase        interact.Phase
+	index, count int
+}
+
+func (s stamped) Progress(p interact.Progress) {
+	p.Phase, p.Index, p.Count = s.phase, s.index, s.count
+	s.rep.Progress(p)
+}
+
+// ReportPhase reports the start of a phase without items or byte counts,
+// e.g. unlocking the keys. A nil rep reports nothing.
+func ReportPhase(rep interact.ProgressReporter, phase interact.Phase, step string) {
+	if rep != nil {
+		rep.Progress(interact.Progress{Phase: phase, Step: step})
+	}
+}

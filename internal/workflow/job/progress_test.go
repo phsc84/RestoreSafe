@@ -138,3 +138,21 @@ func TestTrackProgressWithoutReporterDoesNothing(t *testing.T) {
 	var done atomic.Int64
 	TrackProgress(nil, interact.Progress{}, &done)()
 }
+
+func TestStampAndReportPhase(t *testing.T) {
+	t.Parallel()
+	rec := &progressRecorder{}
+	ReportPhase(rec, interact.PhaseUnlocking, "Unlocking keys")
+	Stamp(rec, interact.PhaseRestoring, 2, 3).Progress(interact.Progress{Step: "Restoring", Item: "Docs", Done: 5, Total: 10})
+	want := []interact.Progress{
+		{Phase: interact.PhaseUnlocking, Step: "Unlocking keys"},
+		{Phase: interact.PhaseRestoring, Index: 2, Count: 3, Step: "Restoring", Item: "Docs", Done: 5, Total: 10},
+	}
+	if len(rec.reports) != 2 || rec.reports[0] != want[0] || rec.reports[1] != want[1] {
+		t.Fatalf("got %+v, want %+v", rec.reports, want)
+	}
+	if Stamp(nil, interact.PhaseRestoring, 1, 1) != nil {
+		t.Fatal("a nil reporter must stay nil, so TrackProgress reports nothing")
+	}
+	ReportPhase(nil, interact.PhaseUnlocking, "Unlocking keys") // must not panic
+}
