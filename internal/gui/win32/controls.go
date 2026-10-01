@@ -24,6 +24,7 @@ const (
 
 	PBS_MARQUEE        = 0x08
 	PBM_SETPOS         = 0x0402
+	PBM_GETPOS         = 0x0408
 	PBM_SETRANGE32     = 0x0406
 	PBM_SETMARQUEE     = 0x040A
 	PROGRESS_CLASS     = "msctls_progress32"

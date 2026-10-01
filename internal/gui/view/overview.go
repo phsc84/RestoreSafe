@@ -324,7 +324,7 @@ func newestRun(s *health.Snapshot) *catalog.BackupRunSummary {
 func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
 	card := FoldersCard{Title: fmt.Sprintf(cardFolders, len(s.Folders)), Link: Button{Text: linkDetails, Action: ActionOpenSettings, Enabled: true}}
 	for _, f := range s.Folders {
-		row := FolderRow{Name: f.BackupName, Path: f.Resolved}
+		row := FolderRow{Name: f.BackupName, Path: Path(f.Resolved)}
 		switch {
 		case f.Err != nil:
 			row.Problem, row.Tone = folderInvalid, ToneError
@@ -375,7 +375,7 @@ func badgeOf(e naming.BackupEntry) Badge {
 }
 
 func storageOf(s *health.Snapshot) StorageCard {
-	card := StorageCard{Path: s.BackupDir}
+	card := StorageCard{Path: Path(s.BackupDir)}
 	st := s.Storage
 	if !st.Known || st.TotalBytes <= 0 {
 		card.Used = storageUnknown

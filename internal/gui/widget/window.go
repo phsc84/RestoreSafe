@@ -46,12 +46,13 @@ const (
 	classBadge   = "RestoreSafeBadge"
 	classBar     = "RestoreSafeBar"
 	classSidebar = "RestoreSafeSidebar"
+	classTrail   = "RestoreSafeTrail"
 )
 
 func registerClasses() error {
 	classesOnce.Do(func() {
 		wndProcPtr = windows.NewCallback(wndProc)
-		for _, name := range []string{classPanel, classIcon, classBadge, classBar, classSidebar} {
+		for _, name := range []string{classPanel, classIcon, classBadge, classBar, classSidebar, classTrail} {
 			wc := win32.WndClassEx{
 				WndProc:   wndProcPtr,
 				Instance:  win32.ModuleHandle(),

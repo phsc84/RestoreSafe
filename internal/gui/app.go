@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,7 +81,15 @@ type app struct {
 	dpi   uint32
 	theme *widget.Theme
 	page  int
-	modal win32.HWND // open input dialog, if any
+	modal win32.HWND  // open credential dialog, if any
+	plan  *planDialog // open backup plan dialog, if any
+
+	// taskbar shows the operation on the taskbar button once it exists;
+	// taskbarCreated is the message that says so.
+	taskbar        *win32.Taskbar
+	taskbarCreated uint32
+	// logText is what the operation wrote, for "Show log".
+	logText strings.Builder
 
 	// The shell of the new interface.
 	shell shell
@@ -156,6 +165,9 @@ func Run(opts Options) error {
 		if !ok {
 			return nil
 		}
+		if a.plan != nil && win32.IsDialogMessage(a.plan.win.hwnd, &msg) {
+			continue
+		}
 		if msg.Message == win32.WM_KEYDOWN && a.shortcut(msg.WParam) {
 			continue
 		}
@@ -199,6 +211,7 @@ func (a *app) createWindow() error {
 	x := work.Left + (work.Width()-w)/2
 	y := work.Top + (work.Height()-h)/2
 
+	a.taskbarCreated = win32.TaskbarButtonCreated()
 	hwnd, err := win32.CreateWindow(windowExStyle, windowClass, a.title(), windowStyle, x, y, w, h, 0, 0)
 	if err != nil {
 		return err
@@ -456,6 +469,12 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	if a == nil || a.hwnd == 0 || hwnd != a.hwnd {
 		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
 	}
+	if a.taskbarCreated != 0 && msg == a.taskbarCreated {
+		a.taskbar.Release()
+		a.taskbar, _ = win32.NewTaskbar(hwnd) //nolint:errcheck // the taskbar shows no progress then
+		a.updateTaskbar()
+		return 0
+	}
 	switch msg {
 	case win32.WM_SIZE:
 		a.layout()
@@ -561,6 +580,7 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 			win32.DeleteObject(f)
 		}
 		a.theme.Fonts.Close()
+		a.taskbar.Release()
 		win32.PostQuitMessage(0)
 		return 0
 	}

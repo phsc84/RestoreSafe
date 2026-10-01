@@ -154,3 +154,20 @@ func TestCancelConfirm(t *testing.T) {
 		t.Fatalf("close during restore %+v", c)
 	}
 }
+
+func TestProgressCardWhilePlanning(t *testing.T) {
+	t.Parallel()
+	m := &flow.Machine{}
+	m.Start(flow.OpBackup)
+	c := ProgressCardOf(m.Current(), planNow)
+	if c.Line != "Preparing the backup plan…" || c.Fraction != -1 || !c.Cancel.Enabled || strings.Contains(trail(c), "*") {
+		t.Fatalf("before the plan: %+v, trail %q", c, trail(c))
+	}
+	m.PlanShown(samplePlan())
+	if c := ProgressCardOf(m.Current(), planNow); c.Line != "Check the plan, then start the backup." {
+		t.Fatalf("with the plan: %q", c.Line)
+	}
+	if f := RunFolders(m.Current()); f["Documents"].Badge.Text != "DIFF 4" || f["Pictures"].Badge.Text != "FULL" {
+		t.Fatalf("planned types %+v", f)
+	}
+}

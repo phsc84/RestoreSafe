@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
@@ -14,19 +13,13 @@ import (
 	"time"
 )
 
-// opButton is a button of the operation screen.
-type opButton struct {
-	text    string
-	onClick func()
-}
-
 // runState is the worker of the operation in progress; a.machine holds its
 // stage.
 type runState struct {
 	b      *flow.Bridge
 	cancel context.CancelFunc
 	doneCh chan workerEnd
-	report *interact.Report // last preflight report
+	report *interact.Report // last preflight report (operation screen)
 }
 
 // workerEnd is how the worker ended: the workflow's error and the facts of
@@ -47,11 +40,9 @@ func runFacts(res *interact.Result) logging.RunFacts {
 	return facts
 }
 
-// Operation screen timer.
-const elapsedTimerID = 1
-
-// startOperation runs op in a worker goroutine and shows the operation
-// screen.
+// startOperation runs op in a worker goroutine. A backup opens its plan
+// dialog and shows its progress on the Overview; restore and verify use
+// the operation screen.
 func (a *app) startOperation(op flow.Op) {
 	if !a.machine.Start(op) {
 		return
@@ -62,13 +53,17 @@ func (a *app) startOperation(op flow.Op) {
 		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
 	})
 	a.run = r
+	a.logText.Reset()
 	u := flow.NewUI(r.b, questions{a})
 
-	a.showPage(pageOperation)
-	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version+" - "+opTitle(op))
-	win32.SetRichText(a.op.log, "")
-	a.opReport = nil
-	a.setOpScreen(opTitle(op), interact.StatusNone, "Preparing ...", contentLog, false, nil)
+	if op == flow.OpBackup {
+		a.showPage(view.PageOverview)
+		a.refreshRun()
+		a.openPlanDialog()
+	} else {
+		a.showOpScreen(op)
+	}
+	a.updateTaskbar()
 
 	cfg, exeDir := a.opts.Config, a.opts.ExeDir
 	go func() {
@@ -91,87 +86,35 @@ func (a *app) startOperation(op flow.Op) {
 	}()
 }
 
-// setOpScreen sets the operation screen's heading, detail line, content
-// area, progress bar, and buttons (nil: none).
-func (a *app) setOpScreen(title string, status interact.Status, detail string, content opContent, showProgress bool, buttons []opButton) {
-	a.opTitleStatus = status
-	win32.SetText(a.op.title, title)
-	win32.SetText(a.op.detail, detail)
-	a.opContent = content
-	a.opShowProgress = showProgress
-	a.opButtons = nil
-	a.applyOpVisibility()
-	a.setOpButtons(buttons)
-	a.layout()
+// onScreen reports whether the current operation uses the first GUI's
+// operation screen.
+func (a *app) onScreen() bool {
+	r := a.machine.Current()
+	return r != nil && r.Op != flow.OpBackup
 }
 
-// setOpButtons shows the given buttons from the left and hides the rest.
-func (a *app) setOpButtons(buttons []opButton) {
-	a.opButtons = buttons
-	for i, h := range a.op.buttons {
-		if i < len(buttons) {
-			win32.SetText(h, buttons[i].text)
-			win32.Enable(h, true)
-			win32.SetVisible(h, true)
-		} else {
-			setShown(h, false)
-		}
-	}
-	if len(buttons) > 0 {
-		win32.SetFocus(a.op.buttons[0])
-	}
-}
-
-// showPreflight shows the preflight report.
-func (a *app) showPreflight(r interact.Report) {
-	if a.run == nil {
-		return
-	}
-	a.run.report = &r
-	a.opReport = &r
-	win32.SetRichText(a.op.report, reportRTF(r, a.fontFace, a.fontPt))
-	detail := "Check the summary, then start."
-	if r.HasErrors() {
-		detail = "The preflight found errors."
-	}
-	a.setOpScreen(opTitle(a.machine.Current().Op), interact.StatusNone, detail, contentReport, false, nil)
-}
-
-// offerStart shows the start buttons under the preflight.
-func (a *app) offerStart(buttons []opButton) {
-	if a.run == nil {
-		return
-	}
-	a.setOpButtons(buttons)
-}
-
-// startRunning switches to the running screen after the start was
-// confirmed.
-func (a *app) startRunning() {
-	if a.run == nil {
-		return
-	}
+// runStarted records that the user started the backup in the plan dialog.
+func (a *app) runStarted() {
 	a.machine.Confirmed(time.Now())
-	a.setOpScreen(opName(a.machine.Current().Op), interact.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
-	a.setMarquee(true)
-	win32.SetTimer(a.hwnd, elapsedTimerID, 1000)
+	a.refreshRun()
+	a.focusPage()
 }
 
-// setMarquee switches the progress bar between an moving marquee (unknown
-// progress) and a normal bar.
-func (a *app) setMarquee(on bool) {
-	style := win32.Style(a.op.progress)
-	if on == (style&win32.PBS_MARQUEE != 0) {
-		return
+// refreshRun shows the state of the backup on the Overview, in the status
+// bar and on the taskbar button.
+func (a *app) refreshRun() {
+	a.shell.overview.updateRun()
+	a.refreshActivity()
+	a.updateTaskbar()
+}
+
+// refreshActivity shows what happens in the status bar.
+func (a *app) refreshActivity() {
+	text := view.RunActivity(a.machine.Current())
+	if text == "" {
+		text = view.Activity(a.checking)
 	}
-	if on {
-		win32.SetStyle(a.op.progress, style|win32.PBS_MARQUEE)
-		win32.SendMessage(a.op.progress, win32.PBM_SETMARQUEE, 1, 30)
-	} else {
-		win32.SendMessage(a.op.progress, win32.PBM_SETMARQUEE, 0, 0)
-		win32.SetStyle(a.op.progress, style&^win32.PBS_MARQUEE)
-		win32.SendMessage(a.op.progress, win32.PBM_SETRANGE32, 0, 1000)
-	}
+	win32.SetText(a.shell.activity, text)
 }
 
 // onProgress shows the latest progress report.
@@ -184,90 +127,37 @@ func (a *app) onProgress() {
 	if a.machine.Stage() != flow.StageRunning {
 		return
 	}
-	title := p.Step
-	if p.Item != "" {
-		title += " - " + p.Item
-	}
-	win32.SetText(a.op.title, title)
-	f := p.Fraction()
-	a.setMarquee(f < 0)
-	if f >= 0 {
-		win32.SendMessage(a.op.progress, win32.PBM_SETPOS, uintptr(f*1000), 0)
-	}
-	a.progressText = progressText(p)
-	a.updateElapsed()
-}
-
-// progressText describes p's bytes, e.g. "1.2 GiB of 3.4 GiB (35 %)".
-func progressText(p interact.Progress) string {
-	f := p.Fraction()
-	if f < 0 {
-		return fsx.FormatBytesBinary(uint64(max(p.Done, 0)))
-	}
-	return fmt.Sprintf("%s of %s (%d %%)", fsx.FormatBytesBinary(uint64(max(p.Done, 0))), fsx.FormatBytesBinary(uint64(p.Total)), int(f*100))
-}
-
-// updateElapsed refreshes the detail line with the progress and the elapsed
-// time.
-func (a *app) updateElapsed() {
-	if a.machine.Stage() != flow.StageRunning {
+	if a.onScreen() {
+		a.opScreenProgress(p)
+		a.updateTaskbar()
 		return
 	}
-	elapsed := time.Since(a.machine.Current().Started).Truncate(time.Second)
-	text := a.progressText
-	if text == "" {
-		text = "Unlocking keys ..."
-	}
-	win32.SetText(a.op.detail, fmt.Sprintf("%s  ·  %s elapsed", text, formatElapsed(elapsed)))
+	a.refreshRun()
 }
 
-func formatElapsed(d time.Duration) string {
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
-	s := int(d.Seconds()) % 60
-	return fmt.Sprintf("%d:%02d:%02d", h, m, s)
-}
-
-// onOutput appends new output to the log pane.
+// onOutput keeps new output for "Show log" and the operation screen.
 func (a *app) onOutput() {
 	if a.run == nil {
 		return
 	}
 	text := a.run.b.TakeOutput()
 	if text != "" {
+		a.logText.WriteString(text)
 		win32.AppendText(a.op.log, strings.ReplaceAll(text, "\n", "\r\n"))
 	}
 }
 
 // confirmCancel handles Cancel while an operation runs: it asks first once
-// the operation has started.
+// the operation has started (figure 6.3).
 func (a *app) confirmCancel() {
 	switch a.machine.CancelRequested() {
 	case flow.CancelNow:
 		a.cancelRun()
 	case flow.CancelAsk:
-		if a.confirmCancelDialog() {
+		if a.confirm(a.hwnd, view.CancelConfirm(a.machine.Current().Op, false)) {
 			a.cancelRun()
 		}
 	}
-}
-
-func (a *app) confirmCancelDialog() bool {
-	op := a.machine.Current().Op
-	content := map[flow.Op]string{
-		flow.OpBackup:  "Backup sets completed so far are kept; the one being written is removed.",
-		flow.OpRestore: "Directories restored so far are kept; the one being restored will be incomplete.",
-		flow.OpVerify:  "Cancelling a verification changes nothing.",
-	}[op]
-	name := strings.ToLower(opName(op))
-	button, _ := a.taskDialog(win32.TaskDialog{
-		Instruction: fmt.Sprintf("Cancel the running %s?", name),
-		Content:     content,
-		Icon:        win32.TD_WARNING_ICON,
-		Buttons:     []win32.TaskButton{{ID: win32.IDOK, Text: "Cancel " + name}, {ID: win32.IDCANCEL, Text: "Continue"}},
-		Default:     win32.IDCANCEL,
-	})
-	return button == win32.IDOK
 }
 
 // cancelRun cancels the operation: the context stops the running work, and
@@ -281,14 +171,18 @@ func (a *app) cancelRun() {
 	r.cancel()
 	r.b.Close()
 	a.closeModal()
-	win32.SetText(a.op.detail, "Cancelling ... RestoreSafe finishes the current step and cleans up.")
-	a.setMarquee(true)
-	for _, h := range a.op.buttons {
-		win32.Enable(h, false)
+	if a.plan != nil {
+		a.plan.close()
 	}
+	if a.onScreen() {
+		a.opScreenCancelling()
+		a.updateTaskbar()
+		return
+	}
+	a.refreshRun()
 }
 
-// onWorkerDone shows the result screen, or closes the window when that was
+// onWorkerDone shows the result, or closes the window when that was
 // requested while the operation ran.
 func (a *app) onWorkerDone() {
 	r := a.run
@@ -296,54 +190,70 @@ func (a *app) onWorkerDone() {
 		return
 	}
 	end := <-r.doneCh
-	err := end.err
 	r.cancel()
 	a.onOutput()
 	win32.KillTimer(a.hwnd, elapsedTimerID)
 	a.run = nil
 	a.progressText = ""
-	res := r.b.FinalResult()
-	if a.machine.Done(res, err, end.facts, time.Now()) {
+	if a.plan != nil {
+		// The plan blocked the start: the result card says why.
+		a.plan.close()
+	}
+	if a.machine.Done(r.b.FinalResult(), end.err, end.facts, time.Now()) {
 		win32.UnblockShutdown(a.hwnd)
 		win32.DestroyWindow(a.hwnd)
 		return
 	}
-
-	o := operationOutcome(a.machine.Current().Op, res, err)
-	detail := ""
-	var buttons []opButton
-	if res != nil && res.LogPath != "" {
-		detail = "Log file: " + res.LogPath
-		logPath := res.LogPath
-		buttons = append(buttons, opButton{"Open &log", func() { a.open(logPath, true) }})
+	run := a.machine.Current()
+	if a.onScreen() {
+		a.opScreenResult(run, r.report)
+	} else {
+		a.startCheck()
+		a.refreshRun()
+		a.focusPage()
 	}
-	buttons = append(buttons, opButton{"&Back to start", a.backToHome})
-	content := contentLog
-	if o.showReport && r.report != nil {
-		content = contentReportAndLog
+	a.updateTaskbar()
+	if !win32.IsForeground(a.hwnd) {
+		win32.FlashUntilActive(a.hwnd)
 	}
-	a.setOpScreen(statusPrefix(o.status)+o.text, o.status, detail, content, false, buttons)
-	win32.SetFocus(a.op.buttons[len(buttons)-1])
 }
 
-// statusPrefix returns the marker shown before a result line.
-func statusPrefix(s interact.Status) string {
-	if m, _ := statusMarker(s); m != "" {
-		return m + "  "
-	}
-	return ""
-}
-
-// backToHome returns to the Overview and checks the backups again, as
-// the backup directory has changed.
-func (a *app) backToHome() {
+// dismiss ends the shown result: the Overview shows the state again, which
+// is checked anew after the first GUI's operation screen.
+func (a *app) dismiss() {
+	wasOnScreen := a.page == pageOperation
 	a.machine.Dismiss()
 	a.showPage(view.PageOverview)
-	a.startCheck()
+	if wasOnScreen {
+		a.startCheck()
+	}
+	a.refreshShell()
+	a.updateTaskbar()
 	a.focusPage()
 }
 
-// onClose handles closing the window (spec 6.4).
+// showRunLog shows what the operation wrote so far.
+func (a *app) showRunLog() {
+	a.showText(a.hwnd, view.LogTitle, a.logText.String())
+}
+
+// showResultDetails shows the workflow's message of the result card: the
+// plan's preflight when the plan blocked the start.
+func (a *app) showResultDetails() {
+	r := a.machine.Current()
+	if r == nil {
+		return
+	}
+	if r.Started.IsZero() && r.Plan != nil {
+		a.showDetails(a.hwnd, view.PlanDetailsTitle, r.Plan.Details)
+		return
+	}
+	if c := view.ResultCardOf(r); c != nil {
+		a.showText(a.hwnd, view.DetailsOfResult, c.Detail)
+	}
+}
+
+// onClose handles closing the window (spec 6.4, 12.4).
 func (a *app) onClose() {
 	switch a.machine.CloseRequested() {
 	case flow.CloseNow:
@@ -351,7 +261,7 @@ func (a *app) onClose() {
 	case flow.CloseAfterCancel:
 		a.cancelRun()
 	case flow.CloseAsk:
-		if a.confirmCancelDialog() {
+		if a.confirm(a.hwnd, view.CancelConfirm(a.machine.Current().Op, true)) {
 			a.machine.CloseConfirmed()
 			a.cancelRun()
 		}
@@ -382,5 +292,40 @@ func (a *app) onEndSession() {
 	case end := <-r.doneCh:
 		r.doneCh <- end
 	case <-time.After(20 * time.Second):
+	}
+}
+
+// updateTaskbar shows the operation on the taskbar button (spec BR-5):
+// progress while it runs, red after a failure, amber after warnings.
+func (a *app) updateTaskbar() {
+	tb := a.taskbar
+	if tb == nil {
+		return
+	}
+	r := a.machine.Current()
+	switch {
+	case r == nil || r.Stage == flow.StagePlanning:
+		tb.SetState(win32.TaskbarNoProgress)
+	case r.Stage == flow.StageCancelling:
+		tb.SetState(win32.TaskbarPaused)
+	case r.Stage == flow.StageRunning:
+		if f := r.Progress.Fraction(); f >= 0 && r.Progress.Phase != interact.PhaseUnlocking {
+			tb.SetState(win32.TaskbarNormal)
+			tb.SetValue(uint64(f*1000), 1000)
+		} else {
+			tb.SetState(win32.TaskbarIndeterminate)
+		}
+	default:
+		c := view.ResultCardOf(r)
+		switch {
+		case c == nil || c.Tone == view.ToneSuccess || c.Tone == view.ToneNeutral:
+			tb.SetState(win32.TaskbarNoProgress)
+		case c.Tone == view.ToneError:
+			tb.SetState(win32.TaskbarError)
+			tb.SetValue(1000, 1000)
+		default:
+			tb.SetState(win32.TaskbarPaused)
+			tb.SetValue(1000, 1000)
+		}
 	}
 }

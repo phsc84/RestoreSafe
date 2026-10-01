@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-5 done, phase 6 in progress (6a, 6b done) |
+| Status | Agreed 2026-09-30; phases 0-6 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -218,12 +218,13 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - The new shell runs: sidebar, status bar, Overview, "Check details". Until phases 7 and 9, the Backups page has the first GUI's Restore and Verify buttons and the Settings page shows the configuration file and the backup directory (`interim.go`, deleted by those phases). "Back up now…" still opens the first GUI's operation screen until phase 6.
 - Open for the polish of phase 10: tooltips (folder paths, the reason of the next backup type, exact sizes and dates), a Folders card that scrolls beyond five folders (it grows today), and the access-key check of all pages with `Accessibility.ps1`.
 
-## 6b. Phase 6 steps
+## 6b. Phase 6 steps and the state after it
 
 - **6a (done):** `flow.UI` (implements `interact.UI` behind `flow.Dialogs`), `flow.Machine` (stages, Cancel and close decisions), `flow.Speed`; the first GUI's screens implement `Dialogs` (`questions.go`).
 - **6b (done):** view models without windows: `view/plan.go` (plan dialog, new-keys confirmation), `view/run.go` (progress card, Folders card states, status bar, cancel and close confirmations), `view/result.go` (result card, BR-7), `view/credentials.go` (spec 9). The backup writes the size of each set and a `cleanup` fact (spec 11.4) for the result card; the worker reads the run's facts before it reports the end.
-- **6c:** the windows: plan dialog, progress and result cards on the Overview, credential dialogs, taskbar progress and flash, cancel and close task dialogs; backup no longer uses the first GUI's operation screen.
-- **Open for phase 7:** a failed run does not report its log path (`ShowResult` is called only on success), so its result card has no "Show log"; the Backups page lists the run from its log and can offer it there.
+- **6c (done):** the windows: plan dialog (`plandialog.go`, modal to the main window but answered from the main message loop), the run card in place of the hero with progress and result (`runcard.go`), folder states on the Folders card, credential dialogs in the theme (`dialogs.go`), spec-worded cancel and close task dialogs, taskbar progress (`ITaskbarList3`) and flashing. Shared dialog frame and vertical layout: `dialogwin.go`, `stack.go`. Backup no longer uses the operation screen; restore and verify keep it (`opscreen.go`, removed with phases 7 and 8).
+- **Open for phase 7:** "Show log" shows the operation's output so far in a viewer, not the Backups page with the run selected (BR-7); the Backups page brings the log pane. A failed run does not report its log path (`ShowResult` is called only on success); the Backups page lists the run from its log. The Last backup card does not mark a cancelled or failed newest run.
+- **Open for phase 10:** the plan and credential dialogs keep their size when the window moves to a monitor with another DPI while they are open; `Smoke-BackupRestore.ps1` still drives the first GUI's home screen and needs the new names (`RestoreSafePlan`, "&Back up now…", the run card's "Done").
 
 ## 7. Risks
 

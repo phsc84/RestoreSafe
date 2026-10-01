@@ -148,6 +148,8 @@ const (
 
 	WM_DESTROY        = 0x0002
 	WM_SIZE           = 0x0005
+	WM_VSCROLL        = 0x0115
+	SB_BOTTOM         = 7
 	WM_CLOSE          = 0x0010
 	WM_GETMINMAXINFO  = 0x0024
 	WM_SETFONT        = 0x0030

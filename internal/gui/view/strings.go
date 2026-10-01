@@ -191,6 +191,8 @@ const (
 	stepRestore            = "Restore"
 	stepCounted            = "%s %d of %d"
 	progressUnlocking      = "Unlocking keys…"
+	progressPreparing      = "Preparing the backup plan…"
+	progressCheckPlan      = "Check the plan, then start the backup."
 	progressCreatingKeys   = "Creating your keys…"
 	progressSecurityPrompt = "Unlocking keys… Follow the Windows Security prompt."
 	progressCancelling     = "Cancelling… RestoreSafe finishes the current step and cleans up."
@@ -269,7 +271,6 @@ const (
 const (
 	unlockTitle          = "Unlock your backups"
 	unlockIntro          = "Enter the password of your backups."
-	unlockIntroKeys      = "Enter the password for the keys of %s."
 	unlockRecoveryIntro  = "Enter your recovery code as it is written on your note."
 	fieldPassword        = "Password"
 	fieldConfirmPassword = "Confirm password"
@@ -296,4 +297,18 @@ const (
 	retypeIntro          = "Type the code you wrote down, to check your note."
 	attemptsLeft         = "%s attempts left."
 	attemptLeftOne       = "1 attempt left."
+)
+
+// Exported for the windows that show them without a view model.
+const (
+	PlanTitle        = planTitle
+	PlanPreparing    = progressPreparing
+	PlanDetailsTitle = "Backup plan details"
+	PlanColumnFolder = "Folder"
+	PlanColumnType   = "Type"
+	PlanColumnWhy    = "Why"
+	PlanColumnAbout  = "About"
+	ButtonCancel     = buttonCancel
+	LogTitle         = "Log"
+	DetailsOfResult  = "Details"
 )

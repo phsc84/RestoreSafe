@@ -1,6 +1,9 @@
 package widget
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFontsAtEveryDPI(t *testing.T) {
 	for _, dpi := range []Scale{96, 120, 144, 192} {
@@ -29,5 +32,14 @@ func TestFontsAtEveryDPI(t *testing.T) {
 	f.Glyphs = false
 	if got := f.GlyphText(GlyphCheck); got != GlyphCheck.Fallback {
 		t.Fatalf("without the icon font: %q", got)
+	}
+}
+
+func TestMeasureWrappedGrowsWithTheText(t *testing.T) {
+	th, _ := testTheme(t)
+	one := th.Fonts.MeasureWrapped("Short.", TextBody, 300)
+	long := th.Fonts.MeasureWrapped(strings.Repeat("A sentence that wraps. ", 20), TextBody, 300)
+	if one <= 0 || long < 3*one {
+		t.Fatalf("one line %d px, long text %d px", one, long)
 	}
 }

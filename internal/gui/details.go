@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"
+	"strings"
 
 	"golang.org/x/sys/windows"
 )
@@ -31,8 +32,25 @@ const (
 	closeWidth    = 96
 )
 
-// showDetails shows r modal to the main window until the user closes it.
-func (a *app) showDetails(title string, r interact.Report) {
+// showDetails shows the report r modal to owner until the user closes it.
+func (a *app) showDetails(owner win32.HWND, title string, r interact.Report) {
+	a.showViewer(owner, title, func(re win32.HWND) { win32.SetRichText(re, reportRTF(r, a.fontFace, a.fontPt)) })
+}
+
+// showText shows plain text (a log) modal to owner, scrolled to its end.
+func (a *app) showText(owner win32.HWND, title, text string) {
+	a.showViewer(owner, title, func(re win32.HWND) {
+		win32.SendMessage(re, win32.EM_SETTEXTMODE, win32.TM_PLAINTEXT, 0)
+		win32.SendMessage(re, win32.EM_EXLIMITTEXT, 0, 64<<20)
+		win32.SetFont(re, a.monoFont)
+		win32.SetText(re, strings.ReplaceAll(text, "\n", "\r\n"))
+		win32.SendMessage(re, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
+	})
+}
+
+// showViewer shows a read-only rich edit that fill fills, modal to owner,
+// with a Close button.
+func (a *app) showViewer(owner win32.HWND, title string, fill func(re win32.HWND)) {
 	if !detailsClassExists {
 		wc := win32.WndClassEx{
 			WndProc:    windows.NewCallback(detailsProc),
@@ -50,10 +68,10 @@ func (a *app) showDetails(title string, r interact.Report) {
 	const style = win32.WS_POPUP | win32.WS_CAPTION | win32.WS_SYSMENU | win32.WS_THICKFRAME
 	const exStyle = win32.WS_EX_DLGMODALFRAME | win32.WS_EX_CONTROLPARENT
 	frame := win32.WindowRectForClient(win32.Rect{Right: s.Px(detailsWidth), Bottom: s.Px(detailsHeight)}, style, exStyle, a.dpi)
-	owner := win32.WindowRect(a.hwnd)
-	x := owner.Left + (owner.Width()-frame.Width())/2
-	y := owner.Top + (owner.Height()-frame.Height())/3
-	hwnd, err := win32.CreateWindow(exStyle, detailsClass, title, style, x, y, frame.Width(), frame.Height(), a.hwnd, 0)
+	ownerRect := win32.WindowRect(owner)
+	x := ownerRect.Left + (ownerRect.Width()-frame.Width())/2
+	y := ownerRect.Top + (ownerRect.Height()-frame.Height())/3
+	hwnd, err := win32.CreateWindow(exStyle, detailsClass, title, style, x, y, frame.Width(), frame.Height(), owner, 0)
 	if err != nil {
 		return
 	}
@@ -65,12 +83,12 @@ func (a *app) showDetails(title string, r interact.Report) {
 	win32.SetFont(d.close, a.font)
 	win32.SendMessage(d.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
 	win32.SendMessage(d.report, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
-	win32.SetRichText(d.report, reportRTF(r, a.fontFace, a.fontPt))
+	fill(d.report)
 	win32.SetAccessibleName(d.report, title)
 	activeDetails = d
 	d.layout(s)
 
-	win32.Enable(a.hwnd, false)
+	win32.Enable(owner, false)
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	win32.SetFocus(d.close)
 	var msg win32.Msg
@@ -86,8 +104,8 @@ func (a *app) showDetails(title string, r interact.Report) {
 	}
 	// Re-enable the owner before the dialog disappears, so the activation
 	// returns to it.
-	win32.Enable(a.hwnd, true)
-	win32.SetForeground(a.hwnd)
+	win32.Enable(owner, true)
+	win32.SetForeground(owner)
 	win32.DestroyWindow(hwnd)
 	activeDetails = nil
 }

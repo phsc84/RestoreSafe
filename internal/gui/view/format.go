@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -86,4 +87,13 @@ func Duration(d time.Duration) string {
 		return fmt.Sprintf("%d h", minutes/60)
 	}
 	return fmt.Sprintf("%d h %d min", minutes/60, minutes%60)
+}
+
+// Path shows a path the way Windows writes it: "C:\Backups" for
+// "C:/Backups" from config.yaml.
+func Path(p string) string {
+	if p == "" {
+		return ""
+	}
+	return filepath.Clean(p)
 }

@@ -23,6 +23,8 @@ const (
 	browseWidth      = 110
 	checkHeight      = 24
 	destNoteHeight   = 40
+	fieldLabel       = 20
+	fieldHeight      = 26
 )
 
 // opContent is what the content area of the operation screen shows.

@@ -14,6 +14,11 @@ func testTheme(t *testing.T) (*Theme, win32.HWND) {
 	runtime.LockOSThread()
 	t.Cleanup(runtime.UnlockOSThread)
 	useCommonControls6(t)
+	// Like Run: COM stays initialized on the thread, so the accessible
+	// names' COM object stays valid.
+	if err := win32.InitCOM(); err != nil {
+		t.Fatal(err)
+	}
 	if err := win32.InitCommonControls(); err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +192,49 @@ func TestSidebarSelection(t *testing.T) {
 	s.Select(2)
 	if len(chosen) != 4 {
 		t.Fatal("Select must not call OnSelect")
+	}
+}
+
+func TestTrailHighlightsTheCurrentStep(t *testing.T) {
+	th, host := testTheme(t)
+	tr, err := NewTrail(th, host, Light.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	countPill := func(steps []TrailStep) int {
+		tr.Set(steps)
+		px := render(t, tr.HWND(), 400, 24)
+		n := 0
+		for x := int32(0); x < 400; x++ {
+			if px(x, 3) == Light.Selection {
+				n++
+			}
+		}
+		return n
+	}
+	if n := countPill([]TrailStep{{"Unlock keys", StepDone}, {"Back up", StepWaiting}}); n != 0 {
+		t.Fatalf("no current step, but %d pill pixels", n)
+	}
+	if n := countPill([]TrailStep{{"Unlock keys", StepDone}, {"Back up 1 of 2", StepCurrent}, {"Clean up", StepWaiting}}); n < 40 {
+		t.Fatalf("the current step needs its pill, got %d pixels", n)
+	}
+}
+
+func TestProgressBarSwitchesToMarquee(t *testing.T) {
+	_, host := testTheme(t)
+	p, err := NewProgressBar(host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Set(-1)
+	if win32.Style(p.HWND())&win32.PBS_MARQUEE == 0 {
+		t.Fatal("an unknown total shows a marquee")
+	}
+	p.Set(0.5)
+	if win32.Style(p.HWND())&win32.PBS_MARQUEE != 0 {
+		t.Fatal("a known fraction shows the bar")
+	}
+	if pos := win32.SendMessage(p.HWND(), win32.PBM_GETPOS, 0, 0); pos != progressRange/2 {
+		t.Fatalf("position %d", pos)
 	}
 }

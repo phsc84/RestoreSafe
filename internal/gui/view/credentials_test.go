@@ -5,30 +5,28 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestUnlockDialog(t *testing.T) {
 	t.Parallel()
-	keys := &interact.KeyPlan{Created: time.Date(2026, 9, 1, 20, 0, 0, 0, time.Local), Password: true}
-	d := UnlockDialogOf(flow.Question{Prompt: "Enter backup password: "}, keys, planNow)
-	if d.Title != "Unlock your backups" || d.Intro != "Enter the password for the keys of Tue 1 Sep." || d.Error != "" {
+	d := UnlockDialogOf(flow.Question{Prompt: "Enter backup password: "})
+	if d.Title != "Unlock your backups" || d.Intro != "Enter the password of your backups." || d.Error != "" {
 		t.Fatalf("first question %+v", d)
 	}
 	if len(d.Fields) != 1 || !d.Fields[0].Masked || d.OK != "Unlock" || d.Cancel == "" {
 		t.Fatalf("fields %+v", d)
 	}
 
-	d = UnlockDialogOf(flow.Question{Prompt: "Enter backup password: ", Message: "Wrong password. 2 attempt(s) remaining.", Retry: true}, keys, planNow)
+	d = UnlockDialogOf(flow.Question{Prompt: "Enter backup password: ", Message: "Wrong password. 2 attempt(s) remaining.", Retry: true})
 	if d.Error != "Wrong password. 2 attempts left." {
 		t.Fatalf("retry %q", d.Error)
 	}
-	d = UnlockDialogOf(flow.Question{Prompt: "Enter backup password: ", Message: "Wrong password. 1 attempt(s) remaining.", Retry: true}, keys, planNow)
+	d = UnlockDialogOf(flow.Question{Prompt: "Enter backup password: ", Message: "Wrong password. 1 attempt(s) remaining.", Retry: true})
 	if d.Error != "Wrong password. 1 attempt left." {
 		t.Fatalf("last retry %q", d.Error)
 	}
 
-	d = UnlockDialogOf(flow.Question{Prompt: "Enter recovery code: "}, nil, planNow)
+	d = UnlockDialogOf(flow.Question{Prompt: "Enter recovery code: "})
 	if len(d.Fields) != 1 || d.Fields[0].Masked || d.Fields[0].Label != "Recovery code" {
 		t.Fatalf("the recovery code is typed unmasked: %+v", d)
 	}

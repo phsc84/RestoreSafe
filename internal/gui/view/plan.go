@@ -65,7 +65,7 @@ type BackupPlanView struct {
 func BackupPlanOf(p interact.BackupPlan, opts *interact.BackupStartOptions, cfg *config.Config, now time.Time) BackupPlanView {
 	v := BackupPlanView{
 		Title:   planTitle,
-		Heading: fmt.Sprintf(planHeading, folderPhrase(backedUpCount(p)), p.BackupDir),
+		Heading: fmt.Sprintf(planHeading, folderPhrase(backedUpCount(p)), Path(p.BackupDir)),
 		Space:   spaceLine(p),
 		Unlock:  PlanLine{Label: planUnlock, Text: unlockText(p.Keys)},
 		Details: Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true},
@@ -114,7 +114,7 @@ func BackupPlanOf(p interact.BackupPlan, opts *interact.BackupStartOptions, cfg 
 }
 
 func planRow(f interact.FolderPlan, now time.Time) PlanRow {
-	row := PlanRow{Name: f.Name, Path: f.Path, Tone: ToneNeutral}
+	row := PlanRow{Name: f.Name, Path: Path(f.Path), Tone: ToneNeutral}
 	switch {
 	case f.Problem != "":
 		row.Why, row.Tone, row.Glyph = issueText(f.Problem), ToneError, GlyphError
@@ -123,12 +123,13 @@ func planRow(f interact.FolderPlan, now time.Time) PlanRow {
 		row.Why, row.Tone = folderDuplicate, ToneSecondary
 		return row
 	case f.Differential:
-		b := Badge{Kind: BadgeDiff, Text: fmt.Sprintf(badgeDiff, f.DiffNumber), Name: fmt.Sprintf(badgeDiffName, f.DiffNumber)}
+		b := planBadge(f)
 		row.Badge = &b
 		row.Why = fmt.Sprintf(planWhyDiff, ShortDay(f.BaseCreated, now))
 		row.About = Size(f.EstimatedBytes)
 	default:
-		row.Badge = &Badge{Kind: BadgeFull, Text: badgeFull, Name: badgeFullName}
+		b := planBadge(f)
+		row.Badge = &b
 		row.Why = capitalize(f.Reason)
 		row.About = Size(f.AllBytes)
 	}

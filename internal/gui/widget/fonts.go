@@ -89,3 +89,14 @@ func (f *Fonts) Measure(text string, style TextStyle) (w, h int32) {
 	r := win32.DrawText(hdc, text, win32.Rect{}, win32.DT_CALCRECT|win32.DT_SINGLELINE|win32.DT_NOPREFIX)
 	return r.Width(), r.Height()
 }
+
+// MeasureWrapped returns the height in pixels that text needs in style when
+// it wraps at word breaks within width pixels.
+func (f *Fonts) MeasureWrapped(text string, style TextStyle, width int32) int32 {
+	hdc := win32.GetDC(0)
+	defer win32.ReleaseDC(0, hdc)
+	old := win32.SelectFont(hdc, f.handles[style])
+	defer win32.SelectFont(hdc, old)
+	r := win32.DrawText(hdc, text, win32.Rect{Right: width}, win32.DT_CALCRECT|win32.DT_WORDBREAK|win32.DT_NOPREFIX)
+	return r.Height()
+}

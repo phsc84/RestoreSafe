@@ -1,9 +1,12 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
+	"fmt"
+	"slices"
 	"time"
 )
 
@@ -47,6 +50,15 @@ type overviewPage struct {
 	heroPrimary, heroSecondary win32.HWND
 
 	folders, storage, last, keys *card
+
+	// run replaces the hero while a backup runs and shows its result;
+	// resultOf is the run whose result it shows.
+	run      *runCard
+	resultOf *flow.Run
+	// folderStatus are the state labels of the Folders card while a backup
+	// runs; folderSig is the shape they were built for.
+	folderStatus map[string]win32.HWND
+	folderSig    string
 }
 
 func newOverviewPage(a *app) (*overviewPage, error) {
@@ -66,6 +78,9 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	o.heroLink = o.acts.link(panel, view.Button{Text: " ", Enabled: true}, idHeroLink)
 	o.heroPrimary = o.acts.button(panel, view.Button{Text: " "}, idHeroPrimary, true)
 	o.heroSecondary = o.acts.button(panel, view.Button{Text: " "}, idHeroSecondary, false)
+	if o.run, err = newRunCard(a, panel.HWND()); err != nil {
+		return nil, err
+	}
 	for i, c := range []**card{&o.folders, &o.storage, &o.last, &o.keys} {
 		if *c, err = newCard(t, panel.HWND(), uint16(idCardLinks+i), o.acts); err != nil {
 			return nil, err
@@ -81,7 +96,7 @@ func (o *overviewPage) command(id, code uint16) {
 	}
 }
 
-// update shows the current snapshot.
+// update shows the current snapshot and the operation, if any.
 func (o *overviewPage) update() {
 	o.view = view.OverviewOf(o.a.snapshot, o.a.opts.Config, time.Now())
 	t := o.a.theme
@@ -97,6 +112,7 @@ func (o *overviewPage) update() {
 	} else {
 		o.setButton(o.heroSecondary, view.Button{}, idHeroSecondary, false)
 	}
+	o.showRun()
 	o.fillFolders()
 	o.fillStorage()
 	o.fillLastBackup()
@@ -104,18 +120,62 @@ func (o *overviewPage) update() {
 	o.layout()
 }
 
-// setButton shows b on the existing control h, or hides it.
-func (o *overviewPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
-	shown = shown && b.Text != ""
-	if h == o.heroLink {
-		win32.SetText(h, "<a>"+b.Text+"</a>")
-	} else {
-		win32.SetText(h, b.Text)
+// backupRun returns the backup the Overview shows: running, or finished
+// with a result card; nil otherwise. Restore and verify still use the
+// first GUI's operation screen.
+func (o *overviewPage) backupRun() *flow.Run {
+	r := o.a.machine.Current()
+	if r == nil || r.Op != flow.OpBackup {
+		return nil
 	}
-	win32.SetVisible(h, shown)
-	win32.Enable(h, shown && b.Enabled)
-	o.acts[id] = b.Action
-	win32.Invalidate(h)
+	return r
+}
+
+// showRun shows the run card in place of the hero while a backup runs or
+// its result is shown (spec OV-7).
+func (o *overviewPage) showRun() {
+	r := o.backupRun()
+	switch {
+	case r != nil && o.a.machine.Busy():
+		o.resultOf = nil
+		o.run.showProgress(view.ProgressCardOf(r, time.Now()))
+	case r != nil && r.Stage == flow.StageFinished:
+		if o.resultOf != r {
+			if c := view.ResultCardOf(r); c != nil {
+				o.run.showResult(*c)
+				o.resultOf = r
+			} else {
+				o.run.hide()
+			}
+		}
+	default:
+		o.resultOf = nil
+		o.run.hide()
+	}
+	heroShown := o.run.mode == runHidden
+	win32.SetVisible(o.heroIcon.HWND(), heroShown)
+	for _, h := range []win32.HWND{o.heroTitle, o.heroLine} {
+		win32.SetVisible(h, heroShown)
+	}
+	for _, h := range []win32.HWND{o.heroLink, o.heroPrimary, o.heroSecondary} {
+		if !heroShown {
+			setShown(h, false)
+		}
+	}
+}
+
+// updateRun shows a progress report: the run card and the Folders card
+// change in place.
+func (o *overviewPage) updateRun() {
+	if o.run.mode != runProgress {
+		o.update()
+		return
+	}
+	o.showRun()
+	if !o.updateFolderStates() {
+		o.fillFolders()
+		o.layout()
+	}
 }
 
 func (o *overviewPage) fillFolders() {
@@ -124,8 +184,26 @@ func (o *overviewPage) fillFolders() {
 	c := o.folders
 	c.reset()
 	c.heading(v.Title, &v.Link)
+	states := o.runStates()
+	o.folderStatus = map[string]win32.HWND{}
+	o.folderSig = folderSig(states)
 	for _, row := range v.Rows {
 		name := c.label(row.Name, widget.TextBody, t.Palette.Text)
+		if state, ok := states[row.Name]; ok {
+			icon := cell{dip: iconWidth}
+			if state.Glyph != view.GlyphNone {
+				if i, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall); err == nil {
+					c.panel.Adopt(i.HWND())
+					i.Set(glyphOf(state.Glyph), toneColor(t.Palette, state.Tone), widget.NoCircle, "")
+					icon.hwnd = i.HWND()
+				}
+			}
+			b := c.badge(state.Badge)
+			status := c.label(state.Text, widget.TextSmall, toneColor(t.Palette, state.Tone))
+			o.folderStatus[row.Name] = status
+			c.row(cardRowHeight, icon, cell{hwnd: name, dip: nameWidth}, cell{hwnd: b.HWND(), px: b.Width(), height: 18}, cell{hwnd: status, fill: true})
+			continue
+		}
 		if row.Problem != "" {
 			c.row(cardRowHeight, cell{hwnd: name, dip: nameWidth}, cell{hwnd: c.label(row.Problem, widget.TextSmall, toneColor(t.Palette, row.Tone)), fill: true})
 			continue
@@ -140,13 +218,56 @@ func (o *overviewPage) fillFolders() {
 	}
 }
 
+// runStates are the folders' states while a backup runs (spec BR-4).
+func (o *overviewPage) runStates() map[string]view.FolderProgress {
+	if r := o.backupRun(); r != nil && o.a.machine.Busy() {
+		return view.RunFolders(r)
+	}
+	return nil
+}
+
+// updateFolderStates changes the state texts in place; it returns false
+// when the rows must be built again (an icon appeared, the run ended).
+func (o *overviewPage) updateFolderStates() bool {
+	states := o.runStates()
+	if states == nil || folderSig(states) != o.folderSig {
+		return false
+	}
+	t := o.a.theme
+	for name, s := range states {
+		if h, ok := o.folderStatus[name]; ok {
+			win32.SetText(h, s.Text)
+			o.folders.panel.SetColor(h, toneColor(t.Palette, s.Tone))
+		}
+	}
+	return true
+}
+
+// folderSig describes the shape of the folder rows: which folder has which
+// icon.
+func folderSig(states map[string]view.FolderProgress) string {
+	if states == nil {
+		return ""
+	}
+	names := make([]string, 0, len(states))
+	for name := range states {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	sig := ""
+	for _, name := range names {
+		sig += fmt.Sprintf("%s:%d:%s;", name, states[name].Glyph, states[name].Badge.Text)
+	}
+	return sig
+}
+
 func (o *overviewPage) fillStorage() {
 	t := o.a.theme
 	v := o.view.Storage
 	c := o.storage
 	c.reset()
 	c.row(cardHeadingHeight,
-		cell{hwnd: c.label(v.Path, widget.TextStrong, t.Palette.Text), fill: true},
+		cell{hwnd: c.panel.PathLabel(v.Path, widget.TextStrong, t.Palette.Text), fill: true},
 		cell{hwnd: c.label(v.Used, widget.TextSmall, t.Palette.TextSecondary), px: measure(t, v.Used, widget.TextSmall)})
 	if len(v.Segments) == 0 {
 		return
@@ -227,39 +348,11 @@ func (o *overviewPage) layout() {
 	area := widget.NewArea(s, win32.ClientRect(o.panel.HWND()))
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
 
-	hero := widget.NewArea(s, area.Top(heroHeight))
-	iconRect := hero.Left(widget.HeroIconSize)
-	iconRect.Top += (iconRect.Height() - s.Px(widget.HeroIconSize)) / 2
-	iconRect.Bottom = iconRect.Top + s.Px(widget.HeroIconSize)
-	win32.SetWindowPos(o.heroIcon.HWND(), iconRect)
-	hero.Left(heroGap)
-	for _, b := range []win32.HWND{o.heroSecondary, o.heroPrimary} {
-		if !win32.IsWindowVisible(b) {
-			continue
-		}
-		w, _ := t.Fonts.Measure(win32.Text(b), widget.TextBody)
-		width := max(w+s.Px(buttonPadding), s.Px(minButtonWidth))
-		r := hero.RightPx(width)
-		r.Top += (r.Height() - s.Px(widget.ButtonHeight)) / 2
-		r.Bottom = r.Top + s.Px(widget.ButtonHeight)
-		win32.SetWindowPos(b, r)
-		hero.Right(8)
+	if o.run.mode != runHidden {
+		o.run.place(area.Top(o.run.height()))
+	} else {
+		o.layoutHero(area.Top(heroHeight))
 	}
-	text := widget.NewArea(s, hero.Rest())
-	text.Inset(0, (heroHeight-heroTitleHeight-heroLineHeight)/2, 12, 0)
-	win32.SetWindowPos(o.heroTitle, text.Top(heroTitleHeight))
-	lineRow := text.Top(heroLineHeight)
-	lineW, _ := t.Fonts.Measure(win32.Text(o.heroLine), widget.TextSmall)
-	linkW, _ := t.Fonts.Measure(o.view.Hero.Link.Text, widget.TextSmall)
-	linkW += s.Px(linkPadding)
-	lineW = min(lineW+s.Px(4), max(lineRow.Width()-linkW, 0))
-	line := lineRow
-	line.Right = line.Left + lineW
-	win32.SetWindowPos(o.heroLine, line)
-	link := lineRow
-	link.Left = line.Right + s.Px(8)
-	link.Right = min(link.Left+linkW, lineRow.Right)
-	win32.SetWindowPos(o.heroLink, link)
 
 	area.Top(widget.CardGap)
 	top := area.Columns(widget.CardGap, 5, 4)
@@ -276,14 +369,19 @@ func (o *overviewPage) layout() {
 // restyle applies new fonts after a DPI change.
 func (o *overviewPage) restyle() {
 	o.panel.Restyle()
-	for _, c := range []*card{o.folders, o.storage, o.last, o.keys} {
+	for _, c := range []*card{o.folders, o.storage, o.last, o.keys, o.run.card} {
 		c.panel.Restyle()
 	}
 	o.update()
 }
 
-// focus puts the keyboard focus on the hero's primary action.
+// focus puts the keyboard focus on the run card or the hero's primary
+// action.
 func (o *overviewPage) focus() {
+	if o.run.mode != runHidden {
+		o.run.focus()
+		return
+	}
 	if win32.IsEnabled(o.heroPrimary) {
 		win32.SetFocus(o.heroPrimary)
 	}
@@ -492,4 +590,57 @@ func glyphOf(g view.Glyph) widget.Glyph {
 func measure(t *widget.Theme, text string, style widget.TextStyle) int32 {
 	w, _ := t.Fonts.Measure(text, style)
 	return w + t.Scale.Px(4)
+}
+
+// layoutHero places the hero in r.
+func (o *overviewPage) layoutHero(r win32.Rect) {
+	t := o.a.theme
+	s := t.Scale
+	hero := widget.NewArea(s, r)
+	iconRect := hero.Left(widget.HeroIconSize)
+	iconRect.Top += (iconRect.Height() - s.Px(widget.HeroIconSize)) / 2
+	iconRect.Bottom = iconRect.Top + s.Px(widget.HeroIconSize)
+	win32.SetWindowPos(o.heroIcon.HWND(), iconRect)
+	hero.Left(heroGap)
+	for _, b := range []win32.HWND{o.heroSecondary, o.heroPrimary} {
+		if !win32.IsWindowVisible(b) {
+			continue
+		}
+		w, _ := t.Fonts.Measure(win32.Text(b), widget.TextBody)
+		width := max(w+s.Px(buttonPadding), s.Px(minButtonWidth))
+		r := hero.RightPx(width)
+		r.Top += (r.Height() - s.Px(widget.ButtonHeight)) / 2
+		r.Bottom = r.Top + s.Px(widget.ButtonHeight)
+		win32.SetWindowPos(b, r)
+		hero.Right(8)
+	}
+	text := widget.NewArea(s, hero.Rest())
+	text.Inset(0, (heroHeight-heroTitleHeight-heroLineHeight)/2, 12, 0)
+	win32.SetWindowPos(o.heroTitle, text.Top(heroTitleHeight))
+	lineRow := text.Top(heroLineHeight)
+	lineW, _ := t.Fonts.Measure(win32.Text(o.heroLine), widget.TextSmall)
+	linkW, _ := t.Fonts.Measure(o.view.Hero.Link.Text, widget.TextSmall)
+	linkW += s.Px(linkPadding)
+	lineW = min(lineW+s.Px(4), max(lineRow.Width()-linkW, 0))
+	line := lineRow
+	line.Right = line.Left + lineW
+	win32.SetWindowPos(o.heroLine, line)
+	link := lineRow
+	link.Left = line.Right + s.Px(8)
+	link.Right = min(link.Left+linkW, lineRow.Right)
+	win32.SetWindowPos(o.heroLink, link)
+}
+
+// setButton shows b on the existing control h, or hides it.
+func (o *overviewPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
+	shown = shown && b.Text != ""
+	if h == o.heroLink {
+		win32.SetText(h, "<a>"+b.Text+"</a>")
+	} else {
+		win32.SetText(h, b.Text)
+	}
+	win32.SetVisible(h, shown)
+	win32.Enable(h, shown && b.Enabled)
+	o.acts[id] = b.Action
+	win32.Invalidate(h)
 }

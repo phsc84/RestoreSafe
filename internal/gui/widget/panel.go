@@ -252,3 +252,15 @@ func (p *Panel) Show(shown bool) {
 	win32.SetVisible(p.hwnd, shown)
 	win32.Enable(p.hwnd, shown)
 }
+
+// Paragraph creates a text control that wraps its text at word breaks;
+// MeasureWrapped tells the height it needs.
+func (p *Panel) Paragraph(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX, 0)
+}
+
+// PathLabel creates a one-line text control that shortens a path in its
+// text in the middle ("C:\Users\...\Backups") when it does not fit.
+func (p *Panel) PathLabel(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_PATHELLIPSIS, 0)
+}

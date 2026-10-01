@@ -104,7 +104,7 @@ func (a *app) refreshShell() {
 	}
 	a.shell.overview.update()
 	a.shell.backups.update()
-	win32.SetText(a.shell.activity, view.Activity(a.checking))
+	a.refreshActivity()
 	win32.SetText(a.shell.info, a.shell.overview.view.Status)
 	a.layout()
 }
@@ -121,7 +121,7 @@ func (a *app) restyleShell() {
 // shortcut handles the keyboard shortcuts of spec 3.2; it reports whether
 // it handled the key.
 func (a *app) shortcut(vk uintptr) bool {
-	if a.page == pageOperation || a.modal != 0 {
+	if a.page == pageOperation || a.modal != 0 || a.plan != nil {
 		return false
 	}
 	ctrl := win32.KeyDown(win32.VK_CONTROL)
@@ -153,7 +153,7 @@ func (a *app) do(action view.Action) {
 		a.startCheck()
 	case view.ActionCheckDetails:
 		if a.snapshot != nil {
-			a.showDetails(view.DetailsTitle, a.snapshot.Check.Report())
+			a.showDetails(a.hwnd, view.DetailsTitle, a.snapshot.Check.Report())
 		}
 	case view.ActionShowInBackups:
 		a.showPage(view.PageBackups)
@@ -161,6 +161,14 @@ func (a *app) do(action view.Action) {
 		a.showPage(view.PageSettings)
 	case view.ActionEditConfig:
 		a.open(a.opts.ConfigPath, true)
+	case view.ActionCancel:
+		a.confirmCancel()
+	case view.ActionShowLog:
+		a.showRunLog()
+	case view.ActionShowDetails:
+		a.showResultDetails()
+	case view.ActionDismiss:
+		a.dismiss()
 	case view.ActionOpenBackupDir:
 		a.open(a.backupDir, false)
 	}

@@ -5,20 +5,34 @@ import (
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"
-	"strings"
 )
 
-// questions shows the questions of an operation on the first GUI's
-// operation screen and its dialogs (replaced in plan phase 6c).
+// questions shows the questions of an operation: the backup plan dialog
+// and the credential dialogs; restore and verify still show their plans on
+// the first GUI's operation screen (replaced in plan phases 7 and 8).
 type questions struct{ a *app }
 
 var _ flow.Dialogs = questions{}
 
-// BackupPlan shows the plan as its preflight report.
+// BackupPlan shows the plan in the plan dialog.
 func (q questions) BackupPlan(p interact.BackupPlan, answer func()) {
 	q.a.machine.PlanShown(p)
-	q.a.showPreflight(p.Details)
+	if q.a.plan != nil {
+		q.a.plan.setPlan(p)
+	}
+	q.a.refreshRun()
 	answer()
+}
+
+// ConfirmBackupStart offers Start (unless the plan is blocked), the other
+// plans in opts, and Cancel in the plan dialog. Choosing another plan
+// shows it, and this question is asked again.
+func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer func(interact.BackupStart, error)) {
+	if q.a.plan == nil {
+		answer(interact.BackupCancel, nil)
+		return
+	}
+	q.a.plan.ask(opts, answer)
 }
 
 func (q questions) RestorePlan(p interact.RestorePlan, answer func()) {
@@ -43,43 +57,10 @@ func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 	})
 }
 
-// ConfirmBackupStart offers Start (unless the plan is blocked), the other
-// plans in opts, and Cancel. Choosing another plan shows it, and this
-// question is asked again.
-func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer func(interact.BackupStart, error)) {
-	a := q.a
-	choose := func(choice interact.BackupStart) func() { return func() { answer(choice, nil) } }
-	var buttons []opButton
-	if !opts.Blocked {
-		buttons = append(buttons, opButton{"&Start backup", func() { a.startRunning(); answer(interact.BackupAsPlanned, nil) }})
-	}
-	if opts.OfferFull {
-		buttons = append(buttons, opButton{"&Full backup", choose(interact.BackupFull)})
-	}
-	if opts.OfferNewKeys {
-		buttons = append(buttons, opButton{"&New keys + full backup", func() {
-			button, _ := a.taskDialog(win32.TaskDialog{
-				Instruction: "Create new keys?",
-				Content: "New keys will be created and every source directory gets a full backup. " +
-					"Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).",
-				Icon:    win32.TD_WARNING_ICON,
-				Buttons: []win32.TaskButton{{ID: win32.IDOK, Text: "Create new keys"}, {ID: win32.IDCANCEL, Text: "Back"}},
-			})
-			if button == win32.IDOK {
-				answer(interact.BackupNewKeys, nil)
-			}
-		}})
-	}
-	if opts.OfferAutomatic {
-		buttons = append(buttons, opButton{"&Automatic plan", choose(interact.BackupAutomatic)})
-	}
-	buttons = append(buttons, opButton{"Cancel", choose(interact.BackupCancel)})
-	a.offerStart(buttons)
-}
-
-// ChooseUnlockMethod offers the regular credentials and the recovery code.
+// ChooseUnlockMethod offers the regular credentials and the recovery code
+// (restore and verify; the unlock dialog takes it over in plan phase 7).
 func (q questions) ChooseUnlockMethod(regular string, answer func(bool, error)) {
-	button, _ := q.a.taskDialog(win32.TaskDialog{
+	button, _ := q.a.taskDialog(q.a.hwnd, win32.TaskDialog{
 		Instruction:  "How do you want to unlock the backup?",
 		Buttons:      []win32.TaskButton{{ID: 100, Text: "Unlock with " + regular}, {ID: 101, Text: "Unlock with the recovery code"}},
 		CommandLinks: true,
@@ -94,19 +75,18 @@ func (q questions) ChooseUnlockMethod(regular string, answer func(bool, error)) 
 	}
 }
 
-// Password asks for a secret without echo.
-func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
-	label := "Password:"
-	if strings.Contains(strings.ToLower(qu.Prompt), "recovery code") {
-		label = "Recovery code:"
+// keys returns the key plan of the backup being run; nil for restore and
+// verify.
+func (q questions) keys() *interact.KeyPlan {
+	if r := q.a.machine.Current(); r != nil && r.Plan != nil {
+		return &r.Plan.Keys
 	}
-	values, ok := q.a.runInputDialog(inputDialog{
-		title:          "RestoreSafe",
-		heading:        strings.TrimRight(strings.TrimSpace(qu.Prompt), ":"),
-		message:        qu.Message,
-		messageIsError: qu.Retry,
-		fields:         []inputField{{label: label, masked: true}},
-	})
+	return nil
+}
+
+// Password asks for the password or the recovery code (figure 9.1).
+func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
+	values, ok := q.a.runCredentialDialog(view.UnlockDialogOf(qu))
 	if !ok {
 		answer(nil, interact.ErrCancelled)
 		return
@@ -114,18 +94,9 @@ func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
 	answer(values[0], nil)
 }
 
-// NewPassword asks for a new password and its confirmation in one dialog.
-func (q questions) NewPassword(qu flow.Question, confirmPrompt string, answer func(pw, confirm []byte, ok bool)) {
-	values, ok := q.a.runInputDialog(inputDialog{
-		title:          "RestoreSafe - new keys",
-		heading:        "Choose the backup password",
-		message:        qu.Message,
-		messageIsError: qu.Retry,
-		fields: []inputField{
-			{label: strings.TrimRight(strings.TrimSpace(qu.Prompt), ":") + ":", masked: true},
-			{label: strings.TrimRight(strings.TrimSpace(confirmPrompt), ":") + ":", masked: true},
-		},
-	})
+// NewPassword asks for a new password and its confirmation (figure 9.2).
+func (q questions) NewPassword(qu flow.Question, _ string, answer func(pw, confirm []byte, ok bool)) {
+	values, ok := q.a.runCredentialDialog(view.NewPasswordDialogOf(qu, q.newKeys()))
 	if !ok {
 		answer(nil, nil, false)
 		return
@@ -133,30 +104,23 @@ func (q questions) NewPassword(qu flow.Question, confirmPrompt string, answer fu
 	answer(values[0], values[1], true)
 }
 
-// RecoveryCode shows the new recovery code once, in a dialog that cannot
-// copy it (docs/SPEC-restoresafe-gui.md, section 13.3).
+// newKeys returns the plan of the keys being created.
+func (q questions) newKeys() interact.KeyPlan {
+	if k := q.keys(); k != nil {
+		return *k
+	}
+	return interact.KeyPlan{New: true, Password: true}
+}
+
+// RecoveryCode shows the new recovery code once (figure 9.3).
 func (q questions) RecoveryCode(code string, answer func()) {
-	q.a.runInputDialog(inputDialog{
-		title:   "RestoreSafe - recovery code",
-		heading: "Your recovery code",
-		code:    strings.Join(view.CodeLines(code), "\r\n"),
-		note: "This code alone restores every backup made with these keys, even without password or YubiKey. " +
-			"Treat it like the key to a safe.\r\n\r\nWrite it down on paper and store it in a safe place, never next to your backups. It is shown only this once.",
-		okText:   "I have written it down",
-		noCancel: true,
-	})
+	q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys()))
 	answer()
 }
 
 // RetypeRecoveryCode asks for the recovery code shown before.
 func (q questions) RetypeRecoveryCode(qu flow.Question, answer func(string, error)) {
-	values, ok := q.a.runInputDialog(inputDialog{
-		title:          "RestoreSafe - recovery code",
-		heading:        "Type the recovery code",
-		message:        qu.Message,
-		messageIsError: qu.Retry,
-		fields:         []inputField{{label: "Type the code you wrote down, to confirm it is correct:"}},
-	})
+	values, ok := q.a.runCredentialDialog(view.RetypeDialogOf(qu, q.newKeys()))
 	if !ok {
 		answer("", interact.ErrCancelled)
 		return
@@ -166,15 +130,6 @@ func (q questions) RetypeRecoveryCode(qu flow.Question, answer func(string, erro
 
 // SpareYubiKey asks to connect the spare YubiKey.
 func (q questions) SpareYubiKey(qu flow.Question, answer func(bool)) {
-	content := "Remove YubiKey 1 and insert your spare YubiKey, then click Continue."
-	if qu.Message != "" {
-		content = qu.Message + "\n\n" + content
-	}
-	button, _ := q.a.taskDialog(win32.TaskDialog{
-		Instruction: "Insert your spare YubiKey",
-		Content:     content,
-		Icon:        win32.TD_INFORMATION_ICON,
-		Buttons:     []win32.TaskButton{{ID: win32.IDOK, Text: "Continue"}, {ID: win32.IDCANCEL, Text: "Cancel"}},
-	})
-	answer(button == win32.IDOK)
+	_, ok := q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys()))
+	answer(ok)
 }

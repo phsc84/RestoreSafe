@@ -47,6 +47,16 @@ func ProgressCardOf(r *flow.Run, now time.Time) ProgressCard {
 		Cancel:   Button{Text: buttonCancel, Action: ActionCancel, Enabled: true},
 		Log:      Button{Text: linkShowLog, Action: ActionShowLog, Enabled: true},
 	}
+	if r.Stage == flow.StagePlanning {
+		c.Line, c.Fraction = progressPreparing, -1
+		if r.Plan != nil {
+			c.Line = progressCheckPlan
+		}
+		for i := range c.Steps {
+			c.Steps[i].State = StepWaiting
+		}
+		return c
+	}
 	if r.Stage == flow.StageCancelling {
 		c.Line, c.Fraction = progressCancelling, -1
 		c.Cancel = Button{Text: buttonCancelling, Action: ActionCancel}
@@ -193,6 +203,8 @@ type FolderProgress struct {
 	Text  string
 	Tone  Tone
 	Glyph Glyph
+	// Badge is the type the run gives the folder.
+	Badge Badge
 }
 
 // RunFolders returns the state of each folder the backup r backs up, by
@@ -202,13 +214,20 @@ func RunFolders(r *flow.Run) map[string]FolderProgress {
 		return nil
 	}
 	states := map[string]FolderProgress{}
+	set := func(name, text string, tone Tone, glyph Glyph) {
+		s, ok := states[name]
+		if ok {
+			s.Text, s.Tone, s.Glyph = text, tone, glyph
+			states[name] = s
+		}
+	}
 	for _, f := range r.Plan.Folders {
 		if f.Problem == "" && !f.Skipped {
-			states[f.Name] = FolderProgress{Text: folderWaiting, Tone: ToneSecondary}
+			states[f.Name] = FolderProgress{Text: folderWaiting, Tone: ToneSecondary, Badge: planBadge(f)}
 		}
 	}
 	for _, f := range r.Finished {
-		states[f.Name] = FolderProgress{Text: fmt.Sprintf(folderDone, Size(f.Bytes)), Tone: ToneSuccess, Glyph: GlyphCheck}
+		set(f.Name, fmt.Sprintf(folderDone, Size(f.Bytes)), ToneSuccess, GlyphCheck)
 	}
 	p := r.Progress
 	if p.Phase != interact.PhaseBackingUp || p.Item == "" {
@@ -223,13 +242,21 @@ func RunFolders(r *flow.Run) map[string]FolderProgress {
 		if f := p.Fraction(); f >= 0 {
 			text = fmt.Sprintf(folderBackingUpPct, int(f*100))
 		}
-		states[p.Item] = FolderProgress{Text: text, Tone: ToneNeutral}
+		set(p.Item, text, ToneNeutral, GlyphNone)
 	case r.Stage == flow.StageCancelling || r.Cancelled:
-		states[p.Item] = FolderProgress{Text: folderCancelled, Tone: ToneSecondary}
+		set(p.Item, folderCancelled, ToneSecondary, GlyphNone)
 	case r.Stage == flow.StageFinished && r.Err != nil:
-		states[p.Item] = FolderProgress{Text: folderFailed, Tone: ToneError, Glyph: GlyphError}
+		set(p.Item, folderFailed, ToneError, GlyphError)
 	}
 	return states
+}
+
+// planBadge is the badge of the type the plan gives f.
+func planBadge(f interact.FolderPlan) Badge {
+	if f.Differential {
+		return Badge{Kind: BadgeDiff, Text: fmt.Sprintf(badgeDiff, f.DiffNumber), Name: fmt.Sprintf(badgeDiffName, f.DiffNumber)}
+	}
+	return Badge{Kind: BadgeFull, Text: badgeFull, Name: badgeFullName}
 }
 
 // RunActivity is the left part of the status bar while r runs, e.g.

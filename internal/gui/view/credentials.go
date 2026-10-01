@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 )
 
 // Field is an edit field of a credential dialog.
@@ -34,8 +33,9 @@ type CredentialDialog struct {
 }
 
 // UnlockDialogOf words the question for the password or the recovery code
-// (figure 9.1). keys are the keys being unlocked, nil when unknown.
-func UnlockDialogOf(q flow.Question, keys *interact.KeyPlan, now time.Time) CredentialDialog {
+// (figure 9.1). Naming the keys by their date (CR-1) matters only when a
+// restore or verification spans several key sets; it comes with them.
+func UnlockDialogOf(q flow.Question) CredentialDialog {
 	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Error: retryError(q)}
 	if strings.Contains(strings.ToLower(q.Prompt), "recovery code") {
 		d.Intro = unlockRecoveryIntro
@@ -43,9 +43,6 @@ func UnlockDialogOf(q flow.Question, keys *interact.KeyPlan, now time.Time) Cred
 		return d
 	}
 	d.Intro = unlockIntro
-	if keys != nil && !keys.Created.IsZero() {
-		d.Intro = fmt.Sprintf(unlockIntroKeys, Day(keys.Created, now))
-	}
 	d.Fields = []Field{{Label: fieldPassword, Masked: true}}
 	return d
 }
