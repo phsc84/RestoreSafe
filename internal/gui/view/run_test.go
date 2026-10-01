@@ -132,7 +132,7 @@ func TestRunFoldersMirrorTheBackup(t *testing.T) {
 		t.Fatal("a folder that is not backed up has no run state")
 	}
 
-	m.Done(nil, errors.New("disk full"), m.Current().Facts, planNow)
+	m.Done(flow.End{Err: errors.New("disk full")}, planNow)
 	if f := RunFolders(m.Current()); f["Pictures"].Text != "Failed" || f["Pictures"].Tone != ToneError {
 		t.Fatalf("failed folder %+v", f["Pictures"])
 	}

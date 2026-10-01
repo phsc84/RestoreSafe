@@ -67,6 +67,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		return err
 	}
 	defer log.Close()
+	u.LogStarted(logPath)
 
 	removeLeftoverTempParts(backupDir, log)
 

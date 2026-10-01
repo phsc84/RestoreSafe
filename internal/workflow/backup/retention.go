@@ -9,11 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 )
-
-var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
 // applyRetentionPolicy deletes the backup sets that plan.Retention selects
 // for the source directories, then the log files no longer needed. Files
@@ -180,8 +177,8 @@ func deleteOrphanLogFiles(backupDir string) ([]string, error) {
 		if de.IsDir() {
 			continue
 		}
-		matches := logFilePattern.FindStringSubmatch(de.Name())
-		if matches == nil || active[matches[2]] || legacyLogs[de.Name()] {
+		_, runID, isLog := naming.ParseLogFileName(de.Name())
+		if !isLog || active[string(runID)] || legacyLogs[de.Name()] {
 			continue
 		}
 		if err := os.Remove(filepath.Join(backupDir, de.Name())); err != nil {

@@ -234,3 +234,16 @@ func DirectoryBaseName(path string) string {
 	base := filepath.Base(strings.TrimRight(filepath.Clean(path), string(filepath.Separator)))
 	return base
 }
+
+// logFilePattern matches the log file of a 2.0 backup run:
+// {YYYY-MM-DD}_{runID}.log.
+var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
+
+// ParseLogFileName parses the name of a run's log file (see LogFileName).
+func ParseLogFileName(basename string) (date string, runID BackupID, ok bool) {
+	m := logFilePattern.FindStringSubmatch(basename)
+	if m == nil {
+		return "", "", false
+	}
+	return m[1], BackupID(m[2]), true
+}

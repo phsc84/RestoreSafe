@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"fmt"
@@ -174,7 +173,7 @@ func TestMachineLifecycle(t *testing.T) {
 	if m.CloseRequested() != CloseAfterCancel {
 		t.Fatal("closing while cancelling waits for the worker")
 	}
-	if !m.Done(nil, errors.New("Backup cancelled."), logging.RunFacts{}, now) || m.Stage() != StageFinished || !m.Current().Cancelled {
+	if !m.Done(End{Err: errors.New("Backup cancelled.")}, now) || m.Stage() != StageFinished || !m.Current().Cancelled {
 		t.Fatal("the window closes once the worker has finished")
 	}
 	if !m.Start(OpBackup) {
@@ -189,7 +188,7 @@ func TestMachineClosingWhilePlanningCancels(t *testing.T) {
 	if m.CloseRequested() != CloseAfterCancel {
 		t.Fatal("closing while planning cancels and closes")
 	}
-	if !m.Done(nil, nil, logging.RunFacts{}, time.Now()) {
+	if !m.Done(End{}, time.Now()) {
 		t.Fatal("the window closes when the worker is done")
 	}
 	m.Dismiss()
@@ -276,7 +275,7 @@ func TestMachineRecordsTheFoldersBackedUp(t *testing.T) {
 	if f := m.Current().Finished; len(f) != 1 || f[0] != (FolderDone{"Docs", 100}) {
 		t.Fatalf("after the first folder: %+v", f)
 	}
-	m.Done(&interact.Result{}, nil, logging.RunFacts{}, now)
+	m.Done(End{Result: &interact.Result{}}, now)
 	if f := m.Current().Finished; len(f) != 2 || f[1] != (FolderDone{"Pics", 7}) {
 		t.Fatalf("a successful run finishes its last folder: %+v", f)
 	}
@@ -285,7 +284,7 @@ func TestMachineRecordsTheFoldersBackedUp(t *testing.T) {
 	failed.Start(OpBackup)
 	failed.Confirmed(now)
 	failed.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 1, Item: "Docs", Done: 5}, now)
-	failed.Done(nil, errors.New("disk full"), logging.RunFacts{}, now)
+	failed.Done(End{Err: errors.New("disk full")}, now)
 	if f := failed.Current().Finished; len(f) != 0 {
 		t.Fatalf("a failed folder is not finished: %+v", f)
 	}

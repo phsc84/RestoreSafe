@@ -994,6 +994,7 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 | `ShowRestorePlan` | Restore page 4 (8); its `Details` for "Show details". |
 | `ShowVerifyPlan` | Verify dialog (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3), restore result page (8). |
+| `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (new in 2.0; the workflows call it after opening the log). |
 | `ConfirmStart` | **Restore…** on page 4, **Verify…** in figure 7.3. |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |

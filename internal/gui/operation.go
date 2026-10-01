@@ -31,12 +31,12 @@ type workerEnd struct {
 
 // runFacts reads the facts of the run's log; it runs on the worker, as the
 // log may be on a slow network share. Without a log (the run failed before
-// it reported its result) there are none.
-func runFacts(res *interact.Result) logging.RunFacts {
-	if res == nil || res.LogPath == "" {
+// it opened one) there are none.
+func runFacts(logPath string) logging.RunFacts {
+	if logPath == "" {
 		return logging.RunFacts{}
 	}
-	facts, _ := logging.ReadFacts(res.LogPath) //nolint:errcheck // the result card does without
+	facts, _ := logging.ReadFacts(logPath) //nolint:errcheck // the result card does without
 	return facts
 }
 
@@ -72,7 +72,7 @@ func (a *app) startOperation(op flow.Op) {
 			if p := recover(); p != nil {
 				err = fmt.Errorf("Internal error: %v", p)
 			}
-			r.doneCh <- workerEnd{err, runFacts(r.b.FinalResult())}
+			r.doneCh <- workerEnd{err, runFacts(r.b.LogPath())}
 			win32.PostMessage(a.hwnd, msgWorkerDone, 0, 0) //nolint:errcheck
 		}()
 		switch op {
@@ -199,7 +199,7 @@ func (a *app) onWorkerDone() {
 		// The plan blocked the start: the result card says why.
 		a.plan.close()
 	}
-	if a.machine.Done(r.b.FinalResult(), end.err, end.facts, time.Now()) {
+	if a.machine.Done(flow.End{Result: r.b.FinalResult(), Err: end.err, Facts: end.facts, LogPath: r.b.LogPath()}, time.Now()) {
 		win32.UnblockShutdown(a.hwnd)
 		win32.DestroyWindow(a.hwnd)
 		return

@@ -103,6 +103,9 @@ func (e *previewEnv) previewAndRun(t *testing.T, answer string) (previewed, dele
 	if runErr != nil {
 		t.Fatalf("backup failed: %v", runErr)
 	}
+	if ui.LogPath == "" || !strings.HasPrefix(filepath.Base(ui.LogPath), time.Now().Format("2006-01-02")) {
+		t.Fatalf("the backup reports its log file, got %q", ui.LogPath)
+	}
 	after := e.setNames(t)
 	for _, name := range before {
 		if !slices.Contains(after, name) {

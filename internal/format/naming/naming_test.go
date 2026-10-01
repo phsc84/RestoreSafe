@@ -193,3 +193,15 @@ func TestDirectoryBaseName(t *testing.T) {
 		t.Fatalf("expected Documents, got %q", got)
 	}
 }
+
+func TestParseLogFileName(t *testing.T) {
+	date, runID, ok := ParseLogFileName("2026-09-30_QRS321.log")
+	if !ok || date != "2026-09-30" || runID != "QRS321" {
+		t.Fatalf("parsed %q %q %v", date, runID, ok)
+	}
+	for _, name := range []string{"2026-09-30_QRS321.log.tmp", "RestoreSafe_2026-09-30.log", "[Docs]_QRS321_2026-09-30_FULL-001.enc"} {
+		if _, _, ok := ParseLogFileName(name); ok {
+			t.Fatalf("%s is no run log", name)
+		}
+	}
+}

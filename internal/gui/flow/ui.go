@@ -69,6 +69,7 @@ func (u *UI) Bridge() *Bridge { return u.b }
 func (u *UI) Output() io.Writer            { return u.b }
 func (u *UI) Progress(p interact.Progress) { u.b.Progress(p) }
 func (u *UI) ShowResult(r interact.Result) { u.b.SetResult(r) }
+func (u *UI) LogStarted(path string)       { u.b.SetLogPath(path) }
 
 // ShowBackupPlan shows the plan; it returns once the plan is on screen.
 func (u *UI) ShowBackupPlan(p interact.BackupPlan) {

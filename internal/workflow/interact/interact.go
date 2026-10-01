@@ -68,6 +68,10 @@ type UI interface {
 	ShowRestorePlan(p RestorePlan)
 	ShowVerifyPlan(p VerifyPlan)
 
+	// LogStarted reports the log file the operation writes, as soon as it
+	// is open: a frontend can offer it even when the operation fails.
+	LogStarted(path string)
+
 	// ShowResult shows the outcome of an operation that completed. It is
 	// called last, before the workflow returns without error.
 	ShowResult(r Result)

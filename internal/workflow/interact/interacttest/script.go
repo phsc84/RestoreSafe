@@ -20,6 +20,8 @@ type Script struct {
 	// prompt without an answer function is an error that names the prompt.
 	ReadLine     func(prompt string) (string, error)
 	ReadPassword func(prompt string) ([]byte, error)
+	// LogPath is the log file the workflow reported.
+	LogPath string
 }
 
 var _ interact.UI = (*Script)(nil)
@@ -224,3 +226,6 @@ func Answers(lines ...string) func(prompt string) (string, error) {
 		return line, nil
 	}
 }
+
+// LogStarted records the log file; the script prints it with the result.
+func (s *Script) LogStarted(path string) { s.LogPath = path }

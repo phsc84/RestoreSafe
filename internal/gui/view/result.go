@@ -38,7 +38,7 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	name := opNoun(r.Op)
 	err := r.Err
 	c := &ResultCard{Done: Button{Text: buttonDone, Action: ActionDismiss, Enabled: true}}
-	if r.Result != nil && r.Result.LogPath != "" {
+	if r.LogPath != "" || (r.Result != nil && r.Result.LogPath != "") {
 		c.Log = &Button{Text: linkShowLog, Action: ActionShowLog, Enabled: true}
 	}
 	switch {

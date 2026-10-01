@@ -19,7 +19,7 @@ func finishedBackup(res *interact.Result, err error, facts logging.RunFacts, fol
 	for i, name := range []string{"Documents", "Pictures"}[:folders] {
 		m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: i + 1, Count: 2, Item: name, Done: 10, Total: 10}, planNow)
 	}
-	m.Done(res, err, facts, planNow.Add(4*time.Minute))
+	m.Done(flow.End{Result: res, Err: err, Facts: facts}, planNow.Add(4*time.Minute))
 	return m.Current()
 }
 
@@ -77,7 +77,7 @@ func TestResultCardOfAnEndBeforeTheStart(t *testing.T) {
 	for _, err := range []error{nil, interact.ErrCancelled, fmt.Errorf("unlock: %w", interact.ErrCancelled)} {
 		m := &flow.Machine{}
 		m.Start(flow.OpBackup)
-		m.Done(nil, err, logging.RunFacts{}, planNow)
+		m.Done(flow.End{Err: err}, planNow)
 		if c := ResultCardOf(m.Current()); c != nil {
 			t.Fatalf("%v: no card when the backup did not start, got %+v", err, c)
 		}
@@ -95,7 +95,7 @@ func TestResultCardOfABlockedPlan(t *testing.T) {
 	p := samplePlan()
 	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "There isn't enough space. Remedy: Free up space."}}
 	m.PlanShown(p)
-	m.Done(nil, errors.New("Backup preflight failed: not enough space. Remedy: Free up space."), logging.RunFacts{}, planNow)
+	m.Done(flow.End{Err: errors.New("Backup preflight failed: not enough space. Remedy: Free up space.")}, planNow)
 	c := ResultCardOf(m.Current())
 	if c == nil || c.Title != "Backup didn't start" || c.Tone != ToneError || len(c.Lines) != 1 || c.Lines[0] != "There isn't enough space." {
 		t.Fatalf("card %+v", c)
@@ -111,7 +111,7 @@ func TestResultCardOfACancelledBackup(t *testing.T) {
 	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 2, Item: "Documents", Done: 10, Total: 10}, planNow)
 	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 2, Count: 2, Item: "Pictures", Done: 3, Total: 10}, planNow)
 	m.Cancelling()
-	m.Done(nil, job.Cancelled("Backup"), logging.RunFacts{}, planNow)
+	m.Done(flow.End{Err: job.Cancelled("Backup")}, planNow)
 	c := ResultCardOf(m.Current())
 	want := "Documents was backed up.|The unfinished Pictures backup was removed.|No old backups were removed."
 	if c == nil || c.Title != "Backup cancelled" || c.Tone != ToneNeutral || strings.Join(c.Lines, "|") != want {
@@ -137,7 +137,7 @@ func TestResultCardOfAVerification(t *testing.T) {
 	m.Start(flow.OpVerify)
 	m.Confirmed(planNow)
 	facts := logging.RunFacts{Verify: map[string]logging.Fact{"a": {}, "b": {}}}
-	m.Done(&interact.Result{LogPath: "v.log"}, nil, facts, planNow.Add(90*time.Second))
+	m.Done(flow.End{Result: &interact.Result{LogPath: "v.log"}, Facts: facts, LogPath: "v.log"}, planNow.Add(90*time.Second))
 	c := ResultCardOf(m.Current())
 	if c == nil || c.Title != "Verification finished" || c.Lines[0] != "Verified 2 backups in 2 min. Every file matched its checksum." {
 		t.Fatalf("card %+v", c)
@@ -148,5 +148,15 @@ func TestSetFolderKeepsUnderscores(t *testing.T) {
 	t.Parallel()
 	if f := setFolder("Docs__from__C_RootA_ABC123_2026-09-30_DIFF003"); f != "Docs__from__C_RootA" {
 		t.Fatalf("folder %q", f)
+	}
+}
+
+func TestResultCardOfAFailedRunOffersItsLog(t *testing.T) {
+	t.Parallel()
+	m, _ := runningBackup()
+	m.Done(flow.End{Err: errors.New("Too many wrong password attempts."), LogPath: "2026-09-30_QRS321.log"}, planNow)
+	c := ResultCardOf(m.Current())
+	if c == nil || c.Title != "Backup failed" || c.Log == nil {
+		t.Fatalf("a failed run with a log offers it: %+v", c)
 	}
 }

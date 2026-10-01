@@ -9,6 +9,8 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/plan"
 	"os"
+	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -106,8 +108,10 @@ type Snapshot struct {
 	// (by set name): its backup and its newest verification.
 	SetFacts map[string]logging.Fact
 	Verified map[string]logging.Fact
-	Storage  Storage
-	Keys     KeysSummary
+	// Logs are the run logs in the backup directory, newest first.
+	Logs    []RunLog
+	Storage Storage
+	Keys    KeysSummary
 	// Retention lists what the next backup removes if it succeeds.
 	Retention []catalog.SetInfo
 	// Check is the health check, for "Check details" and for what it
@@ -191,21 +195,40 @@ func hasStatus(problems []Problem, status interact.Status) bool {
 	return false
 }
 
-// readFacts reads the log of every run that wrote a complete set. A log
-// that cannot be read adds no facts.
+// RunLog is the log file of a backup run. Verifications and restores of the
+// run append to it.
+type RunLog struct {
+	RunID naming.BackupID
+	Date  string
+	Path  string
+	// Modified is when the log was last written.
+	Modified time.Time
+}
+
+// readFacts reads the facts of every run log in the backup directory,
+// including the logs of runs that wrote no complete set (a failed or
+// cancelled backup). A log that cannot be read adds no facts.
 func (s *Snapshot) readFacts() {
 	s.Facts = make(map[naming.BackupID]logging.RunFacts)
 	s.SetFacts = make(map[string]logging.Fact)
 	s.Verified = make(map[string]logging.Fact)
-	for _, info := range s.Sets {
-		if !info.Complete() {
+	s.Logs = nil
+	entries, err := os.ReadDir(s.BackupDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		date, runID, ok := naming.ParseLogFileName(e.Name())
+		if !ok || e.IsDir() {
 			continue
 		}
-		runID := naming.BackupID(info.Header.RunID)
-		if _, read := s.Facts[runID]; read {
-			continue
+		path := filepath.Join(s.BackupDir, e.Name())
+		l := RunLog{RunID: runID, Date: date, Path: path}
+		if fi, err := e.Info(); err == nil {
+			l.Modified = fi.ModTime()
 		}
-		facts, err := logging.ReadFacts(naming.LogFileName(s.BackupDir, info.Header.Date, runID))
+		s.Logs = append(s.Logs, l)
+		facts, err := logging.ReadFacts(path)
 		if err != nil {
 			continue
 		}
@@ -219,6 +242,17 @@ func (s *Snapshot) readFacts() {
 			}
 		}
 	}
+	slices.SortFunc(s.Logs, func(a, b RunLog) int { return b.Modified.Compare(a.Modified) })
+}
+
+// LogOf returns the log of the run runID, or nil.
+func (s *Snapshot) LogOf(runID naming.BackupID) *RunLog {
+	for i := range s.Logs {
+		if s.Logs[i].RunID == runID {
+			return &s.Logs[i]
+		}
+	}
+	return nil
 }
 
 func folderStatuses(sources []plan.Source, infos []catalog.SetInfo, next map[string]*plan.Folder) []FolderStatus {

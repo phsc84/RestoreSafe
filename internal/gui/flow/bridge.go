@@ -33,6 +33,7 @@ type Bridge struct {
 	progress   interact.Progress
 	progPosted bool
 	result     *interact.Result
+	logPath    string
 }
 
 type answer struct {
@@ -190,4 +191,18 @@ func (b *Bridge) FinalResult() *interact.Result {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.result
+}
+
+// SetLogPath records the log file of the operation (interact.UI.LogStarted).
+func (b *Bridge) SetLogPath(path string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.logPath = path
+}
+
+// LogPath returns the recorded log file, or "".
+func (b *Bridge) LogPath() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.logPath
 }

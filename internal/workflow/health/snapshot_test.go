@@ -1,10 +1,13 @@
 package health
 
 import (
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
+	"io"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -205,5 +208,29 @@ func TestCheckerWaitsOnlyUntilTheDeadline(t *testing.T) {
 	close(release)
 	if s := c.Snapshot(context.Background(), params); s.State != StateProtected {
 		t.Fatalf("after the check finished: state %d, problems %v", s.State, codes(s.Problems))
+	}
+}
+
+func TestSnapshotListsTheLogOfAFailedRun(t *testing.T) {
+	t.Parallel()
+	sc := scenario.Build(t, scenario.Protected)
+	path := filepath.Join(sc.BackupDir, "2026-09-30_FAIL01.log")
+	log, err := logging.NewLogger(path, "info", io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: "disk full"})
+	log.Close()
+
+	s := snapshotOf(t, sc)
+	l := s.LogOf("FAIL01")
+	if l == nil || l.Path != path || l.Date != "2026-09-30" {
+		t.Fatalf("log of the failed run: %+v (logs %+v)", l, s.Logs)
+	}
+	if b := s.Facts["FAIL01"].Backup; b == nil || b.Result != logging.ResultFailed {
+		t.Fatalf("facts of the failed run: %+v", s.Facts["FAIL01"])
+	}
+	if len(s.Logs) < 2 || s.Logs[0].RunID != "FAIL01" {
+		t.Fatalf("the newest log comes first: %+v", s.Logs)
 	}
 }
