@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
@@ -8,32 +9,23 @@ import (
 	"strings"
 )
 
-// operation is one of the three workflows.
-type operation int
-
-const (
-	opBackup operation = iota
-	opRestore
-	opVerify
-)
-
-// name returns the operation's name as the workflows use it in messages.
-func (o operation) name() string {
+// opName returns the operation's name as the workflows use it in messages.
+func opName(o flow.Op) string {
 	switch o {
-	case opRestore:
+	case flow.OpRestore:
 		return "Restore"
-	case opVerify:
+	case flow.OpVerify:
 		return "Verification"
 	}
 	return "Backup"
 }
 
-// title returns the operation's window title part.
-func (o operation) title() string {
+// opTitle returns the operation's window title part.
+func opTitle(o flow.Op) string {
 	switch o {
-	case opRestore:
+	case flow.OpRestore:
 		return "Restore backup"
-	case opVerify:
+	case flow.OpVerify:
 		return "Verify backup"
 	}
 	return "Create backup"
@@ -51,8 +43,8 @@ type outcome struct {
 // operationOutcome maps the end of a workflow to the result screen
 // (docs/SPEC-restoresafe-gui.md, section 6.3). res is the result reported
 // through ShowResult, or nil.
-func operationOutcome(op operation, res *interact.Result, err error) outcome {
-	name := op.name()
+func operationOutcome(op flow.Op, res *interact.Result, err error) outcome {
+	name := opName(op)
 	switch {
 	case err == nil && res != nil && res.Warnings > 0:
 		return outcome{interact.StatusWarn, fmt.Sprintf("%s completed with %d warning(s). See the log.", name, res.Warnings), false}

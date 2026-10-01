@@ -19,17 +19,13 @@ type opButton struct {
 	onClick func()
 }
 
-// runState is the operation in progress.
+// runState is the worker of the operation in progress; a.machine holds its
+// stage.
 type runState struct {
-	op      operation
-	b       *flow.Bridge
-	cancel  context.CancelFunc
-	doneCh  chan error
-	started time.Time // when the running screen appeared; zero before
-
-	cancelling    bool
-	closeWhenDone bool
-	report        *interact.Report // last preflight report
+	b      *flow.Bridge
+	cancel context.CancelFunc
+	doneCh chan error
+	report *interact.Report // last preflight report
 }
 
 // Operation screen timer.
@@ -37,23 +33,23 @@ const elapsedTimerID = 1
 
 // startOperation runs op in a worker goroutine and shows the operation
 // screen.
-func (a *app) startOperation(op operation) {
-	if a.run != nil {
+func (a *app) startOperation(op flow.Op) {
+	if !a.machine.Start(op) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &runState{op: op, cancel: cancel, doneCh: make(chan error, 1)}
+	r := &runState{cancel: cancel, doneCh: make(chan error, 1)}
 	r.b = flow.NewBridge(func(kind int) {
 		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
 	})
 	a.run = r
-	g := &guiUI{app: a, b: r.b, op: op}
+	u := flow.NewUI(r.b, questions{a})
 
 	a.showPage(pageOperation)
-	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version+" - "+op.title())
+	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version+" - "+opTitle(op))
 	win32.SetRichText(a.op.log, "")
 	a.opReport = nil
-	a.setOpScreen(op.title(), interact.StatusNone, "Preparing ...", contentLog, false, nil)
+	a.setOpScreen(opTitle(op), interact.StatusNone, "Preparing ...", contentLog, false, nil)
 
 	cfg, exeDir := a.opts.Config, a.opts.ExeDir
 	go func() {
@@ -66,12 +62,12 @@ func (a *app) startOperation(op operation) {
 			win32.PostMessage(a.hwnd, msgWorkerDone, 0, 0) //nolint:errcheck
 		}()
 		switch op {
-		case opBackup:
-			err = backup.Run(ctx, g, cfg, exeDir)
-		case opRestore:
-			err = g.runRestore(ctx, cfg, exeDir)
-		case opVerify:
-			err = g.runVerify(ctx, cfg, exeDir)
+		case flow.OpBackup:
+			err = backup.Run(ctx, u, cfg, exeDir)
+		case flow.OpRestore:
+			err = a.runRestore(ctx, u, cfg, exeDir)
+		case flow.OpVerify:
+			err = a.runVerify(ctx, u, cfg, exeDir)
 		}
 	}()
 }
@@ -119,7 +115,7 @@ func (a *app) showPreflight(r interact.Report) {
 	if r.HasErrors() {
 		detail = "The preflight found errors."
 	}
-	a.setOpScreen(a.run.op.title(), interact.StatusNone, detail, contentReport, false, nil)
+	a.setOpScreen(opTitle(a.machine.Current().Op), interact.StatusNone, detail, contentReport, false, nil)
 }
 
 // offerStart shows the start buttons under the preflight.
@@ -133,12 +129,11 @@ func (a *app) offerStart(buttons []opButton) {
 // startRunning switches to the running screen after the start was
 // confirmed.
 func (a *app) startRunning() {
-	r := a.run
-	if r == nil {
+	if a.run == nil {
 		return
 	}
-	r.started = time.Now()
-	a.setOpScreen(r.op.name(), interact.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
+	a.machine.Confirmed(time.Now())
+	a.setOpScreen(opName(a.machine.Current().Op), interact.StatusNone, "Unlocking keys ...", contentLog, true, []opButton{{"Cancel", a.confirmCancel}})
 	a.setMarquee(true)
 	win32.SetTimer(a.hwnd, elapsedTimerID, 1000)
 }
@@ -162,11 +157,14 @@ func (a *app) setMarquee(on bool) {
 
 // onProgress shows the latest progress report.
 func (a *app) onProgress() {
-	r := a.run
-	if r == nil || r.started.IsZero() || r.cancelling {
+	if a.run == nil {
 		return
 	}
-	p := r.b.TakeProgress()
+	p := a.run.b.TakeProgress()
+	a.machine.Progressed(p, time.Now())
+	if a.machine.Stage() != flow.StageRunning {
+		return
+	}
 	title := p.Step
 	if p.Item != "" {
 		title += " - " + p.Item
@@ -193,11 +191,10 @@ func progressText(p interact.Progress) string {
 // updateElapsed refreshes the detail line with the progress and the elapsed
 // time.
 func (a *app) updateElapsed() {
-	r := a.run
-	if r == nil || r.started.IsZero() || r.cancelling {
+	if a.machine.Stage() != flow.StageRunning {
 		return
 	}
-	elapsed := time.Since(r.started).Truncate(time.Second)
+	elapsed := time.Since(a.machine.Current().Started).Truncate(time.Second)
 	text := a.progressText
 	if text == "" {
 		text = "Unlocking keys ..."
@@ -223,29 +220,32 @@ func (a *app) onOutput() {
 	}
 }
 
-// confirmCancel asks before cancelling a running operation.
+// confirmCancel handles Cancel while an operation runs: it asks first once
+// the operation has started.
 func (a *app) confirmCancel() {
-	r := a.run
-	if r == nil || r.cancelling {
-		return
+	switch a.machine.CancelRequested() {
+	case flow.CancelNow:
+		a.cancelRun()
+	case flow.CancelAsk:
+		if a.confirmCancelDialog() {
+			a.cancelRun()
+		}
 	}
-	if !a.confirmCancelDialog() {
-		return
-	}
-	a.cancelRun()
 }
 
 func (a *app) confirmCancelDialog() bool {
-	content := map[operation]string{
-		opBackup:  "Backup sets completed so far are kept; the one being written is removed.",
-		opRestore: "Directories restored so far are kept; the one being restored will be incomplete.",
-		opVerify:  "Cancelling a verification changes nothing.",
-	}[a.run.op]
+	op := a.machine.Current().Op
+	content := map[flow.Op]string{
+		flow.OpBackup:  "Backup sets completed so far are kept; the one being written is removed.",
+		flow.OpRestore: "Directories restored so far are kept; the one being restored will be incomplete.",
+		flow.OpVerify:  "Cancelling a verification changes nothing.",
+	}[op]
+	name := strings.ToLower(opName(op))
 	button, _ := a.taskDialog(win32.TaskDialog{
-		Instruction: fmt.Sprintf("Cancel the running %s?", strings.ToLower(a.run.op.name())),
+		Instruction: fmt.Sprintf("Cancel the running %s?", name),
 		Content:     content,
 		Icon:        win32.TD_WARNING_ICON,
-		Buttons:     []win32.TaskButton{{ID: win32.IDOK, Text: "Cancel " + strings.ToLower(a.run.op.name())}, {ID: win32.IDCANCEL, Text: "Continue"}},
+		Buttons:     []win32.TaskButton{{ID: win32.IDOK, Text: "Cancel " + name}, {ID: win32.IDCANCEL, Text: "Continue"}},
 		Default:     win32.IDCANCEL,
 	})
 	return button == win32.IDOK
@@ -255,10 +255,10 @@ func (a *app) confirmCancelDialog() bool {
 // the bridge answers pending and later questions with their cancel answers.
 func (a *app) cancelRun() {
 	r := a.run
-	if r == nil || r.cancelling {
+	if r == nil || a.machine.Stage() == flow.StageCancelling {
 		return
 	}
-	r.cancelling = true
+	a.machine.Cancelling()
 	r.cancel()
 	r.b.Close()
 	a.closeModal()
@@ -282,14 +282,14 @@ func (a *app) onWorkerDone() {
 	win32.KillTimer(a.hwnd, elapsedTimerID)
 	a.run = nil
 	a.progressText = ""
-	if r.closeWhenDone {
+	res := r.b.FinalResult()
+	if a.machine.Done(res, err, time.Now()) {
 		win32.UnblockShutdown(a.hwnd)
 		win32.DestroyWindow(a.hwnd)
 		return
 	}
 
-	res := r.b.FinalResult()
-	o := operationOutcome(r.op, res, err)
+	o := operationOutcome(a.machine.Current().Op, res, err)
 	detail := ""
 	var buttons []opButton
 	if res != nil && res.LogPath != "" {
@@ -317,26 +317,22 @@ func statusPrefix(s interact.Status) string {
 // backToHome returns to the Overview and checks the backups again, as
 // the backup directory has changed.
 func (a *app) backToHome() {
+	a.machine.Dismiss()
 	a.showPage(view.PageOverview)
 	a.startCheck()
 	a.focusPage()
 }
 
-// onClose handles closing the window (docs/SPEC-restoresafe-gui.md, 12.4).
+// onClose handles closing the window (spec 6.4).
 func (a *app) onClose() {
-	r := a.run
-	switch {
-	case r == nil:
+	switch a.machine.CloseRequested() {
+	case flow.CloseNow:
 		win32.DestroyWindow(a.hwnd)
-	case r.cancelling:
-		r.closeWhenDone = true
-	case r.started.IsZero():
-		// Only questions so far: nothing is written yet.
-		r.closeWhenDone = true
+	case flow.CloseAfterCancel:
 		a.cancelRun()
-	default:
+	case flow.CloseAsk:
 		if a.confirmCancelDialog() {
-			r.closeWhenDone = true
+			a.machine.CloseConfirmed()
 			a.cancelRun()
 		}
 	}
@@ -346,13 +342,12 @@ func (a *app) onClose() {
 // session and asks Windows to wait until it has cleaned up. It reports
 // whether the session may end now.
 func (a *app) onQueryEndSession() bool {
-	r := a.run
-	if r == nil {
+	if a.run == nil {
 		return true
 	}
-	r.closeWhenDone = true
+	a.machine.CloseConfirmed()
 	a.cancelRun()
-	win32.BlockShutdown(a.hwnd, fmt.Sprintf("RestoreSafe is stopping the %s and cleaning up.", strings.ToLower(r.op.name())))
+	win32.BlockShutdown(a.hwnd, fmt.Sprintf("RestoreSafe is stopping the %s and cleaning up.", strings.ToLower(opName(a.machine.Current().Op))))
 	return false
 }
 

@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
@@ -142,12 +143,12 @@ func (a *app) do(action view.Action) {
 	switch action {
 	case view.ActionBackUp:
 		if a.snapshot != nil && !a.snapshot.Check.BlocksBackup() {
-			a.startOperation(opBackup)
+			a.startOperation(flow.OpBackup)
 		}
 	case view.ActionRestore:
-		a.startOperation(opRestore)
+		a.startOperation(flow.OpRestore)
 	case view.ActionVerify:
-		a.startOperation(opVerify)
+		a.startOperation(flow.OpVerify)
 	case view.ActionCheckAgain:
 		a.startCheck()
 	case view.ActionCheckDetails:

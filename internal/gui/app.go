@@ -111,7 +111,8 @@ type app struct {
 	selectAction string // "restore" or "verify"
 	destDefault  string // the backup directory, for "restore into the backup directory"
 	progressText string
-	run          *runState
+	machine      flow.Machine     // the stage of the operation
+	run          *runState        // its worker, nil when none runs
 	opReport     *interact.Report // preflight report on screen, re-rendered on DPI changes
 
 	// The state of the backups.
