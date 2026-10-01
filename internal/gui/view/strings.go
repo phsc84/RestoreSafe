@@ -1,0 +1,108 @@
+package view
+
+// Every user-visible string of the views (spec 3.6). Sentences with
+// variable parts are format strings.
+
+// Application and shell.
+const (
+	appName         = "RestoreSafe"
+	navOverview     = "Overview"
+	navBackups      = "Backups"
+	navSettings     = "Settings"
+	statusReady     = "Ready"
+	statusChecking  = "Checking…"
+	statusFreeSpace = "%s free in backup directory"
+)
+
+// Hero titles and lines (spec 5, figure 5.3).
+const (
+	heroProtected       = "Your folders are protected"
+	heroEmpty           = "Create your first backup"
+	heroEmptyLine       = "%s to %s. RestoreSafe creates your keys first."
+	heroEmptyLineKeys   = "%s to %s."
+	heroFacts           = "%s · Last backup %s"
+	heroMore            = " · and %d more problems"
+	heroMoreOne         = " · and 1 more problem"
+	heroChecking        = "Checking your backups…"
+	heroConfigInvalid   = "RestoreSafe can't read its configuration"
+	heroConfigLine      = "Check config.yaml, then start RestoreSafe again."
+	heroDirUnreachable  = "The backup directory isn't reachable"
+	heroDirUnreachLine  = "%s doesn't respond. Check the drive or the network connection."
+	heroDirNotWritable  = "RestoreSafe can't write to the backup directory"
+	heroDirNotWritLine  = "Check the permissions of %s."
+	heroSourceMissing   = "%s can't be found"
+	heroSourceMissLine  = "Connect the drive, or remove the folder from config.yaml."
+	heroSourceInvalid   = "%s can't be used"
+	heroSourceInvLine   = "Check the folder, or remove it from config.yaml. The details say why."
+	heroBaseMissingOne  = "A backup of %s can't be restored"
+	heroBaseMissing     = "%d backups of %s can't be restored"
+	heroBaseMissingLine = "Their full backup (chain %s) is missing or incomplete. Restore its FULL files from your copy, or delete the DIFF files of %s."
+	heroSetDamaged      = "A backup of %s is damaged"
+	heroSetDamagedLine  = "Its files don't match their description. The details have the remedy."
+	heroVerifyFailed    = "A backup of %s is damaged"
+	heroVerifyLine      = "The verification found an error. Create a new backup, and don't rely on the damaged one."
+	heroOverdue         = "Your last backup is %d days old"
+	heroOverdueLine     = "Your reminder limit is %d days · Last backup %s"
+	heroNotBackedUp     = "%s has no backup yet"
+	heroNotBackedUpLine = "Back up now to protect it."
+	heroSkippedOne      = "1 file in %s wasn't backed up"
+	heroSkipped         = "%d files in %s weren't backed up"
+	heroSkippedLine     = "They couldn't be read. Older backups of %s are kept until a backup without skipped files succeeds."
+	heroIncomplete      = "An unfinished backup of %s is newer than its last complete one"
+	heroIncompleteLine  = "Probably a crash. The log of that run tells what happened."
+	heroSpaceLow        = "The backup directory is running out of space"
+	heroSpaceLowLine    = "A full backup of all folders needs about %s; %s are free."
+	heroArgon2          = "A key setting was too high and was capped"
+	heroArgon2Line      = "Lower the value in config.yaml."
+)
+
+// Buttons and links; & marks the access key.
+const (
+	buttonBackUp       = "&Back up now…"
+	buttonCheckAgain   = "Check &again"
+	buttonEditConfig   = "&Edit config"
+	buttonShowBackups  = "&Show in Backups"
+	linkCheckDetails   = "Check details"
+	linkShowInBackups  = "Show in Backups"
+	linkDetails        = "Details"
+	reasonBlockedCheck = "Fix the problems the check found first."
+)
+
+// Overview cards (spec 5, figure 5.1).
+const (
+	cardFolders        = "Folders (%d)"
+	folderNext         = "next: %s"
+	folderNoBackup     = "no backup yet"
+	folderMissing      = "Can't be found"
+	folderInvalid      = "Can't be used"
+	folderDuplicate    = "Listed twice; backed up once"
+	storageUsed        = "%s of %s used"
+	storageUnknown     = "Free space unknown"
+	legendBackups      = "Backups %s"
+	legendOther        = "Other %s"
+	legendFree         = "Free %s"
+	storageEstimate    = "A full backup of all folders needs about %s"
+	cardLastBackup     = "Last backup"
+	lastBackupLine     = "%s · %s · %s"
+	lastBackupDuration = " · %s"
+	lastBackupNone     = "No backups yet"
+	basedOnFull        = "based on FULL of %s"
+	basedOnMissing     = "its full backup is missing"
+	newChain           = "full backup"
+	cardKeys           = "Keys"
+	keysCreated        = "Created %s"
+	keysSpare          = "2 YubiKeys"
+	keysRecovery       = "recovery code"
+	keysNone           = "Your first backup creates your keys."
+	keysNewNeeded      = "Your next backup creates new keys: %s"
+	yubiKeyConnected   = "YubiKey connected"
+	yubiKeyMissing     = "YubiKey not connected"
+	folderOne          = "1 folder"
+	folderMany         = "%d folders"
+	badgeFull          = "FULL"
+	badgeDiff          = "DIFF %d"
+	badgeFullName      = "Full backup"
+	badgeDiffName      = "Differential %d"
+	typeDiff           = "DIFF"
+	typeFull           = "FULL"
+)
