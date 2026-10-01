@@ -27,6 +27,7 @@
 //   - gui/win32 has no internal imports.
 //   - gui/view and gui/flow import neither gui/win32 nor gui/widget nor the
 //     Windows API directly: what decides what the user sees is plain Go.
+//   - gui/flow does not import gui/view: view words the runs of flow.
 //   - gui/widget imports only gui/win32 from the module: widgets know nothing
 //     about backups.
 //   - testutil, e2e, and architecture are test support: exempt from the

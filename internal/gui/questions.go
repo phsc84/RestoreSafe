@@ -2,6 +2,7 @@ package gui
 
 import (
 	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"
 	"strings"
@@ -138,7 +139,7 @@ func (q questions) RecoveryCode(code string, answer func()) {
 	q.a.runInputDialog(inputDialog{
 		title:   "RestoreSafe - recovery code",
 		heading: "Your recovery code",
-		code:    codeLines(code),
+		code:    strings.Join(view.CodeLines(code), "\r\n"),
 		note: "This code alone restores every backup made with these keys, even without password or YubiKey. " +
 			"Treat it like the key to a safe.\r\n\r\nWrite it down on paper and store it in a safe place, never next to your backups. It is shown only this once.",
 		okText:   "I have written it down",
@@ -176,15 +177,4 @@ func (q questions) SpareYubiKey(qu flow.Question, answer func(bool)) {
 		Buttons:     []win32.TaskButton{{ID: win32.IDOK, Text: "Continue"}, {ID: win32.IDCANCEL, Text: "Cancel"}},
 	})
 	answer(button == win32.IDOK)
-}
-
-// codeLines splits a recovery code (groups separated by dashes) into two
-// lines of equal group count, so it fits the dialog in a large font.
-func codeLines(code string) string {
-	groups := strings.Split(code, "-")
-	if len(groups) < 2 {
-		return code
-	}
-	half := (len(groups) + 1) / 2
-	return strings.Join(groups[:half], "-") + "\r\n" + strings.Join(groups[half:], "-")
 }

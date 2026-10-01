@@ -55,6 +55,7 @@ type UI struct {
 	lastPasswordPrompt string
 	newPasswordAsked   bool
 	retypeAsked        bool
+	spareAsked         bool
 }
 
 var _ interact.UI = (*UI)(nil)
@@ -191,7 +192,8 @@ func (u *UI) RetypeRecoveryCode() (string, error) {
 // WaitForSpareYubiKey waits until the user confirms the spare YubiKey is
 // connected.
 func (u *UI) WaitForSpareYubiKey() (bool, error) {
-	q := Question{Message: u.recentMessage()}
+	q := Question{Message: u.recentMessage(), Retry: u.spareAsked}
+	u.spareAsked = true
 	v, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.SpareYubiKey(q, func(ok bool) { answer(ok, nil) })
 	}, false, nil)

@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
 	"context"
@@ -24,8 +25,26 @@ type opButton struct {
 type runState struct {
 	b      *flow.Bridge
 	cancel context.CancelFunc
-	doneCh chan error
+	doneCh chan workerEnd
 	report *interact.Report // last preflight report
+}
+
+// workerEnd is how the worker ended: the workflow's error and the facts of
+// its log.
+type workerEnd struct {
+	err   error
+	facts logging.RunFacts
+}
+
+// runFacts reads the facts of the run's log; it runs on the worker, as the
+// log may be on a slow network share. Without a log (the run failed before
+// it reported its result) there are none.
+func runFacts(res *interact.Result) logging.RunFacts {
+	if res == nil || res.LogPath == "" {
+		return logging.RunFacts{}
+	}
+	facts, _ := logging.ReadFacts(res.LogPath) //nolint:errcheck // the result card does without
+	return facts
 }
 
 // Operation screen timer.
@@ -38,7 +57,7 @@ func (a *app) startOperation(op flow.Op) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &runState{cancel: cancel, doneCh: make(chan error, 1)}
+	r := &runState{cancel: cancel, doneCh: make(chan workerEnd, 1)}
 	r.b = flow.NewBridge(func(kind int) {
 		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
 	})
@@ -58,7 +77,7 @@ func (a *app) startOperation(op flow.Op) {
 			if p := recover(); p != nil {
 				err = fmt.Errorf("Internal error: %v", p)
 			}
-			r.doneCh <- err
+			r.doneCh <- workerEnd{err, runFacts(r.b.FinalResult())}
 			win32.PostMessage(a.hwnd, msgWorkerDone, 0, 0) //nolint:errcheck
 		}()
 		switch op {
@@ -276,14 +295,15 @@ func (a *app) onWorkerDone() {
 	if r == nil {
 		return
 	}
-	err := <-r.doneCh
+	end := <-r.doneCh
+	err := end.err
 	r.cancel()
 	a.onOutput()
 	win32.KillTimer(a.hwnd, elapsedTimerID)
 	a.run = nil
 	a.progressText = ""
 	res := r.b.FinalResult()
-	if a.machine.Done(res, err, time.Now()) {
+	if a.machine.Done(res, err, end.facts, time.Now()) {
 		win32.UnblockShutdown(a.hwnd)
 		win32.DestroyWindow(a.hwnd)
 		return
@@ -359,8 +379,8 @@ func (a *app) onEndSession() {
 	}
 	a.cancelRun()
 	select {
-	case err := <-r.doneCh:
-		r.doneCh <- err
+	case end := <-r.doneCh:
+		r.doneCh <- end
 	case <-time.After(20 * time.Second):
 	}
 }

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-5 done |
+| Status | Agreed 2026-09-30; phases 0-5 done, phase 6 in progress (6a, 6b done) |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -112,8 +112,8 @@ Added to `internal/architecture` (test and package documentation):
 
 ```text
 gui              gui (root)                    may import flow, view, widget, win32, workflow, ...
-                 flow                          may import interact, view; not widget, not win32
-                 view                          may import workflow packages, config, logging, format; not flow, widget, win32
+                 flow                          may import interact, logging; not view, widget, win32
+                 view                          may import flow, workflow packages, config, logging, format; not widget, win32
                  widget                        may import win32; nothing else internal
                  win32                         no internal imports (unchanged)
 workflow         plan                          may import format, config, fsx; no other workflow package
@@ -123,6 +123,7 @@ workflow         plan                          may import format, config, fsx; n
 - `view` and `flow` are pure Go: the test fails if they (directly or through another package) import `win32` or `golang.org/x/sys/windows`.
 - `widget` knows nothing about backups: it may not import `workflow`, `format` or `config`.
 - `plan` is below the run packages: `backup` and `health` import it; it imports none of them.
+- `flow` is below `view`: `view` words the runs `flow` holds (progress card, result card), so `flow` never imports `view`.
 
 ## 5. Package design
 
@@ -216,6 +217,13 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 
 - The new shell runs: sidebar, status bar, Overview, "Check details". Until phases 7 and 9, the Backups page has the first GUI's Restore and Verify buttons and the Settings page shows the configuration file and the backup directory (`interim.go`, deleted by those phases). "Back up now…" still opens the first GUI's operation screen until phase 6.
 - Open for the polish of phase 10: tooltips (folder paths, the reason of the next backup type, exact sizes and dates), a Folders card that scrolls beyond five folders (it grows today), and the access-key check of all pages with `Accessibility.ps1`.
+
+## 6b. Phase 6 steps
+
+- **6a (done):** `flow.UI` (implements `interact.UI` behind `flow.Dialogs`), `flow.Machine` (stages, Cancel and close decisions), `flow.Speed`; the first GUI's screens implement `Dialogs` (`questions.go`).
+- **6b (done):** view models without windows: `view/plan.go` (plan dialog, new-keys confirmation), `view/run.go` (progress card, Folders card states, status bar, cancel and close confirmations), `view/result.go` (result card, BR-7), `view/credentials.go` (spec 9). The backup writes the size of each set and a `cleanup` fact (spec 11.4) for the result card; the worker reads the run's facts before it reports the end.
+- **6c:** the windows: plan dialog, progress and result cards on the Overview, credential dialogs, taskbar progress and flash, cancel and close task dialogs; backup no longer uses the first GUI's operation screen.
+- **Open for phase 7:** a failed run does not report its log path (`ShowResult` is called only on success), so its result card has no "Show log"; the Backups page lists the run from its log and can offer it there.
 
 ## 7. Risks
 

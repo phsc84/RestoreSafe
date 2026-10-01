@@ -20,7 +20,7 @@ var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log
 // that do not follow the RestoreSafe 2 naming scheme (including 1.x backups)
 // are never touched. Directories in hold are left untouched: their newest
 // backup misses files that could not be read, which older backups may still
-// contain.
+// contain. It records what it removed as a cleanup fact.
 func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int, sources []plan.Source, hold map[string]bool, log *logging.Logger) error {
 	if retentionKeep <= 0 && keepDifferentials <= 0 {
 		log.Info("Cleanup old data disabled (retention_keep=%d, retention_keep_differentials=%d)", retentionKeep, keepDifferentials)
@@ -39,6 +39,7 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 	if errors.As(err, &unreadable) {
 		log.Warn("Retention cleanup skipped: %v", err)
 		log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
+		log.Fact(logging.Fact{Kind: logging.FactCleanup, Result: logging.ResultWarnings, Error: err.Error()})
 		return nil
 	}
 	if err != nil {
@@ -64,6 +65,7 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 		directories = append(directories, directory)
 	}
 	sort.Strings(directories)
+	removed := logging.Fact{Kind: logging.FactCleanup, Result: logging.ResultOK}
 	for _, directory := range directories {
 		if hold[directory] {
 			log.Warn("Cleanup old data skipped for [%s]: the new backup misses files that could not be read, so older backups are kept.", directory)
@@ -73,8 +75,13 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 			deleted, err := deleteSetFiles(info.Parts)
 			logDeleted(deleted)
 			if err != nil {
-				return fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", info.Entry.String(), err)
+				err = fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", info.Entry.String(), err)
+				removed.Result, removed.Error = logging.ResultFailed, err.Error()
+				log.Fact(removed)
+				return err
 			}
+			removed.Removed++
+			removed.Bytes += info.SizeBytes
 		}
 	}
 
@@ -83,6 +90,8 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 		log.Warn("Retention log cleanup failed: %v", err)
 	}
 	logDeleted(deletedLogs)
+
+	log.Fact(removed)
 
 	if !headerShown {
 		log.Info("Cleanup old data (retention: %s) - nothing to delete", policy)

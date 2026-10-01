@@ -12,7 +12,7 @@ import (
 // log file as one line (never to the user's output), so the results of a
 // backup run stay with its backup sets and are deleted with them.
 type Fact struct {
-	// Kind is FactBackup, FactSet or FactVerify.
+	// Kind is FactBackup, FactSet, FactVerify or FactCleanup.
 	Kind string `json:"kind"`
 	// Result is ResultOK, ResultWarnings, ResultFailed or ResultCancelled.
 	Result string `json:"result"`
@@ -23,6 +23,11 @@ type Fact struct {
 	// Skipped counts the files a backup set misses because they could not
 	// be read.
 	Skipped int `json:"skipped,omitempty"`
+	// Bytes is what a backup set takes in the backup directory, or what a
+	// cleanup removed.
+	Bytes int64 `json:"bytes,omitempty"`
+	// Removed counts the backup sets a cleanup removed.
+	Removed int `json:"removed,omitempty"`
 	// Seconds is the duration of a backup run.
 	Seconds int64 `json:"seconds,omitempty"`
 	// Error is the reason of a failure.
@@ -33,9 +38,10 @@ type Fact struct {
 
 // Fact kinds and results.
 const (
-	FactBackup = "backup"
-	FactVerify = "verify"
-	FactSet    = "set"
+	FactBackup  = "backup"
+	FactVerify  = "verify"
+	FactSet     = "set"
+	FactCleanup = "cleanup"
 
 	ResultOK        = "ok"
 	ResultWarnings  = "warnings"
@@ -66,6 +72,9 @@ type RunFacts struct {
 	Sets map[string]Fact
 	// Verify holds the newest verification result per backup set name.
 	Verify map[string]Fact
+	// Cleanup is what retention removed after the backup run, nil when it
+	// did not run (cancelled, verification failed, or retention disabled).
+	Cleanup *Fact
 }
 
 // ReadFacts reads the facts of the log file at path. Lines that are not
@@ -94,6 +103,8 @@ func ReadFacts(path string) (RunFacts, error) {
 			if fact.Set != "" {
 				facts.Sets[fact.Set] = fact
 			}
+		case FactCleanup:
+			facts.Cleanup = &fact
 		case FactVerify:
 			if fact.Set != "" {
 				facts.Verify[fact.Set] = fact

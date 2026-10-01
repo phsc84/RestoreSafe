@@ -4,10 +4,12 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
 	"RestoreSafe/internal/workflow/plan"
 	"context"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -107,6 +109,9 @@ func (e *previewEnv) previewAndRun(t *testing.T, answer string) (previewed, dele
 			deleted = append(deleted, name)
 		}
 	}
+	if removed := cleanupFact(t, e.dir).Removed; removed != len(deleted) {
+		t.Fatalf("the cleanup fact counts %d removed sets, but %d were deleted", removed, len(deleted))
+	}
 	slices.Sort(previewed)
 	slices.Sort(deleted)
 	return previewed, deleted
@@ -186,4 +191,28 @@ func TestRetentionPreviewMatchesWhenNothingIsRemoved(t *testing.T) {
 			assertPreviewMatches(t, previewed, deleted, 0)
 		})
 	}
+}
+
+// cleanupFact returns the cleanup fact of the newest log in dir, a zero
+// fact when retention did not run.
+func cleanupFact(t *testing.T, dir string) logging.Fact {
+	t.Helper()
+	logs, err := filepath.Glob(filepath.Join(dir, "*.log"))
+	if err != nil || len(logs) == 0 {
+		t.Fatalf("no log in %s: %v", dir, err)
+	}
+	newest, newestTime := "", time.Time{}
+	for _, l := range logs {
+		if fi, err := os.Stat(l); err == nil && fi.ModTime().After(newestTime) {
+			newest, newestTime = l, fi.ModTime()
+		}
+	}
+	facts, err := logging.ReadFacts(newest)
+	if err != nil {
+		t.Fatalf("cannot read the facts of %s: %v", newest, err)
+	}
+	if facts.Cleanup == nil {
+		return logging.Fact{}
+	}
+	return *facts.Cleanup
 }

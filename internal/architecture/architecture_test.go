@@ -193,3 +193,18 @@ func TestWidgetsKnowNoBackups(t *testing.T) {
 		}
 	}
 }
+
+// TestFlowKnowsNoWords keeps the lifecycle below its wording: gui/view
+// words the runs of gui/flow, so gui/flow never imports gui/view.
+func TestFlowKnowsNoWords(t *testing.T) {
+	for pkg, imports := range moduleImports(t) {
+		if !under(pkg, "internal/gui/flow") {
+			continue
+		}
+		for _, imp := range imports {
+			if under(imp, "internal/gui/view") {
+				t.Errorf("%s imports %s; view words flow, not the other way round", pkg, imp)
+			}
+		}
+	}
+}

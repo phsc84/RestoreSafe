@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
 	"time"
 )
@@ -38,14 +39,18 @@ type Run struct {
 	Started time.Time
 	// Plan is the last backup plan shown.
 	Plan *interact.BackupPlan
-	// Progress is the latest report, Speed its rate.
+	// Progress is the latest report, Speed the rate of its step.
 	Progress interact.Progress
 	Speed    Speed
+	// Finished are the folders backed up so far, in order.
+	Finished []FolderDone
 	// CloseWhenDone closes the window once the worker has finished.
 	CloseWhenDone bool
-	// Result and Err are the outcome, Ended when the worker finished.
+	// Result and Err are the outcome, Facts what the run's log recorded,
+	// Ended when the worker finished.
 	Result *interact.Result
 	Err    error
+	Facts  logging.RunFacts
 	Ended  time.Time
 	// Cancelled is set when the user cancelled.
 	Cancelled bool
@@ -108,10 +113,31 @@ func (m *Machine) Progressed(p interact.Progress, now time.Time) {
 		return
 	}
 	if p.Phase != r.Progress.Phase || p.Index != r.Progress.Index || p.Item != r.Progress.Item {
+		r.finishStep()
 		r.Speed = Speed{}
 	}
 	r.Progress = p
 	r.Speed.Add(now, p.Done)
+}
+
+// finishStep records the folder of the current step as backed up.
+func (r *Run) finishStep() {
+	p := r.Progress
+	if p.Phase != interact.PhaseBackingUp || p.Item == "" {
+		return
+	}
+	bytes := p.Done
+	if p.Total > 0 {
+		bytes = p.Total
+	}
+	r.Finished = append(r.Finished, FolderDone{Name: p.Item, Bytes: bytes})
+}
+
+// FolderDone is a folder a backup run has backed up.
+type FolderDone struct {
+	Name string
+	// Bytes is the size of the folder read.
+	Bytes int64
 }
 
 // CancelAction is what a click on Cancel does.
@@ -178,14 +204,18 @@ func (m *Machine) CloseConfirmed() {
 	}
 }
 
-// Done records the end of the worker. It returns true when the window
-// should close now.
-func (m *Machine) Done(res *interact.Result, err error, now time.Time) (closeWindow bool) {
+// Done records the end of the worker: the result it reported, the error it
+// returned and the facts of its log. It returns true when the window should
+// close now.
+func (m *Machine) Done(res *interact.Result, err error, facts logging.RunFacts, now time.Time) (closeWindow bool) {
 	r := m.run
 	if r == nil {
 		return false
 	}
-	r.Result, r.Err, r.Ended = res, err, now
+	if err == nil && res != nil {
+		r.finishStep()
+	}
+	r.Result, r.Err, r.Facts, r.Ended = res, err, facts, now
 	r.Stage = StageFinished
 	return r.CloseWhenDone
 }

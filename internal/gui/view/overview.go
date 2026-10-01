@@ -52,6 +52,14 @@ const (
 	ActionRestore
 	ActionVerify
 	ActionOpenBackupDir
+	ActionStartBackup
+	ActionFullBackup
+	ActionAutomaticPlan
+	ActionNewKeys
+	ActionCancel
+	ActionShowDetails
+	ActionShowLog
+	ActionDismiss
 )
 
 // Button is a button or link of a view.

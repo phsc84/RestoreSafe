@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"fmt"
@@ -173,7 +174,7 @@ func TestMachineLifecycle(t *testing.T) {
 	if m.CloseRequested() != CloseAfterCancel {
 		t.Fatal("closing while cancelling waits for the worker")
 	}
-	if !m.Done(nil, errors.New("Backup cancelled."), now) || m.Stage() != StageFinished || !m.Current().Cancelled {
+	if !m.Done(nil, errors.New("Backup cancelled."), logging.RunFacts{}, now) || m.Stage() != StageFinished || !m.Current().Cancelled {
 		t.Fatal("the window closes once the worker has finished")
 	}
 	if !m.Start(OpBackup) {
@@ -188,7 +189,7 @@ func TestMachineClosingWhilePlanningCancels(t *testing.T) {
 	if m.CloseRequested() != CloseAfterCancel {
 		t.Fatal("closing while planning cancels and closes")
 	}
-	if !m.Done(nil, nil, time.Now()) {
+	if !m.Done(nil, nil, logging.RunFacts{}, time.Now()) {
 		t.Fatal("the window closes when the worker is done")
 	}
 	m.Dismiss()
@@ -260,5 +261,32 @@ func TestSpeedRateAndTimeLeft(t *testing.T) {
 	back.Add(start.Add(time.Second), 50)
 	if back.Rate() != 0 {
 		t.Fatal("going back starts over")
+	}
+}
+
+func TestMachineRecordsTheFoldersBackedUp(t *testing.T) {
+	t.Parallel()
+	var m Machine
+	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
+	m.Start(OpBackup)
+	m.Confirmed(now)
+	m.Progressed(interact.Progress{Phase: interact.PhaseUnlocking}, now)
+	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 2, Item: "Docs", Done: 90, Total: 100}, now)
+	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 2, Count: 2, Item: "Pics", Done: 7}, now)
+	if f := m.Current().Finished; len(f) != 1 || f[0] != (FolderDone{"Docs", 100}) {
+		t.Fatalf("after the first folder: %+v", f)
+	}
+	m.Done(&interact.Result{}, nil, logging.RunFacts{}, now)
+	if f := m.Current().Finished; len(f) != 2 || f[1] != (FolderDone{"Pics", 7}) {
+		t.Fatalf("a successful run finishes its last folder: %+v", f)
+	}
+
+	var failed Machine
+	failed.Start(OpBackup)
+	failed.Confirmed(now)
+	failed.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 1, Item: "Docs", Done: 5}, now)
+	failed.Done(nil, errors.New("disk full"), logging.RunFacts{}, now)
+	if f := failed.Current().Finished; len(f) != 0 {
+		t.Fatalf("a failed folder is not finished: %+v", f)
 	}
 }

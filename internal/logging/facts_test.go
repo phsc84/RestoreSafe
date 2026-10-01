@@ -23,6 +23,8 @@ func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: "My Docs_ABC123_2026-09-30_FULL"})
 	log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: "Pics_ABC123_2026-09-30_FULL"})
 	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultWarnings, Warnings: 2, Seconds: 252})
+	log.Fact(logging.Fact{Kind: logging.FactSet, Result: logging.ResultOK, Set: "Pics_ABC123_2026-09-30_FULL", Bytes: 4096})
+	log.Fact(logging.Fact{Kind: logging.FactCleanup, Result: logging.ResultOK, Removed: 3, Bytes: 1 << 30})
 	log.Close()
 
 	if strings.Contains(console.String(), "FACT") {
@@ -42,6 +44,12 @@ func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	}
 	if len(facts.Verify) != 2 {
 		t.Fatalf("expected facts for 2 sets, got %+v", facts.Verify)
+	}
+	if s := facts.Sets["Pics_ABC123_2026-09-30_FULL"]; s.Bytes != 4096 {
+		t.Fatalf("unexpected set fact: %+v", s)
+	}
+	if c := facts.Cleanup; c == nil || c.Removed != 3 || c.Bytes != 1<<30 {
+		t.Fatalf("unexpected cleanup fact: %+v", c)
 	}
 }
 

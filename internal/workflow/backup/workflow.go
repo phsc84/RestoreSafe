@@ -199,17 +199,17 @@ func runBackupOperation(
 			log.Info("  Backup type: full (%s)", folder.Reason)
 		}
 		index++
-		skipped, err := backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
+		stats, err := backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
 		if err != nil {
 			return backupFailed(ctx, log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
 		setResult := logging.ResultOK
-		if skipped > 0 {
+		if stats.Skipped > 0 {
 			warningCount++
 			retentionHold[directoryName] = true
 			setResult = logging.ResultWarnings
 		}
-		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: skipped})
+		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Bytes: stats.Bytes})
 		written = append(written, entry)
 	}
 
@@ -343,7 +343,7 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 
 // backupDirectory writes one backup set of srcDir into backupDir: a
 // differential of base, or a full backup when base is nil. It returns the
-// number of files and directories skipped as unreadable.
+// files it skipped as unreadable and the size of the set.
 func backupDirectory(
 	ctx context.Context,
 	rep interact.ProgressReporter,
@@ -356,7 +356,7 @@ func backupDirectory(
 	master []byte,
 	cfg *config.Config,
 	log *logging.Logger,
-) (int, error) {
+) (setStats, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	var progressLog *logging.Logger
 	if cfg.IODiagnostics {
@@ -403,7 +403,7 @@ func backupDirectory(
 		Progress: &done,
 	})
 	if err != nil {
-		return 0, err
+		return setStats{}, err
 	}
 
 	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
@@ -423,10 +423,30 @@ func backupDirectory(
 	if n := res.Stats.Stale; n > 0 {
 		log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
 	}
-	return res.Stats.Skipped + res.Stats.Stale, nil
+	return setStats{Skipped: res.Stats.Skipped + res.Stats.Stale, Bytes: partsSize(res.Parts)}, nil
 }
 
 // secondsSince returns the whole seconds since start.
 func secondsSince(start time.Time) int64 {
 	return int64(time.Since(start) / time.Second)
+}
+
+// setStats is what backupDirectory reports about the set it wrote.
+type setStats struct {
+	// Skipped counts the files and directories that could not be read.
+	Skipped int
+	// Bytes is the size of the set's part files.
+	Bytes int64
+}
+
+// partsSize returns the total size of the part files; a part that cannot be
+// read counts as 0, as the size only feeds the run's facts.
+func partsSize(paths []string) int64 {
+	var total int64
+	for _, p := range paths {
+		if fi, err := os.Stat(p); err == nil {
+			total += fi.Size()
+		}
+	}
+	return total
 }

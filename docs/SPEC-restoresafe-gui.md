@@ -306,7 +306,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 │ └────────────────────────────────────────────────────────────────────────┘ │
 │                                                                            │
 │ Space        About 55 GB needed · 370 GB free                   (ok)       │
-│ Unlock       Password and one YubiKey touch                                │
+│ Unlock       One YubiKey touch, then your password                          │
 │ Afterwards   Verify each new backup. Remove Pictures chain of 6 Jul        │
 │              (full + 5 differentials, 41 GB). > Show what's removed        │
 │                                                                            │
@@ -337,7 +337,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 | ID | Requirement |
 |---|---|
 | BP-1 | The plan lists every source folder with the planned type (differential with its number, or full), the reason in plain words, and the size (for a differential the estimate from 2.0 spec 6.2; for a full the folder size). A folder with a blocking problem shows the error icon and the problem instead of a type. |
-| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "Password and one YubiKey touch", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), write down a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
+| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), write down a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
 | BP-5 | Blocking issues (`Report.HasErrors`) remove **Start**; the issues are listed in red above the buttons with their remedy. Warnings are listed in amber and don't block. "Show details" shows the full preflight report (split size, exclude patterns, unreadable-file rule, Argon2, log level) in the report view. |
@@ -349,7 +349,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 |---|---|
 | BR-1 | The progress card shows a title ("Backing up", "Restoring", "Verifying"), the step trail, the current folder and its type, a progress bar, bytes done of the (estimated) total, speed, time left, **Cancel** and "Show log". |
 | BR-2 | Step trail for a backup: **Unlock keys** › **Back up n of N** › **Verify** (only with `verify_after_backup`) › **Clean up** (retention). For verify: **Unlock keys** › **Verify n of N**. Completed steps show a check. While keys are unlocked (Argon2 takes seconds) or a Windows Security prompt is open, the bar is a marquee and the line under the title reads "Unlocking keys…" or "Follow the Windows Security prompt". |
-| BR-3 | Speed and time left are computed by the UI from `Progress.Done` over the last 5 seconds. Time left appears only after 10 seconds and when the total is known, is rounded ("About 3 min left", "Less than a minute left"), and the total is prefixed with "about" for differential estimates. |
+| BR-3 | Speed and time left are computed by the UI from `Progress.Done` over the last 5 seconds. Time left appears only after 10 seconds and when the total is known, is rounded ("About 3 min left", "Less than a minute left"). The total is the size of the folder read, which the workflow measures before it starts, so it carries no "about". |
 | BR-4 | The Folders card mirrors the run: done folders get a check and their size, the current folder its percentage, the others "Waiting"; a folder that failed or was skipped by `on_unreadable_file: fail` gets the error icon. |
 | BR-5 | Progress is coalesced (12.2): at most one pending progress message; the workflows report four times per second. The taskbar button shows progress (`ITaskbarList3`): normal while running, indeterminate while unlocking, error on failure, paused (amber) when finished with warnings. |
 | BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.5). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
@@ -374,7 +374,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────┐
 │ (ok)  Backup finished                                       [ Show log ] [ Done ] │
-│       3 folders, 3.4 GB in 4 min. Verified. Removed 1 old chain (41 GB).          │
+│       3 folders, 3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).        │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────────────┐
 │ (!)  Backup finished with 2 warnings                        [ Show log ] [ Done ] │
@@ -671,7 +671,6 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 │ Password  [•••••••••••••          ]                │
 │ (!) Wrong password. 2 attempts left.               │
 │                                                    │
-│ Next: touch your YubiKey when Windows asks.        │
 │ > Use your recovery code instead                   │
 ├────────────────────────────────────────────────────┤
 │                              [ Unlock ] [ Cancel ] │
@@ -719,7 +718,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 
 | ID | Requirement |
 |---|---|
-| CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): the prompt names the key set by its creation date when there's more than one key set in the selection. The "attempts left" line from the workflow output is shown under the field (as today). For YubiKey modes the dialog says what comes next ("Next: touch your YubiKey when Windows asks."). In YubiKey-only mode there's no password dialog; the progress card shows "Follow the Windows Security prompt" instead. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
+| CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): the prompt names the key set by its creation date when there's more than one key set in the selection. The "attempts left" line from the workflow output is shown under the field (as today). The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
 | CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`, `RetypeRecoveryCode`): one dialog frame with "Step n of N", where N counts the steps the configuration needs (password; YubiKey; spare YubiKey; recovery code). Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
 | CR-3 | Recovery code: 13.3 applies unchanged (static control, no copy, overwritten on close, retype in a separate step). |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
@@ -866,7 +865,7 @@ The workflows fill the plan from the values they already compute (`plan.Folders`
 
 ### 11.4 Run facts from the log (new)
 
-The Backups page needs, per run, the duration, the warning count and the verification results. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2}`): the plaintext header and trailer do not record it, and SKIPPED_FILES needs it without a password.
+The Backups page needs, per run, the duration, the warning count and the verification results. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2}`): the plaintext header and trailer do not record it, and SKIPPED_FILES needs it without a password. The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
 
 ### 11.5 Session result
 
