@@ -786,59 +786,55 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 
 The UI keeps the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. What the redesign changes in today's contract is listed here. Two changes remove parts: the plans of 11.2 replace `ShowReport`, and restore and verify receive the user's choice as a request instead of asking for it (12.3). [PLAN-gui-redesign.md](PLAN-gui-redesign.md) has the package layout and the order of the work.
 
-### 11.1 Status model: `health.Snapshot` (new, read-only, no password)
+### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
-`health.Snapshot(ctx, cfg, exeDir, configPath, now)` returns everything the Overview, Backups and Settings pages show. It runs on a worker goroutine and is computed from `config`, `health.Check`, `catalog.Inventory`, `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists.
+`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Overview, Backups and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory (shared with `health.Check`), `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
 
 ```go
-type State int // Empty, Protected, Warning, Error (Running is set by the UI)
+type State int // StateEmpty, StateProtected, StateWarning, StateError (Running is set by the UI)
 
 type Snapshot struct {
     State     State
-    Problems  []Problem           // most urgent first (3.5)
-    Notes     []Problem           // information lines: 1.x files, leftovers, new keys needed
-    Folders   []FolderStatus      // one per configured source folder, in config order
+    Problems  []Problem          // errors and warnings, most urgent first (3.5)
+    Notes     []Problem          // information: YubiKey not connected, new keys needed, 1.x files, leftovers, duplicate sources
+    Folders   []FolderStatus     // one per configured source folder, in config order
+    BackupDir string
     Runs      []catalog.BackupRunSummary
-    Sets      []catalog.SetInfo   // for the Backups list, including incomplete sets
+    Sets      []catalog.SetInfo  // newest first, including incomplete sets
     Facts     map[naming.BackupID]logging.RunFacts // 11.4, per run
-    Storage   Storage
-    Keys      KeysSummary
-    Retention []catalog.SetInfo   // what the next backup removes if it succeeds (11.3)
+    SetFacts  map[string]logging.Fact // per set name: what its backup recorded (skipped files)
+    Verified  map[string]logging.Fact // per set name: its newest verification
+    Storage   Storage            // Known, TotalBytes, FreeBytes, BackupBytes, FullEstimate
+    Keys      KeysSummary        // Exists, Created, Methods, SpareYubiKey, RecoveryCode, YubiKeyConnected *bool, NewKeysReason
+    Retention []catalog.SetInfo  // what the next backup removes if it succeeds (11.3)
+    Check     Result             // the health check: "Check details" and what it blocks
     Checked   time.Time
 }
 
 type Problem struct {
-    Code     interact.Code // stable, 11.8
-    Status   interact.Status // StatusError, StatusWarn or StatusInfo
-    Message  string // plain language, one sentence (3.6)
-    Hint     string // what the user can do
-    Detail   string // the health check's full text with Remedy, for "Show details"
-    Folder   string // optional backup name
-    ChainID  string // optional
+    Code    interact.Code   // stable, 11.8
+    Status  interact.Status // StatusError, StatusWarn or StatusInfo
+    Folder  string          // backup name of the folder concerned
+    Path    string
+    ChainID naming.BackupID
+    Set     naming.BackupEntry
+    Count   int             // files, sets or days, depending on the code
+    Bytes   int64
+    Detail  string          // the technical text with its remedy, for "Show details"
 }
 
 type FolderStatus struct {
-    Name, Path  string
-    Problem     *Problem
-    Newest      *catalog.SetInfo // newest complete set
-    NextIsDiff  bool             // from plan.Folders, the same code the backup uses
-    NextReason  string
-}
-
-type Storage struct{ TotalBytes, FreeBytes, BackupBytes, FullEstimate int64 }
-
-type KeysSummary struct {
-    Exists          bool
-    Created         time.Time
-    Methods         string // "Password + YubiKey"
-    SpareYubiKey    bool
-    RecoveryCode    bool
-    YubiKeyConnected *bool  // nil when no YubiKey is used
-    NewKeysReason   string  // non-empty when the next backup creates new keys
+    plan.Source              // path, backup name, error, duplicate
+    Newest *catalog.SetInfo  // newest complete set
+    Next   *plan.Folder      // what the next backup does: full or differential and why (the same code the backup uses)
 }
 ```
 
-`health.Result` keeps its items but gives each one a code and a structured message (11.8) instead of only a `Detail` string; the report view keeps rendering `Report()` for "Check details".
+A problem carries its code and the facts that describe it, not sentences: the words are chosen by `gui/view`, where all user-visible strings live (3.6).
+
+`health.Checker` takes snapshots at most one at a time. A caller waits only until its context ends (`health.SnapshotTimeout`, 5 seconds) and then gets a snapshot that reports the backup directory as not responding; a snapshot still blocked in a system call keeps running, and later callers wait for it instead of starting another.
+
+`health.Result` keeps its items for the report view ("Check details"); every warning and error item carries a code (11.8).
 
 ### 11.2 Structured plans
 
@@ -869,7 +865,7 @@ The workflows fill the plan from the values they already compute (`plan.Folders`
 
 ### 11.4 Run facts from the log (new)
 
-The Backups page needs, per run, the duration, the warning count and the verification results. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3).
+The Backups page needs, per run, the duration, the warning count and the verification results. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2}`): the plaintext header and trailer do not record it, and SKIPPED_FILES needs it without a password.
 
 ### 11.5 Session result
 
@@ -918,6 +914,9 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `NEW_KEYS_NEEDED` | Info | Your next backup creates new keys | The reason from `KeySetMismatch`. |
 | `LEGACY_1X` | Info | RestoreSafe 1.x backups found | Keep RestoreSafe 1.0.2 to restore them. |
 | `LEFTOVER_TMP` | Info | Leftovers of an interrupted backup | Removed by the next backup. |
+| `SOURCE_DUPLICATE` | Info | A folder is listed twice | It is backed up once. Remove the duplicate from config.yaml. |
+| `FOLDER_NOT_BACKED_UP` | Warning | <folder> has no backup yet | Action: Back up now. |
+| `BACKUP_DIR_NEW`, `NO_BACKUPS` | (health check only) | The backup directory is new or empty | The snapshot shows this as the Empty state, not as a problem. |
 | `BASE_MISSING`, `SET_INCOMPLETE` | Error (preflight) | This backup can't be used | Its full backup is missing, or the set is incomplete. |
 | `SPACE_INSUFFICIENT` | Error (preflight) | There isn't enough space | Free up space, or choose another place. |
 | `SPACE_ESTIMATE_ONLY` | Warning (preflight) | The differential fits only by its estimate | If everything is stored again, the space runs out and the backup stops. |
@@ -929,7 +928,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 
 ```text
 if operation running                                        -> Running (UI)
-if no complete 2.0 set                                      -> Empty   (Error problems still shown)
+if no complete 2.0 set and no error of the backup directory or the configuration -> Empty   (other problems still shown)
 if any Error problem                                        -> Error
 if any Warning problem                                      -> Warning
 else                                                        -> Protected

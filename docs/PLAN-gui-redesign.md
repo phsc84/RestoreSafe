@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-3 done |
+| Status | Agreed 2026-09-30; phases 0-4 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -168,7 +168,8 @@ Exported, documented, and tested where it is:
 ### 5.3 `workflow/health`
 
 - `Check` keeps its `Result` for "Check details"; every item gets an `interact.Code`.
-- `Snapshot(ctx, cfg, exeDir, configPath, now) Snapshot` computes spec 11.1: problems and notes ordered by spec 3.5, folders with the next type from `plan.Folders`, runs and sets from `catalog`, storage, keys, retention preview, and run facts from `logging`. The context carries the 5-second limit for the backup directory; a check that is still blocked in a system call after the limit is abandoned, reported as unreachable, and never started twice.
+- `TakeSnapshot(Params) Snapshot` computes spec 11.1 from one inspection shared with `Check` (the backup directory is read once): problems and notes ordered by spec 3.5, folders with the next type from `plan.Folders`, runs and sets from `catalog`, storage, keys, retention preview, and run facts from `logging`. Problems carry codes and facts, not sentences; the view words them. `Checker` limits how long a caller waits (5 seconds): a check still blocked in a system call is abandoned, reported as unreachable, and never started twice.
+- `internal/testutil/scenario` builds a backup directory in each condition (`scenario.All`); the table test of `TakeSnapshot` runs over all of them, and the view tests of phase 5 reuse them.
 
 ### 5.4 `logging/facts.go`
 

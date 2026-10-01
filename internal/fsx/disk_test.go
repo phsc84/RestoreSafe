@@ -23,3 +23,10 @@ func TestQueryFreeSpaceBytesRejectsPathWithNulByte(t *testing.T) {
 		t.Fatal("expected QueryFreeSpaceBytes to fail for path with NUL byte")
 	}
 }
+
+func TestQueryDiskSpaceReturnsFreeAndTotal(t *testing.T) {
+	free, total, err := QueryDiskSpace(t.TempDir())
+	if err != nil || total == 0 || free > total {
+		t.Fatalf("expected free <= total > 0, got free=%d total=%d err=%v", free, total, err)
+	}
+}

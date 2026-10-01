@@ -12,14 +12,17 @@ import (
 // log file as one line (never to the user's output), so the results of a
 // backup run stay with its backup sets and are deleted with them.
 type Fact struct {
-	// Kind is FactBackup or FactVerify.
+	// Kind is FactBackup, FactSet or FactVerify.
 	Kind string `json:"kind"`
 	// Result is ResultOK, ResultWarnings, ResultFailed or ResultCancelled.
 	Result string `json:"result"`
-	// Set is the backup set a verify fact is about.
+	// Set is the backup set a set or verify fact is about.
 	Set string `json:"set,omitempty"`
 	// Warnings counts the warnings of a backup run.
 	Warnings int `json:"warnings,omitempty"`
+	// Skipped counts the files a backup set misses because they could not
+	// be read.
+	Skipped int `json:"skipped,omitempty"`
 	// Seconds is the duration of a backup run.
 	Seconds int64 `json:"seconds,omitempty"`
 	// Error is the reason of a failure.
@@ -32,6 +35,7 @@ type Fact struct {
 const (
 	FactBackup = "backup"
 	FactVerify = "verify"
+	FactSet    = "set"
 
 	ResultOK        = "ok"
 	ResultWarnings  = "warnings"
@@ -58,6 +62,8 @@ func (l *Logger) Fact(f Fact) {
 type RunFacts struct {
 	// Backup is the result of the backup run, nil when the log has none.
 	Backup *Fact
+	// Sets holds what the backup run wrote per backup set name.
+	Sets map[string]Fact
 	// Verify holds the newest verification result per backup set name.
 	Verify map[string]Fact
 }
@@ -67,7 +73,7 @@ type RunFacts struct {
 // version, or edited by hand, yields fewer facts, never an error. Only a log
 // that cannot be read is an error.
 func ReadFacts(path string) (RunFacts, error) {
-	facts := RunFacts{Verify: make(map[string]Fact)}
+	facts := RunFacts{Sets: make(map[string]Fact), Verify: make(map[string]Fact)}
 	f, err := os.Open(path)
 	if err != nil {
 		return facts, err
@@ -84,6 +90,10 @@ func ReadFacts(path string) (RunFacts, error) {
 		switch fact.Kind {
 		case FactBackup:
 			facts.Backup = &fact
+		case FactSet:
+			if fact.Set != "" {
+				facts.Sets[fact.Set] = fact
+			}
 		case FactVerify:
 			if fact.Set != "" {
 				facts.Verify[fact.Set] = fact

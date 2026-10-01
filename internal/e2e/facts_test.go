@@ -47,6 +47,9 @@ func TestRunFactsAreLogged(t *testing.T) {
 		t.Fatalf("expected a successful backup fact, got %+v", facts.Backup)
 	}
 	for _, info := range infos {
+		if s, ok := facts.Sets[info.Entry.String()]; !ok || s.Result != logging.ResultOK || s.Skipped != 0 {
+			t.Fatalf("the backup must record set %s: %+v", info.Entry.String(), facts.Sets)
+		}
 		if v, ok := facts.Verify[info.Entry.String()]; !ok || v.Result != logging.ResultOK {
 			t.Fatalf("verify after backup must record %s: %+v", info.Entry.String(), facts.Verify)
 		}

@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact/interacttest"
@@ -360,6 +361,9 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	infos, _ := catalog.Inventory(backupDir)
 	if len(infos) != 2 {
 		t.Fatalf("retention must keep the older backup while files are skipped, got %d sets", len(infos))
+	}
+	if set := runLog(t, backupDir, infos[0]).Sets[infos[0].Entry.String()]; set.Skipped != 1 || set.Result != logging.ResultWarnings {
+		t.Fatalf("the newest set must record its skipped file: %+v", set)
 	}
 
 	// Restoring the newest backup reports the skipped file; excluded files

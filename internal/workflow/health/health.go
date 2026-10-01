@@ -1,5 +1,6 @@
-// Package health runs the startup health check: configuration, directories,
-// YubiKey, backup inventory and keys.
+// Package health runs the startup health check (configuration, directories,
+// YubiKey, backup inventory and keys) and computes the snapshot of the
+// backup state that the user interface shows.
 package health
 
 import (
@@ -8,10 +9,17 @@ import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
 	"fmt"
 	"os"
 	"path/filepath"
+)
+
+// Injectable for tests.
+var (
+	checkYubiKeyConnected = yubikey.CheckConnected
+	queryDiskSpace        = fsx.QueryDiskSpace
 )
 
 type healthSeverity int
@@ -33,8 +41,10 @@ const (
 	healthScopeKeys            = "Keys"
 )
 
+// healthItem is one finding. Every warning and error carries a Code.
 type healthItem struct {
 	Severity healthSeverity
+	Code     interact.Code
 	Scope    string
 	Detail   string
 }
@@ -74,7 +84,7 @@ func buildResult(items []healthItem) Result {
 // Check performs the startup health check without printing it; the
 // result's Report describes the findings.
 func Check(cfg *config.Config, exeDir, configPath string) Result {
-	return buildResult(collectStartupHealthItemsWithConfigPath(cfg, exeDir, configPath))
+	return buildResult(inspect(cfg, exeDir, configPath).items)
 }
 
 // Report describes the findings as a report: one heading per checked scope
@@ -123,31 +133,69 @@ func healthStatus(severity healthSeverity) interact.Status {
 	}
 }
 
+// inspection is what the health check read, once, for the findings and for
+// the snapshot.
+type inspection struct {
+	items      []healthItem
+	configPath string
+	backupDir  string
+	sources    []plan.Source
+	inventory  inventory
+	// yubiKeyConnected is nil when the configuration uses no YubiKey.
+	yubiKeyConnected *bool
+}
+
+// inventory is the content of the backup directory.
+type inventory struct {
+	infos []catalog.SetInfo
+	// err is set when the directory could not be scanned.
+	err           error
+	legacy, temps []string
+}
+
+func inspect(cfg *config.Config, exeDir, configPath string) inspection {
+	in := inspection{
+		configPath: filepath.ToSlash(filepath.Clean(configPath)),
+		backupDir:  fsx.ResolveDir(cfg.BackupDirectory, exeDir),
+		sources:    plan.ResolveSources(cfg.SourceDirectories, exeDir),
+	}
+	in.items = append(in.items, checkConfigFileHealth(in.configPath)...)
+	in.items = append(in.items, checkArgon2Health(cfg)...)
+	in.items = append(in.items, sourceItems(in.sources)...)
+	in.items = append(in.items, checkBackupDirectoryHealth(in.backupDir)...)
+
+	yubiKeyItems, connected := checkYubiKeyHealth(cfg)
+	in.items = append(in.items, yubiKeyItems...)
+	in.yubiKeyConnected = connected
+
+	in.inventory = scanInventory(in.backupDir)
+	in.items = append(in.items, inventoryItems(cfg, in.inventory)...)
+	return in
+}
+
 func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configPath string) []healthItem {
-	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
-	configPathDisplay := filepath.ToSlash(filepath.Clean(configPath))
-	items := make([]healthItem, 0)
+	return inspect(cfg, exeDir, configPath).items
+}
 
-	items = append(items, checkConfigFileHealth(configPathDisplay)...)
-	items = append(items, checkArgon2Health(cfg)...)
-
-	sourceStatuses := plan.ResolveSources(cfg.SourceDirectories, exeDir)
-	for _, src := range sourceStatuses {
-		if src.Err != nil {
+func sourceItems(sources []plan.Source) []healthItem {
+	items := make([]healthItem, 0, len(sources))
+	for _, src := range sources {
+		switch {
+		case src.Err != nil:
 			items = append(items, healthItem{
 				Severity: healthError,
+				Code:     job.SourceProblemCode(src.Err),
 				Scope:    healthScopeSourceDirectory,
 				Detail:   fmt.Sprintf("%s → %v", src.Resolved, src.Err),
 			})
-			continue
-		}
-		if src.Warning != "" {
+		case src.Warning != "":
 			items = append(items, healthItem{
 				Severity: healthWarn,
+				Code:     interact.CodeSourceDuplicate,
 				Scope:    healthScopeSourceDirectory,
 				Detail:   fmt.Sprintf("%s → %s", src.Resolved, src.Warning),
 			})
-		} else {
+		default:
 			items = append(items, healthItem{
 				Severity: healthOK,
 				Scope:    healthScopeSourceDirectory,
@@ -155,10 +203,6 @@ func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configP
 			})
 		}
 	}
-
-	items = append(items, checkBackupDirectoryHealth(backupDir)...)
-	items = append(items, checkYubiKeyHealth(cfg)...)
-	items = append(items, checkBackupInventoryHealth(cfg, backupDir)...)
 	return items
 }
 
@@ -169,6 +213,7 @@ func checkArgon2Health(cfg *config.Config) []healthItem {
 	for _, notice := range cfg.Argon2Notices {
 		items = append(items, healthItem{
 			Severity: healthWarn,
+			Code:     interact.CodeArgon2Capped,
 			Scope:    healthScopeArgon2,
 			Detail:   notice + " Remedy: Lower the value in config.yaml to silence this warning.",
 		})
@@ -180,6 +225,7 @@ func checkConfigFileHealth(configPathDisplay string) []healthItem {
 	if _, err := os.Stat(configPathDisplay); err != nil {
 		return []healthItem{{
 			Severity: healthError,
+			Code:     interact.CodeConfigInvalid,
 			Scope:    healthScopeConfig,
 			Detail:   fmt.Sprintf("%s → %v. Remedy: Ensure config.yaml exists and is readable.", configPathDisplay, err),
 		}}
@@ -191,18 +237,34 @@ func checkConfigFileHealth(configPathDisplay string) []healthItem {
 	}}
 }
 
+// checkBackupDirectoryHealth checks that the backup directory can be written.
+// A missing directory is created by the first backup, unless the drive or
+// share it is on is missing: that is an unreachable backup directory (e.g. a
+// disconnected USB drive).
 func checkBackupDirectoryHealth(backupDir string) []healthItem {
 	info, err := os.Stat(backupDir)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if root := volumeRoot(backupDir); root != "" {
+				if _, rootErr := os.Stat(root); rootErr != nil {
+					return []healthItem{{
+						Severity: healthError,
+						Code:     interact.CodeBackupDirUnreachable,
+						Scope:    healthScopeBackupDirectory,
+						Detail:   fmt.Sprintf("%s → the drive or share %s is not available. Remedy: Connect the drive or check the network connection.", backupDir, root),
+					}}
+				}
+			}
 			return []healthItem{{
 				Severity: healthWarn,
+				Code:     interact.CodeBackupDirNew,
 				Scope:    healthScopeBackupDirectory,
 				Detail:   fmt.Sprintf("%s does not exist yet and will be created during backup", backupDir),
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
+			Code:     interact.CodeBackupDirUnreachable,
 			Scope:    healthScopeBackupDirectory,
 			Detail:   fmt.Sprintf("%s → %v. Remedy: Check backup_directory in config.yaml and ensure read access.", backupDir, err),
 		}}
@@ -211,6 +273,7 @@ func checkBackupDirectoryHealth(backupDir string) []healthItem {
 	if !info.IsDir() {
 		return []healthItem{{
 			Severity: healthError,
+			Code:     interact.CodeBackupDirNotWritable,
 			Scope:    healthScopeBackupDirectory,
 			Detail:   fmt.Sprintf("%s is not a directory. Remedy: Provide a directory path, not a file path.", backupDir),
 		}}
@@ -224,6 +287,16 @@ func checkBackupDirectoryHealth(backupDir string) []healthItem {
 	)
 }
 
+// volumeRoot returns the root of the drive or share of path ("E:\",
+// "\\server\share\"), or "" when path has none.
+func volumeRoot(path string) string {
+	volume := filepath.VolumeName(filepath.Clean(path))
+	if volume == "" {
+		return ""
+	}
+	return volume + string(filepath.Separator)
+}
+
 // probeWriteAccess creates and removes a temporary file in dir to confirm write
 // and delete access. It returns health items using the given scope and remedy strings.
 func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []healthItem {
@@ -232,6 +305,7 @@ func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []hea
 	if err != nil {
 		return []healthItem{{
 			Severity: healthError,
+			Code:     interact.CodeBackupDirNotWritable,
 			Scope:    scope,
 			Detail:   fmt.Sprintf("%s is not writable: %v. Remedy: %s", display, err, writeErrRemedy),
 		}}
@@ -247,6 +321,7 @@ func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []hea
 	if err := os.Remove(probePath); err != nil {
 		items = append(items, healthItem{
 			Severity: healthWarn,
+			Code:     interact.CodeBackupDirNotWritable,
 			Scope:    scope,
 			Detail:   fmt.Sprintf("Temporary write probe cleanup failed: %v. Remedy: %s", err, cleanupErrRemedy),
 		})
@@ -254,84 +329,106 @@ func probeWriteAccess(dir, scope, writeErrRemedy, cleanupErrRemedy string) []hea
 	return items
 }
 
-func checkYubiKeyHealth(cfg *config.Config) []healthItem {
+// checkYubiKeyHealth reports whether the YubiKey the configuration needs is
+// connected; connected is nil when no YubiKey is used.
+func checkYubiKeyHealth(cfg *config.Config) (items []healthItem, connected *bool) {
 	if !cfg.UseYubiKey() {
 		return []healthItem{{
 			Severity: healthOK,
 			Scope:    healthScopeYubiKey,
 			Detail:   "Disabled",
-		}}
+		}}, nil
 	}
 
-	if err := yubikey.CheckConnected(); err != nil {
+	ok := checkYubiKeyConnected() == nil
+	if !ok {
 		return []healthItem{{
 			Severity: healthWarn,
+			Code:     interact.CodeYubiKeyNotConnected,
 			Scope:    healthScopeYubiKey,
 			Detail:   "YubiKey not connected. Remedy: Connect the YubiKey before running backup, restore, or verify.",
-		}}
+		}}, &ok
 	}
 	return []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeYubiKey,
 		Detail:   "YubiKey connected",
-	}}
+	}}, &ok
+}
+
+func scanInventory(backupDir string) inventory {
+	infos, err := catalog.Inventory(backupDir)
+	inv := inventory{infos: infos, err: err}
+	if err == nil {
+		inv.legacy, _ = catalog.ListLegacyFiles(backupDir)
+		inv.temps, _ = catalog.ListTempParts(backupDir)
+	}
+	return inv
 }
 
 func checkBackupInventoryHealth(cfg *config.Config, backupDir string) []healthItem {
-	infos, err := catalog.Inventory(backupDir)
-	if err != nil {
-		if os.IsNotExist(err) {
+	return inventoryItems(cfg, scanInventory(backupDir))
+}
+
+func inventoryItems(cfg *config.Config, inv inventory) []healthItem {
+	if inv.err != nil {
+		if os.IsNotExist(inv.err) {
 			return []healthItem{{
 				Severity: healthWarn,
+				Code:     interact.CodeBackupDirNew,
 				Scope:    healthScopeBackupInventory,
 				Detail:   "Backup directory does not exist yet, no backups to inspect",
 			}}
 		}
 		return []healthItem{{
 			Severity: healthError,
+			Code:     interact.CodeBackupDirUnreachable,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in backup directory.", err),
+			Detail:   fmt.Sprintf("Failed to scan backups: %v. Remedy: Check read permissions in backup directory.", inv.err),
 		}}
 	}
 
 	items := make([]healthItem, 0)
-	items = append(items, checkLegacyAndTempFiles(backupDir)...)
+	items = append(items, legacyAndTempItems(inv)...)
 
-	if len(infos) == 0 {
+	if len(inv.infos) == 0 {
 		items = append(items, healthItem{
 			Severity: healthWarn,
+			Code:     interact.CodeNoBackups,
 			Scope:    healthScopeBackupInventory,
 			Detail:   "No backup sets found. Remedy: Check backup directory or create a new backup run.",
 		})
-		return append(items, checkKeyHealth(cfg, infos)...)
+		return append(items, checkKeyHealth(cfg, inv.infos)...)
 	}
 
 	items = append(items, healthItem{
 		Severity: healthOK,
 		Scope:    healthScopeBackupInventory,
-		Detail:   fmt.Sprintf("Found %d backup set(s)", len(infos)),
+		Detail:   fmt.Sprintf("Found %d backup set(s)", len(inv.infos)),
 	})
-	items = append(items, buildBackupInventoryIssueItems(infos)...)
-	return append(items, checkKeyHealth(cfg, infos)...)
+	items = append(items, buildBackupInventoryIssueItems(inv.infos)...)
+	return append(items, checkKeyHealth(cfg, inv.infos)...)
 }
 
-// checkLegacyAndTempFiles warns about RestoreSafe 1.x backups (which 2.0
-// cannot restore and never touches) and about leftovers of interrupted
-// backups (removed at the start of the next backup).
-func checkLegacyAndTempFiles(backupDir string) []healthItem {
+// legacyAndTempItems warn about RestoreSafe 1.x backups (which 2.0 cannot
+// restore and never touches) and about leftovers of interrupted backups
+// (removed at the start of the next backup).
+func legacyAndTempItems(inv inventory) []healthItem {
 	var items []healthItem
-	if legacy, err := catalog.ListLegacyFiles(backupDir); err == nil && len(legacy) > 0 {
+	if len(inv.legacy) > 0 {
 		items = append(items, healthItem{
 			Severity: healthWarn,
+			Code:     interact.CodeLegacyBackups,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("RestoreSafe 1.x backups found (%d file(s)). RestoreSafe 2.0 cannot restore them. Remedy: Keep RestoreSafe 1.0.2 to restore these files; they are never modified or deleted by 2.0.", len(legacy)),
+			Detail:   fmt.Sprintf("RestoreSafe 1.x backups found (%d file(s)). RestoreSafe 2.0 cannot restore them. Remedy: Keep RestoreSafe 1.0.2 to restore these files; they are never modified or deleted by 2.0.", len(inv.legacy)),
 		})
 	}
-	if temps, err := catalog.ListTempParts(backupDir); err == nil && len(temps) > 0 {
+	if len(inv.temps) > 0 {
 		items = append(items, healthItem{
 			Severity: healthWarn,
+			Code:     interact.CodeLeftoverTempFiles,
 			Scope:    healthScopeBackupInventory,
-			Detail:   fmt.Sprintf("%d leftover file(s) of an interrupted backup found (*.enc.tmp). They are removed at the start of the next backup.", len(temps)),
+			Detail:   fmt.Sprintf("%d leftover file(s) of an interrupted backup found (*.enc.tmp). They are removed at the start of the next backup.", len(inv.temps)),
 		})
 	}
 	return items
@@ -341,18 +438,13 @@ func buildBackupInventoryIssueItems(infos []catalog.SetInfo) []healthItem {
 	items := make([]healthItem, 0)
 	structuralIssues := 0
 
-	completeFulls := make(map[string]bool)
-	for _, info := range infos {
-		if info.Complete() && !info.Entry.IsDiff() {
-			completeFulls[info.Entry.ChainKey()] = true
-		}
-	}
-
+	completeFulls := completeFullChains(infos)
 	for _, info := range infos {
 		if info.Err != nil {
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
+				Code:     interact.CodeSetIncomplete,
 				Scope:    healthScopeBackupSet,
 				Detail:   fmt.Sprintf("%s → %v", info.Entry.String(), info.Err),
 			})
@@ -362,8 +454,9 @@ func buildBackupInventoryIssueItems(infos []catalog.SetInfo) []healthItem {
 			structuralIssues++
 			items = append(items, healthItem{
 				Severity: healthError,
+				Code:     interact.CodeBaseMissing,
 				Scope:    healthScopeBackupSet,
-				Detail:   fmt.Sprintf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing or incomplete. Remedy: Restore the FULL files of %s from your copy, or delete the DIFF files of %s.", info.Entry.String(), info.Entry.DirectoryName, info.Entry.ChainID, info.Entry.ChainID, info.Entry.ChainID, info.Entry.ChainID),
+				Detail:   baseMissingDetail(info),
 			})
 		}
 	}
@@ -376,6 +469,23 @@ func buildBackupInventoryIssueItems(infos []catalog.SetInfo) []healthItem {
 		})
 	}
 	return items
+}
+
+// completeFullChains returns the chains (catalog ChainKey) that have a
+// complete full backup.
+func completeFullChains(infos []catalog.SetInfo) map[string]bool {
+	fulls := make(map[string]bool)
+	for _, info := range infos {
+		if info.Complete() && !info.Entry.IsDiff() {
+			fulls[info.Entry.ChainKey()] = true
+		}
+	}
+	return fulls
+}
+
+func baseMissingDetail(info catalog.SetInfo) string {
+	e := info.Entry
+	return fmt.Sprintf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing or incomplete. Remedy: Restore the FULL files of %s from your copy, or delete the DIFF files of %s.", e.String(), e.DirectoryName, e.ChainID, e.ChainID, e.ChainID, e.ChainID)
 }
 
 // checkKeyHealth summarizes the current keys and whether the configuration
@@ -393,6 +503,7 @@ func checkKeyHealth(cfg *config.Config, infos []catalog.SetInfo) []healthItem {
 	if reason := catalog.KeySetMismatch(cfg, ks); reason != "" {
 		return []healthItem{{
 			Severity: healthWarn,
+			Code:     interact.CodeNewKeysNeeded,
 			Scope:    healthScopeKeys,
 			Detail:   fmt.Sprintf("%s. %s: the next backup creates new keys and full backups.", detail, reason),
 		}}

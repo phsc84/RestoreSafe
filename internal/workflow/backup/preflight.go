@@ -9,9 +9,7 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
-	"errors"
 	"fmt"
-	"io/fs"
 	"strings"
 	"time"
 )
@@ -162,7 +160,7 @@ func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEst
 // exist, CodeSourceInvalid for any other problem with the sources.
 func sourceProblemCode(sources []plan.Source) interact.Code {
 	for _, src := range sources {
-		if errors.Is(src.Err, fs.ErrNotExist) {
+		if src.Err != nil && job.SourceProblemCode(src.Err) == interact.CodeSourceMissing {
 			return interact.CodeSourceMissing
 		}
 	}

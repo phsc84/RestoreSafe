@@ -203,10 +203,13 @@ func runBackupOperation(
 		if err != nil {
 			return backupFailed(ctx, log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
+		setResult := logging.ResultOK
 		if skipped > 0 {
 			warningCount++
 			retentionHold[directoryName] = true
+			setResult = logging.ResultWarnings
 		}
+		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: skipped})
 		written = append(written, entry)
 	}
 

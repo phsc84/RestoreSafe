@@ -10,19 +10,22 @@ import (
 
 // QueryFreeSpaceBytes returns available free bytes for the filesystem containing path.
 func QueryFreeSpaceBytes(path string) (uint64, error) {
+	free, _, err := QueryDiskSpace(path)
+	return free, err
+}
+
+// QueryDiskSpace returns the free bytes available to this user and the total
+// size of the filesystem containing path.
+func QueryDiskSpace(path string) (free, total uint64, err error) {
 	pathPtr, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to encode path: %w", err)
+		return 0, 0, fmt.Errorf("Failed to encode path: %w", err)
 	}
 
-	var freeBytesAvailable uint64
-	var totalNumberOfBytes uint64
 	var totalNumberOfFreeBytes uint64
-
-	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytesAvailable, &totalNumberOfBytes, &totalNumberOfFreeBytes)
+	err = windows.GetDiskFreeSpaceEx(pathPtr, &free, &total, &totalNumberOfFreeBytes)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to query free space for %q: %w. Remedy: Check drive availability and access rights.", path, err)
+		return 0, 0, fmt.Errorf("Failed to query free space for %q: %w. Remedy: Check drive availability and access rights.", path, err)
 	}
-
-	return freeBytesAvailable, nil
+	return free, total, nil
 }
