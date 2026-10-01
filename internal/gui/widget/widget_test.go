@@ -238,3 +238,58 @@ func TestProgressBarSwitchesToMarquee(t *testing.T) {
 		t.Fatalf("position %d", pos)
 	}
 }
+
+func TestSplitterReportsItsNewTop(t *testing.T) {
+	th, host := testTheme(t)
+	s, err := NewSplitter(th, host, Light.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	win32.SetWindowPos(s.HWND(), win32.Rect{Top: 100, Right: 400, Bottom: 108})
+	var tops []int32
+	s.OnMove = func(top int32) { tops = append(tops, top) }
+	at := func(x, y int32) uintptr { return uintptr(uint16(x)) | uintptr(uint16(y))<<16 }
+	win32.SendMessage(s.HWND(), win32.WM_MOUSEMOVE, 0, at(10, 4)) // not dragging
+	win32.SendMessage(s.HWND(), win32.WM_LBUTTONDOWN, 0, at(10, 4))
+	win32.SendMessage(s.HWND(), win32.WM_MOUSEMOVE, 0, at(10, 24))
+	win32.SendMessage(s.HWND(), win32.WM_LBUTTONUP, 0, at(10, 24))
+	win32.SendMessage(s.HWND(), win32.WM_MOUSEMOVE, 0, at(10, 50)) // released
+	if len(tops) != 1 || tops[0] != 120 {
+		t.Fatalf("tops %v, want [120]", tops)
+	}
+}
+
+func TestListViewGroupsAndItems(t *testing.T) {
+	_, host := testTheme(t)
+	lv, err := win32.CreateWindow(0, win32.WC_LISTVIEW, "", win32.WS_CHILD|win32.WS_VISIBLE|win32.LVS_REPORT|win32.LVS_SINGLESEL, 0, 0, 400, 300, host, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	win32.ListSetup(lv)
+	win32.ListInsertColumn(lv, 0, "Folder", 120, false)
+	win32.ListInsertColumn(lv, 1, "Size", 80, true)
+	win32.ListInsertGroup(lv, 0, "Today, 09:12 · 2 folders", false)
+	win32.ListInsertGroup(lv, 1, "Sun 27 Sep, 20:05 · 1 folder", true)
+	a := win32.ListInsertItem(lv, "Docs", 0, 7)
+	win32.ListSetText(lv, a, 1, "1.0 GB")
+	win32.ListInsertItem(lv, "Pics", 0, 8)
+	win32.ListInsertItem(lv, "Docs", 1, 9)
+	if n := win32.ListItemCount(lv); n != 3 {
+		t.Fatalf("%d items", n)
+	}
+	if !win32.ListGroupCollapsed(lv, 1) || win32.ListGroupCollapsed(lv, 0) {
+		t.Fatal("group 1 starts collapsed, group 0 expanded")
+	}
+	win32.ListSetGroupCollapsed(lv, 1, false)
+	if win32.ListGroupCollapsed(lv, 1) {
+		t.Fatal("group 1 expanded")
+	}
+	win32.ListSelect(lv, 1)
+	if sel := win32.ListSelected(lv); sel != 1 || win32.ListParam(lv, sel) != 8 {
+		t.Fatalf("selected %d with param %d", sel, win32.ListParam(lv, sel))
+	}
+	win32.ListClear(lv)
+	if win32.ListItemCount(lv) != 0 || win32.ListSelected(lv) != -1 {
+		t.Fatal("cleared")
+	}
+}

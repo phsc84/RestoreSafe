@@ -50,3 +50,21 @@ func TestEncodeRuneMatchesUTF8(t *testing.T) {
 		}
 	}
 }
+
+// TestListViewStructSizes keeps the list view structs at their x64 SDK
+// sizes.
+func TestListViewStructSizes(t *testing.T) {
+	for name, got := range map[string]uintptr{
+		"LVITEMW":        unsafe.Sizeof(lvItem{}),
+		"LVGROUP":        unsafe.Sizeof(lvGroup{}),
+		"LVCOLUMNW":      unsafe.Sizeof(lvColumn{}),
+		"LVHITTESTINFO":  unsafe.Sizeof(lvHitTestInfo{}),
+		"NMLVCUSTOMDRAW": unsafe.Sizeof(NMLVCustomDraw{}),
+		"NMLISTVIEW":     unsafe.Sizeof(NMListView{}),
+	} {
+		want := map[string]uintptr{"LVITEMW": 88, "LVGROUP": 152, "LVCOLUMNW": 56, "LVHITTESTINFO": 24, "NMLVCUSTOMDRAW": 136, "NMLISTVIEW": 64}[name]
+		if got != want {
+			t.Errorf("%s: %d bytes, want %d", name, got, want)
+		}
+	}
+}

@@ -41,18 +41,19 @@ var (
 
 // Window classes of the widgets.
 const (
-	classPanel   = "RestoreSafePanel"
-	classIcon    = "RestoreSafeIcon"
-	classBadge   = "RestoreSafeBadge"
-	classBar     = "RestoreSafeBar"
-	classSidebar = "RestoreSafeSidebar"
-	classTrail   = "RestoreSafeTrail"
+	classPanel    = "RestoreSafePanel"
+	classIcon     = "RestoreSafeIcon"
+	classBadge    = "RestoreSafeBadge"
+	classBar      = "RestoreSafeBar"
+	classSidebar  = "RestoreSafeSidebar"
+	classTrail    = "RestoreSafeTrail"
+	classSplitter = "RestoreSafeSplitter"
 )
 
 func registerClasses() error {
 	classesOnce.Do(func() {
 		wndProcPtr = windows.NewCallback(wndProc)
-		for _, name := range []string{classPanel, classIcon, classBadge, classBar, classSidebar, classTrail} {
+		for _, name := range []string{classPanel, classIcon, classBadge, classBar, classSidebar, classTrail, classSplitter} {
 			wc := win32.WndClassEx{
 				WndProc:   wndProcPtr,
 				Instance:  win32.ModuleHandle(),
