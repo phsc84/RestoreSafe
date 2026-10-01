@@ -25,6 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"time"
 )
 
 // Run executes the full backup workflow, asking u for decisions and credentials
@@ -154,6 +155,7 @@ func runBackupOperation(
 	if n == 1 {
 		dirWord = "directory"
 	}
+	start := time.Now()
 	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(runID), date, n, dirWord)
 	warningCount := 0
 	var written []naming.BackupEntry
@@ -199,7 +201,7 @@ func runBackupOperation(
 		index++
 		skipped, err := backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
 		if err != nil {
-			return backupFailed(ctx, log, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
+			return backupFailed(ctx, log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
 		if skipped > 0 {
 			warningCount++
@@ -213,7 +215,7 @@ func runBackupOperation(
 	if cfg.VerifyAfterBackup && len(written) > 0 {
 		failed, err := verifyBackupAfterWrite(ctx, u, backupDir, written, master, log)
 		if err != nil {
-			return backupFailed(ctx, log, err)
+			return backupFailed(ctx, log, start, err)
 		}
 		if failed > 0 {
 			verifyFailed = true
@@ -223,7 +225,7 @@ func runBackupOperation(
 
 	// A cancelled run leaves the older backups alone.
 	if err := ctx.Err(); err != nil {
-		return backupFailed(ctx, log, err)
+		return backupFailed(ctx, log, start, err)
 	}
 
 	// Retention is skipped when verification failed so a verified older backup
@@ -243,16 +245,23 @@ func runBackupOperation(
 	} else {
 		log.Info("Backup completed successfully")
 	}
+	result := logging.ResultOK
+	if warningCount > 0 {
+		result = logging.ResultWarnings
+	}
+	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: result, Warnings: warningCount, Seconds: secondsSince(start)})
 	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
 	return nil
 }
 
 // backupFailed returns err, or, when the user cancelled the backup, logs what
 // was kept and returns the cancellation.
-func backupFailed(ctx context.Context, log *logging.Logger, err error) error {
+func backupFailed(ctx context.Context, log *logging.Logger, start time.Time, err error) error {
 	if ctx.Err() == nil {
+		log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: err.Error(), Seconds: secondsSince(start)})
 		return err
 	}
+	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultCancelled, Seconds: secondsSince(start)})
 	log.Warn("Backup cancelled. Backup sets completed before cancelling were kept, an interrupted one was removed, and old backups were not cleaned up.")
 	return job.Cancelled("Backup")
 }
@@ -276,6 +285,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 		if err != nil {
 			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
+			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue
 		}
 		// A differential's own data is checked; its full backup was
@@ -292,9 +302,11 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 		if err != nil {
 			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
+			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue
 		}
 		log.Info("  Verified: %d part file(s), %d file(s) - [%s] successfully verified", parts, m.Footer.Files, entry.DirectoryName)
+		log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: entry.String()})
 	}
 
 	if failures == 0 {
@@ -409,4 +421,9 @@ func backupDirectory(
 		log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
 	}
 	return res.Stats.Skipped + res.Stats.Stale, nil
+}
+
+// secondsSince returns the whole seconds since start.
+func secondsSince(start time.Time) int64 {
+	return int64(time.Since(start) / time.Second)
 }

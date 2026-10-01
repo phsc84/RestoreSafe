@@ -96,6 +96,7 @@ type Config struct {
 	LogLevel           string       `yaml:"log_level"`
 	IODiagnostics      bool         `yaml:"io_diagnostics"`
 	VerifyAfterBackup  bool         `yaml:"verify_after_backup"`
+	ReminderDays       *int         `yaml:"reminder_days"`
 	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
 	YubiKeySpare       bool         `yaml:"yubikey_spare"`
 	RecoveryCode       bool         `yaml:"recovery_code"`
@@ -113,6 +114,22 @@ type Config struct {
 	// clamped to their enforced maximums during Load. Populated at load time,
 	// never read from YAML, and surfaced as warnings by the startup health check.
 	Argon2Notices []string `yaml:"-"`
+}
+
+// Backup reminder: the start screen warns when the newest backup is older
+// than reminder_days. 0 turns the reminder off.
+const (
+	DefaultReminderDays = 7
+	MaxReminderDays     = 365
+)
+
+// ReminderLimit returns after how many days without a backup the start
+// screen warns; 0 means never.
+func (c *Config) ReminderLimit() int {
+	if c.ReminderDays == nil {
+		return DefaultReminderDays
+	}
+	return *c.ReminderDays
 }
 
 // UseYubiKey reports whether the configured authentication mode requires a YubiKey.
@@ -281,6 +298,9 @@ func (c *Config) validate() error {
 	case OnUnreadableFail, OnUnreadableSkip:
 	default:
 		return fmt.Errorf("Invalid 'on_unreadable_file': %q (allowed: fail, skip). Remedy: Set 'on_unreadable_file' to \"fail\" or \"skip\".", c.OnUnreadableFile)
+	}
+	if c.ReminderDays != nil && (*c.ReminderDays < 0 || *c.ReminderDays > MaxReminderDays) {
+		return fmt.Errorf("Invalid 'reminder_days': %d (allowed 0-%d). Remedy: Set it to the number of days without a backup after which RestoreSafe reminds you, or 0 to turn the reminder off; the default is %d.", *c.ReminderDays, MaxReminderDays, DefaultReminderDays)
 	}
 	d := c.Differential
 	if d.FullBackupIntervalDays < 0 || d.FullBackupIntervalDays > MaxFullBackupIntervalDays {

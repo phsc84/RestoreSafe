@@ -120,6 +120,7 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 | `recovery_code` | `false` | Create a recovery code when new keys are created |
 | `password_min_length` | `12` | Minimum password length for new keys (at least 8) |
 | `verify_after_backup` | `false` | Re-read and check each backup right after writing it |
+| `reminder_days` | `7` | Remind on the start screen when the newest backup is older than this many days (0 = no reminder) |
 
 ## Updating
 

@@ -139,6 +139,30 @@ func TestLoadDifferentialOptions(t *testing.T) {
 	}
 }
 
+func TestLoadReminderDays(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		extra string
+		want  int
+	}{
+		{"", DefaultReminderDays},
+		{"reminder_days: 14\n", 14},
+		{"reminder_days: 0\n", 0},
+		{"reminder_days: 365\n", 365},
+	} {
+		cfg, err := loadConfigText(t, tc.extra)
+		if err != nil || cfg.ReminderLimit() != tc.want {
+			t.Fatalf("%q: got %v; want limit %d", tc.extra, err, tc.want)
+		}
+	}
+	for _, extra := range []string{"reminder_days: -1\n", "reminder_days: 366\n"} {
+		if _, err := loadConfigText(t, extra); err == nil || !strings.Contains(err.Error(), "reminder_days") {
+			t.Fatalf("%q: expected a reminder_days error, got %v", extra, err)
+		}
+	}
+}
+
 // TestConfigSampleIsValid keeps config-SAMPLE.yaml loadable and its values
 // equal to the documented defaults.
 func TestConfigSampleIsValid(t *testing.T) {
@@ -152,7 +176,7 @@ func TestConfigSampleIsValid(t *testing.T) {
 	switch {
 	case cfg.AuthenticationMode != AuthModePassword, cfg.YubiKeySpare, cfg.RecoveryCode,
 		cfg.PasswordMinLength != DefaultPasswordMinLength, cfg.OnUnreadableFile != OnUnreadableFail,
-		!cfg.ExcludeMatcher.Empty(), cfg.RetentionKeep != 3,
+		!cfg.ExcludeMatcher.Empty(), cfg.RetentionKeep != 3, cfg.ReminderLimit() != DefaultReminderDays,
 		!d.IsEnabled(), d.IntervalDays() != DefaultFullBackupIntervalDays, d.SizePercent() != DefaultMaxSizePercent, d.RetentionKeepDifferentials != 0:
 		t.Fatalf("config-SAMPLE.yaml values differ from the documented defaults: %+v", cfg)
 	}

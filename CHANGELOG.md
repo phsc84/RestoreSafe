@@ -18,6 +18,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey.
 - **New keys + full backup** in the backup preflight creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
 - `password_min_length` (default 12, at least 8) for new passwords.
+- `reminder_days` (default 7, 0 = off): the start screen reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
 - `exclude` patterns for files and directories to leave out of backups.
 - `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
 - `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).

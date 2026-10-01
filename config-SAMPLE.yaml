@@ -79,6 +79,13 @@ io_diagnostics: false
 # Default: false
 verify_after_backup: false
 
+# Remind on the start screen when the newest backup is older than this many
+# days. RestoreSafe checks it only while it is open; it never runs in the
+# background.
+# 0 = no reminder
+# Default: 7  |  Minimum: 0  |  Maximum: 365
+reminder_days: 7
+
 # Authentication mode.
 # 1 = Password only (default)
 # 2 = Password AND YubiKey FIDO2 hmac-secret (2FA)

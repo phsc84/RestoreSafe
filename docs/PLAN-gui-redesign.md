@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-2 done |
+| Status | Agreed 2026-09-30; phases 0-3 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -172,7 +172,7 @@ Exported, documented, and tested where it is:
 
 ### 5.4 `logging/facts.go`
 
-`Logger.Fact(kind string, fields ...Field)` writes a line `FACT backup warnings=2 duration=4m12s` through the normal log. `ReadFacts(path) (RunFacts, error)` reads them back; unknown or missing lines give zero values. Written by backup (end of run), verify (per set), restore (end).
+`Logger.Fact(Fact)` writes one line `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}` to the log file only (JSON, because folder names may contain spaces). `ReadFacts(path) (RunFacts, error)` reads them back: the backup result and the newest verify result per set; unknown or garbled lines are skipped. The backup writes its result at the end (also when it fails or is cancelled) and a verify fact per set when it verifies after the backup; the verify operation writes a verify fact per set. Restore writes none: no screen shows restore results after the fact.
 
 ### 5.5 `gui/flow`
 

@@ -198,7 +198,7 @@ func (l *Logger) writeLine(severity string, stdout bool, format string, args ...
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	ts := time.Now().Format("2006-01-02 15:04:05")
+	ts := time.Now().Format(timestampLayout)
 	msg := fmt.Sprintf(format, args...)
 	line := fmt.Sprintf("[%s] %s - %s\n", ts, severity, msg)
 	if stdout {

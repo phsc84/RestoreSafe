@@ -218,8 +218,12 @@ func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, s
 		}
 		n, err := verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, i+1, len(selected)), info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
+			if ctx.Err() == nil {
+				log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: info.Entry.String(), Error: err.Error()})
+			}
 			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
+		log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: info.Entry.String()})
 		skipped += n
 	}
 	return skipped, nil
