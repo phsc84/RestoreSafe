@@ -3,6 +3,7 @@ package gui
 import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
@@ -313,13 +314,12 @@ func statusPrefix(s interact.Status) string {
 	return ""
 }
 
-// backToHome returns to the home screen and runs the health check again, as
+// backToHome returns to the Overview and checks the backups again, as
 // the backup directory has changed.
 func (a *app) backToHome() {
-	win32.SetText(a.hwnd, "RestoreSafe "+a.opts.Version)
-	a.showPage(pageHome)
-	a.startHealthCheck()
-	a.focusHome()
+	a.showPage(view.PageOverview)
+	a.startCheck()
+	a.focusPage()
 }
 
 // onClose handles closing the window (docs/SPEC-restoresafe-gui.md, 12.4).

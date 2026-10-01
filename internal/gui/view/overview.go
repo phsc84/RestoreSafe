@@ -49,6 +49,9 @@ const (
 	ActionShowInBackups
 	ActionEditConfig
 	ActionOpenSettings
+	ActionRestore
+	ActionVerify
+	ActionOpenBackupDir
 )
 
 // Button is a button or link of a view.
@@ -158,6 +161,9 @@ type KeysCard struct {
 	Details string
 	Note    string
 	Tone    Tone
+	// YubiKey is whether the YubiKey is connected, "" when none is used.
+	YubiKey     string
+	YubiKeyTone Tone
 }
 
 // Overview is everything the Overview page shows.
@@ -429,6 +435,12 @@ func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
 func keysOf(s *health.Snapshot) KeysCard {
 	k := s.Keys
 	card := KeysCard{Title: cardKeys}
+	switch {
+	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:
+		card.YubiKey, card.YubiKeyTone = yubiKeyConnected, ToneSecondary
+	case k.YubiKeyConnected != nil:
+		card.YubiKey, card.YubiKeyTone = yubiKeyMissing, ToneInfo
+	}
 	if !k.Exists {
 		card.Note, card.Tone = keysNone, ToneInfo
 		return card
@@ -442,13 +454,8 @@ func keysOf(s *health.Snapshot) KeysCard {
 		details = append([]string{keysRecovery}, details...)
 	}
 	card.Details = capitalize(strings.Join(details, " · "))
-	switch {
-	case k.NewKeysReason != "":
+	if k.NewKeysReason != "" {
 		card.Note, card.Tone = fmt.Sprintf(keysNewNeeded, k.NewKeysReason), ToneInfo
-	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:
-		card.Note, card.Tone = yubiKeyConnected, ToneSecondary
-	case k.YubiKeyConnected != nil:
-		card.Note, card.Tone = yubiKeyMissing, ToneInfo
 	}
 	return card
 }

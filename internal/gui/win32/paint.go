@@ -259,3 +259,28 @@ func IsWindow(hwnd HWND) bool {
 	r, _, _ := procIsWindow.Call(uintptr(hwnd))
 	return r != 0
 }
+
+// Messages and keys of the main window.
+const (
+	WM_ACTIVATEAPP = 0x001C
+	VK_CONTROL     = 0x11
+	VK_F5          = 0x74
+	SS_RIGHT       = 0x0002
+	WS_THICKFRAME  = 0x00040000
+)
+
+var procGetKeyState = user32.NewProc("GetKeyState")
+
+// KeyDown reports whether the virtual key vk is held down.
+func KeyDown(vk int32) bool {
+	r, _, _ := procGetKeyState.Call(uintptr(vk))
+	return int16(r) < 0
+}
+
+var procIsWindowVisible = user32.NewProc("IsWindowVisible")
+
+// IsWindowVisible reports whether hwnd has the visible style.
+func IsWindowVisible(hwnd HWND) bool {
+	r, _, _ := procIsWindowVisible.Call(uintptr(hwnd))
+	return r != 0
+}

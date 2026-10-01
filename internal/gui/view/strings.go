@@ -106,3 +106,22 @@ const (
 	typeDiff           = "DIFF"
 	typeFull           = "FULL"
 )
+
+// Window, interim pages and dialogs.
+const (
+	titleFormat          = "%s %s"
+	titleWithConfig      = "%s %s · %s"
+	backupsInterimLine   = "Choose a backup to restore or verify."
+	buttonRestoreOld     = "&Restore backup…"
+	buttonVerifyOld      = "&Verify backup…"
+	settingsConfigFile   = "Configuration file"
+	settingsBackupDir    = "Backup directory"
+	buttonEditConfigFile = "&Edit config.yaml"
+	buttonOpenFolder     = "&Open in Explorer"
+	settingsRestartLine  = "After saving your changes in the editor, start RestoreSafe again."
+	detailsTitle         = "Check details"
+	buttonClose          = "Close"
+)
+
+// ButtonClose is the label of a dialog's close button.
+const ButtonClose = buttonClose

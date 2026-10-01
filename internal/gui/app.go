@@ -1,5 +1,7 @@
 // Package gui is the graphical frontend of RestoreSafe: a native Win32 main
-// window with screens and dialogs (see docs/SPEC-restoresafe-gui.md).
+// window with a sidebar, pages and dialogs (see docs/SPEC-restoresafe-gui.md).
+// What the pages show is computed by gui/view; the pages render it with the
+// controls of gui/widget.
 package gui
 
 import (
@@ -7,15 +9,18 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
+	"context"
 	"fmt"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -28,31 +33,28 @@ type Options struct {
 	Config     *config.Config
 }
 
-// Control IDs and application messages.
+// Control IDs and application messages. The IDs are the AutomationIds of
+// the controls (spec 15).
 const (
-	idConfigOpen = 101 + iota
-	idBackupOpen
-	idBackup
-	idRestore
-	idVerify
-	idRecheck
-	idOpButton // idOpButton+i is button i of the operation screen
+	idOpButton = 120 // idOpButton+i is button i of the operation screen
 
 	idTree       = 201
 	idDestEdit   = 202
 	idDestBrowse = 203
 	idDestCheck  = 204
 
-	msgHealthDone = win32.WM_APP + 1
-	msgBridge     = win32.WM_APP + 2 // wparam: flow.NoteQuestion, flow.NoteOutput, flow.NoteProgress
+	idSidebar = 301
+	idStatus  = 302
+	idPage    = 310 // idPage+page is the panel of a page
+
+	msgSnapshot   = win32.WM_APP + 1
+	msgBridge     = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone = win32.WM_APP + 3
 )
 
-// Pages of the main window.
-const (
-	pageHome = iota
-	pageOperation
-)
+// Pages of the main window: the pages of the navigation (view.Page*) and,
+// while an operation runs, the operation screen of the first GUI.
+const pageOperation = 3
 
 const (
 	windowClass   = "RestoreSafeMainWindow"
@@ -64,21 +66,32 @@ const (
 	appIconIDFallback = 1
 )
 
+// recheckAfter is how old a snapshot may get before activating the window
+// checks again (spec OV-8).
+const recheckAfter = 5 * time.Minute
+
 // app is the main window. There is one per process; the window procedure
 // reaches it through theApp.
 type app struct {
 	opts      Options
 	backupDir string
 
-	hwnd     win32.HWND
-	dpi      uint32
+	hwnd  win32.HWND
+	dpi   uint32
+	theme *widget.Theme
+	page  int
+	modal win32.HWND // open input dialog, if any
+
+	// The shell of the new interface.
+	shell shell
+
+	// The first GUI's message fonts, for the operation screen and its
+	// dialogs (replaced in plan phases 6 to 8).
 	font     windows.Handle
-	boldFont windows.Handle // headings
-	monoFont windows.Handle // log pane
+	boldFont windows.Handle
+	monoFont windows.Handle
 	fontFace string
 	fontPt   int
-	page     int
-	modal    win32.HWND // open input dialog, if any
 
 	op struct {
 		title, detail, progress win32.HWND
@@ -101,16 +114,12 @@ type app struct {
 	run          *runState
 	opReport     *interact.Report // preflight report on screen, re-rendered on DPI changes
 
-	home struct {
-		configLabel, configPath, configOpen win32.HWND
-		backupLabel, backupPath, backupOpen win32.HWND
-		report, status                      win32.HWND
-		backup, restore, verify, recheck    win32.HWND
-	}
-	state homeState
-
-	mu            sync.Mutex
-	pendingHealth *health.Result
+	// The state of the backups.
+	checker   health.Checker
+	snapshot  *health.Snapshot
+	checking  bool
+	mu        sync.Mutex
+	pendingSn *health.Snapshot
 }
 
 var theApp *app
@@ -135,7 +144,7 @@ func Run(opts Options) error {
 	if err := a.createWindow(); err != nil {
 		return err
 	}
-	a.startHealthCheck()
+	a.startCheck()
 
 	var msg win32.Msg
 	for {
@@ -145,6 +154,9 @@ func Run(opts Options) error {
 		}
 		if !ok {
 			return nil
+		}
+		if msg.Message == win32.WM_KEYDOWN && a.shortcut(msg.WParam) {
+			continue
 		}
 		if !win32.IsDialogMessage(a.hwnd, &msg) {
 			win32.TranslateAndDispatch(&msg)
@@ -156,6 +168,11 @@ func Run(opts Options) error {
 // starting (e.g. an unreadable configuration).
 func ShowError(title, message string) {
 	win32.MessageBox(0, message, "RestoreSafe - "+title, win32.MB_OK|win32.MB_ICONERROR)
+}
+
+// title returns the window title (spec 3.2).
+func (a *app) title() string {
+	return view.Title(a.opts.Version, filepath.Base(a.opts.ConfigPath))
 }
 
 func (a *app) createWindow() error {
@@ -175,13 +192,13 @@ func (a *app) createWindow() error {
 	}
 
 	// Default size, centered in the work area of the monitor with the cursor.
-	frame := win32.WindowRectForClient(win32.Rect{Right: s.Px(windowWidth), Bottom: s.Px(windowHeight)}, windowStyle, windowExStyle, dpi)
+	frame := win32.WindowRectForClient(win32.Rect{Right: s.Px(widget.WindowWidth), Bottom: s.Px(widget.WindowHeight)}, windowStyle, windowExStyle, dpi)
 	w := min(frame.Width(), work.Width())
 	h := min(frame.Height(), work.Height())
 	x := work.Left + (work.Width()-w)/2
 	y := work.Top + (work.Height()-h)/2
 
-	hwnd, err := win32.CreateWindow(windowExStyle, windowClass, "RestoreSafe "+a.opts.Version, windowStyle, x, y, w, h, 0, 0)
+	hwnd, err := win32.CreateWindow(windowExStyle, windowClass, a.title(), windowStyle, x, y, w, h, 0, 0)
 	if err != nil {
 		return err
 	}
@@ -189,10 +206,15 @@ func (a *app) createWindow() error {
 	a.dpi = win32.DpiForWindow(hwnd)
 	yubikey.SetParentWindow(uintptr(hwnd))
 
+	fonts, err := widget.NewFonts(widget.Scale(a.dpi))
+	if err != nil {
+		return err
+	}
+	a.theme = &widget.Theme{Palette: widget.Light, Fonts: fonts, Scale: widget.Scale(a.dpi)}
 	if err := a.createFonts(); err != nil {
 		return err
 	}
-	if err := a.createHome(); err != nil {
+	if err := a.createShell(); err != nil {
 		return err
 	}
 	if err := a.createOperation(); err != nil {
@@ -200,15 +222,14 @@ func (a *app) createWindow() error {
 	}
 	a.applyFonts()
 	a.setAccessibleNames()
-	a.showPage(pageHome)
-	a.layout()
+	a.showPage(view.PageOverview)
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	return nil
 }
 
 // createFonts creates the message font, a bold variant for headings, and a
-// monospaced font for the log, for the current DPI, and applies them; the
-// previous fonts are deleted afterwards.
+// monospaced font for the log of the operation screen, for the current
+// DPI, and applies them; the previous fonts are deleted afterwards.
 func (a *app) createFonts() error {
 	lf, err := win32.MessageFont(a.dpi)
 	if err != nil {
@@ -245,8 +266,8 @@ func (a *app) createFonts() error {
 	return nil
 }
 
-// applyFonts sets the fonts of all controls and the rich edits' zoom and
-// margins for the current DPI.
+// applyFonts sets the fonts of the operation screen's controls and the rich
+// edits' zoom and margins for the current DPI.
 func (a *app) applyFonts() {
 	for _, c := range a.controls() {
 		win32.SetFont(c, a.font)
@@ -258,7 +279,7 @@ func (a *app) applyFonts() {
 		win32.SetFont(a.op.log, a.monoFont)
 	}
 	pad := uintptr(widget.Scale(a.dpi).Px(reportPadding))
-	for _, re := range []win32.HWND{a.home.report, a.op.report, a.op.log} {
+	for _, re := range []win32.HWND{a.op.report, a.op.log} {
 		if re == 0 {
 			continue
 		}
@@ -268,11 +289,9 @@ func (a *app) applyFonts() {
 	}
 }
 
-// controls returns the controls that use the message font.
+// controls returns the operation screen's controls that use the message font.
 func (a *app) controls() []win32.HWND {
-	h := &a.home
-	all := []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck,
-		a.op.detail, a.op.report, a.op.tree, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
+	all := []win32.HWND{a.op.detail, a.op.report, a.op.tree, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
 	all = append(all, a.op.buttons[:]...)
 	out := all[:0]
 	for _, c := range all {
@@ -281,11 +300,6 @@ func (a *app) controls() []win32.HWND {
 		}
 	}
 	return out
-}
-
-func (a *app) homeControls() []win32.HWND {
-	h := &a.home
-	return []win32.HWND{h.configLabel, h.configPath, h.configOpen, h.backupLabel, h.backupPath, h.backupOpen, h.report, h.status, h.backup, h.restore, h.verify, h.recheck}
 }
 
 // createOperation creates the operation screen's controls, hidden.
@@ -326,22 +340,9 @@ func (a *app) createOperation() error {
 	return nil
 }
 
-// showPage shows the controls of page and hides the others.
-func (a *app) showPage(page int) {
-	a.page = page
-	for _, c := range a.homeControls() {
-		setShown(c, page == pageHome)
-	}
-	a.applyOpVisibility()
-	if page == pageHome {
-		a.refreshHome() // restores the actions' enabled state
-	}
-	a.layout()
-}
-
 // setShown shows or hides a control. A hidden control is also disabled, so
 // the dialog manager skips it: otherwise its access key (e.g. Alt+B of the
-// hidden "Create backup") would win over the visible one.
+// hidden "Back up now") would win over the visible one.
 func setShown(c win32.HWND, shown bool) {
 	win32.SetVisible(c, shown)
 	win32.Enable(c, shown)
@@ -367,147 +368,66 @@ func (a *app) applyOpVisibility() {
 	}
 }
 
-func (a *app) createHome() error {
-	h := &a.home
-	var err error
-	static := func(text string, style uint32) win32.HWND {
-		if err != nil {
-			return 0
-		}
-		var c win32.HWND
-		c, err = win32.CreateWindow(0, "STATIC", text, win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|style, 0, 0, 0, 0, a.hwnd, 0)
-		return c
-	}
-	button := func(text string, id uintptr) win32.HWND {
-		if err != nil {
-			return 0
-		}
-		var c win32.HWND
-		c, err = win32.CreateWindow(0, "BUTTON", text, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.BS_PUSHBUTTON, 0, 0, 0, 0, a.hwnd, id)
-		return c
-	}
-
-	// Creation order is the tab order.
-	h.configLabel = static("Configuration", win32.SS_CENTERIMAGE)
-	h.configPath = static(filepath.Clean(a.opts.ConfigPath), win32.SS_CENTERIMAGE|win32.SS_PATHELLIPSIS)
-	h.configOpen = button("Open &file", idConfigOpen)
-	h.backupLabel = static("Backups", win32.SS_CENTERIMAGE)
-	h.backupPath = static(filepath.Clean(a.backupDir), win32.SS_CENTERIMAGE|win32.SS_PATHELLIPSIS)
-	h.backupOpen = button("Open f&older", idBackupOpen)
-	if err == nil {
-		h.report, err = win32.CreateWindow(0, win32.MSFTEDIT_CLASS, "Startup health check",
-			win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL,
-			0, 0, 0, 0, a.hwnd, 0)
-	}
-	h.status = static("", win32.SS_LEFT)
-	h.backup = button("Create &backup", idBackup)
-	h.restore = button("&Restore backup", idRestore)
-	h.verify = button("&Verify backup", idVerify)
-	h.recheck = button("Rechec&k", idRecheck)
-	if err != nil {
-		return err
-	}
-	win32.SendMessage(h.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
-	return nil
-}
-
-// layout positions the controls of the current page.
+// layout positions the shell or the operation screen.
 func (a *app) layout() {
-	if a.home.report == 0 || a.op.log == 0 {
+	if a.op.log == 0 || a.shell.sidebar == nil {
 		return
 	}
 	client := win32.ClientRect(a.hwnd)
-	s := widget.Scale(a.dpi)
-	if a.page == pageOperation {
-		l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
-		o := &a.op
-		for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log, o.tree: l.tree,
-			o.destLabel: l.destLabel, o.destEdit: l.destEdit, o.destBrowse: l.destBrowse, o.destCheck: l.destCheck, o.destNote: l.destNote} {
-			win32.SetWindowPos(c, r)
-		}
-		for i, b := range o.buttons {
-			win32.SetWindowPos(b, l.buttons[i])
-		}
+	if a.page != pageOperation {
+		a.layoutShell(client)
 		return
 	}
-	l := layoutHome(s, client.Width(), client.Height())
-	h := &a.home
-	for c, r := range map[win32.HWND]win32.Rect{
-		h.configLabel: l.configLabel, h.configPath: l.configPath, h.configOpen: l.configOpen,
-		h.backupLabel: l.backupLabel, h.backupPath: l.backupPath, h.backupOpen: l.backupOpen,
-		h.report: l.report, h.status: l.blocked,
-		h.backup: l.backup, h.restore: l.restore, h.verify: l.verify, h.recheck: l.recheck,
-	} {
+	s := widget.Scale(a.dpi)
+	l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
+	o := &a.op
+	for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log, o.tree: l.tree,
+		o.destLabel: l.destLabel, o.destEdit: l.destEdit, o.destBrowse: l.destBrowse, o.destCheck: l.destCheck, o.destNote: l.destNote} {
 		win32.SetWindowPos(c, r)
+	}
+	for i, b := range o.buttons {
+		win32.SetWindowPos(b, l.buttons[i])
 	}
 }
 
-// startHealthCheck runs the startup health check in the background; it can
-// take a while on a network drive, and the window stays responsive.
-func (a *app) startHealthCheck() {
-	a.state.checking = true
-	a.refreshHome()
+// startCheck takes a new snapshot in the background; it can take a while
+// on a network drive, and the window stays responsive. A check that runs
+// longer than health.SnapshotTimeout reports the backup directory as not
+// responding.
+func (a *app) startCheck() {
+	if a.checking {
+		return
+	}
+	a.checking = true
+	a.refreshShell()
+	params := health.Params{Config: a.opts.Config, ExeDir: a.opts.ExeDir, ConfigPath: a.opts.ConfigPath, Now: time.Now()}
 	go func() {
-		result := health.Check(a.opts.Config, a.opts.ExeDir, a.opts.ConfigPath)
+		ctx, cancel := context.WithTimeout(context.Background(), health.SnapshotTimeout)
+		defer cancel()
+		s := a.checker.Snapshot(ctx, params)
 		a.mu.Lock()
-		a.pendingHealth = &result
+		a.pendingSn = &s
 		a.mu.Unlock()
-		win32.PostMessage(a.hwnd, msgHealthDone, 0, 0) //nolint:errcheck
+		win32.PostMessage(a.hwnd, msgSnapshot, 0, 0) //nolint:errcheck
 	}()
 }
 
-func (a *app) healthDone() {
+// snapshotDone shows the snapshot the check posted.
+func (a *app) snapshotDone() {
 	a.mu.Lock()
-	result := a.pendingHealth
-	a.pendingHealth = nil
+	s := a.pendingSn
+	a.pendingSn = nil
 	a.mu.Unlock()
-	if result == nil {
+	if s == nil {
 		return
 	}
-	a.state = homeState{health: result}
-	a.refreshHome()
-	if a.page == pageHome {
-		a.focusHome()
-	}
-}
-
-func (a *app) refreshHome() {
-	h := &a.home
-	report := interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: []interact.Row{interact.Note("Checking ...")}}}}
-	if a.state.health != nil && !a.state.checking {
-		report = a.state.health.Report()
-	}
-	win32.SetRichText(h.report, reportRTF(report, a.fontFace, a.fontPt))
-	backup, restoreOrVerify := a.state.actionsEnabled()
-	win32.Enable(h.backup, backup)
-	win32.Enable(h.restore, restoreOrVerify)
-	win32.Enable(h.verify, restoreOrVerify)
-	win32.Enable(h.recheck, !a.state.checking)
-	win32.SetText(h.status, a.state.statusLine())
-}
-
-func (a *app) onCommand(id uint16) {
-	// Commands of the page that is not shown are ignored (see setShown).
-	if (a.page == pageHome) != (id < idOpButton) {
-		return
-	}
-	switch id {
-	case idConfigOpen:
-		a.open(a.opts.ConfigPath, true)
-	case idBackupOpen:
-		a.open(a.backupDir, false)
-	case idRecheck:
-		a.startHealthCheck()
-	case idBackup:
-		a.startOperation(opBackup)
-	case idRestore:
-		a.startOperation(opRestore)
-	case idVerify:
-		a.startOperation(opVerify)
-	default:
-		if i := int(id) - idOpButton; i >= 0 && i < len(a.opButtons) {
-			a.opButtons[i].onClick()
-		}
+	first := a.snapshot == nil
+	a.snapshot = s
+	a.checking = false
+	a.refreshShell()
+	// After the first check, the keyboard starts at the hero's action.
+	if first && a.page == view.PageOverview {
+		a.focusPage()
 	}
 }
 
@@ -528,7 +448,7 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	switch msg {
 	case win32.WM_GETMINMAXINFO:
 		s := widget.Scale(win32.DpiForWindow(hwnd))
-		minRect := win32.WindowRectForClient(win32.Rect{Right: s.Px(windowMinWidth), Bottom: s.Px(windowMinHeight)}, windowStyle, windowExStyle, uint32(s))
+		minRect := win32.WindowRectForClient(win32.Rect{Right: s.Px(widget.WindowMinWidth), Bottom: s.Px(widget.WindowMinHeight)}, windowStyle, windowExStyle, uint32(s))
 		win32.MinMaxInfoParam(lparam).MinTrackSize = win32.Point{X: minRect.Width(), Y: minRect.Height()}
 		return 0
 	}
@@ -542,11 +462,16 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case win32.WM_DPICHANGED:
 		a.dpi = uint32(win32.HiWord(wparam))
 		a.createFonts() //nolint:errcheck // keeps the previous font on failure
+		a.restyle()
 		win32.SetWindowPos(hwnd, *win32.RectParam(lparam))
 		a.layout()
-		a.refreshHome()
 		if a.opReport != nil {
 			win32.SetRichText(a.op.report, reportRTF(*a.opReport, a.fontFace, a.fontPt))
+		}
+		return 0
+	case win32.WM_ACTIVATEAPP:
+		if wparam != 0 && a.run == nil && a.snapshot != nil && time.Since(a.snapshot.Checked) > recheckAfter {
+			a.startCheck()
 		}
 		return 0
 	case win32.WM_CTLCOLORSTATIC:
@@ -572,8 +497,10 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		case id == idDestBrowse && code == win32.BN_CLICKED:
 			a.browseDestination()
 			return 0
-		case code == win32.BN_CLICKED && lparam != 0:
-			a.onCommand(id)
+		case code == win32.BN_CLICKED && lparam != 0 && a.page == pageOperation:
+			if i := int(id) - idOpButton; i >= 0 && i < len(a.opButtons) {
+				a.opButtons[i].onClick()
+			}
 			return 0
 		}
 	case win32.DM_GETDEFID:
@@ -592,8 +519,8 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 			}
 		}
 		return 0
-	case msgHealthDone:
-		a.healthDone()
+	case msgSnapshot:
+		a.snapshotDone()
 		return 0
 	case msgBridge:
 		if a.run != nil {
@@ -632,10 +559,24 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		for _, f := range []windows.Handle{a.font, a.boldFont, a.monoFont} {
 			win32.DeleteObject(f)
 		}
+		a.theme.Fonts.Close()
 		win32.PostQuitMessage(0)
 		return 0
 	}
 	return win32.DefWindowProc(hwnd, msg, wparam, lparam)
+}
+
+// restyle creates the theme's fonts for the new DPI and applies them.
+func (a *app) restyle() {
+	s := widget.Scale(a.dpi)
+	fonts, err := widget.NewFonts(s)
+	if err != nil {
+		return
+	}
+	old := a.theme.Fonts
+	a.theme.Fonts, a.theme.Scale = fonts, s
+	a.restyleShell()
+	old.Close()
 }
 
 // appIcon loads the application icon in the given size.
@@ -646,29 +587,16 @@ func appIcon(size int32) windows.Handle {
 	return win32.LoadIcon(appIconIDFallback, size)
 }
 
-// setAccessibleNames names the controls screen readers cannot name from a
-// label: the rich edits (their window text is the content), the tree, and
-// the progress bar.
+// setAccessibleNames names the operation screen's controls screen readers
+// cannot name from a label: the rich edits (their window text is the
+// content), the tree, and the progress bar.
 func (a *app) setAccessibleNames() {
 	for hwnd, name := range map[win32.HWND]string{
-		a.home.report: "Startup health check",
 		a.op.report:   "Preflight summary",
 		a.op.log:      "Log",
 		a.op.tree:     "Backups",
 		a.op.progress: "Progress",
 	} {
 		win32.SetAccessibleName(hwnd, name)
-	}
-}
-
-// focusHome puts the keyboard focus on the first home action that can run,
-// or on Recheck.
-func (a *app) focusHome() {
-	h := &a.home
-	for _, b := range []win32.HWND{h.backup, h.restore, h.verify, h.recheck} {
-		if win32.IsEnabled(b) {
-			win32.SetFocus(b)
-			return
-		}
 	}
 }

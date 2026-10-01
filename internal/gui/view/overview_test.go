@@ -203,3 +203,24 @@ func checkWriting(t *testing.T, v any) {
 	}
 	walk(reflect.ValueOf(v))
 }
+
+func TestOverviewKeysShowTheYubiKey(t *testing.T) {
+	t.Parallel()
+	for _, c := range []scenario.Condition{scenario.Protected, scenario.Empty} {
+		sc := scenario.Build(t, c)
+		s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
+		connected := false
+		s.Keys.YubiKeyConnected = &connected
+		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey not connected" || k.YubiKeyTone != ToneInfo {
+			t.Fatalf("%s: keys %+v", c, k)
+		}
+		connected = true
+		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey connected" {
+			t.Fatalf("%s: keys %+v", c, k)
+		}
+		s.Keys.YubiKeyConnected = nil
+		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "" {
+			t.Fatalf("%s: without a YubiKey, no line: %+v", c, k)
+		}
+	}
+}

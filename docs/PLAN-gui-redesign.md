@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-4 done |
+| Status | Agreed 2026-09-30; phases 0-5 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -211,6 +211,11 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 | 10 | Release | `scripts/gui-test` updated (`AutomationId`, `New-TestCondition.ps1`, `Check-States.ps1`); checklist run; accessibility, DPI and high-contrast pass; usability session; README usage and screenshots, CHANGELOG; merge into `v2` | Release gate (spec 16.7) | — |
 
 Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure workflow changes. Phases 5–9 are the new UI; phase 5 is the largest, because the shell, the widgets and the pure-Go layers come together.
+
+## 6a. State after phase 5
+
+- The new shell runs: sidebar, status bar, Overview, "Check details". Until phases 7 and 9, the Backups page has the first GUI's Restore and Verify buttons and the Settings page shows the configuration file and the backup directory (`interim.go`, deleted by those phases). "Back up now…" still opens the first GUI's operation screen until phase 6.
+- Open for the polish of phase 10: tooltips (folder paths, the reason of the next backup type, exact sizes and dates), a Folders card that scrolls beyond five folders (it grows today), and the access-key check of all pages with `Accessibility.ps1`.
 
 ## 7. Risks
 

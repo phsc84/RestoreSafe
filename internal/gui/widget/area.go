@@ -60,6 +60,14 @@ func (a *Area) Right(dip int32) win32.Rect {
 	return r
 }
 
+// RightPx cuts a column of px pixels off the right and returns it.
+func (a *Area) RightPx(px int32) win32.Rect {
+	w := min(px, a.R.Width())
+	r := win32.Rect{Left: a.R.Right - w, Top: a.R.Top, Right: a.R.Right, Bottom: a.R.Bottom}
+	a.R.Right -= w
+	return r
+}
+
 // Rest returns what is left of the area.
 func (a Area) Rest() win32.Rect { return a.R }
 

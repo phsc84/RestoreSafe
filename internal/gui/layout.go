@@ -5,62 +5,13 @@ import (
 	"RestoreSafe/internal/gui/win32"
 )
 
-// Sizes of the main window and its controls, in DIPs.
+// Sizes of the operation screen and its dialogs, in DIPs.
 const (
-	windowMinWidth   = 720
-	windowMinHeight  = 520
-	windowWidth      = 900
-	windowHeight     = 640
-	margin           = 16
-	gap              = 8
-	rowHeight        = 24
-	buttonHeight     = 30
-	labelWidth       = 100
-	smallButtonWidth = 90
-	actionWidth      = 150
-	noteHeight       = 20
-	reportPadding    = 8
+	margin        = 16
+	gap           = 8
+	buttonHeight  = 30
+	reportPadding = 8
 )
-
-// homeLayout places the home screen's controls in a client area of the
-// given size in pixels.
-type homeLayout struct {
-	configLabel, configPath, configOpen win32.Rect
-	backupLabel, backupPath, backupOpen win32.Rect
-	report                              win32.Rect
-	blocked                             win32.Rect
-	backup, restore, verify, recheck    win32.Rect
-}
-
-func layoutHome(s widget.Scale, width, height int32) homeLayout {
-	// Work in DIPs, then scale; the client size arrives in pixels.
-	w := width * 96 / int32(s)
-	h := height * 96 / int32(s)
-	var l homeLayout
-
-	pathX := int32(margin + labelWidth + gap)
-	openX := w - margin - smallButtonWidth
-	pathW := max(openX-gap-pathX, 0)
-	row := func(y int32) (label, path, open win32.Rect) {
-		return s.Rect(margin, y, labelWidth, rowHeight),
-			s.Rect(pathX, y, pathW, rowHeight),
-			s.Rect(openX, y-1, smallButtonWidth, rowHeight+2)
-	}
-	l.configLabel, l.configPath, l.configOpen = row(margin)
-	l.backupLabel, l.backupPath, l.backupOpen = row(margin + rowHeight + gap)
-
-	buttonsY := h - margin - buttonHeight
-	blockedY := buttonsY - gap - noteHeight
-	reportY := int32(margin + 2*(rowHeight+gap) + gap)
-	l.report = s.Rect(margin, reportY, w-2*margin, max(blockedY-gap-reportY, 0))
-	l.blocked = s.Rect(margin, blockedY, w-2*margin, noteHeight)
-
-	l.backup = s.Rect(margin, buttonsY, actionWidth, buttonHeight)
-	l.restore = s.Rect(margin+actionWidth+gap, buttonsY, actionWidth, buttonHeight)
-	l.verify = s.Rect(margin+2*(actionWidth+gap), buttonsY, actionWidth, buttonHeight)
-	l.recheck = s.Rect(w-margin-smallButtonWidth-20, buttonsY, smallButtonWidth+20, buttonHeight)
-	return l
-}
 
 // Sizes of the operation screen, in DIPs.
 const (

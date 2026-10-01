@@ -237,3 +237,18 @@ func (p *Panel) drawPrimary(di *win32.DrawItemStruct) {
 		win32.DrawFocusRect(di.HDC, focus)
 	}
 }
+
+// RightLabel creates a right-aligned text control.
+func (p *Panel) RightLabel(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS|win32.SS_RIGHT, 0)
+}
+
+// SetText changes the text of a control.
+func (p *Panel) SetText(hwnd win32.HWND, text string) { win32.SetText(hwnd, text) }
+
+// Show shows or hides the panel. A hidden panel is also disabled, so the
+// access keys of its controls cannot fire.
+func (p *Panel) Show(shown bool) {
+	win32.SetVisible(p.hwnd, shown)
+	win32.Enable(p.hwnd, shown)
+}
