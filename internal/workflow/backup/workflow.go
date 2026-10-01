@@ -19,6 +19,7 @@ import (
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
+	"RestoreSafe/internal/workflow/plan"
 	"RestoreSafe/internal/workflow/restorepoint"
 	"context"
 	"fmt"
@@ -46,7 +47,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	}
 	defer lock.Release()
 
-	sources := resolveBackupSources(cfg.SourceDirectories, exeDir)
+	sources := plan.ResolveSources(cfg.SourceDirectories, exeDir)
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
@@ -70,8 +71,8 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	removeLeftoverTempParts(backupDir, log)
 
-	keys := planKeys(cfg, infos)
-	plans := planBackupTypes(cfg, infos, sources, keys, false, time.Now())
+	keys := plan.KeysFor(cfg, infos)
+	plans := plan.Folders(cfg, infos, sources, keys, false, time.Now())
 
 	est := estimateBackupSpace(cfg, backupDir, sources, plans)
 	report := backupPreflightReport(cfg, backupDir, sources, keys, plans, est, yubikey.CheckConnected)
@@ -86,7 +87,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	// planned); [K] creates new keys (offered when existing keys would be
 	// reused), to change the password, replace a lost YubiKey, or get a new
 	// recovery code.
-	choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{OfferFull: anyDifferential(plans), OfferNewKeys: keys.Existing != nil})
+	choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{OfferFull: plan.AnyDifferential(plans), OfferNewKeys: keys.Existing != nil})
 	if err != nil {
 		return err
 	}
@@ -96,10 +97,10 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		fmt.Fprintln(out, "Backup cancelled.")
 		return nil
 	case interact.BackupFull:
-		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
+		plans = plan.Folders(cfg, infos, sources, keys, true, time.Now())
 	case interact.BackupNewKeys:
-		keys = keyPlan{NewKeysReason: "New keys requested"}
-		plans = planBackupTypes(cfg, infos, sources, keys, true, time.Now())
+		keys = plan.Keys{NewKeysReason: "New keys requested"}
+		plans = plan.Folders(cfg, infos, sources, keys, true, time.Now())
 	}
 	if choice == interact.BackupFull || choice == interact.BackupNewKeys {
 		if err := checkSpaceForFullBackups(backupDir, est); err != nil {
@@ -167,12 +168,12 @@ func runBackupOperation(
 	cfg *config.Config,
 	log *logging.Logger,
 	logPath, backupDir string,
-	sources []backupSource,
+	sources []plan.Source,
 	date string,
 	runID naming.BackupID,
 	keySet *container.KeySet,
 	master []byte,
-	plans map[string]*dirPlan,
+	plans map[string]*plan.Folder,
 ) error {
 	out := u.Output()
 	fmt.Fprintln(out)
@@ -209,18 +210,18 @@ func runBackupOperation(
 
 		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
 		var base *setwriter.Base
-		if plan := plans[directoryName]; plan.IsDiff() {
-			loaded, err := loadBase(backupDir, plan.Base, keySet, master)
+		if folder := plans[directoryName]; folder.IsDiff() {
+			loaded, err := loadBase(backupDir, folder.Base, keySet, master)
 			if err != nil {
-				log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", plan.Base.Entry.String(), err)
+				log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", folder.Base.Entry.String(), err)
 				warningCount++
 			} else {
 				base = loaded
-				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: plan.Base.Entry.ChainID, Date: date, DiffNumber: plan.DiffNumber}
-				log.Info("  Backup type: differential %03d of chain %s (%s)", plan.DiffNumber, plan.Base.Entry.ChainID, plan.Reason)
+				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: folder.Base.Entry.ChainID, Date: date, DiffNumber: folder.DiffNumber}
+				log.Info("  Backup type: differential %03d of chain %s (%s)", folder.DiffNumber, folder.Base.Entry.ChainID, folder.Reason)
 			}
-		} else if plan != nil {
-			log.Info("  Backup type: full (%s)", plan.Reason)
+		} else if folder != nil {
+			log.Info("  Backup type: full (%s)", folder.Reason)
 		}
 		skipped, err := backupDirectory(ctx, u, srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
 		if err != nil {

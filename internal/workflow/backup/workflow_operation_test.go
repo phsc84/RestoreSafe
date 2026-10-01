@@ -7,6 +7,7 @@ import (
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/plan"
 	"context"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ type operationEnv struct {
 	logPath   string
 	logger    *logging.Logger
 	cfg       *config.Config
-	sources   []backupSource
+	sources   []plan.Source
 }
 
 func newOperationEnv(t *testing.T, payload string) *operationEnv {
@@ -34,7 +35,7 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	if err := os.MkdirAll(env.backupDir, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	env.sources = resolveBackupSources([]string{env.srcDir}, "")
+	env.sources = plan.ResolveSources([]string{env.srcDir}, "")
 	env.logPath = filepath.Join(env.backupDir, "operation.log")
 	logger, err := logging.NewLogger(env.logPath, "info", nil)
 	if err != nil {

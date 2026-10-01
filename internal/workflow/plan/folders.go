@@ -1,4 +1,4 @@
-package backup
+package plan
 
 import (
 	"RestoreSafe/internal/config"
@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-// dirPlan says whether one source directory gets a full or a differential
+// Folder says whether one source directory gets a full or a differential
 // backup in this run.
-type dirPlan struct {
+type Folder struct {
 	// Base is the full backup a differential is based on; nil means a full
 	// backup.
 	Base *catalog.SetInfo
@@ -21,22 +21,22 @@ type dirPlan struct {
 }
 
 // IsDiff reports whether the plan is a differential backup.
-func (p *dirPlan) IsDiff() bool { return p != nil && p.Base != nil }
+func (p *Folder) IsDiff() bool { return p != nil && p.Base != nil }
 
 // Label returns "Differential" or "Full".
-func (p *dirPlan) Label() string {
+func (p *Folder) Label() string {
 	if p.IsDiff() {
 		return "Differential"
 	}
 	return "Full"
 }
 
-// planBackupTypes decides per source directory between a full and a
-// differential backup (spec 6.1). All checks use headers and trailers only,
-// so the complete plan is known before the password is asked. forceFull
-// (the [F] choice) makes every directory a full backup.
-func planBackupTypes(cfg *config.Config, infos []catalog.SetInfo, sources []backupSource, keys keyPlan, forceFull bool, now time.Time) map[string]*dirPlan {
-	plans := make(map[string]*dirPlan)
+// Folders decides per source directory between a full and a differential
+// backup (2.0 spec 6.1), keyed by backup name. All checks use headers and
+// trailers only, so the complete plan is known before the password is asked.
+// forceFull (the user chose a full backup) makes every directory a full backup.
+func Folders(cfg *config.Config, infos []catalog.SetInfo, sources []Source, keys Keys, forceFull bool, now time.Time) map[string]*Folder {
+	plans := make(map[string]*Folder)
 	for _, src := range sources {
 		if src.Err != nil || src.Skip {
 			continue
@@ -45,13 +45,13 @@ func planBackupTypes(cfg *config.Config, infos []catalog.SetInfo, sources []back
 		if name == "" {
 			name = naming.DirectoryBaseName(src.Resolved)
 		}
-		plans[name] = planDirectory(cfg, infos, name, keys, forceFull, now)
+		plans[name] = planFolder(cfg, infos, name, keys, forceFull, now)
 	}
 	return plans
 }
 
-func planDirectory(cfg *config.Config, infos []catalog.SetInfo, directory string, keys keyPlan, forceFull bool, now time.Time) *dirPlan {
-	full := func(reason string) *dirPlan { return &dirPlan{Reason: reason} }
+func planFolder(cfg *config.Config, infos []catalog.SetInfo, directory string, keys Keys, forceFull bool, now time.Time) *Folder {
+	full := func(reason string) *Folder { return &Folder{Reason: reason} }
 
 	switch {
 	case forceFull:
@@ -110,15 +110,15 @@ func planDirectory(cfg *config.Config, infos []catalog.SetInfo, directory string
 		}
 	}
 
-	return &dirPlan{
+	return &Folder{
 		Base:       base,
 		DiffNumber: maxNumber + 1,
 		Reason:     fmt.Sprintf("base: full %s %s, %d days old", base.Entry.Date, base.Entry.ChainID, ageDays),
 	}
 }
 
-// anyDifferential reports whether at least one directory gets a differential.
-func anyDifferential(plans map[string]*dirPlan) bool {
+// AnyDifferential reports whether at least one directory gets a differential.
+func AnyDifferential(plans map[string]*Folder) bool {
 	for _, p := range plans {
 		if p.IsDiff() {
 			return true

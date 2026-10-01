@@ -2,7 +2,6 @@ package backup
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/recovery"
@@ -10,6 +9,7 @@ import (
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/plan"
 	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"encoding/json"
@@ -17,38 +17,6 @@ import (
 	"strings"
 	"testing"
 )
-
-func infoWithKeySet(ks *container.KeySet) catalog.SetInfo {
-	return catalog.SetInfo{Header: &container.Header{KeySet: *ks, CreatedUTC: ks.CreatedUTC}}
-}
-
-func TestPlanKeys(t *testing.T) {
-	t.Parallel()
-
-	ks, _ := testutil.NewPasswordKeySet(t, []byte("pw"))
-	cfg := &config.Config{AuthenticationMode: config.AuthModePassword}
-	infos := []catalog.SetInfo{infoWithKeySet(ks)}
-
-	if p := planKeys(cfg, nil); p.Existing != nil || !strings.Contains(p.NewKeysReason, "No existing keys") {
-		t.Fatalf("empty directory: %+v", p)
-	}
-	if p := planKeys(cfg, infos); p.Existing == nil || p.Existing.ID != ks.ID {
-		t.Fatalf("matching keys not reused: %+v", p)
-	}
-	for _, tc := range []struct {
-		mutate func(*config.Config)
-		want   string
-	}{
-		{func(c *config.Config) { c.AuthenticationMode = config.AuthModePasswordYubiKey }, "Authentication_mode changed"},
-		{func(c *config.Config) { c.RecoveryCode = true }, "Recovery_code enabled"},
-	} {
-		c := *cfg
-		tc.mutate(&c)
-		if p := planKeys(&c, infos); p.Existing != nil || !strings.Contains(p.NewKeysReason, tc.want) {
-			t.Fatalf("expected new keys with reason %q, got %+v", tc.want, p)
-		}
-	}
-}
 
 type enrollStub struct {
 	passwords [][2]string // password and its confirmation, per new password prompt
@@ -225,7 +193,7 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 		return append([]byte(nil), master...), nil
 	}
 
-	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, keyPlan{Existing: ks}, logging.NewConsoleLogger("info", nil))
+	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, plan.Keys{Existing: ks}, logging.NewConsoleLogger("info", nil))
 	if err != nil || gotKS.ID != ks.ID || !bytes.Equal(gotMaster, master) {
 		t.Fatalf("existing keys not reused: %v", err)
 	}

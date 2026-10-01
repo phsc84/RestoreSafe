@@ -2,18 +2,17 @@ package backup
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/recovery"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/plan"
 	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"errors"
 	"fmt"
-	"strings"
 	"unicode/utf8"
 )
 
@@ -30,38 +29,16 @@ var (
 // spare registration, recovery code confirmation).
 const maxEnrollAttempts = 3
 
-// keyPlan describes whether a backup run reuses the current key set or
-// creates new keys (enrollment).
-type keyPlan struct {
-	// Existing is the key set to reuse; nil means new keys are created.
-	Existing *container.KeySet
-	// NewKeysReason explains why new keys are created.
-	NewKeysReason string
-}
-
-// planKeys selects the key set of the newest complete backup when it matches
-// the configuration; otherwise new keys are needed.
-func planKeys(cfg *config.Config, infos []catalog.SetInfo) keyPlan {
-	ks := catalog.CurrentKeySet(infos)
-	if ks == nil {
-		return keyPlan{NewKeysReason: "No existing keys found in the backup directory"}
-	}
-	if reason := catalog.KeySetMismatch(cfg, ks); reason != "" {
-		return keyPlan{NewKeysReason: strings.ToUpper(reason[:1]) + reason[1:]}
-	}
-	return keyPlan{Existing: ks}
-}
-
 // obtainKeys unlocks the planned key set or runs enrollment. The caller must
 // zero the returned master key.
-func obtainKeys(u interact.UI, cfg *config.Config, plan keyPlan, log *logging.Logger) (*container.KeySet, []byte, error) {
-	if plan.Existing != nil {
-		master, err := unlockKeySetFn(u, plan.Existing, unlock.Options{PasswordPrompt: "Enter backup password: "}, log)
+func obtainKeys(u interact.UI, cfg *config.Config, keys plan.Keys, log *logging.Logger) (*container.KeySet, []byte, error) {
+	if keys.Existing != nil {
+		master, err := unlockKeySetFn(u, keys.Existing, unlock.Options{PasswordPrompt: "Enter backup password: "}, log)
 		if err != nil {
 			return nil, nil, err
 		}
-		log.InfoLogOnly("Existing keys unlocked (%s).", plan.Existing.Summary())
-		return plan.Existing, master, nil
+		log.InfoLogOnly("Existing keys unlocked (%s).", keys.Existing.Summary())
+		return keys.Existing, master, nil
 	}
 	return enrollKeySet(u, cfg, log)
 }

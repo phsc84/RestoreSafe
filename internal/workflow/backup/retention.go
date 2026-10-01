@@ -4,52 +4,29 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/workflow/plan"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"time"
 )
 
 var logFilePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})_([A-Z0-9]{6})\.log$`)
 
-// chain groups the backup sets of one directory that share a chain ID.
-type chain struct {
-	id          naming.BackupID
-	fullCreated time.Time
-	hasFull     bool
-	sets        []catalog.SetInfo
-}
-
-// applyRetentionPolicy keeps the newest retentionKeep chains (a full backup
-// plus its differentials) per configured source directory and deletes older
-// chains as a whole, so a full backup is never deleted while a kept
-// differential depends on it. Within each kept chain, only the newest
-// keepDifferentials differentials are kept (0 keeps all; the newest
-// differential is always kept). Incomplete sets older than the newest
-// complete set of their directory are deleted too. Files that do not follow
-// the RestoreSafe 2 naming scheme (including 1.x backups) are never touched.
-// Directories in hold are left untouched: their newest backup misses files
-// that could not be read, which older backups may still contain.
-func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int, sources []backupSource, hold map[string]bool, log *logging.Logger) error {
+// applyRetentionPolicy deletes the backup sets that plan.Retention selects
+// for the source directories, then the log files no longer needed. Files
+// that do not follow the RestoreSafe 2 naming scheme (including 1.x backups)
+// are never touched. Directories in hold are left untouched: their newest
+// backup misses files that could not be read, which older backups may still
+// contain.
+func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int, sources []plan.Source, hold map[string]bool, log *logging.Logger) error {
 	if retentionKeep <= 0 && keepDifferentials <= 0 {
 		log.Info("Cleanup old data disabled (retention_keep=%d, retention_keep_differentials=%d)", retentionKeep, keepDifferentials)
 		return nil
 	}
-
-	directorySet := make(map[string]bool)
-	for _, source := range sources {
-		if source.Err != nil {
-			continue
-		}
-		backupName := source.BackupName
-		if backupName == "" {
-			backupName = naming.DirectoryBaseName(source.Resolved)
-		}
-		directorySet[backupName] = true
-	}
-	if len(directorySet) == 0 {
+	if !anyUsableSource(sources) {
 		return nil
 	}
 
@@ -57,12 +34,15 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 	if err != nil {
 		return fmt.Errorf("Failed to scan backups for retention: %w", err)
 	}
-	for _, info := range infos {
-		if directorySet[info.Entry.DirectoryName] && info.Err != nil && !catalog.IsIncomplete(info.Err) {
-			log.Warn("Retention cleanup skipped: failed to inspect backup set %s (%v)", info.Entry.String(), info.Err)
-			log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
-			return nil
-		}
+	removals, err := plan.Retention(sources, infos, retentionKeep, keepDifferentials)
+	var unreadable *plan.UnreadableSetError
+	if errors.As(err, &unreadable) {
+		log.Warn("Retention cleanup skipped: %v", err)
+		log.Warn("No retention cleanup was performed to avoid deleting backups based on incomplete metadata.")
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	// The "Cleanup old data" header is logged lazily, immediately before the
@@ -79,13 +59,17 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 		}
 	}
 
-	for directory := range directorySet {
+	directories := make([]string, 0, len(removals))
+	for directory := range removals {
+		directories = append(directories, directory)
+	}
+	sort.Strings(directories)
+	for _, directory := range directories {
 		if hold[directory] {
 			log.Warn("Cleanup old data skipped for [%s]: the new backup misses files that could not be read, so older backups are kept.", directory)
 			continue
 		}
-		toDelete := retentionCandidates(directory, infos, retentionKeep, keepDifferentials)
-		for _, info := range toDelete {
+		for _, info := range removals[directory] {
 			deleted, err := deleteSetFiles(info.Parts)
 			logDeleted(deleted)
 			if err != nil {
@@ -106,6 +90,17 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 	return nil
 }
 
+// anyUsableSource reports whether at least one source directory can take part
+// in retention.
+func anyUsableSource(sources []plan.Source) bool {
+	for _, src := range sources {
+		if src.Err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // retentionSummary describes the retention settings, e.g.
 // "keep 3 chain(s), all differentials".
 func retentionSummary(retentionKeep, keepDifferentials int) string {
@@ -118,102 +113,6 @@ func retentionSummary(retentionKeep, keepDifferentials int) string {
 		diffs = fmt.Sprintf("%d differential(s) per chain", keepDifferentials)
 	}
 	return "keep " + chains + ", " + diffs
-}
-
-// retentionCandidates returns the sets of directory that retention deletes.
-func retentionCandidates(directory string, infos []catalog.SetInfo, retentionKeep, keepDifferentials int) []catalog.SetInfo {
-	chains := make(map[naming.BackupID]*chain)
-	var incomplete []catalog.SetInfo
-	var newestComplete time.Time
-	for _, info := range infos {
-		if info.Entry.DirectoryName != directory {
-			continue
-		}
-		if !info.Complete() {
-			incomplete = append(incomplete, info)
-			continue
-		}
-		if c := info.Created(); c.After(newestComplete) {
-			newestComplete = c
-		}
-		ch := chains[info.Entry.ChainID]
-		if ch == nil {
-			ch = &chain{id: info.Entry.ChainID}
-			chains[info.Entry.ChainID] = ch
-		}
-		ch.sets = append(ch.sets, info)
-		if !info.Entry.IsDiff() {
-			ch.hasFull = true
-			ch.fullCreated = info.Created()
-		}
-	}
-
-	// Only chains with a complete full backup take part in retention; a chain
-	// whose full backup is missing is reported by the health check instead.
-	ordered := make([]*chain, 0, len(chains))
-	for _, ch := range chains {
-		if ch.hasFull {
-			ordered = append(ordered, ch)
-		}
-	}
-	sort.Slice(ordered, func(i, j int) bool {
-		if !ordered[i].fullCreated.Equal(ordered[j].fullCreated) {
-			return ordered[i].fullCreated.After(ordered[j].fullCreated)
-		}
-		return ordered[i].id > ordered[j].id
-	})
-
-	var out []catalog.SetInfo
-	kept := ordered
-	if retentionKeep > 0 && len(ordered) > retentionKeep {
-		for _, ch := range ordered[retentionKeep:] {
-			out = append(out, ch.sets...)
-		}
-		kept = ordered[:retentionKeep]
-	}
-	if keepDifferentials > 0 {
-		for _, ch := range kept {
-			out = append(out, surplusDifferentials(ch, keepDifferentials)...)
-		}
-	}
-	for _, info := range incomplete {
-		if !newestComplete.IsZero() && newestPartModTime(info.Parts).Before(newestComplete) {
-			out = append(out, info)
-		}
-	}
-	return out
-}
-
-// surplusDifferentials returns the differentials of ch beyond the newest keep
-// ones. Differentials are independent of each other (each needs only the
-// full backup), so older ones can be removed without affecting newer ones.
-func surplusDifferentials(ch *chain, keep int) []catalog.SetInfo {
-	var diffs []catalog.SetInfo
-	for _, s := range ch.sets {
-		if s.Entry.IsDiff() {
-			diffs = append(diffs, s)
-		}
-	}
-	if len(diffs) <= keep {
-		return nil
-	}
-	sort.Slice(diffs, func(i, j int) bool {
-		if diffs[i].Entry.DiffNumber != diffs[j].Entry.DiffNumber {
-			return diffs[i].Entry.DiffNumber > diffs[j].Entry.DiffNumber
-		}
-		return diffs[i].Created().After(diffs[j].Created())
-	})
-	return diffs[keep:]
-}
-
-func newestPartModTime(parts []string) time.Time {
-	var newest time.Time
-	for _, p := range parts {
-		if fi, err := os.Stat(p); err == nil && fi.ModTime().After(newest) {
-			newest = fi.ModTime()
-		}
-	}
-	return newest
 }
 
 // deleteSetFiles removes the given part files and returns the base names of

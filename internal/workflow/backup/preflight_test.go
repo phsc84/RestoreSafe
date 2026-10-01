@@ -7,6 +7,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/plan"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,7 +18,7 @@ import (
 
 func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 	t.Parallel()
-	plans := []backupSource{
+	plans := []plan.Source{
 		{Resolved: "A"},
 		{Resolved: "B", Skip: true},
 		{Resolved: "C", Err: errors.New("inaccessible")},
@@ -32,7 +33,7 @@ func TestRunnableSourceCountCountsOnlyRunnablePlans(t *testing.T) {
 
 func TestValidateSourceDirectoriesIncludesFailureCount(t *testing.T) {
 	t.Parallel()
-	err := validateSourceDirectories([]backupSource{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
+	err := validateSourceDirectories([]plan.Source{{Resolved: "A", Err: errors.New("bad")}, {Resolved: "B", Err: errors.New("bad")}})
 	if err == nil {
 		t.Fatal("expected preflight validation error, got nil")
 	}
@@ -115,7 +116,7 @@ func TestValidateBackupPartCountRejectsBackupsExceedingLimit(t *testing.T) {
 	}
 
 	cfg := &config.Config{SplitSizeMB: 1}
-	sources := []backupSource{{Resolved: sourceDir}}
+	sources := []plan.Source{{Resolved: sourceDir}}
 
 	err := validateBackupPartCount(cfg, sources)
 	if err == nil {
@@ -138,7 +139,7 @@ func TestValidateBackupPartCountAllowsBackupsWithinLimit(t *testing.T) {
 	}
 
 	cfg := &config.Config{SplitSizeMB: 1}
-	sources := []backupSource{
+	sources := []plan.Source{
 		{Resolved: sourceDir},
 		{Resolved: filepath.Join(root, "skipped"), Skip: true},
 		{Resolved: filepath.Join(root, "errored"), Err: errors.New("inaccessible")},
@@ -165,10 +166,10 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	}
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "info"}
-	sources := []backupSource{{Resolved: sourceDir}}
+	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -185,13 +186,13 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	t.Parallel()
 	backupDir := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "info"}
-	sources := []backupSource{
+	sources := []plan.Source{
 		{Resolved: filepath.Join(backupDir, "Docs"), BackupName: "CustomDocs", Err: errors.New("access denied")},
 		{Resolved: filepath.Join(backupDir, "Photos"), Warning: "Large source"},
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -224,10 +225,10 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	}
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: config.AuthModePasswordYubiKey, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
+	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -260,10 +261,10 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 2, AuthenticationMode: config.AuthModePasswordYubiKey, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
+	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -301,10 +302,10 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	}
 
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "debug"}
-	sources := []backupSource{{Resolved: sourceDir}}
+	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, keyPlan{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
@@ -347,7 +348,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{SplitSizeMB: 1}
-	sources := []backupSource{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
+	sources := []plan.Source{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
 	issues, err := backupPreflightIssues(cfg, root, sources, estimateBackupSpace(cfg, root, sources, nil))
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
@@ -369,9 +370,9 @@ func TestBackupPreflightReportStructure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, AuthenticationMode: config.AuthModeYubiKey, LogLevel: "info"}
-	sources := []backupSource{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
+	sources := []plan.Source{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	r := backupPreflightReport(cfg, root, sources, keyPlan{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
+	r := backupPreflightReport(cfg, root, sources, plan.Keys{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
 	if r.Title != "Backup preflight" || len(r.Sections) != 2 {
 		t.Fatalf("unexpected report: %+v", r)
 	}
@@ -410,7 +411,7 @@ func TestEstimateBackupSpaceMeasuresRunnableSources(t *testing.T) {
 	if err := os.WriteFile(notADir, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	sources := []backupSource{
+	sources := []plan.Source{
 		{Resolved: srcA},
 		{Resolved: srcB, Skip: true},
 		{Resolved: filepath.Join(root, "missing"), Err: os.ErrNotExist},
@@ -441,10 +442,10 @@ func TestEstimateBackupSpaceCountsOnlyChangedFilesForDifferentials(t *testing.T)
 	}
 	// The full backup was made after the file was written: nothing changed
 	// since. A full backup made in the past counts the file as changed.
-	base := func(created time.Time) map[string]*dirPlan {
-		return map[string]*dirPlan{"Docs": {Base: &catalog.SetInfo{Header: &container.Header{CreatedUTC: created.UTC().Format(time.RFC3339)}}}}
+	base := func(created time.Time) map[string]*plan.Folder {
+		return map[string]*plan.Folder{"Docs": {Base: &catalog.SetInfo{Header: &container.Header{CreatedUTC: created.UTC().Format(time.RFC3339)}}}}
 	}
-	sources := []backupSource{{Resolved: src}}
+	sources := []plan.Source{{Resolved: src}}
 
 	est := estimateBackupSpace(&config.Config{}, root, sources, base(time.Now().Add(time.Hour)))
 	if !est.anyDiff || est.full != 10 || est.likely != 0 {

@@ -125,6 +125,8 @@ func TestWorkflowPackagesStayIndependent(t *testing.T) {
 				t.Errorf("%s imports the workflow %s; only the frontend starts workflows", pkg, imp)
 			case under(pkg, "internal/workflow/interact") && under(imp, "internal/workflow") && !under(imp, "internal/workflow/interact"):
 				t.Errorf("%s imports %s; the frontend contract must not depend on workflow code", pkg, imp)
+			case under(pkg, "internal/workflow/plan") && under(imp, "internal/workflow") && !under(imp, "internal/workflow/plan"):
+				t.Errorf("%s imports %s; planning sits below the workflows that act on it", pkg, imp)
 			}
 		}
 	}

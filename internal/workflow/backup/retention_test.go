@@ -7,6 +7,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/workflow/plan"
 	"errors"
 	"fmt"
 	"os"
@@ -60,15 +61,15 @@ func (e *retentionEnv) parts(t *testing.T, entry naming.BackupEntry) []string {
 	return parts
 }
 
-func docsSources() []backupSource {
-	return []backupSource{{Resolved: "C:/src/Docs", BackupName: "Docs"}}
+func docsSources() []plan.Source {
+	return []plan.Source{{Resolved: "C:/src/Docs", BackupName: "Docs"}}
 }
 
 func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	log := logging.NewConsoleLogger("info", nil)
-	if err := applyRetentionPolicy(dir, 0, 0, []backupSource{{Resolved: dir}}, nil, log); err != nil {
+	if err := applyRetentionPolicy(dir, 0, 0, []plan.Source{{Resolved: dir}}, nil, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
 	}
 }
@@ -76,7 +77,7 @@ func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	sources := []backupSource{{Resolved: dir, Err: errors.New("inaccessible")}}
+	sources := []plan.Source{{Resolved: dir, Err: errors.New("inaccessible")}}
 	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, logging.NewConsoleLogger("info", nil)); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
@@ -239,7 +240,7 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 
 	// The next differential continues the numbering: numbers are never reused.
 	cfg := &config.Config{}
-	p := planDirectory(cfg, infos, "Docs", keyPlan{Existing: env.ks}, false, time.Now())
+	p := plan.Folders(cfg, infos, docsSources(), plan.Keys{Existing: env.ks}, false, time.Now())["Docs"]
 	if !p.IsDiff() || p.DiffNumber != 4 {
 		t.Fatalf("expected differential 004 next, got %+v", p)
 	}

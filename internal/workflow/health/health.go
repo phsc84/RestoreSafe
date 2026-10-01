@@ -8,7 +8,7 @@ import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
+	"RestoreSafe/internal/workflow/plan"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -131,7 +131,7 @@ func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configP
 	items = append(items, checkConfigFileHealth(configPathDisplay)...)
 	items = append(items, checkArgon2Health(cfg)...)
 
-	sourceStatuses := job.InspectSourceDirectoriesForValidation(cfg.SourceDirectories, exeDir)
+	sourceStatuses := plan.ResolveSources(cfg.SourceDirectories, exeDir)
 	for _, src := range sourceStatuses {
 		if src.Err != nil {
 			items = append(items, healthItem{

@@ -86,7 +86,7 @@ internal/
 │   │   └── report.go, result.go, password.go   unchanged
 │   ├── plan/                   (new) planning without password (package plan)
 │   │   ├── sources.go          source resolution and backup names (from backup/source_names.go, job/source_validation.go)
-│   │   ├── types.go            full or differential per folder (from backup/plan.go)
+│   │   ├── folders.go          full or differential per folder (from backup/plan.go)
 │   │   ├── keys.go             key plan (from backup/keys.go: planKeys, keyPlan)
 │   │   └── retention.go        chains, retention candidates, retention preview (from backup/retention.go)
 │   ├── backup/                 keeps enrollment, space estimate, preflight, run, applying retention
@@ -158,17 +158,17 @@ Exported, documented, and tested where it is:
 | Function | From | Used by |
 |---|---|---|
 | `ResolveSources(dirs, exeDir) []Source` | `backup.resolveBackupSources`, `job.InspectSourceDirectoriesForValidation` | backup, health |
-| `Keys(cfg, infos) KeyPlan` | `backup.planKeys` | backup, health |
-| `Types(cfg, infos, sources, keys, forceFull, now) map[string]Folder` | `backup.planBackupTypes` | backup, health |
-| `RetentionCandidates(dir, infos, keep, keepDiffs) []catalog.SetInfo` | `backup.retentionCandidates` | backup (applying), `RetentionPreview` |
-| `RetentionPreview(cfg, infos, folders, hold) []catalog.SetInfo` | new | backup plan, health snapshot |
+| `KeysFor(cfg, infos) Keys` | `backup.planKeys` | backup, health |
+| `Folders(cfg, infos, sources, keys, forceFull, now) map[string]*Folder` | `backup.planBackupTypes` | backup, health |
+| `Retention(sources, infos, keep, keepDiffs) (map[string][]catalog.SetInfo, error)` | `backup.retentionCandidates` and the guard of `backup.applyRetentionPolicy` | backup (applying), `RetentionPreview` |
+| `RetentionPreview(cfg, infos, sources, folders, now) []catalog.SetInfo` | new | backup plan, health snapshot |
 
-`RetentionPreview` adds the planned sets to a copy of the inventory as synthetic entries and runs `RetentionCandidates` on it, so preview and deletion can't diverge. `backup.applyRetentionPolicy` keeps the deletion, logging and orphan-log cleanup.
+`RetentionPreview` adds the planned sets to a copy of the inventory as synthetic entries and runs `Retention` on it, so preview and deletion can't diverge. It describes a successful run; a hold after unreadable files or a failed verification is known only to the run. `backup.applyRetentionPolicy` keeps the deletion, logging and orphan-log cleanup.
 
 ### 5.3 `workflow/health`
 
 - `Check` keeps its `Result` for "Check details"; every item gets an `interact.Code`.
-- `Snapshot(ctx, cfg, exeDir, configPath, now) Snapshot` computes spec 11.1: problems and notes ordered by spec 3.5, folders with the next type from `plan.Types`, runs and sets from `catalog`, storage, keys, retention preview, and run facts from `logging`. The context carries the 5-second limit for the backup directory; a check that is still blocked in a system call after the limit is abandoned, reported as unreachable, and never started twice.
+- `Snapshot(ctx, cfg, exeDir, configPath, now) Snapshot` computes spec 11.1: problems and notes ordered by spec 3.5, folders with the next type from `plan.Folders`, runs and sets from `catalog`, storage, keys, retention preview, and run facts from `logging`. The context carries the 5-second limit for the backup directory; a check that is still blocked in a system call after the limit is abandoned, reported as unreachable, and never started twice.
 
 ### 5.4 `logging/facts.go`
 

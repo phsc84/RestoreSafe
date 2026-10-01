@@ -821,7 +821,7 @@ type FolderStatus struct {
     Name, Path  string
     Problem     *Problem
     Newest      *catalog.SetInfo // newest complete set
-    NextIsDiff  bool             // from plan.Types, the same code the backup uses
+    NextIsDiff  bool             // from plan.Folders, the same code the backup uses
     NextReason  string
 }
 
@@ -861,11 +861,11 @@ type BackupPlan struct {
 }
 ```
 
-The workflows fill the plan from the values they already compute (`plan.Types`, the space estimate, `plan.Keys`, the restore and verify preflights), and build `Details` from the same values.
+The workflows fill the plan from the values they already compute (`plan.Folders`, the space estimate, `plan.KeysFor`, the restore and verify preflights), and build `Details` from the same values.
 
 ### 11.3 Retention preview (new)
 
-`plan.RetentionCandidates` (today `backup.retentionCandidates`) computes what retention removes for a folder. `plan.RetentionPreview` applies it to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the Backups retention line (BK-7). The preview uses the same code as `applyRetentionPolicy`, and must return nothing for folders where retention will be held (newest set with skipped or stale files, or verification enabled and not yet run: say "if verification passes").
+`plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the Backups retention line (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
 
 ### 11.4 Run facts from the log (new)
 
@@ -1078,7 +1078,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Status model | One table-driven test of `health.Snapshot` over all fixtures of 16.1: expected `State`, the problem codes in order, "and N more", `Folders` with next type and reason, `Keys`, `Storage`. Includes: YubiKey not connected is information only; 1.x and leftovers are notes; Empty wins over Warning but Error problems are still listed; an unreachable backup directory returns within the 5-second timeout. | 3.5, 11.1, 11.9, OV-1, OV-3 to OV-6 |
 | Problem codes | Every health finding and every preflight issue carries a code from 11.8 (a test runs all fixtures and fails on an empty or unknown code). Message and Hint are non-empty and contain no `Remedy:`, no Go error text and no file names with IDs. | 11.8, 3.6 |
 | Plan is what happens | End-to-end per scenario (first backup with new keys; differential; full because the full is too old, with an injected clock; full because the last differential exceeded `max_size_percent`; forced full; new keys; differentials disabled; a missing source folder): the plan's type per folder equals the sets the run writes, and the plan and the text report come from the same values. | 11.2, BP-1 to BP-4 |
-| Retention preview is what happens | End-to-end for `retention_keep` 0, 1 and 3 and `retention_keep_differentials` 0 and 2, with a full and a differential run: the sets named by the preview are exactly the sets deleted by the run. Held cases: skipped files in the newest set, a failed verification after backup; the preview says nothing is removed and the run removes nothing. | 11.3, BP-2, BK-7 |
+| Retention preview is what happens | End-to-end: the sets named by the preview are exactly the sets the run deletes, for a new chain with `retention_keep` 1, 2 and 3; a new differential with `retention_keep_differentials` 1 and 2; both limits together; an old incomplete set; and nothing to remove (retention off, below the limits). The hold after skipped files or a failed verification is tested at `applyRetentionPolicy`. | 11.3, BP-2, BK-7 |
 | Run facts | Backup, verify and restore write the structured result lines of 11.4 into the right run log; the reader returns duration, warnings and verify results. A log without such lines (older 2.0 runs, a hand-edited or truncated log) yields "unknown" and never an error. | 11.4, BK-1, BK-2, BK-8 |
 | Progress | A recording UI checks per workflow: phases in the order of BR-2, `Index` from 1 to `Count`, `Done` never decreasing within a step, a final report per step. | 11.7, BR-2, RW-7 |
 | Reload | A valid file replaces the configuration; an invalid file keeps the previous one and returns the error; Reload during an operation is refused. `reminder_days` bounds and default. | 11.6, ST-2, decision 2 |

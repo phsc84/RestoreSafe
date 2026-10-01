@@ -1,4 +1,4 @@
-package backup
+package plan
 
 import (
 	"RestoreSafe/internal/format/naming"
@@ -9,20 +9,30 @@ import (
 	"strings"
 )
 
-type backupSource struct {
+// Source is one configured source directory, resolved and checked.
+type Source struct {
+	// Resolved is the absolute path.
 	Resolved       string
-	normalizedPath string // cached result of normalizedSourcePathKey(Resolved)
-	BackupName     string
-	Warning        string
-	Skip           bool
-	Err            error
+	normalizedPath string // cached result of fsx.NormalizePathKey(Resolved)
+	// BackupName is the directory name in the backup file names, with an
+	// alias when several sources share a base name.
+	BackupName string
+	// Warning is set for an identical duplicate of an earlier source.
+	Warning string
+	// Skip is set for an identical duplicate; it is not backed up again.
+	Skip bool
+	// Err is set when the directory cannot be backed up.
+	Err error
 }
 
-func resolveBackupSources(sourceDirectories []string, exeDir string) []backupSource {
-	result := make([]backupSource, 0, len(sourceDirectories))
+// ResolveSources resolves the configured source directories (relative paths
+// against exeDir), checks them, marks identical duplicates, and assigns the
+// backup names.
+func ResolveSources(sourceDirectories []string, exeDir string) []Source {
+	result := make([]Source, 0, len(sourceDirectories))
 	for _, src := range sourceDirectories {
 		resolved := fsx.ResolveDir(src, exeDir)
-		status := backupSource{Resolved: resolved, normalizedPath: fsx.NormalizePathKey(resolved)}
+		status := Source{Resolved: resolved, normalizedPath: fsx.NormalizePathKey(resolved)}
 
 		status.Err = fsx.ValidateSourceDirectory(resolved)
 		result = append(result, status)
@@ -32,7 +42,7 @@ func resolveBackupSources(sourceDirectories []string, exeDir string) []backupSou
 	return result
 }
 
-func markIdenticalSourceDuplicates(sources []backupSource) {
+func markIdenticalSourceDuplicates(sources []Source) {
 	seenByPath := make(map[string]int)
 	for i := range sources {
 		if sources[i].Err != nil {
@@ -50,14 +60,14 @@ func markIdenticalSourceDuplicates(sources []backupSource) {
 	}
 }
 
-func assignSourceBackupNames(sources []backupSource) {
+func assignSourceBackupNames(sources []Source) {
 	grouped := groupSourcesByBasename(sources)
 	assignNamesByGroup(sources, grouped)
 	fillMissingBackupNames(sources)
 }
 
 // groupSourcesByBasename maps each unique base directory name to the indices of valid (non-error, non-skipped) sources that share it.
-func groupSourcesByBasename(sources []backupSource) map[string][]int {
+func groupSourcesByBasename(sources []Source) map[string][]int {
 	grouped := make(map[string][]int)
 	for i, source := range sources {
 		if source.Err != nil || source.Skip {
@@ -72,7 +82,7 @@ func groupSourcesByBasename(sources []backupSource) map[string][]int {
 // assignNamesByGroup assigns BackupNames from the grouped index map.
 // Unique base names are used directly; duplicate base names get a path-alias suffix.
 // Alias collisions mark both sources with an error.
-func assignNamesByGroup(sources []backupSource, grouped map[string][]int) {
+func assignNamesByGroup(sources []Source, grouped map[string][]int) {
 	for baseName, indices := range grouped {
 		if len(indices) == 1 {
 			sources[indices[0]].BackupName = baseName
@@ -101,7 +111,7 @@ func assignNamesByGroup(sources []backupSource, grouped map[string][]int) {
 
 // fillMissingBackupNames ensures every source has a BackupName set.
 // Skipped sources inherit the name of their non-skipped counterpart; others fall back to base directory name.
-func fillMissingBackupNames(sources []backupSource) {
+func fillMissingBackupNames(sources []Source) {
 	nameByPath := make(map[string]string)
 	for i := range sources {
 		if sources[i].Err != nil || sources[i].Skip {

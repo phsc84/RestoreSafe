@@ -7,6 +7,7 @@ import (
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
+	"RestoreSafe/internal/workflow/plan"
 	"fmt"
 	"strings"
 	"time"
@@ -19,9 +20,9 @@ import (
 func backupPreflightReport(
 	cfg *config.Config,
 	backupDir string,
-	sources []backupSource,
-	keys keyPlan,
-	plans map[string]*dirPlan,
+	sources []plan.Source,
+	keys plan.Keys,
+	plans map[string]*plan.Folder,
 	est spaceEstimate,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
@@ -55,12 +56,12 @@ func backupPreflightReport(
 			status = interact.StatusWarn
 			details = append(details, src.Warning)
 		}
-		if plan := plans[backupName]; plan != nil && !src.Skip {
+		if folder := plans[backupName]; folder != nil && !src.Skip {
 			reasonLabel := "reason: "
-			if plan.IsDiff() {
+			if folder.IsDiff() {
 				reasonLabel = ""
 			}
-			details = append(details, fmt.Sprintf("%s backup (%s%s)", plan.Label(), reasonLabel, plan.Reason))
+			details = append(details, fmt.Sprintf("%s backup (%s%s)", folder.Label(), reasonLabel, folder.Reason))
 		}
 		directories = append(directories, interact.Item(status, src.Resolved, details...))
 	}
@@ -112,7 +113,7 @@ func backupPreflightReport(
 
 // keyPlanRows state whether the run reuses the existing keys or creates new
 // ones, and what that means for the user.
-func keyPlanRows(keys keyPlan) []interact.Row {
+func keyPlanRows(keys plan.Keys) []interact.Row {
 	if keys.Existing != nil {
 		return []interact.Row{interact.Field("Keys", "existing keys, "+keys.Existing.Summary())}
 	}
@@ -127,7 +128,7 @@ func keyPlanRows(keys keyPlan) []interact.Row {
 // as report issues, together with the error of the first failed check. A
 // differential whose estimate fits, but that would not fit if it stored
 // every file again, gets a warning instead of an error.
-func backupPreflightIssues(cfg *config.Config, backupDir string, sources []backupSource, est spaceEstimate) ([]interact.Issue, error) {
+func backupPreflightIssues(cfg *config.Config, backupDir string, sources []plan.Source, est spaceEstimate) ([]interact.Issue, error) {
 	var issues []interact.Issue
 	var first error
 	targetWarn, targetErr := validateTargetSpaceForBackup(backupDir, est)
@@ -150,10 +151,10 @@ func backupPreflightIssues(cfg *config.Config, backupDir string, sources []backu
 	return issues, first
 }
 
-func validateSourceDirectories(sources []backupSource) error {
+func validateSourceDirectories(sources []plan.Source) error {
 	return job.ValidatePreflightItems(
 		sources,
-		func(src backupSource) bool { return src.Err != nil },
+		func(src plan.Source) bool { return src.Err != nil },
 		"Backup preflight failed: %d source directory(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
 	)
 }
@@ -232,7 +233,7 @@ func partCountAdvisory(maxPartCount int64) string {
 // directory is written as its own sequence of parts starting at 1, so the limit
 // is checked per source. The estimate uses the source size and configured split
 // size (plus a safety margin for overhead); both are known before the backup starts.
-func validateBackupPartCount(cfg *config.Config, sources []backupSource) error {
+func validateBackupPartCount(cfg *config.Config, sources []plan.Source) error {
 	splitSizeBytes := cfg.SplitSizeMB * 1024 * 1024
 	if splitSizeBytes <= 0 {
 		return nil
@@ -267,7 +268,7 @@ func validateBackupPartCount(cfg *config.Config, sources []backupSource) error {
 	return nil
 }
 
-func runnableSourceCount(sources []backupSource) int {
+func runnableSourceCount(sources []plan.Source) int {
 	count := 0
 	for _, source := range sources {
 		if source.Err != nil || source.Skip {
@@ -300,7 +301,7 @@ type spaceEstimate struct {
 
 // estimateBackupSpace measures every source that will be backed up, once,
 // following the exclude patterns.
-func estimateBackupSpace(cfg *config.Config, backupDir string, sources []backupSource, plans map[string]*dirPlan) spaceEstimate {
+func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
 	var est spaceEstimate
 	for _, src := range sources {
 		if src.Err != nil || src.Skip {
@@ -311,8 +312,8 @@ func estimateBackupSpace(cfg *config.Config, backupDir string, sources []backupS
 			name = naming.DirectoryBaseName(src.Resolved)
 		}
 		var since time.Time
-		if plan := plans[name]; plan.IsDiff() {
-			since = plan.Base.Created()
+		if folder := plans[name]; folder.IsDiff() {
+			since = folder.Base.Created()
 			est.anyDiff = true
 		}
 		m, err := archive.MeasureSource(archive.BuildOptions{SourceDir: src.Resolved, ExcludeDirs: []string{backupDir}, Exclude: cfg.ExcludeMatcher}, since)

@@ -1,4 +1,4 @@
-package backup
+package plan
 
 import (
 	"RestoreSafe/internal/config"
@@ -20,15 +20,15 @@ func planInfo(chain string, diff int, created time.Time, dataLen int64, keySetID
 	}
 }
 
-func planFor(cfg *config.Config, infos []catalog.SetInfo, keys keyPlan, force bool) *dirPlan {
-	sources := []backupSource{{Resolved: "C:/src/Docs", BackupName: "Docs"}}
-	return planBackupTypes(cfg, infos, sources, keys, force, planNow)["Docs"]
+func planFor(cfg *config.Config, infos []catalog.SetInfo, keys Keys, force bool) *Folder {
+	sources := []Source{{Resolved: "C:/src/Docs", BackupName: "Docs"}}
+	return Folders(cfg, infos, sources, keys, force, planNow)["Docs"]
 }
 
-func TestPlanDirectoryRules(t *testing.T) {
+func TestFolderRules(t *testing.T) {
 	t.Parallel()
 
-	keys := keyPlan{Existing: &container.KeySet{ID: "current"}}
+	keys := Keys{Existing: &container.KeySet{ID: "current"}}
 	cfg := &config.Config{}
 	day := 24 * time.Hour
 	full := planInfo("ABC123", 0, planNow.Add(-10*day), 1000, "current")
@@ -38,7 +38,7 @@ func TestPlanDirectoryRules(t *testing.T) {
 		name   string
 		cfg    *config.Config
 		infos  []catalog.SetInfo
-		keys   keyPlan
+		keys   Keys
 		force  bool
 		diff   int
 		reason string
@@ -47,7 +47,7 @@ func TestPlanDirectoryRules(t *testing.T) {
 		{"next number after existing diffs", cfg, []catalog.SetInfo{planInfo("ABC123", 4, planNow.Add(-day), 100, "current"), full}, keys, false, 5, "base: full"},
 		{"incomplete diff still counts", cfg, []catalog.SetInfo{{Entry: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", DiffNumber: 7}, Err: &container.ErrIncomplete{}}, full}, keys, false, 8, "base: full"},
 		{"forced full", cfg, []catalog.SetInfo{full}, keys, true, 0, "full backup requested"},
-		{"new keys", cfg, []catalog.SetInfo{full}, keyPlan{NewKeysReason: "x"}, false, 0, "new keys"},
+		{"new keys", cfg, []catalog.SetInfo{full}, Keys{NewKeysReason: "x"}, false, 0, "new keys"},
 		{"disabled", &config.Config{Differential: config.Differential{Enabled: &disabled}}, []catalog.SetInfo{full}, keys, false, 0, "disabled"},
 		{"no full", cfg, nil, keys, false, 0, "no complete full backup"},
 		{"older keys", cfg, []catalog.SetInfo{planInfo("ABC123", 0, planNow.Add(-day), 1000, "old")}, keys, false, 0, "older keys"},
@@ -65,10 +65,10 @@ func TestPlanDirectoryRules(t *testing.T) {
 	}
 }
 
-func TestPlanUsesNewestCompleteFullAsBase(t *testing.T) {
+func TestFoldersUseNewestCompleteFullAsBase(t *testing.T) {
 	t.Parallel()
 
-	keys := keyPlan{Existing: &container.KeySet{ID: "current"}}
+	keys := Keys{Existing: &container.KeySet{ID: "current"}}
 	day := 24 * time.Hour
 	newest := planInfo("NEW002", 0, planNow.Add(-2*day), 1000, "current")
 	older := planInfo("OLD001", 0, planNow.Add(-5*day), 1000, "current")
@@ -78,7 +78,7 @@ func TestPlanUsesNewestCompleteFullAsBase(t *testing.T) {
 	if !p.IsDiff() || p.Base.Entry.ChainID != "NEW002" || p.DiffNumber != 1 {
 		t.Fatalf("expected differential 1 of NEW002, got %+v", p)
 	}
-	if !anyDifferential(map[string]*dirPlan{"Docs": p}) {
-		t.Fatal("anyDifferential must see the differential")
+	if !AnyDifferential(map[string]*Folder{"Docs": p}) {
+		t.Fatal("AnyDifferential must see the differential")
 	}
 }

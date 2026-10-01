@@ -6,7 +6,7 @@
 //
 //	cmd             restoresafe, yubidiag
 //	gui             gui, gui/win32
-//	workflow        interact, backup, restore, verify, health, unlock, restorepoint, job
+//	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job
 //	format          archive, container, manifest, catalog, naming, setwriter
 //	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo
 //	security        cryptox, recovery, yubikey (recovery and yubikey -> cryptox)
@@ -22,6 +22,8 @@
 //     frontend starts workflows.
 //   - workflow/interact (and interacttest) imports no other workflow package:
 //     the contract does not depend on workflow code.
+//   - workflow/plan imports no other workflow package: backup and health
+//     act on its decisions, so it sits below them.
 //   - gui/win32 has no internal imports.
 //   - testutil, e2e, and architecture are test support: exempt from the
 //     layers, never imported by production code.

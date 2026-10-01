@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/interact/interacttest"
+	"RestoreSafe/internal/workflow/plan"
 	"context"
 	"fmt"
 	"math/rand/v2"
@@ -28,7 +29,7 @@ func TestThroughputBenchmarkBackup(t *testing.T) {
 
 	cfg := &config.Config{SplitSizeMB: config.DefaultSplitSizeMB, Argon2: testutil.FastArgon2Config}
 	ks, master := testutil.NewPasswordKeySet(t, []byte("bench-pw"))
-	sources := resolveBackupSources([]string{srcDir}, "")
+	sources := plan.ResolveSources([]string{srcDir}, "")
 
 	// The first run warms up caches and is not counted.
 	var times []time.Duration
