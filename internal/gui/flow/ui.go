@@ -30,8 +30,11 @@ type Dialogs interface {
 	VerifyPlan(p interact.VerifyPlan, answer func())
 	// ConfirmStart asks to start "restore" or "verification".
 	ConfirmStart(action string, answer func(bool, error))
-	// ChooseUnlockMethod answers true for the recovery code.
-	ChooseUnlockMethod(regular string, answer func(recovery bool, err error))
+	// ChooseUnlockMethod answers true for the recovery code; regular names
+	// the regular credentials, e.g. "password + YubiKey". A dialog that
+	// takes the password with the choice answers it as secret, which the
+	// caller zeroes; nil otherwise.
+	ChooseUnlockMethod(q Question, regular string, answer func(recovery bool, secret []byte, err error))
 	// Password answers the secret; the caller zeroes it.
 	Password(q Question, answer func(secret []byte, err error))
 	// NewPassword answers the password and its confirmation, or ok=false
@@ -56,6 +59,9 @@ type UI struct {
 	newPasswordAsked   bool
 	retypeAsked        bool
 	spareAsked         bool
+	// pendingSecret is a password typed with the choice of the unlock
+	// method, for the next Password question.
+	pendingSecret []byte
 }
 
 var _ interact.UI = (*UI)(nil)
@@ -103,11 +109,26 @@ func (u *UI) ConfirmStart(action string) (bool, error) {
 }
 
 // ChooseUnlockMethod asks for the regular credentials or the recovery code.
+// The dialog may take the password with the choice (password-only keys);
+// the next Password question then returns it without asking again.
 func (u *UI) ChooseUnlockMethod(regular string) (bool, error) {
+	q := Question{Message: u.recentMessage()}
+	type choice struct {
+		recovery bool
+		secret   []byte
+	}
 	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.ChooseUnlockMethod(regular, func(recovery bool, err error) { answer(recovery, err) })
-	}, false, interact.ErrCancelled)
-	return v.(bool), err
+		u.d.ChooseUnlockMethod(q, regular, func(recovery bool, secret []byte, err error) {
+			answer(choice{recovery, secret}, err)
+		})
+	}, choice{}, interact.ErrCancelled)
+	c, _ := v.(choice)
+	if err != nil {
+		cryptox.ZeroBytes(c.secret)
+		return false, err
+	}
+	u.pendingSecret = c.secret
+	return c.recovery, nil
 }
 
 // recentMessage returns the last output line written since the previous
@@ -125,6 +146,13 @@ func (u *UI) recentMessage() string {
 
 // Password asks for a secret without echo.
 func (u *UI) Password(prompt string) ([]byte, error) {
+	if s := u.pendingSecret; s != nil && !strings.Contains(strings.ToLower(prompt), "recovery code") {
+		// Typed with the choice of the unlock method.
+		u.pendingSecret = nil
+		u.lastPasswordPrompt = prompt
+		u.recentMessage()
+		return s, nil
+	}
 	q := Question{Prompt: prompt, Message: u.recentMessage(), Retry: u.lastPasswordPrompt == prompt}
 	u.lastPasswordPrompt = prompt
 	v, err := u.b.Ask(func(answer func(any, error)) {

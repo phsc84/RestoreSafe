@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
@@ -160,6 +161,10 @@ type LastBackupCard struct {
 	Glyph Glyph
 	Line  string
 	Rows  []SetRow
+	// Note tells of a later backup that failed or was cancelled before it
+	// wrote a set.
+	Note     string
+	NoteTone Tone
 }
 
 // KeysCard describes the keys (spec OV-6).
@@ -402,6 +407,7 @@ func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
 	if run == nil {
 		card.Line, card.Tone, card.Glyph = lastBackupNone, ToneSecondary, GlyphNone
 		card.Link.Enabled = false
+		card.Note, card.NoteTone = laterRunNote(s, time.Time{}, now)
 		return card
 	}
 	var size int64
@@ -420,10 +426,18 @@ func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
 		if facts.Backup.Seconds > 0 {
 			card.Line += fmt.Sprintf(lastBackupDuration, Duration(time.Duration(facts.Backup.Seconds)*time.Second))
 		}
-		if facts.Backup.Warnings > 0 {
+		switch {
+		case facts.Backup.Result == logging.ResultFailed:
+			card.Line += " · " + runPartFailed
+			card.Tone, card.Glyph = ToneError, GlyphError
+		case facts.Backup.Result == logging.ResultCancelled:
+			card.Line += " · " + runPartCancelled
+			card.Tone, card.Glyph = ToneWarning, GlyphWarning
+		case facts.Backup.Warnings > 0:
 			card.Tone, card.Glyph = ToneWarning, GlyphWarning
 		}
 	}
+	card.Note, card.NoteTone = laterRunNote(s, run.Created, now)
 	for _, e := range run.Entries {
 		row := SetRow{Name: e.DirectoryName, Badge: badgeOf(e), Based: newChain}
 		if e.IsDiff() {
@@ -475,4 +489,22 @@ func capitalize(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// laterRunNote tells of the newest backup when it is newer than the run
+// with sets and failed or was cancelled before it wrote a set.
+func laterRunNote(s *health.Snapshot, after time.Time, now time.Time) (string, Tone) {
+	for _, l := range s.Logs {
+		b := s.Facts[l.RunID].Backup
+		if b == nil || !b.Time.After(after) {
+			continue
+		}
+		switch b.Result {
+		case logging.ResultFailed:
+			return fmt.Sprintf(laterFailed, When(b.Time, now)), ToneError
+		case logging.ResultCancelled:
+			return fmt.Sprintf(laterCancelled, When(b.Time, now)), ToneSecondary
+		}
+	}
+	return "", ToneNeutral
 }

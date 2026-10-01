@@ -3,7 +3,6 @@ package gui
 import (
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"
 )
 
@@ -57,21 +56,20 @@ func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 	})
 }
 
-// ChooseUnlockMethod offers the regular credentials and the recovery code
-// (restore and verify; the unlock dialog takes it over in plan phase 7).
-func (q questions) ChooseUnlockMethod(regular string, answer func(bool, error)) {
-	button, _ := q.a.taskDialog(q.a.hwnd, win32.TaskDialog{
-		Instruction:  "How do you want to unlock the backup?",
-		Buttons:      []win32.TaskButton{{ID: 100, Text: "Unlock with " + regular}, {ID: 101, Text: "Unlock with the recovery code"}},
-		CommandLinks: true,
-	})
-	switch button {
-	case 100:
-		answer(false, nil)
-	case 101:
-		answer(true, nil)
+// ChooseUnlockMethod shows the unlock dialog with the link to the recovery
+// code (CR-1). For password-only keys it takes the password too.
+func (q questions) ChooseUnlockMethod(qu flow.Question, regular string, answer func(bool, []byte, error)) {
+	d := view.UnlockChoiceOf(qu, regular)
+	res := q.a.runCredentialDialog(d)
+	switch {
+	case res.link:
+		answer(true, nil, nil)
+	case !res.ok:
+		answer(false, nil, interact.ErrCancelled)
+	case len(d.Fields) > 0:
+		answer(false, res.values[0], nil)
 	default:
-		answer(false, interact.ErrCancelled)
+		answer(false, nil, nil)
 	}
 }
 
@@ -86,22 +84,22 @@ func (q questions) keys() *interact.KeyPlan {
 
 // Password asks for the password or the recovery code (figure 9.1).
 func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
-	values, ok := q.a.runCredentialDialog(view.UnlockDialogOf(qu))
-	if !ok {
+	res := q.a.runCredentialDialog(view.UnlockDialogOf(qu))
+	if !res.ok {
 		answer(nil, interact.ErrCancelled)
 		return
 	}
-	answer(values[0], nil)
+	answer(res.values[0], nil)
 }
 
 // NewPassword asks for a new password and its confirmation (figure 9.2).
 func (q questions) NewPassword(qu flow.Question, _ string, answer func(pw, confirm []byte, ok bool)) {
-	values, ok := q.a.runCredentialDialog(view.NewPasswordDialogOf(qu, q.newKeys()))
-	if !ok {
+	res := q.a.runCredentialDialog(view.NewPasswordDialogOf(qu, q.newKeys()))
+	if !res.ok {
 		answer(nil, nil, false)
 		return
 	}
-	answer(values[0], values[1], true)
+	answer(res.values[0], res.values[1], true)
 }
 
 // newKeys returns the plan of the keys being created.
@@ -120,16 +118,15 @@ func (q questions) RecoveryCode(code string, answer func()) {
 
 // RetypeRecoveryCode asks for the recovery code shown before.
 func (q questions) RetypeRecoveryCode(qu flow.Question, answer func(string, error)) {
-	values, ok := q.a.runCredentialDialog(view.RetypeDialogOf(qu, q.newKeys()))
-	if !ok {
+	res := q.a.runCredentialDialog(view.RetypeDialogOf(qu, q.newKeys()))
+	if !res.ok {
 		answer("", interact.ErrCancelled)
 		return
 	}
-	answer(string(values[0]), nil)
+	answer(string(res.values[0]), nil)
 }
 
 // SpareYubiKey asks to connect the spare YubiKey.
 func (q questions) SpareYubiKey(qu flow.Question, answer func(bool)) {
-	_, ok := q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys()))
-	answer(ok)
+	answer(q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys())).ok)
 }

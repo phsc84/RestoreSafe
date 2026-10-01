@@ -10,13 +10,15 @@ import (
 
 // fakeDialogs answers the questions as the test scripts them.
 type fakeDialogs struct {
-	questions []Question
-	plans     []interact.BackupPlan
-	opts      []interact.BackupStartOptions
-	password  func(Question) ([]byte, error)
-	newPw     func() ([]byte, []byte, bool)
-	start     interact.BackupStart
-	confirm   []byte // the confirmation NewPassword answered
+	questions    []Question
+	plans        []interact.BackupPlan
+	opts         []interact.BackupStartOptions
+	password     func(Question) ([]byte, error)
+	newPw        func() ([]byte, []byte, bool)
+	start        interact.BackupStart
+	confirm      []byte // the confirmation NewPassword answered
+	recovery     bool
+	choiceSecret []byte
 }
 
 func (f *fakeDialogs) BackupPlan(p interact.BackupPlan, answer func()) {
@@ -27,10 +29,12 @@ func (f *fakeDialogs) ConfirmBackupStart(o interact.BackupStartOptions, answer f
 	f.opts = append(f.opts, o)
 	answer(f.start, nil)
 }
-func (f *fakeDialogs) RestorePlan(interact.RestorePlan, func())         {}
-func (f *fakeDialogs) VerifyPlan(interact.VerifyPlan, func())           {}
-func (f *fakeDialogs) ConfirmStart(string, func(bool, error))           {}
-func (f *fakeDialogs) ChooseUnlockMethod(string, func(bool, error))     {}
+func (f *fakeDialogs) RestorePlan(interact.RestorePlan, func()) {}
+func (f *fakeDialogs) VerifyPlan(interact.VerifyPlan, func())   {}
+func (f *fakeDialogs) ConfirmStart(string, func(bool, error))   {}
+func (f *fakeDialogs) ChooseUnlockMethod(_ Question, _ string, answer func(bool, []byte, error)) {
+	answer(f.recovery, f.choiceSecret, nil)
+}
 func (f *fakeDialogs) RecoveryCode(string, func())                      {}
 func (f *fakeDialogs) RetypeRecoveryCode(Question, func(string, error)) {}
 func (f *fakeDialogs) SpareYubiKey(Question, func(bool))                {}
@@ -287,5 +291,31 @@ func TestMachineRecordsTheFoldersBackedUp(t *testing.T) {
 	failed.Done(End{Err: errors.New("disk full")}, now)
 	if f := failed.Current().Finished; len(f) != 0 {
 		t.Fatalf("a failed folder is not finished: %+v", f)
+	}
+}
+
+func TestUIPasswordTypedWithTheUnlockChoice(t *testing.T) {
+	t.Parallel()
+	asked := 0
+	d := &fakeDialogs{choiceSecret: []byte("typed"), password: func(Question) ([]byte, error) { asked++; return []byte("again"), nil }}
+	u := newTestUI(t, d)
+	if recovery, err := u.ChooseUnlockMethod("password only"); recovery || err != nil {
+		t.Fatalf("choice %v %v", recovery, err)
+	}
+	if pw, err := u.Password("Enter verification password: "); string(pw) != "typed" || err != nil || asked != 0 {
+		t.Fatalf("the password typed with the choice: %q %v (asked %d)", pw, err, asked)
+	}
+	// A wrong password asks again, as a retry.
+	if pw, _ := u.Password("Enter verification password: "); string(pw) != "again" || !d.questions[0].Retry {
+		t.Fatalf("retry %q %+v", pw, d.questions)
+	}
+
+	r := &fakeDialogs{recovery: true, password: func(Question) ([]byte, error) { return []byte("CODE"), nil }}
+	ur := newTestUI(t, r)
+	if recovery, _ := ur.ChooseUnlockMethod("password only"); !recovery {
+		t.Fatal("the recovery code was chosen")
+	}
+	if code, _ := ur.Password("Enter recovery code: "); string(code) != "CODE" || len(r.questions) != 1 {
+		t.Fatalf("the recovery code is asked: %q", code)
 	}
 }

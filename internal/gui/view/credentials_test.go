@@ -77,3 +77,19 @@ func TestCodeLines(t *testing.T) {
 		t.Fatalf("odd group count: %q", got)
 	}
 }
+
+func TestUnlockChoiceByKeyType(t *testing.T) {
+	t.Parallel()
+	older := flow.Question{Message: "Backup Docs_ABC123_2026-09-01_FULL uses different keys (created 2026-09-01). Authenticate with the credentials of those keys."}
+	d := UnlockChoiceOf(older, "password only")
+	if len(d.Fields) != 1 || !d.Fields[0].Masked || d.Link != "Use your recovery code instead" || !strings.Contains(d.Hint, "created 2026-09-01") {
+		t.Fatalf("password keys %+v", d)
+	}
+	if d := UnlockChoiceOf(flow.Question{}, "password + YubiKey"); len(d.Fields) != 0 || !strings.Contains(d.Intro, "YubiKey first") {
+		t.Fatalf("password + YubiKey %+v", d)
+	}
+	if d := UnlockChoiceOf(flow.Question{}, "YubiKey only (no password)"); len(d.Fields) != 0 || !strings.Contains(d.Intro, "touch it") {
+		t.Fatalf("YubiKey only %+v", d)
+	}
+	checkWriting(t, d)
+}

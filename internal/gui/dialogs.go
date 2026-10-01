@@ -26,6 +26,7 @@ const (
 const (
 	idCredentialOK     = win32.IDOK
 	idCredentialCancel = 470
+	idCredentialLink   = 471
 )
 
 // credentialDialog is the open credential dialog (spec 9); the GUI shows
@@ -39,20 +40,30 @@ type credentialDialog struct {
 	codeFont windows.Handle
 	noCancel bool
 	ok, open bool
+	// linked is set when the user chose the link.
+	linked bool
 }
 
 var activeCredential *credentialDialog
 
-// runCredentialDialog shows v modal to the main window and returns the
-// field values, or ok=false when it was cancelled. The caller zeroes
-// masked values after use.
-func (a *app) runCredentialDialog(v view.CredentialDialog) (values [][]byte, ok bool) {
+// credentialAnswer is how the user closed a credential dialog.
+type credentialAnswer struct {
+	// values are the fields, read when ok; the caller zeroes masked ones.
+	values [][]byte
+	ok     bool
+	// link is set when the user chose the dialog's link.
+	link bool
+}
+
+// runCredentialDialog shows v modal to the main window until the user
+// answers.
+func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	t := a.theme
 	s := t.Scale
 	pal := t.Palette
 	win, err := newDialogWindow(t, a.hwnd, credentialClass, v.Title)
 	if err != nil {
-		return nil, false
+		return credentialAnswer{}
 	}
 	d := &credentialDialog{win: win, fields: v.Fields, open: true, noCancel: v.Cancel == ""}
 	activeCredential = d
@@ -61,6 +72,9 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) (values [][]byte, ok 
 		case idCredentialOK:
 			d.close(true)
 		case idCredentialCancel, win32.IDCANCEL:
+			d.close(false)
+		case idCredentialLink:
+			d.linked = true
 			d.close(false)
 		}
 	}
@@ -109,6 +123,11 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) (values [][]byte, ok 
 	if v.Error != "" {
 		st.gap(8)
 		st.para(v.Error, widget.TextSmall, pal.Error, view.GlyphError)
+	}
+	if v.Link != "" {
+		st.gap(10)
+		w, _ := t.Fonts.Measure(v.Link, widget.TextSmall)
+		st.row(stackLineHeight, cell{hwnd: panel.Link(v.Link, idCredentialLink), px: w + s.Px(linkPadding)})
 	}
 	if v.Note != "" {
 		st.gap(10)
@@ -162,7 +181,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) (values [][]byte, ok 
 	win32.DeleteObject(d.codeFont)
 	activeCredential = nil
 	a.modal = 0
-	return d.values, d.ok
+	return credentialAnswer{values: d.values, ok: d.ok, link: d.linked}
 }
 
 // codeFont creates the font for a displayed code: monospaced, bold, and

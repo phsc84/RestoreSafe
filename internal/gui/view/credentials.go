@@ -30,6 +30,9 @@ type CredentialDialog struct {
 	OK        string
 	// Cancel is "" when the dialog cannot be cancelled.
 	Cancel string
+	// Link is an alternative answer, e.g. "Use your recovery code instead";
+	// "" for none.
+	Link string
 }
 
 // UnlockDialogOf words the question for the password or the recovery code
@@ -43,8 +46,36 @@ func UnlockDialogOf(q flow.Question) CredentialDialog {
 		return d
 	}
 	d.Intro = unlockIntro
+	d.Hint = noticeOf(q)
 	d.Fields = []Field{{Label: fieldPassword, Masked: true}}
 	return d
+}
+
+// UnlockChoiceOf words the unlock dialog of keys with a recovery code (CR-1):
+// the regular way, with the password field for password-only keys, and the
+// link to the recovery code. regular names the keys' credentials as
+// config.AuthMode.Label does.
+func UnlockChoiceOf(q flow.Question, regular string) CredentialDialog {
+	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Link: linkUseRecovery, Hint: noticeOf(q)}
+	switch r := strings.ToLower(regular); {
+	case strings.Contains(r, "yubikey only"):
+		d.Intro = unlockWithYubiKey
+	case strings.Contains(r, "yubikey"):
+		d.Intro = unlockWithBoth
+	default:
+		d.Intro = unlockIntro
+		d.Fields = []Field{{Label: fieldPassword, Masked: true}}
+	}
+	return d
+}
+
+// noticeOf is what the workflow said before a first question, e.g. that a
+// backup uses older keys; "" on a retry, which retryError words.
+func noticeOf(q flow.Question) string {
+	if q.Retry {
+		return ""
+	}
+	return issueText(q.Message)
 }
 
 // NewPasswordDialogOf words the first step of creating keys (figure 9.2).

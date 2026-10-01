@@ -37,8 +37,9 @@ type Run struct {
 	Stage Stage
 	// Started is when the user started it; zero while planning.
 	Started time.Time
-	// Plan is the last backup plan shown.
-	Plan *interact.BackupPlan
+	// Plan is the last backup plan shown; Verify the verification plan.
+	Plan   *interact.BackupPlan
+	Verify *interact.VerifyPlan
 	// Progress is the latest report, Speed the rate of its step.
 	Progress interact.Progress
 	Speed    Speed
@@ -236,5 +237,12 @@ func (m *Machine) Done(end End, now time.Time) (closeWindow bool) {
 func (m *Machine) Dismiss() {
 	if m.Stage() == StageFinished {
 		m.run = nil
+	}
+}
+
+// VerifyPlanShown records the verification plan on screen.
+func (m *Machine) VerifyPlanShown(p interact.VerifyPlan) {
+	if m.run != nil {
+		m.run.Verify = &p
 	}
 }
