@@ -106,6 +106,9 @@ type RestoreSetPlan struct {
 	// OutputProblem is set when the folder cannot be created (e.g. it
 	// exists).
 	OutputProblem string
+	// OutputCode classifies OutputProblem: RESTORE_TARGET_EXISTS or
+	// RESTORE_TARGET_INVALID.
+	OutputCode Code
 }
 
 // RestorePlan is what a restore will do, shown before the start is

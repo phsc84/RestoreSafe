@@ -76,6 +76,8 @@ func ProgressCardOf(r *flow.Run, now time.Time) ProgressCard {
 	case interact.PhaseCleaningUp:
 		c.Line, c.Fraction = progressCleaningUp, -1
 		return c
+	case interact.PhaseRestoring:
+		c.Line = restoringLine(r, p.Item, now)
 	default:
 		c.Line = p.Item
 	}
@@ -305,4 +307,26 @@ func CancelConfirm(op flow.Op, closing bool) Confirm {
 		c.Instruction, c.Yes, c.No = closeInstruction, buttonCancelAndClose, buttonKeepRunning
 	}
 	return c
+}
+
+// restoringLine names the folder being restored and what is read for it:
+// "Documents · differential 3, with its full backup of 1 Sep".
+func restoringLine(r *flow.Run, folder string, now time.Time) string {
+	if r.Restore == nil {
+		return folder
+	}
+	for _, s := range r.Restore.Sets {
+		if s.Set.DirectoryName != folder {
+			continue
+		}
+		if !s.Set.IsDiff() {
+			return fmt.Sprintf(progressRestoring, folder, restoringFull)
+		}
+		day := s.Base.Date
+		if d, err := time.ParseInLocation("2006-01-02", s.Base.Date, time.Local); err == nil {
+			day = ShortDay(d, now)
+		}
+		return fmt.Sprintf(progressRestoring, folder, fmt.Sprintf(restoringDiff, s.Set.DiffNumber, day))
+	}
+	return folder
 }

@@ -393,3 +393,76 @@ const (
 	menuCopyName    = "&Copy set name"
 	menuOpenFolder  = "&Open backup folder"
 )
+
+// Restore wizard (spec 8).
+const (
+	WizardTitle          = "Restore"
+	stepWhen             = "When"
+	stepFolders          = "Folders"
+	stepDestination      = "Destination"
+	stepCheck            = "Check"
+	stepNumbered         = "%d %s"
+	reasonNoneRestorable = "Its full backups are missing."
+	withFullOf           = "+ FULL of %s"
+	aboutSize            = "about %s"
+	footerSelection      = "%s · about %s"
+	destHintEmpty        = "Enter or browse to the folder to restore into."
+	destHintFullPath     = `Enter a full path, such as D:\Restore.`
+	destExists           = "%s already exists. Choose another place, or rename or move that folder."
+	destInvalid          = "%s can't be created: %s"
+	spaceUnknownDest     = "The free space at this place is unknown. Check the path."
+	spaceTooLittle       = "Not enough space: about %s needed, %s free"
+	spaceTight           = "Space may run short: about %s needed, %s free"
+	spaceEnough          = "Enough space: about %s needed, %s free"
+	checkHeading         = "Ready to restore"
+	checkNote            = "Every file is checked against its checksum. Nothing in your backups changes, and no existing file is overwritten."
+	checkFrom            = "From"
+	checkTo              = "To"
+	checkToNew           = "%s (new)"
+	readFull             = "%s: full backup"
+	readDiff             = "%s: differential %d + full backup of %s"
+	unlockOrRecovery     = ", or recovery code"
+	buttonRestoreStart   = "&Restore…"
+	WizardBack           = "< &Back"
+	WizardNext           = "&Next >"
+	WizardBrowse         = "B&rowse…"
+	WizardIntoBackupDir  = "Restore into the backup directory"
+	WizardClose          = "Close"
+	whenHeading          = "Restore your folders as they were at"
+	whenNote             = "Differentials are restored together with their full backup."
+	foldersHeading       = "Which folders do you want back?"
+	foldersNote          = "Whole folders are restored. To get a single file back, restore its folder to a new place and copy the file."
+	destHeading          = "Where should the folders go?"
+	destCreates          = "RestoreSafe creates one new folder per restored folder:"
+	ColumnDate           = "Date"
+	ColumnFolders        = "Folders"
+	ColumnSize           = "Size"
+	restoredOne          = "%s (about %s) restored to %s in %s."
+	restoreEveryFile     = "Every file matched its checksum."
+	restoreSkippedOne    = "%s: 1 file isn't in this backup. It couldn't be read when the backup was made; the log names it."
+	restoreSkipped       = "%s: %s files aren't in this backup. They couldn't be read when the backup was made; the log names them."
+	resultIncomplete     = "Restore incomplete"
+	restoreStopped       = "%s: %s"
+	restoreIncompleteDir = "%s is incomplete; don't use it as a full copy."
+	restoreNotRestored   = "%s wasn't restored."
+	restoreNotRestoredN  = "%s weren't restored."
+	restoreKept          = "%s was restored."
+	restoreKeptN         = "%s were restored."
+	restoreVerifyHint    = "Verify this backup, or restore from an older one."
+	buttonOpenFolder2    = "&Open folder"
+	progressRestoring    = "%s · %s"
+	restoringFull        = "full backup"
+	restoringDiff        = "differential %d, with its full backup of %s"
+)
+
+// WizardTexts are the fixed texts of the wizard's pages.
+type WizardTexts struct {
+	WhenHeading, WhenNote       string
+	FoldersHeading, FoldersNote string
+	DestHeading, DestCreates    string
+}
+
+// WizardTextsOf returns the fixed texts of the wizard.
+func WizardTextsOf() WizardTexts {
+	return WizardTexts{whenHeading, whenNote, foldersHeading, foldersNote, destHeading, destCreates}
+}

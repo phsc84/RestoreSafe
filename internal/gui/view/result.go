@@ -24,7 +24,9 @@ type ResultCard struct {
 	Detail  string
 	Details *Button
 	// Log is nil when the run has no log file.
-	Log  *Button
+	Log *Button
+	// Open opens the restored folders; nil for other operations.
+	Open *Button
 	Done Button
 }
 
@@ -41,6 +43,9 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	if r.LogPath != "" || (r.Result != nil && r.Result.LogPath != "") {
 		c.Log = &Button{Text: linkShowLog, Action: ActionShowLog, Enabled: true}
 	}
+	if r.Op == flow.OpRestore && r.Restore != nil && !r.Started.IsZero() {
+		c.Open = &Button{Text: buttonOpenFolder2, Action: ActionOpenRestored, Enabled: true}
+	}
 	switch {
 	case err == nil && r.Result == nil, errors.Is(err, interact.ErrCancelled):
 		// Cancelled in a question, or nothing to do.
@@ -50,6 +55,9 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	case errors.Is(err, context.Canceled) && !r.Started.IsZero():
 		c.Tone, c.Glyph, c.Title = ToneNeutral, GlyphNone, fmt.Sprintf(resultCancelled, name)
 		c.Lines = keptLines(r, true)
+		if r.Op == flow.OpRestore {
+			c.Lines = restoreKeptLines(r)
+		}
 	case errors.Is(err, context.Canceled):
 		return nil
 	case r.Started.IsZero():
@@ -64,6 +72,13 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	default:
 		c.Tone, c.Glyph, c.Title = ToneError, GlyphError, fmt.Sprintf(resultFailed, name)
 		c.Lines = append([]string{firstSentences(err.Error())}, keptLines(r, false)...)
+		if r.Op == flow.OpRestore {
+			// A failed restore leaves a folder incomplete: red, never amber
+			// (RW-8).
+			c.Title = resultIncomplete
+			c.Lines = append([]string{firstSentences(err.Error())}, restoreKeptLines(r)...)
+			c.Lines = append(c.Lines, restoreVerifyHint)
+		}
 		c.Detail = err.Error()
 		c.Details = &Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true}
 	}
@@ -88,6 +103,10 @@ func finished(c *ResultCard, r *flow.Run, name string) {
 		c.Tone, c.Glyph, c.Title = ToneWarning, GlyphWarning, fmt.Sprintf(resultWarningOne, name)
 	} else if warnings > 1 {
 		c.Tone, c.Glyph, c.Title = ToneWarning, GlyphWarning, fmt.Sprintf(resultWarnings, name, warnings)
+	}
+	if r.Op == flow.OpRestore {
+		restoreFinished(c, r)
+		return
 	}
 	if r.Op != flow.OpBackup {
 		c.Lines = []string{verifiedLine(r)}
@@ -288,4 +307,69 @@ func setFolder(set string) string {
 		s = s[:i]
 	}
 	return s
+}
+
+// restoreFinished words a restore that ended without error (RW-8).
+func restoreFinished(c *ResultCard, r *flow.Run) {
+	n, bytes, dest := len(r.Finished), int64(0), ""
+	explained := 0
+	var skipped []string
+	if p := r.Restore; p != nil {
+		n, bytes, dest = len(p.Sets), p.NeededBytes, Path(p.Destination)
+		for _, s := range p.Sets {
+			k := r.Facts.Sets[s.Set.String()].Skipped
+			switch {
+			case k == 1:
+				skipped = append(skipped, fmt.Sprintf(restoreSkippedOne, s.Set.DirectoryName))
+			case k > 1:
+				skipped = append(skipped, fmt.Sprintf(restoreSkipped, s.Set.DirectoryName, Count(k)))
+			}
+		}
+		if len(skipped) > 0 {
+			explained = 1 // the workflow counts skipped files as one warning
+		}
+	}
+	line := fmt.Sprintf(restoredOne, folderPhrase(n), Size(bytes), dest, Duration(r.Ended.Sub(r.Started))) + " " + restoreEveryFile
+	c.Lines = append([]string{line}, skipped...)
+	if rest := r.Result.Warnings - explained; rest > 0 {
+		c.Lines = append(c.Lines, otherWarnings(rest))
+	}
+}
+
+// restoreKeptLines says what a cancelled or failed restore left: the
+// folders restored, the one that is incomplete, the ones not restored.
+func restoreKeptLines(r *flow.Run) []string {
+	done := map[string]bool{}
+	var kept []string
+	for _, f := range r.Finished {
+		done[f.Name] = true
+		kept = append(kept, f.Name)
+	}
+	current := ""
+	if p := r.Progress; p.Phase == interact.PhaseRestoring && !done[p.Item] {
+		current = p.Item
+	}
+	var lines, missing []string
+	if len(kept) == 1 {
+		lines = append(lines, fmt.Sprintf(restoreKept, kept[0]))
+	} else if len(kept) > 1 {
+		lines = append(lines, fmt.Sprintf(restoreKeptN, joinAnd(kept)))
+	}
+	if r.Restore != nil {
+		for _, s := range r.Restore.Sets {
+			name := s.Set.DirectoryName
+			switch {
+			case name == current:
+				lines = append(lines, fmt.Sprintf(restoreIncompleteDir, Path(s.OutputDir)))
+			case !done[name]:
+				missing = append(missing, name)
+			}
+		}
+	}
+	if len(missing) == 1 {
+		lines = append(lines, fmt.Sprintf(restoreNotRestored, missing[0]))
+	} else if len(missing) > 1 {
+		lines = append(lines, fmt.Sprintf(restoreNotRestoredN, joinAnd(missing)))
+	}
+	return lines
 }

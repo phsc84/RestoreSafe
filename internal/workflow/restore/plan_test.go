@@ -51,3 +51,24 @@ func TestRestorePlanDescribesTheRestore(t *testing.T) {
 		t.Fatalf("an existing folder must block the restore: %+v", p)
 	}
 }
+
+func TestPlanDestinationIsThePlanOfRun(t *testing.T) {
+	fx := testutil.NewRestoreFixture(t, []byte("pw"))
+	infos := fixtureInfos(t, fx.BackupFixture)
+	cfg := &config.Config{BackupDirectory: fx.BackupDir}
+	sets := []naming.BackupEntry{fx.Entry}
+
+	p, err := PlanDestination(cfg, fx.BackupDir, infos, sets, fx.RestoreRoot)
+	if err != nil || len(p.Sets) != 1 || p.HasErrors() || p.Sets[0].OutputDir != filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName) {
+		t.Fatalf("plan %+v, %v", p, err)
+	}
+	if err := os.MkdirAll(p.Sets[0].OutputDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := PlanDestination(cfg, fx.BackupDir, infos, sets, fx.RestoreRoot); !p.HasErrors() || p.Sets[0].OutputProblem == "" {
+		t.Fatalf("an existing folder blocks: %+v", p)
+	}
+	if _, err := PlanDestination(cfg, fx.BackupDir, infos, sets, "  "); err == nil {
+		t.Fatal("no destination is an error")
+	}
+}

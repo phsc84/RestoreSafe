@@ -191,7 +191,8 @@ func checkWriting(t *testing.T, v any) {
 			}
 		case reflect.Struct:
 			for i := range r.NumField() {
-				if r.Type().Field(i).IsExported() {
+				// Detail is the workflow's message for "Show details", as written.
+				if f := r.Type().Field(i); f.IsExported() && f.Name != "Detail" {
 					walk(r.Field(i))
 				}
 			}

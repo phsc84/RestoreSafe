@@ -37,13 +37,15 @@ type Run struct {
 	Stage Stage
 	// Started is when the user started it; zero while planning.
 	Started time.Time
-	// Plan is the last backup plan shown; Verify the verification plan.
-	Plan   *interact.BackupPlan
-	Verify *interact.VerifyPlan
+	// Plan is the last backup plan shown; Verify and Restore the plans of
+	// a verification and a restore.
+	Plan    *interact.BackupPlan
+	Verify  *interact.VerifyPlan
+	Restore *interact.RestorePlan
 	// Progress is the latest report, Speed the rate of its step.
 	Progress interact.Progress
 	Speed    Speed
-	// Finished are the folders backed up so far, in order.
+	// Finished are the folders backed up or restored so far, in order.
 	Finished []FolderDone
 	// CloseWhenDone closes the window once the worker has finished.
 	CloseWhenDone bool
@@ -122,10 +124,11 @@ func (m *Machine) Progressed(p interact.Progress, now time.Time) {
 	r.Speed.Add(now, p.Done)
 }
 
-// finishStep records the folder of the current step as backed up.
+// finishStep records the folder of the current step as backed up or
+// restored.
 func (r *Run) finishStep() {
 	p := r.Progress
-	if p.Phase != interact.PhaseBackingUp || p.Item == "" {
+	if (p.Phase != interact.PhaseBackingUp && p.Phase != interact.PhaseRestoring) || p.Item == "" {
 		return
 	}
 	bytes := p.Done
@@ -135,7 +138,7 @@ func (r *Run) finishStep() {
 	r.Finished = append(r.Finished, FolderDone{Name: p.Item, Bytes: bytes})
 }
 
-// FolderDone is a folder a backup run has backed up.
+// FolderDone is a folder a backup has backed up or a restore restored.
 type FolderDone struct {
 	Name string
 	// Bytes is the size of the folder read.
@@ -244,5 +247,12 @@ func (m *Machine) Dismiss() {
 func (m *Machine) VerifyPlanShown(p interact.VerifyPlan) {
 	if m.run != nil {
 		m.run.Verify = &p
+	}
+}
+
+// RestorePlanShown records the restore plan on screen.
+func (m *Machine) RestorePlanShown(p interact.RestorePlan) {
+	if m.run != nil {
+		m.run.Restore = &p
 	}
 }

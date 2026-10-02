@@ -61,6 +61,8 @@ const (
 	ActionShowDetails
 	ActionShowLog
 	ActionDismiss
+	ActionStartRestore
+	ActionOpenRestored
 )
 
 // Button is a button or link of a view.
