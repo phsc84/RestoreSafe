@@ -70,6 +70,9 @@ type backupsPage struct {
 	rows []rowRef
 	// lastGroups are the runs of the list's groups, by group ID.
 	lastGroups []naming.BackupID
+	// shownCollapsed is how each group was shown: a group whose state
+	// differs at the next rebuild was changed by the user.
+	shownCollapsed []bool
 
 	barText, restore, verify win32.HWND
 	bar                      view.ActionBar
@@ -293,12 +296,16 @@ func (b *backupsPage) fillList() {
 		win32.Invalidate(lv)
 		return
 	}
-	// Keep what the user collapsed or expanded.
+	// Keep what the user collapsed or expanded: a group whose state differs
+	// from how it was shown.
 	for gi := range b.groupsShown() {
-		if gi < len(b.lastGroups) {
-			b.collapsed[b.lastGroups[gi]] = win32.ListGroupCollapsed(lv, int32(gi))
+		if gi < len(b.lastGroups) && gi < len(b.shownCollapsed) {
+			if now := win32.ListGroupCollapsed(lv, int32(gi)); now != b.shownCollapsed[gi] {
+				b.collapsed[b.lastGroups[gi]] = now
+			}
 		}
 	}
+	b.shownCollapsed = nil
 	b.listSig = sig.String()
 	win32.SendMessage(lv, win32.WM_SETREDRAW, 0, 0)
 	win32.ListClear(lv)
@@ -311,6 +318,7 @@ func (b *backupsPage) fillList() {
 			collapsed = !g.Expanded
 		}
 		win32.ListInsertGroup(lv, int32(gi), g.Header, collapsed)
+		b.shownCollapsed = append(b.shownCollapsed, collapsed)
 		b.lastGroups = append(b.lastGroups, g.RunID)
 		if len(g.Rows) == 0 {
 			b.rows = append(b.rows, rowRef{gi, -1})

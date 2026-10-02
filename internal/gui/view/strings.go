@@ -232,7 +232,9 @@ const (
 
 // Result card (spec 6.3).
 const (
-	buttonDone            = "Done"
+	buttonDone            = "&Done"
+	buttonShowRunLog      = "Show &log"
+	buttonCancelRun       = "&Cancel"
 	nounBackup            = "Backup"
 	nounVerification      = "Verification"
 	nounRestore           = "Restore"

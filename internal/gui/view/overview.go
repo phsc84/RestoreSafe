@@ -266,13 +266,13 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 	case interact.CodeConfigInvalid:
 		return Hero{Title: heroConfigInvalid, Line: heroConfigLine, Primary: *editConfig}
 	case interact.CodeBackupDirUnreachable:
-		return Hero{Title: heroDirUnreachable, Line: fmt.Sprintf(heroDirUnreachLine, p.Path), Primary: checkAgain}
+		return Hero{Title: heroDirUnreachable, Line: fmt.Sprintf(heroDirUnreachLine, Path(p.Path)), Primary: checkAgain}
 	case interact.CodeBackupDirNotWritable:
-		return Hero{Title: heroDirNotWritable, Line: fmt.Sprintf(heroDirNotWritLine, p.Path), Primary: checkAgain}
+		return Hero{Title: heroDirNotWritable, Line: fmt.Sprintf(heroDirNotWritLine, Path(p.Path)), Primary: checkAgain}
 	case interact.CodeSourceMissing:
-		return Hero{Title: fmt.Sprintf(heroSourceMissing, p.Path), Line: heroSourceMissLine, Primary: checkAgain, Secondary: editConfig}
+		return Hero{Title: fmt.Sprintf(heroSourceMissing, Path(p.Path)), Line: heroSourceMissLine, Primary: checkAgain, Secondary: editConfig}
 	case interact.CodeSourceInvalid:
-		return Hero{Title: fmt.Sprintf(heroSourceInvalid, p.Path), Line: heroSourceInvLine, Primary: checkAgain, Secondary: editConfig}
+		return Hero{Title: fmt.Sprintf(heroSourceInvalid, Path(p.Path)), Line: heroSourceInvLine, Primary: checkAgain, Secondary: editConfig}
 	case interact.CodeBaseMissing:
 		title := fmt.Sprintf(heroBaseMissing, p.Count, p.Folder)
 		if p.Count == 1 {

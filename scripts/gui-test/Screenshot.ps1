@@ -1,4 +1,4 @@
-# Screenshot.ps1 - starts RestoreSafe, waits, and saves a screenshot of its
+﻿# Screenshot.ps1 - starts RestoreSafe, waits, and saves a screenshot of its
 # window, cropped to the visible frame and optionally scaled (e.g. 0.667 for
 # the README screenshots, taken at 150 %).
 #

@@ -41,7 +41,7 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	err := r.Err
 	c := &ResultCard{Done: Button{Text: buttonDone, Action: ActionDismiss, Enabled: true}}
 	if r.LogPath != "" || (r.Result != nil && r.Result.LogPath != "") {
-		c.Log = &Button{Text: linkShowLog, Action: ActionShowLog, Enabled: true}
+		c.Log = &Button{Text: buttonShowRunLog, Action: ActionShowLog, Enabled: true}
 	}
 	if r.Op == flow.OpRestore && r.Restore != nil && !r.Started.IsZero() {
 		c.Open = &Button{Text: buttonOpenFolder2, Action: ActionOpenRestored, Enabled: true}

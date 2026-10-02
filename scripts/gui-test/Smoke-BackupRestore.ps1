@@ -1,6 +1,7 @@
-# Smoke-BackupRestore.ps1 - runs a backup, a restore of the newest backup run,
-# and a verification through the RestoreSafe window, and compares the
-# restored files with the sources.
+﻿# Smoke-BackupRestore.ps1 - backs up twice through the plan dialog (a full,
+# then differentials), restores one folder of the newest run through the
+# restore wizard, verifies the newest run from the Backups page, and
+# compares the restored folder with its source (spec 16.4).
 #
 # Use a test configuration with authentication_mode 1 (password only); the
 # script cannot answer YubiKey prompts. It answers new-key setup (password
@@ -16,7 +17,8 @@ param(
   [Parameter(Mandatory)][string]$Config,
   [Parameter(Mandatory)][string]$Password,
   [Parameter(Mandatory)][string]$RestoreTo,
-  [string]$ScreenshotDir = ""
+  [string]$ScreenshotDir = "",
+  [int]$Backups = 2
 )
 . "$PSScriptRoot\GuiDriver.ps1"
 
@@ -29,77 +31,65 @@ function Snap($hwnd, [string]$name) {
     Shot $hwnd (Join-Path $ScreenshotDir ("{0:D2}-{1}.png" -f $script:shotNo, $name))
   }
 }
-# Answer-Credentials answers the questions after a start: new or existing
-# password, recovery code shown at key setup, and the unlock method (regular).
-function Answer-Credentials($procId, $main) {
-  $end = (Get-Date).AddSeconds(120)
-  while ((Get-Date) -lt $end) {
-    if (Find-Button $main "&Back to start") { return }
-    $dlg = Find-Window $procId "RestoreSafeInputDialog"
-    if ($dlg) {
-      $edits = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Edit" })
-      if ([U]::Text($dlg) -like "*recovery code*" -and $edits.Count -eq 0) {
-        # Key setup shows the recovery code: read it, then confirm it.
-        $script:recoveryCode = ([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Static" } | ForEach-Object { [U]::Text($_) } |
-          Where-Object { $_ -match '^[0-9A-Z-]+\r\n[0-9A-Z-]+$' } | Select-Object -First 1) -replace "`r`n", "-"
-        Snap $dlg "recovery-code"
-        [U]::PostMessage($dlg, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null
-      } elseif ([U]::Text($dlg) -like "*recovery code*") {
-        Fill-Dialog $dlg @($script:recoveryCode)
-      } else {
-        Fill-Dialog $dlg (@($Password) * $edits.Count)
-      }
-      Start-Sleep -Milliseconds 800
-      continue
-    }
-    $task = [U]::TopLevel($procId) | Where-Object { [U]::Class($_) -eq "#32770" } | Select-Object -First 1
-    if ($task) { Press-Keys $task "{ENTER}"; Start-Sleep -Milliseconds 800; continue }  # unlock method: regular credentials
-    Start-Sleep -Milliseconds 300
-  }
-  throw "timeout waiting for the result screen"
+# Result waits for the result card in $window and returns its title.
+function Result($window) {
+  Wait-Until { Find-Control $window RunDone -Enabled } 600 "result" | Out-Null
+  Text-Of $window RunTitle
 }
 
 $failed = $false
 $p = Start-Process $Exe -ArgumentList "-config=`"$Config`"" -PassThru
 try {
   $main = Wait-Until { Find-Window $p.Id "RestoreSafeMainWindow" } 20 "RestoreSafe window"
-  Wait-Until { Find-Button $main "Create &backup" } 60 "health check" | Out-Null
-  Snap $main "home"
+  Wait-Until { (Text-Of $main HeroTitle) -and (Text-Of $main HeroTitle) -notlike "Checking*" } 60 "health check" | Out-Null
+  Snap $main "overview"
 
-  # Backup as planned.
-  Click (Find-Button $main "Create &backup")
-  Wait-Until { Find-Button $main "&Start backup" } 120 "backup preflight" | Out-Null
-  Snap $main "backup-preflight"
-  Click (Find-Button $main "&Start backup")
-  Answer-Credentials $p.Id $main
-  $r = Result-Line $main; Snap $main "backup-result"; "Backup:  $r"
-  if ($r -notmatch "completed") { $failed = $true }
+  # Backups through the plan dialog.
+  for ($i = 1; $i -le $Backups; $i++) {
+    Click-Control $main HeroPrimary 60
+    $plan = Wait-Until { Find-Window $p.Id "RestoreSafePlan" } 20 "plan dialog"
+    Wait-Until { Find-Control $plan PlanStart -Enabled } 120 "backup plan" | Out-Null
+    Snap $plan "plan-$i"
+    Click-Control $plan PlanStart
+    Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
+    $r = Result $main; Snap $main "backup-$i"; "Backup $($i): $r"
+    if ($r -notlike "Backup finished*") { $failed = $true }
+    Click-Control $main RunDone
+  }
 
-  # Restore of the newest backup run.
-  Click (Find-Button $main "&Back to start")
-  Click (Wait-Until { Find-Button $main "&Restore backup" } 60 "Restore enabled")
-  Wait-Until { Find-Button $main "&Restore selected" } 30 "selection" | Out-Null
-  Snap $main "selection"
-  Click (Find-Button $main "&Restore selected")
-  Wait-Until { Find-Button $main "&Browse..." } 10 "destination" | Out-Null
-  $edit = [U]::Children($main) | Where-Object { [U]::Class($_) -eq "Edit" -and [U]::IsWindowVisible($_) } | Select-Object -First 1
-  Set-EditText $main $edit 202 $RestoreTo
-  Click (Wait-Until { Find-Button $main "&Next" } 10 "Next enabled")
-  Wait-Until { Find-Button $main "&Start restore" } 60 "restore preflight" | Out-Null
-  Snap $main "restore-preflight"
-  Click (Find-Button $main "&Start restore")
-  Answer-Credentials $p.Id $main
-  $r = Result-Line $main; Snap $main "restore-result"; "Restore: $r"
-  if ($r -notmatch "completed") { $failed = $true }
+  # Restore of the newest run's first folder through the wizard.
+  Go-Page $main 1
+  $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
+  Select-ListItem $list 0
+  Wait-Until { Find-Control $main BackupsRestore -Enabled } 20 "a backup selected" | Out-Null
+  Snap $main "backups"
+  Click-Control $main BackupsRestore
+  $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "restore wizard"
+  Click-Control $wiz WizardNext
+  Click-Control $wiz WizardNext
+  $edit = Wait-Until { Find-Control $wiz WizardDest } 10 "destination"
+  Set-Text $edit $RestoreTo
+  Wait-Until { Find-Control $wiz WizardNext -Enabled } 20 "destination checked" | Out-Null
+  Snap $wiz "wizard-destination"
+  Click-Control $wiz WizardNext
+  Wait-Until { (Text-Of $wiz WizardNext) -eq "&Restore…" -and (Find-Control $wiz WizardNext -Enabled) } 60 "restore plan" | Out-Null
+  Snap $wiz "wizard-check"
+  Click-Control $wiz WizardNext
+  Answer-Credentials $p.Id $Password { Find-Control $wiz RunDone -Enabled }
+  $r = Result $wiz; Snap $wiz "restore-result"; "Restore:  $r"
+  if ($r -notlike "Restore finished*") { $failed = $true }
+  Click-Control $wiz RunDone
 
-  # Verification of the newest backup run.
-  Click (Find-Button $main "&Back to start")
-  Click (Wait-Until { Find-Button $main "&Verify backup" } 60 "Verify enabled")
-  Click (Wait-Until { Find-Button $main "&Verify selected" } 30 "selection")
-  Click (Wait-Until { Find-Button $main "&Start verification" } 60 "verify preflight")
-  Answer-Credentials $p.Id $main
-  $r = Result-Line $main; Snap $main "verify-result"; "Verify:  $r"
-  if ($r -notmatch "completed") { $failed = $true }
+  # Verification of the newest run.
+  Go-Page $main 1
+  $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
+  Select-ListItem $list 0
+  Click-Control $main BackupsVerify
+  Click-TaskButton $p.Id "Verify…"
+  Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
+  $r = Result $main; Snap $main "verify-result"; "Verify:   $r"
+  if ($r -notlike "Verification finished*") { $failed = $true }
+  Click-Control $main RunDone
 } catch {
   "FAILED: $_"
   $failed = $true
@@ -107,13 +97,15 @@ try {
   Stop-Process $p -Force -ErrorAction SilentlyContinue
 }
 
-# Compare the restored files with the sources of the configuration.
+# Compare the restored folder with its source.
 $sources = Select-String -Path $Config -Pattern '^\s*-\s*"(.+)"\s*$' | Where-Object { $_.Line -notmatch '^\s*#' } |
   ForEach-Object { $_.Matches[0].Groups[1].Value }
+$compared = 0
 foreach ($src in $sources) {
   $name = Split-Path $src -Leaf
   $dst = Join-Path $RestoreTo $name
-  if (-not (Test-Path $dst)) { continue }  # only the sets of the newest run are restored
+  if (-not (Test-Path $dst)) { continue }  # one folder is restored
+  $compared++
   $srcFiles = Get-ChildItem -Recurse -File $src | ForEach-Object { $_.FullName.Substring($src.Length) }
   $diff = foreach ($rel in $srcFiles) {
     $b = Join-Path $dst $rel
@@ -121,6 +113,7 @@ foreach ($src in $sources) {
   }
   if ($diff) { "Compare: $name differs: $($diff -join ', ')"; $failed = $true } else { "Compare: $name identical ($($srcFiles.Count) files)" }
 }
+if ($compared -eq 0) { "Compare: nothing was restored"; $failed = $true }
 
 if ($failed) { exit 1 }
 exit 0

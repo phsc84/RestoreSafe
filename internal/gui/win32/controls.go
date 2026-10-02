@@ -312,3 +312,12 @@ func WindowRect(hwnd HWND) Rect {
 	procGetWindowRect.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&r)))
 	return r
 }
+
+// gwlpID is GWLP_ID, the control ID of a child window.
+const gwlpID = ^uintptr(11) // -12
+
+// SetControlID gives a child window the control ID id, which is also its
+// UI Automation AutomationId.
+func SetControlID(hwnd HWND, id uint16) {
+	procSetWindowLongPtrW.Call(uintptr(hwnd), gwlpID, uintptr(id))
+}

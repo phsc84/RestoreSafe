@@ -13,6 +13,7 @@ const (
 	idRunDetails
 	idRunDone
 	idRunOpen
+	idRunTitle
 )
 
 // Sizes of the run card, in DIPs.
@@ -73,6 +74,7 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 		r.card.reset()
 		r.mode = runProgress
 		r.title = p.Label("", widget.TextTitle, t.Palette.Text)
+		win32.SetControlID(r.title, idRunTitle)
 		r.cancel = r.acts.button(p, v.Cancel, idRunCancel, false)
 		var err error
 		if r.trail, err = widget.NewTrail(t, p.HWND(), t.Palette.Surface); err == nil {
@@ -130,6 +132,7 @@ func (r *runCard) showResult(v view.ResultCard) {
 		r.icon.Set(glyphOf(v.Glyph), fore, circle, v.Title)
 	}
 	r.title = p.Label(v.Title, widget.TextTitle, t.Palette.Text)
+	win32.SetControlID(r.title, idRunTitle)
 	for _, line := range v.Lines {
 		r.lines = append(r.lines, p.Paragraph(line, widget.TextBody, t.Palette.Text))
 	}

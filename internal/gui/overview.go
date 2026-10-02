@@ -7,6 +7,7 @@ import (
 	"RestoreSafe/internal/gui/win32"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -16,6 +17,7 @@ const (
 	idHeroSecondary
 	idHeroLink
 	idCardLinks // idCardLinks+i is the link of card i
+	idHeroTitle = 409
 )
 
 // Sizes of the Overview page, in DIPs.
@@ -74,7 +76,8 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	}
 	// Creation order is the tab order.
 	o.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
-	o.heroLine = panel.Label("", widget.TextSmall, t.Palette.TextSecondary)
+	win32.SetControlID(o.heroTitle, idHeroTitle)
+	o.heroLine = panel.Paragraph("", widget.TextSmall, t.Palette.TextSecondary)
 	o.heroLink = o.acts.link(panel, view.Button{Text: " ", Enabled: true}, idHeroLink)
 	o.heroPrimary = o.acts.button(panel, view.Button{Text: " "}, idHeroPrimary, true)
 	o.heroSecondary = o.acts.button(panel, view.Button{Text: " "}, idHeroSecondary, false)
@@ -106,6 +109,13 @@ func (o *overviewPage) update() {
 	fore, circle := heroColors(t.Palette, h.Tone)
 	o.heroIcon.Set(glyphOf(h.Glyph), fore, circle, h.Title)
 	win32.SetText(o.heroTitle, h.Title)
+	// A path in the title keeps its end (the folder) when shortened.
+	style := win32.Style(o.heroTitle) &^ (win32.SS_ENDELLIPSIS | win32.SS_PATHELLIPSIS)
+	if strings.Contains(h.Title, ``) {
+		win32.SetStyle(o.heroTitle, style|win32.SS_PATHELLIPSIS)
+	} else {
+		win32.SetStyle(o.heroTitle, style|win32.SS_ENDELLIPSIS)
+	}
 	win32.SetText(o.heroLine, h.Line)
 	o.setButton(o.heroLink, h.Link, idHeroLink, true)
 	o.setButton(o.heroPrimary, h.Primary, idHeroPrimary, true)
@@ -353,7 +363,7 @@ func (o *overviewPage) layout() {
 	if o.run.mode != runHidden {
 		o.run.place(area.TopPx(o.run.height(area.Rest().Width())))
 	} else {
-		o.layoutHero(area.Top(heroHeight))
+		o.layoutHero(area.TopPx(o.heroGeometry(area.Rest().Width()).height))
 	}
 
 	area.Top(widget.CardGap)
@@ -638,39 +648,87 @@ func measure(t *widget.Theme, text string, style widget.TextStyle) int32 {
 func (o *overviewPage) layoutHero(r win32.Rect) {
 	t := o.a.theme
 	s := t.Scale
+	g := o.heroGeometry(r.Width())
 	hero := widget.NewArea(s, r)
 	iconRect := hero.Left(widget.HeroIconSize)
 	iconRect.Top += (iconRect.Height() - s.Px(widget.HeroIconSize)) / 2
 	iconRect.Bottom = iconRect.Top + s.Px(widget.HeroIconSize)
 	win32.SetWindowPos(o.heroIcon.HWND(), iconRect)
 	hero.Left(heroGap)
-	for _, b := range []win32.HWND{o.heroSecondary, o.heroPrimary} {
-		if !win32.IsWindowVisible(b) {
-			continue
-		}
-		w, _ := t.Fonts.Measure(win32.Text(b), widget.TextBody)
-		width := max(w+s.Px(buttonPadding), s.Px(minButtonWidth))
-		r := hero.RightPx(width)
+	for _, b := range o.heroButtons() {
+		r := hero.RightPx(heroButtonWidth(t, b))
 		r.Top += (r.Height() - s.Px(widget.ButtonHeight)) / 2
 		r.Bottom = r.Top + s.Px(widget.ButtonHeight)
 		win32.SetWindowPos(b, r)
 		hero.Right(8)
 	}
-	text := widget.NewArea(s, hero.Rest())
-	text.Inset(0, (heroHeight-heroTitleHeight-heroLineHeight)/2, 12, 0)
-	win32.SetWindowPos(o.heroTitle, text.Top(heroTitleHeight))
-	lineRow := text.Top(heroLineHeight)
-	lineW, _ := t.Fonts.Measure(win32.Text(o.heroLine), widget.TextSmall)
-	linkW, _ := t.Fonts.Measure(o.view.Hero.Link.Text, widget.TextSmall)
-	linkW += s.Px(linkPadding)
-	lineW = min(lineW+s.Px(4), max(lineRow.Width()-linkW, 0))
-	line := lineRow
-	line.Right = line.Left + lineW
-	win32.SetWindowPos(o.heroLine, line)
-	link := lineRow
-	link.Left = line.Right + s.Px(8)
-	link.Right = min(link.Left+linkW, lineRow.Right)
+	text := hero.Rest()
+	text.Top += (text.Height() - g.textHeight) / 2
+	x, y := text.Left, text.Top
+	win32.SetWindowPos(o.heroTitle, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + s.Px(heroTitleHeight)})
+	y += s.Px(heroTitleHeight)
+	win32.SetWindowPos(o.heroLine, win32.Rect{Left: x, Top: y, Right: x + g.lineWidth, Bottom: y + g.lineHeight})
+	link := win32.Rect{Left: x + g.lineWidth + s.Px(8), Top: y, Right: x + g.lineWidth + s.Px(8) + g.linkWidth, Bottom: y + s.Px(heroLineHeight)}
+	if g.linkBelow {
+		y += g.lineHeight
+		link = win32.Rect{Left: x, Top: y, Right: x + g.linkWidth, Bottom: y + s.Px(heroLineHeight)}
+	}
 	win32.SetWindowPos(o.heroLink, link)
+}
+
+// heroGeometry is the layout of the hero's text at a width.
+type heroGeometry struct {
+	textWidth, textHeight int32
+	lineWidth, lineHeight int32
+	linkWidth             int32
+	// linkBelow puts "Check details" under a line that wraps.
+	linkBelow bool
+	height    int32
+}
+
+// heroGeometry lays the hero's text out at width pixels: the line wraps
+// when it does not fit beside the link, and the hero grows with it.
+func (o *overviewPage) heroGeometry(width int32) heroGeometry {
+	t := o.a.theme
+	s := t.Scale
+	g := heroGeometry{textWidth: width - s.Px(widget.HeroIconSize+heroGap+12)}
+	for _, b := range o.heroButtons() {
+		g.textWidth -= heroButtonWidth(t, b) + s.Px(8)
+	}
+	g.textWidth = max(g.textWidth, s.Px(200))
+	line := win32.Text(o.heroLine)
+	lineW, _ := t.Fonts.Measure(line, widget.TextSmall)
+	lineW += s.Px(4)
+	linkW, _ := t.Fonts.Measure(o.view.Hero.Link.Text, widget.TextSmall)
+	g.linkWidth = linkW + s.Px(linkPadding)
+	g.lineWidth, g.lineHeight = lineW, s.Px(heroLineHeight)
+	if lineW+s.Px(8)+g.linkWidth > g.textWidth {
+		g.linkBelow = true
+		g.lineWidth = g.textWidth
+		g.lineHeight = max(t.Fonts.MeasureWrapped(line, widget.TextSmall, g.textWidth), s.Px(heroLineHeight))
+	}
+	g.textHeight = s.Px(heroTitleHeight) + g.lineHeight
+	if g.linkBelow {
+		g.textHeight += s.Px(heroLineHeight)
+	}
+	g.height = max(s.Px(heroHeight), g.textHeight+s.Px(8))
+	return g
+}
+
+// heroButtons are the hero's shown buttons, from the right.
+func (o *overviewPage) heroButtons() []win32.HWND {
+	var out []win32.HWND
+	for _, b := range []win32.HWND{o.heroSecondary, o.heroPrimary} {
+		if win32.IsWindowVisible(b) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+func heroButtonWidth(t *widget.Theme, b win32.HWND) int32 {
+	w, _ := t.Fonts.Measure(win32.Text(b), widget.TextBody)
+	return max(w+t.Scale.Px(buttonPadding), t.Scale.Px(minButtonWidth))
 }
 
 // setButton shows b on the existing control h, or hides it.

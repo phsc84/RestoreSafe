@@ -1,38 +1,39 @@
 # GUI test scripts
 
-PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, press keys, read control texts, and take screenshots. They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
+PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, read control texts, and take screenshots (spec section 16.4 of [docs/SPEC-restoresafe-gui.md](../../docs/SPEC-restoresafe-gui.md)). They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
 
-They rely on the first GUI's control texts (e.g. `Create &backup`) and window classes (`RestoreSafeMainWindow`, `RestoreSafeInputDialog`). The status-first UI replaces that GUI; section 16.4 of [docs/SPEC-restoresafe-gui.md](../../docs/SPEC-restoresafe-gui.md) specifies the updated scripts, which find controls by `AutomationId` instead of text.
+Controls are found by their control ID, which is also their UI Automation `AutomationId` (table `$Ids` in `GuiDriver.ps1`; a Go test in `internal/gui` keeps it equal to the code). Windows are found by class: `RestoreSafeMainWindow`, `RestoreSafePlan`, `RestoreSafeWizard`, `RestoreSafeInputDialog`, `RestoreSafeDetails`, and `#32770` for task dialogs.
 
 | Script | Use |
 |---|---|
-| `GuiDriver.ps1` | Helpers, dot-sourced by the other scripts: find windows and buttons, click, fill input dialogs, set edit text, send keys, read the result line, save a screenshot. |
-| `Smoke-BackupRestore.ps1` | Backup, restore of the newest run, and verify through the window; compares the restored files with the sources. Exit code 0 on success. Password-only configurations (it cannot answer YubiKey prompts); it handles new-key setup and a recovery code. |
+| `GuiDriver.ps1` | Helpers, dot-sourced by the other scripts: find windows and controls, click, switch pages, select list items (MSAA), fill and answer credential dialogs, click task-dialog buttons, save a screenshot. |
+| `Smoke-BackupRestore.ps1` | Two backups through the plan dialog (a full, then differentials), a restore of one folder of the newest run through the wizard, a verification of the newest run; compares the restored folder with its source. Exit code 0 on success. Password-only configurations (it cannot answer YubiKey prompts); it handles new-key setup and a recovery code. |
+| `New-TestCondition.ps1` | Copies a smoke-test setup and turns the copy into a condition of spec 3.5 and 11.8 (`-Condition BaseMissing`, ...; the names of the Go fixtures). |
+| `Check-States.ps1` | For every condition: makes it, starts RestoreSafe, compares the hero's title and primary action with the expected ones, saves a screenshot. Exit code 0 when all match. |
+| `Accessibility.ps1` | Library: `Show-Accessibility` (role, name, AutomationId, access key of every control, as screen readers see them), `Test-AccessKeys`. As a check: walks the pages, the plan dialog and the wizard and reports buttons without access keys and duplicate access keys. |
 | `Screenshot.ps1` | Starts RestoreSafe and saves a screenshot cropped to the visible frame, optionally scaled (the README screenshots use `-Scale 0.667` at 150 %). |
-| `Accessibility.ps1` | `Show-Accessibility <hwnd>` lists role, name, and keyboard shortcut of every visible control, as screen readers see them (MSAA). |
 
 ## Examples
 
-Run them from Windows PowerShell 5.1 in an interactive session (the window must be able to come to the front). Use a test configuration and directories, e.g. in `sandbox\`, never your real backups.
+Run them from Windows PowerShell 5.1 in an interactive session. Use a test configuration and directories, never your real backups: a password-only `config.yaml` with two small source folders, e.g. in `sandbox\gui-test\`.
 
 ```powershell
 cd scripts\gui-test
+$exe = "C:\dev\RestoreSafe\sandbox\RestoreSafe.exe"
+$cfg = "C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"
 
-# Smoke test with screenshots of every step.
-.\Smoke-BackupRestore.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\dev\RestoreSafe\sandbox\gui-test\config.yaml `
-    -Password "correct horse battery" -RestoreTo C:\dev\RestoreSafe\sandbox\gui-test\restored `
-    -ScreenshotDir C:\dev\RestoreSafe\sandbox\gui-test\shots
+# Smoke test with screenshots of every step (the restore destination must not exist).
+.\Smoke-BackupRestore.ps1 -Exe $exe -Config $cfg -Password "correct horse battery" `
+    -RestoreTo C:\dev\RestoreSafe\sandbox\gui-test\restored -ScreenshotDir C:\dev\RestoreSafe\sandbox\gui-test\shots
 
-# Screenshot of the start screen for the README.
-.\Screenshot.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -ExeArgs '-config="C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"' `
-    -Out ..\..\docs\images\Screenshot_v2.0.0_home.png -Scale 0.667
+# Every status condition, from the smoke test's backups.
+.\Check-States.ps1 -Exe $exe -Config $cfg -Out C:\dev\RestoreSafe\sandbox\gui-test\states
 
-# Accessibility of the start screen.
-. .\GuiDriver.ps1; . .\Accessibility.ps1
-$p = Start-Process ..\..\sandbox\RestoreSafe.exe -PassThru
-$main = Wait-Until { Find-Window $p.Id "RestoreSafeMainWindow" } 20 "window"
-Show-Accessibility $main
-Stop-Process $p
+# Access keys of all pages and dialogs.
+.\Accessibility.ps1 -Exe $exe -Config $cfg
+
+# Screenshot of the Overview for the README.
+.\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\Screenshot_v2.0.0_overview.png -Scale 0.667
 ```
 
-The smoke test's restore destination must not exist yet; delete it between runs.
+The release gate (spec 16.7) runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` at 100 % and 150 % display scaling.

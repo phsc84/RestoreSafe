@@ -44,7 +44,7 @@ func ProgressCardOf(r *flow.Run, now time.Time) ProgressCard {
 		Title:    runTitle(r.Op),
 		Steps:    stepsOf(r),
 		Fraction: p.Fraction(),
-		Cancel:   Button{Text: buttonCancel, Action: ActionCancel, Enabled: true},
+		Cancel:   Button{Text: buttonCancelRun, Action: ActionCancel, Enabled: true},
 		Log:      Button{Text: linkShowLog, Action: ActionShowLog, Enabled: true},
 	}
 	if r.Stage == flow.StagePlanning {
