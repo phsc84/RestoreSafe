@@ -21,6 +21,7 @@ Found while building; they are not defects of the run. Decide for each whether i
 |---|---|
 | OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" files (no fact records them). |
 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. |
+| BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written: for a differential it is much larger than the size on the Backups page. |
 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. |
 | RW-1 | The wizard is resizable; its progress page leaves empty space below the card. |
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. |

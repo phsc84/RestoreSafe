@@ -23,22 +23,25 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
 ## Screenshots
 
-The start screen runs a health check of the configuration, the directories, the YubiKey, and the existing backups:
+The Overview answers "are my folders protected?": the status at the top, then the folders, the backup directory, the last backup, and the keys:
 
-<img src="docs/images/Screenshot_v2.0.0_home.png" alt="RestoreSafe start screen with the startup health check">
+<img src="docs/images/Screenshot_v2.0.0_overview.png" alt="Overview with the status, the folders, the backup directory, the last backup, and the keys">
 
-Before a backup starts, the preflight shows what RestoreSafe will do, including whether each directory gets a full or a differential backup:
+**Back up now…** shows the plan first: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
 
-<img src="docs/images/Screenshot_v2.0.0_preflight.png" alt="Backup preflight with differential backups and the start choices">
+<img src="docs/images/Screenshot_v2.0.0_plan.png" alt="Backup plan with differential backups and the start choices">
 
-While it runs, RestoreSafe shows the progress and the log; Cancel stops it and removes the unfinished backup set:
+While it runs, the Overview shows the steps, the progress, the speed, and the time left; the Folders card follows each folder:
 
-<img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress with progress bar and log">
+<img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress on the Overview">
 
-To restore or verify, choose a whole backup run or a single backup set; for a differential, RestoreSafe reads its full backup too:
+The Backups page lists every backup run with its folders, types, sizes, and status, and the log of the selected run:
 
-<img src="docs/images/Screenshot_v2.0.0_selection.png" alt="Choosing the backup to restore">
+<img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Backups page with runs, backup sets, and the log">
 
+Restoring is a wizard: when, which folders, where to, and a last check of what will happen:
+
+<img src="docs/images/Screenshot_v2.0.0_restore.png" alt="Restore wizard, last page before the restore starts">
 
 ## Features
 
@@ -65,7 +68,7 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Windows application: preflight summary before every operation, progress with a live log, Cancel at any time, and a result screen
+- Windows application: an Overview that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed and time left, Cancel at any time, a Backups page with every run and its log, a restore wizard, and a Settings page with Reload
 - Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
 - Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
@@ -89,7 +92,7 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
    ```
 
-   The start screen shows which configuration is loaded. RestoreSafe reads `config.yaml` at start; after changing it, restart RestoreSafe.
+   The Settings page shows which configuration is loaded. After changing `config.yaml`, click **Reload** on the Settings page.
 3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs. Every parameter is explained in `config-SAMPLE.yaml`.
@@ -120,7 +123,7 @@ To restore or verify, choose a whole backup run or a single backup set; for a di
 | `recovery_code` | `false` | Create a recovery code when new keys are created |
 | `password_min_length` | `12` | Minimum password length for new keys (at least 8) |
 | `verify_after_backup` | `false` | Re-read and check each backup right after writing it |
-| `reminder_days` | `7` | Remind on the start screen when the newest backup is older than this many days (0 = no reminder) |
+| `reminder_days` | `7` | Remind on the Overview when the newest backup is older than this many days (0 = no reminder) |
 
 ## Updating
 
@@ -140,31 +143,38 @@ RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created b
 
 ## Usage
 
-Double-click RestoreSafe.exe. The start screen shows the configuration, the backup directory, and the startup health check. **Create backup**, **Restore backup**, and **Verify backup** are available when the health check finds nothing that blocks them; otherwise the line below the check says why. Fix the problem, then click **Recheck**.
+Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`:
+
+- **Overview** - whether your folders are protected. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. **Check details** shows the full health check. Below: your folders with their newest backup and the type of the next one, the backup directory and its free space, the last backup, and your keys.
+- **Backups** - every backup run with its backup sets, and the log of the selected run.
+- **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
+
+RestoreSafe checks your backups when it starts, after every operation, with **Check again** or `F5`, and when you return to it after five minutes.
 
 ### Create a backup
-Click **Create backup**. The preflight summary shows, for every source directory, whether it gets a full or a differential backup and why (see [Screenshots](#screenshots)). For a differential, the needed space is an estimate of the files changed since the full backup; the summary also shows the size if everything were stored again.
+Click **Back up now…** (`Ctrl+B`). The backup plan shows, for every folder, whether it gets a full or a differential backup and why, the space needed (for a differential an estimate of the files changed since the full backup), how you will unlock, and what retention removes afterwards (see [Screenshots](#screenshots)). Then choose:
 
-Then choose:
-
-- **Start backup** - start the backup as planned
-- **Full backup** - full backup for every directory instead (offered when a differential is planned)
-- **New keys + full backup** - create new keys and full backups (to change your password, replace a lost YubiKey, or get a new recovery code; see [How your backups are locked](#how-your-backups-are-locked))
+- **Start** - back up as planned
+- **Full backup instead** - full backups for every folder (offered when a differential is planned); **Back to plan** returns
+- **New keys + full backup…** - create new keys and full backups (to change your password, replace a lost YubiKey, or get a new recovery code; see [How your backups are locked](#how-your-backups-are-locked))
 - **Cancel**
 
 Then enter your password and/or confirm the Windows Security prompt of your YubiKey. On your first backup, RestoreSafe creates your keys first (see [What you will see](#what-you-will-see)).
 
-While the backup runs, the window shows the progress and the log. **Cancel** stops it: backup sets completed so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same.
+While the backup runs, the Overview shows the steps, the folder being backed up, the progress, the speed, and the time left; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the Overview until you click **Done**.
 
 ### Restore a backup
-Click **Restore backup** and choose what to restore: a backup run (all its backup sets) or a single backup set. Then choose the destination folder (**Browse...**, or restore into the backup directory itself), check the preflight, click **Start restore**, and enter your password and/or confirm your YubiKey.
+On the Backups page, select a backup run or one of its folders and click **Restore…** (or double-click it). The restore wizard asks:
 
-Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically and shows it in the preflight. Files deleted before the differential was created are not restored.
+1. **When** - the backup run to restore from.
+2. **Folders** - which of its folders. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
+3. **Destination** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet, and the page checks that and the free space while you type.
+4. **Check** - what will be read and created. Nothing is written before you click **Restore…** and enter your password and/or confirm your YubiKey.
 
-RestoreSafe creates one folder per backup set in the destination, named like the backed-up folder; these folders must not exist yet (the preflight checks it). If a file does not match its checksum, the restore stops and reports that it is incomplete.
+Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically and shows it in the wizard. Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
 
 ### Verify a backup
-Click **Verify backup**, choose a backup run or a single backup set, and click **Start verification**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup.
+On the Backups page, select a backup run or one of its folders and click **Verify…**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The Backups page shows the result ("Verified" or "Damaged") for each backup set.
 
 ### Excluding files and unreadable files
 Use `exclude` in `config.yaml` to leave out files and directories (case-insensitive):
@@ -240,7 +250,7 @@ Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_cod
 
 **Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
 
-**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, RestoreSafe asks whether to unlock with your password/YubiKey or with the recovery code.
+**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, the unlock dialog offers **Use your recovery code instead**.
 
 ### When RestoreSafe creates new keys
 
@@ -248,9 +258,9 @@ New keys mean: a new master key, new boxes, and a new full backup of every sourc
 
 - you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
 - you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
-- you click **New keys + full backup** in the backup summary, to change your password, replace a lost YubiKey, or get a new recovery code.
+- you click **New keys + full backup…** in the backup plan, to change your password, replace a lost YubiKey, or get a new recovery code.
 
-The backup summary always tells you in advance when new keys will be created and why.
+The backup plan always tells you in advance when new keys will be created and why; so does the Keys card on the Overview.
 
 **Important:** new keys come with new unlock methods. Your old password, old YubiKey registrations, and old recovery code do **not** open backups made with the new keys. They still open your older backups, until retention deletes them.
 
@@ -417,14 +427,14 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 |---|---|
 | `cmd/restoresafe` | Entry point of `RestoreSafe.exe` |
 | `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
-| `internal/gui` | The window application; `internal/gui/win32` wraps the Windows API it uses |
+| `internal/gui` | The window application: `gui/flow` (operation lifecycle and questions), `gui/view` (what every page and dialog shows, as plain Go), `gui/widget` (drawn controls and the theme), `gui/win32` (the Windows API it uses) |
 | `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, restore points); `workflow/interact` is the contract between the workflows and the GUI |
 | `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
 | `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
 | `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
 | `build/windows` | Icon, application manifest, and version information embedded by `build.bat` |
 | `docs` | Specifications and the GUI test checklist |
-| `scripts/gui-test` | PowerShell UI automation for the manual GUI checklist |
+| `scripts/gui-test` | PowerShell UI automation: smoke test, status conditions, access keys (see its README) |
 
 Imports point downward only (`gui` → `workflow` → `format` → `security`, ...); `go test ./internal/architecture` checks this.
 

@@ -79,7 +79,7 @@ io_diagnostics: false
 # Default: false
 verify_after_backup: false
 
-# Remind on the start screen when the newest backup is older than this many
+# Remind on the Overview when the newest backup is older than this many
 # days. RestoreSafe checks it only while it is open; it never runs in the
 # background.
 # 0 = no reminder
@@ -126,7 +126,7 @@ password_min_length: 12
 # The values are stored in the keys when new keys are created, and restore always
 # uses the stored values automatically. Because RestoreSafe reuses your keys,
 # changed values take effect the next time new keys are created (first backup, or
-# [K] in the backup summary); existing backups are not affected.
+# "New keys + full backup…" in the backup plan); existing backups are not affected.
 #
 # Parameters and their effect:
 #

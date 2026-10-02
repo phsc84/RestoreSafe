@@ -427,9 +427,10 @@ func backupDirectory(
 	return setStats{Skipped: res.Stats.Skipped + res.Stats.Stale, Bytes: partsSize(res.Parts)}, nil
 }
 
-// secondsSince returns the whole seconds since start.
+// secondsSince returns the seconds since start, rounded up, so that a run
+// shorter than a second still records a duration (0 means none recorded).
 func secondsSince(start time.Time) int64 {
-	return int64(time.Since(start) / time.Second)
+	return int64((time.Since(start) + time.Second - 1) / time.Second)
 }
 
 // setStats is what backupDirectory reports about the set it wrote.

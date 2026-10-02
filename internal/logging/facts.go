@@ -28,7 +28,7 @@ type Fact struct {
 	Bytes int64 `json:"bytes,omitempty"`
 	// Removed counts the backup sets a cleanup removed.
 	Removed int `json:"removed,omitempty"`
-	// Seconds is the duration of a backup run.
+	// Seconds is the duration of a backup run, rounded up to whole seconds.
 	Seconds int64 `json:"seconds,omitempty"`
 	// Error is the reason of a failure.
 	Error string `json:"error,omitempty"`

@@ -9,16 +9,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 **Breaking change:** RestoreSafe 2.0 uses a new backup format. It cannot restore backups created by 1.x, and 1.x cannot restore 2.0 backups. Keep RestoreSafe 1.0.2 to restore your 1.x backups; 2.0 never modifies or deletes them. Start from the new `config-SAMPLE.yaml`. See "Updating from RestoreSafe 1.x to 2.0" in the README.
 
 ### Added
-- Windows application instead of the console menu: start screen with the startup health check, preflight summary before every operation, progress with a live log, Cancel at any time (completed backup sets are kept, the unfinished one is removed), and a result screen. Backups to restore or verify are chosen in a tree of backup runs and sets; the restore destination has a folder picker. Operable by keyboard and readable by screen readers.
+- Windows application instead of the console menu, built around the question "are my folders protected?":
+  - **Overview**: the status (protected, warning, error, or no backup yet) with the action that fixes a problem, the folders with their newest backup and the type of the next one, the backup directory and its free space, the last backup, and the keys. The backups are checked at start, after every operation, with **Check again** or F5, and when you return after five minutes.
+  - **Backup plan** before every backup: full or differential per folder and why, the space, how you unlock, and what retention removes if the backup succeeds.
+  - Progress on the Overview with steps, speed, and time left, also on the taskbar button; Cancel at any time (completed backup sets are kept, the unfinished one is removed); a result card that says what happened per folder.
+  - **Backups** page: every backup run with its sets, types, sizes, and status (complete, verified, skipped files, incomplete, damaged), the log of the selected run, and Restore and Verify.
+  - **Restore wizard**: when, which folders, where to, and a last check; it checks the destination folders and the free space while you type.
+  - **Settings** page: the configuration in words, **Edit config.yaml**, and **Reload** (no restart needed after a change).
+  - Operable by keyboard (access keys, Ctrl+1 to Ctrl+3, Ctrl+B, F5) and readable by screen readers; follows the display scaling of each monitor and Windows high contrast.
 - Differential backups: RestoreSafe chooses automatically between a full and a differential backup per source directory and shows the decision and reason before the backup starts. A differential stores only files that are new or changed since the last full backup (size, modification time, and NTFS change time are compared; unchanged files are not read).
-- **Full backup** in the backup preflight forces full backups.
+- **Full backup instead** in the backup plan forces full backups.
 - Restore and verify of differential backups; a differential is restored together with its full backup, and the link between them is checked before any file is written.
 - Encrypted manifest in every backup: restore and verify check every file against its SHA-256 checksum.
 - Restore of creation and modification times and of the read-only, hidden, and system attributes.
 - Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey.
-- **New keys + full backup** in the backup preflight creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
+- **New keys + full backup…** in the backup plan creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
 - `password_min_length` (default 12, at least 8) for new passwords.
-- `reminder_days` (default 7, 0 = off): the start screen reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
+- `reminder_days` (default 7, 0 = off): the Overview reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
 - `exclude` patterns for files and directories to leave out of backups.
 - `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
 - `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).
