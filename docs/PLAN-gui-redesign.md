@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-9 done |
+| Status | Agreed 2026-09-30; phases 0-9 done; phase 10 done except the manual checklist run, the usability session and the merge into `v2` |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -242,6 +242,14 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 
 - The Settings page (`settings.go`, `view/settings.go`) replaces the interim page: configuration file with Edit config.yaml and Reload, folders with their state from the check, exclude patterns and the unreadable-file rule, backup directory with reachability and free space, full and differential, retention, checks, keys and unlocking (Argon2id behind a link), logging. Rows wrap within their cards; the page scrolls (`widget.Panel.SetScroll`).
 - Reload (`reload.go`) runs `config.Load` on a worker: a broken file keeps the configuration in use and shows the error with its line on the card; a good file is used at once, or after the running operation, and the backups are checked again with it.
+
+## 6f. State after phase 10 (without the manual parts)
+
+- **10a:** tooltips (folder paths, the reason of the next type, exact sizes and dates, the config.yaml key of each Settings value); the Folders card scrolls beyond five folders; the wizard's step trail goes back to completed steps; its log viewer has the BK-5 filter; the plan and credential dialogs follow a DPI change while open; Windows high contrast uses the system colors.
+- **10b:** `scripts/gui-test` for the new UI: controls by control ID (a Go test keeps `$Ids` equal to the code), `New-TestCondition.ps1` (13 conditions), `Check-States.ps1`, `Accessibility.ps1`, and the smoke test through the plan, the wizard and the Backups page.
+- **10c:** pre-run of `docs/GUI-TEST-CHECKLIST.md` at 150 % (scripts and scripted walks), with a list of known differences from the spec to accept or change.
+- **10d:** README (usage, screenshots from a neutral demo setup), CHANGELOG, config sample.
+- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, a decision on each known difference, then the merge into `v2`.
 
 ## 7. Risks
 
