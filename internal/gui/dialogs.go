@@ -61,7 +61,8 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	t := a.theme
 	s := t.Scale
 	pal := t.Palette
-	win, err := newDialogWindow(t, a.hwnd, credentialClass, v.Title)
+	owner := a.dialogOwner()
+	win, err := newDialogWindow(t, owner, credentialClass, v.Title)
 	if err != nil {
 		return credentialAnswer{}
 	}
@@ -153,7 +154,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	win32.SetWindowPos(okButton, row.RightPx(max(buttonWidth(t, okButton), s.Px(dialogButton))))
 
 	a.modal = win.hwnd
-	win32.Enable(a.hwnd, false)
+	win32.Enable(owner, false)
 	win32.ShowWindow(win.hwnd, win32.SW_SHOWNORMAL)
 	if len(d.edits) > 0 {
 		win32.SetFocus(d.edits[0])
@@ -176,7 +177,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	}
 	// Enable the owner before the dialog disappears, so the activation
 	// returns to it and not to another application.
-	win32.Enable(a.hwnd, true)
+	win32.Enable(owner, true)
 	win.destroy()
 	win32.DeleteObject(d.codeFont)
 	activeCredential = nil
@@ -238,9 +239,6 @@ func (a *app) closeModal() {
 	}
 }
 
-// rgb returns a COLORREF.
-func rgb(r, g, b byte) uint32 { return uint32(r) | uint32(g)<<8 | uint32(b)<<16 }
-
 // taskDialog shows a task dialog owned by owner and returns the chosen
 // button and radio button (IDCANCEL when it was closed).
 func (a *app) taskDialog(owner win32.HWND, d win32.TaskDialog) (button, radio int32) {
@@ -270,7 +268,7 @@ func (a *app) confirm(owner win32.HWND, c view.Confirm) bool {
 // confirmInfo asks c in an information task dialog owned by the main
 // window; Yes is the default. It reports whether the user chose Yes.
 func (a *app) confirmInfo(c view.Confirm) bool {
-	button, _ := a.taskDialog(a.hwnd, win32.TaskDialog{
+	button, _ := a.taskDialog(a.dialogOwner(), win32.TaskDialog{
 		Instruction: c.Instruction,
 		Content:     c.Content,
 		Icon:        win32.TD_INFORMATION_ICON,
@@ -278,4 +276,13 @@ func (a *app) confirmInfo(c view.Confirm) bool {
 		Default:     win32.IDOK,
 	})
 	return button == win32.IDOK
+}
+
+// dialogOwner is the window questions and confirmations are modal to: the
+// restore wizard while it is open, the main window otherwise.
+func (a *app) dialogOwner() win32.HWND {
+	if a.wizard != nil {
+		return a.wizard.win.hwnd
+	}
+	return a.hwnd
 }

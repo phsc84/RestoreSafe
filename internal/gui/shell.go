@@ -61,21 +61,14 @@ func (a *app) pagePanels() []*widget.Panel {
 	return []*widget.Panel{a.shell.overview.panel, a.shell.backups.panel, a.shell.settings.panel}
 }
 
-// showPage shows page: a page of the navigation, or the operation screen.
+// showPage shows a page of the navigation.
 func (a *app) showPage(page int) {
 	a.page = page
-	shellShown := page != pageOperation
-	setShown(a.shell.sidebar.HWND(), shellShown)
-	a.shell.status.Show(shellShown)
 	for i, p := range a.pagePanels() {
 		p.Show(i == page)
 	}
-	if shellShown {
-		a.shell.sidebar.Select(page)
-		win32.SetText(a.hwnd, a.title())
-		a.refreshInfo()
-	}
-	a.applyOpVisibility()
+	a.shell.sidebar.Select(page)
+	a.refreshInfo()
 	a.layout()
 }
 
@@ -133,7 +126,7 @@ func (a *app) restyleShell() {
 // shortcut handles the keyboard shortcuts of spec 3.2; it reports whether
 // it handled the key.
 func (a *app) shortcut(vk uintptr) bool {
-	if a.page == pageOperation || a.modal != 0 || a.plan != nil {
+	if a.modal != 0 || a.plan != nil || a.wizard != nil {
 		return false
 	}
 	ctrl := win32.KeyDown(win32.VK_CONTROL)
@@ -155,16 +148,21 @@ func (a *app) do(action view.Action) {
 	switch action {
 	case view.ActionBackUp:
 		if a.snapshot != nil && !a.snapshot.Check.BlocksBackup() {
-			a.startOperation(flow.OpBackup, nil)
+			a.startOperation(opRequest{op: flow.OpBackup})
 		}
 	case view.ActionRestore:
-		if sets := a.shell.backups.chosen(); len(sets) > 0 {
-			a.startOperation(flow.OpRestore, sets)
+		b := a.shell.backups
+		if len(b.chosen()) > 0 {
+			a.openWizard(b.selRun, b.selSet)
+		}
+	case view.ActionOpenRestored:
+		if r := a.machine.Current(); r != nil && r.Restore != nil {
+			a.open(r.Restore.Destination, false)
 		}
 	case view.ActionVerify:
 		if sets := a.shell.backups.chosen(); len(sets) > 0 {
 			a.verifyWhat = a.shell.backups.bar.What
-			a.startOperation(flow.OpVerify, sets)
+			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
 		}
 	case view.ActionCheckAgain:
 		a.startCheck()

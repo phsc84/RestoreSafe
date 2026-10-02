@@ -25,8 +25,11 @@ type PlanRow struct {
 // PlanLine is a labeled line under the plan's table (spec BP-2).
 type PlanLine struct {
 	Label, Text string
-	Tone        Tone
-	Glyph       Glyph
+	// Paths are lines that are paths, shortened in the middle; they take
+	// the place of Text.
+	Paths []string
+	Tone  Tone
+	Glyph Glyph
 }
 
 // IssueLine is a preflight issue (spec BP-5).
@@ -357,3 +360,6 @@ func joinAnd(items []string) string {
 	}
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
+
+// IssueText shows a workflow message with its remedy as plain sentences.
+func IssueText(s string) string { return issueText(s) }

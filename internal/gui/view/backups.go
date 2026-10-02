@@ -38,6 +38,9 @@ type InfoLine struct {
 	Tone   Tone
 	Glyph  Glyph
 	Button *Button
+	// Path is set when Text is one line that starts with a path: it is
+	// shortened in the middle rather than wrapped.
+	Path bool
 }
 
 // BackupRow is one backup set in the list (spec BK-2).

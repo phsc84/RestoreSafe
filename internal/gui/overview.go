@@ -120,12 +120,12 @@ func (o *overviewPage) update() {
 	o.layout()
 }
 
-// backupRun returns the backup or verification the Overview shows:
-// running, or finished with a result card; nil otherwise. Restore still
-// uses the first GUI's operation screen.
+// backupRun returns the operation the Overview shows: running, or
+// finished with a result card; nil otherwise. A restore shows once it has
+// started (spec RW-9); before, the restore wizard is its plan.
 func (o *overviewPage) backupRun() *flow.Run {
 	r := o.a.machine.Current()
-	if r == nil || r.Op == flow.OpRestore {
+	if r == nil || (r.Op == flow.OpRestore && r.Started.IsZero()) {
 		return nil
 	}
 	return r
@@ -349,7 +349,7 @@ func (o *overviewPage) layout() {
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
 
 	if o.run.mode != runHidden {
-		o.run.place(area.Top(o.run.height()))
+		o.run.place(area.TopPx(o.run.height(area.Rest().Width())))
 	} else {
 		o.layoutHero(area.Top(heroHeight))
 	}

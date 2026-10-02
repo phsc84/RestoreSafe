@@ -293,3 +293,23 @@ func TestListViewGroupsAndItems(t *testing.T) {
 		t.Fatal("cleared")
 	}
 }
+
+func TestListViewCheckboxes(t *testing.T) {
+	_, host := testTheme(t)
+	lv, err := win32.CreateWindow(0, win32.WC_LISTVIEW, "", win32.WS_CHILD|win32.WS_VISIBLE|win32.LVS_REPORT, 0, 0, 300, 200, host, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	win32.ListSetupPlain(lv, true)
+	win32.ListInsertColumn(lv, 0, "Folder", 120, false)
+	a := win32.ListAddItem(lv, "Docs", 1)
+	b := win32.ListAddItem(lv, "Pics", 2)
+	win32.ListSetChecked(lv, a, true)
+	if !win32.ListChecked(lv, a) || win32.ListChecked(lv, b) || win32.ListParam(lv, b) != 2 {
+		t.Fatal("check states")
+	}
+	win32.ListSetChecked(lv, a, false)
+	if win32.ListChecked(lv, a) {
+		t.Fatal("cleared")
+	}
+}

@@ -118,3 +118,45 @@ func (s *stack) place(left, top int32) {
 		y += it.height
 	}
 }
+
+// pathLine adds one line that starts with a path: shortened in the middle
+// when it does not fit, behind an icon (or the icon's space when indent).
+func (s *stack) pathLine(text string, style widget.TextStyle, color widget.Color, glyph view.Glyph, indent bool) {
+	sc := s.t.Scale
+	var icon win32.HWND
+	left := int32(0)
+	if glyph != view.GlyphNone {
+		icon = s.icon(glyph, color)
+	}
+	if glyph != view.GlyphNone || indent {
+		left = sc.Px(iconWidth)
+	}
+	h := s.panel.PathLabel(text, style, color)
+	s.items = append(s.items, stackItem{height: sc.Px(stackLineHeight), place: func(r win32.Rect) {
+		if icon != 0 {
+			win32.SetWindowPos(icon, win32.Rect{Left: r.Left, Top: r.Top, Right: r.Left + left, Bottom: r.Bottom})
+		}
+		r.Left += left
+		win32.SetWindowPos(h, r)
+	}})
+}
+
+// labeledPaths adds lines of paths with a label in front of the first.
+func (s *stack) labeledPaths(label string, paths []string, color widget.Color) {
+	sc := s.t.Scale
+	for i, p := range paths {
+		var l win32.HWND
+		if i == 0 {
+			l = s.panel.Label(label, widget.TextSmall, s.t.Palette.TextSecondary)
+		}
+		h := s.panel.PathLabel(p, widget.TextBody, color)
+		s.items = append(s.items, stackItem{height: sc.Px(stackLineHeight), place: func(r win32.Rect) {
+			labelW := sc.Px(stackLabelWidth)
+			if l != 0 {
+				win32.SetWindowPos(l, win32.Rect{Left: r.Left, Top: r.Top, Right: r.Left + labelW, Bottom: r.Bottom})
+			}
+			r.Left += labelW
+			win32.SetWindowPos(h, r)
+		}})
+	}
+}

@@ -108,7 +108,10 @@ func TestRestoreCheck(t *testing.T) {
 		Unlock: interact.UnlockPlan{Methods: "password + YubiKey", RecoveryCode: true},
 	}
 	v := RestoreCheckOf(p, "Today, 09:12", now)
-	want := []string{"Today, 09:12\nDocuments: differential 3 + full backup of 1 Sep", `D:\Restore\Documents (new)`, "Enough space: about 92 GB needed, 212 GB free", "Password + YubiKey, or recovery code"}
+	want := []string{"Today, 09:12\nDocuments: differential 3 + full backup of 1 Sep", "", "Enough space: about 92 GB needed, 212 GB free", "Password + YubiKey, or recovery code"}
+	if p := v.Lines[1].Paths; len(p) != 1 || p[0] != `D:\Restore\Documents (new)` {
+		t.Fatalf("to %q", p)
+	}
 	for i, l := range v.Lines {
 		if l.Text != want[i] {
 			t.Fatalf("line %d %q, want %q", i, l.Text, want[i])

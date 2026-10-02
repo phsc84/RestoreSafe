@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-7 done |
+| Status | Agreed 2026-09-30; phases 0-8 done |
 | Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -209,7 +209,7 @@ Each phase ends with `go build ./...`, `go vet ./...`, `go test ./...` green, a 
 | 7 | Backups page | Run list with groups, filter, problem and information lines, retention line, log pane with filter, verify dialog and status. From phase 6: "Show log" of the progress and result cards opens Backups with the run selected and the log pane (BR-7; today a viewer of the output); a failed run's log reached from its run (a failed run reports no log path); the Last backup card marks a cancelled or failed newest run; the unlock dialog offers "Use your recovery code instead" and names the key set by its date (CR-1), replacing the `ChooseUnlockMethod` task dialog | Backups view per scenario | verify leaves the operation screen |
 | 8 | Restore wizard | Pages 1–4, destination checks, progress and result pages | Wizard navigation and enablement, debounced checks | selection tree, destination screen and operation screen deleted (`opscreen.go`, `screens.go`, `selection.go`, `layout.go`, `outcome.go`) |
 | 9 | Settings | Read-only cards, Edit config.yaml, Reload | Settings view; Reload swap and refusal | — |
-| 10 | Release | `scripts/gui-test` updated (`AutomationId`, `New-TestCondition.ps1`, `Check-States.ps1`; `Smoke-BackupRestore.ps1` moved to the new names: `RestoreSafePlan`, "&Back up now…", the run card's "Done"); checklist run; accessibility, DPI and high-contrast pass, including the plan and credential dialogs following a DPI change while open; polish from phase 5: tooltips (folder paths, the reason of the next backup type, exact sizes and dates), a Folders card that scrolls beyond five folders, the access-key check of all pages with `Accessibility.ps1`; usability session; README usage and screenshots, CHANGELOG; merge into `v2` | Release gate (spec 16.7) | — |
+| 10 | Release | From phase 8: the restore wizard's step indicator made clickable for completed steps (RW-1; Back does it today) and its "Show log" viewer given the BK-5 filter (RW-8); `scripts/gui-test` updated (`AutomationId`, `New-TestCondition.ps1`, `Check-States.ps1`; `Smoke-BackupRestore.ps1` moved to the new names: `RestoreSafePlan`, "&Back up now…", the run card's "Done"); checklist run; accessibility, DPI and high-contrast pass, including the plan and credential dialogs following a DPI change while open; polish from phase 5: tooltips (folder paths, the reason of the next backup type, exact sizes and dates), a Folders card that scrolls beyond five folders, the access-key check of all pages with `Accessibility.ps1`; usability session; README usage and screenshots, CHANGELOG; merge into `v2` | Release gate (spec 16.7) | — |
 
 Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure workflow changes. Phases 5–9 are the new UI; phase 5 is the largest, because the shell, the widgets and the pure-Go layers come together.
 
@@ -231,6 +231,11 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **7b:** `view/backups.go` (runs, rows, statuses, filter, retention and problem lines, selection, verify confirmation, log lines); the Last backup card marks cancelled and failed runs; the unlock dialog offers the recovery code (CR-1), and the password typed in it reaches the next password question through `flow.UI`.
 - **7c:** list view with groups and custom draw, drop-down list, context menu, clipboard, splitter.
 - **7d:** the Backups page (`backups.go`) replaces the interim page. Verify starts from it and runs on the Overview's run card; "Show log" of the cards opens the page with the run selected. A click on a run's group header selects the run (comctl32 sends no click for headers, so the page checks which group has the focus). Restore starts from the page with the chosen sets and still goes through the first GUI's destination and operation screens until phase 8; the selection tree is deleted.
+
+## 6d. State after phase 8
+
+- **8a:** `restore.PlanDestination` (the plan of `restore.Run` without questions, for page 3); `view/wizard.go` (steps, restore points, folders with the full backup read with a differential, destination checks, check page); restore wording in the progress and result cards ("Restore incomplete" in red, the incomplete folder, the folders not restored, Open folder).
+- **8b:** the restore wizard (`wizard.go`), one resizable dialog. Pages 1 to 4 are modal to the main window; page 4 starts the workflow, which shows its plan and waits for **Restore…** (Back answers no; nothing is written before). While the restore runs, the main window is usable again and shows the run card; credential dialogs and confirmations are modal to the wizard, and so is the Windows Security prompt. A cancelled password goes back to page 4. The first GUI's operation screen, destination screen and their layout and outcome code are deleted, and the tree-view wrappers with them.
 
 ## 7. Risks
 

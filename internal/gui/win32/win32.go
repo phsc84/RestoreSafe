@@ -176,6 +176,7 @@ const (
 	SM_CXICON    = 11
 	SM_CYICON    = 12
 	SM_CXSMICON  = 49
+	SM_CXVSCROLL = 2
 	SM_CYSMICON  = 50
 	MB_OK        = 0x0
 	MB_ICONERROR = 0x10
@@ -188,7 +189,6 @@ const (
 	ICC_STANDARD_CLASSES = 0x4000
 	ICC_PROGRESS_CLASS   = 0x20
 	ICC_LISTVIEW_CLASSES = 0x01
-	ICC_TREEVIEW_CLASSES = 0x2
 
 	FW_BOLD = 700
 
@@ -276,7 +276,7 @@ func ModuleHandle() windows.Handle {
 
 // InitCommonControls registers the common control classes the GUI uses.
 func InitCommonControls() error {
-	icc := initCommonControlsEx{ICC: ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS | ICC_TREEVIEW_CLASSES | ICC_LINK_CLASS | ICC_LISTVIEW_CLASSES}
+	icc := initCommonControlsEx{ICC: ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS | ICC_LINK_CLASS | ICC_LISTVIEW_CLASSES}
 	icc.Size = uint32(unsafe.Sizeof(icc))
 	if r, _, err := procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc))); r == 0 {
 		return lastErr("InitCommonControlsEx", err)

@@ -13,7 +13,6 @@ import (
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -36,26 +35,17 @@ type Options struct {
 // Control IDs and application messages. The IDs are the AutomationIds of
 // the controls (spec 15).
 const (
-	idOpButton = 120 // idOpButton+i is button i of the operation screen
-
-	idDestEdit   = 202
-	idDestBrowse = 203
-	idDestCheck  = 204
-
 	idSidebar = 301
 	idStatus  = 302
 	idPage    = 310 // idPage+page is the panel of a page
 
-	msgSnapshot   = win32.WM_APP + 1
-	msgBridge     = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
-	msgWorkerDone = win32.WM_APP + 3
-	msgLogLoaded  = win32.WM_APP + 4 // a log file for the Backups page was read
-	msgListFocus  = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
+	msgSnapshot    = win32.WM_APP + 1
+	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
+	msgWorkerDone  = win32.WM_APP + 3
+	msgLogLoaded   = win32.WM_APP + 4 // a log file for the Backups page was read
+	msgListFocus   = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
+	msgDestChecked = win32.WM_APP + 6 // the restore wizard's destination check is done
 )
-
-// Pages of the main window: the pages of the navigation (view.Page*) and,
-// while an operation runs, the operation screen of the first GUI.
-const pageOperation = 3
 
 const (
 	windowClass   = "RestoreSafeMainWindow"
@@ -77,12 +67,15 @@ type app struct {
 	opts      Options
 	backupDir string
 
-	hwnd  win32.HWND
-	dpi   uint32
-	theme *widget.Theme
-	page  int
-	modal win32.HWND  // open credential dialog, if any
-	plan  *planDialog // open backup plan dialog, if any
+	hwnd   win32.HWND
+	dpi    uint32
+	theme  *widget.Theme
+	page   int
+	modal  win32.HWND     // open credential dialog, if any
+	plan   *planDialog    // open backup plan dialog, if any
+	wizard *restoreWizard // open restore wizard, if any
+	// lastDestination is where the last restore of this session went.
+	lastDestination string
 
 	// taskbar shows the operation on the taskbar button once it exists;
 	// taskbarCreated is the message that says so.
@@ -96,40 +89,24 @@ type app struct {
 	// The shell of the new interface.
 	shell shell
 
-	// The first GUI's message fonts, for the operation screen and its
-	// dialogs (replaced in plan phases 6 to 8).
+	// The message font and a monospaced font for the viewers, and the base
+	// font of their RTF.
 	font     windows.Handle
-	boldFont windows.Handle
 	monoFont windows.Handle
 	fontFace string
 	fontPt   int
 
-	op struct {
-		title, detail, progress win32.HWND
-		report, log             win32.HWND
-		destLabel, destEdit     win32.HWND
-		destBrowse, destCheck   win32.HWND
-		destNote                win32.HWND
-		buttons                 [opButtons]win32.HWND
-	}
-	opButtons      []opButton
-	opTitleStatus  interact.Status
-	opContent      opContent
-	opShowProgress bool
-	// Destination screen.
-	destDefault  string // the backup directory, for "restore into the backup directory"
-	progressText string
-	machine      flow.Machine     // the stage of the operation
-	run          *runState        // its worker, nil when none runs
-	opReport     *interact.Report // preflight report on screen, re-rendered on DPI changes
+	machine flow.Machine // the stage of the operation
+	run     *runState    // its worker, nil when none runs
 
 	// The state of the backups.
-	checker    health.Checker
-	snapshot   *health.Snapshot
-	checking   bool
-	mu         sync.Mutex
-	pendingSn  *health.Snapshot
-	pendingLog *loadedLog
+	checker     health.Checker
+	snapshot    *health.Snapshot
+	checking    bool
+	mu          sync.Mutex
+	pendingSn   *health.Snapshot
+	pendingLog  *loadedLog
+	pendingDest *destCheck
 }
 
 var theApp *app
@@ -166,6 +143,9 @@ func Run(opts Options) error {
 			return nil
 		}
 		if a.plan != nil && win32.IsDialogMessage(a.plan.win.hwnd, &msg) {
+			continue
+		}
+		if a.wizard != nil && win32.IsDialogMessage(a.wizard.win.hwnd, &msg) {
 			continue
 		}
 		if msg.Message == win32.WM_KEYDOWN && a.shortcut(msg.WParam) {
@@ -231,19 +211,14 @@ func (a *app) createWindow() error {
 	if err := a.createShell(); err != nil {
 		return err
 	}
-	if err := a.createOperation(); err != nil {
-		return err
-	}
-	a.applyFonts()
-	a.setAccessibleNames()
 	a.showPage(view.PageOverview)
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	return nil
 }
 
-// createFonts creates the message font, a bold variant for headings, and a
-// monospaced font for the log of the operation screen, for the current
-// DPI, and applies them; the previous fonts are deleted afterwards.
+// createFonts creates the message font and a monospaced font for the
+// viewers (report and log dialogs) at the current DPI; the previous fonts
+// are deleted afterwards.
 func (a *app) createFonts() error {
 	lf, err := win32.MessageFont(a.dpi)
 	if err != nil {
@@ -253,153 +228,37 @@ func (a *app) createFonts() error {
 	if err != nil {
 		return err
 	}
-	bold := lf
-	bold.Weight = win32.FW_BOLD
-	bold.Height = lf.Height * 6 / 5
-	boldFont, err := win32.CreateFont(&bold)
-	if err != nil {
-		win32.DeleteObject(font)
-		return err
-	}
 	mono := lf
 	copy(mono.FaceName[:], windows.StringToUTF16("Consolas"))
 	monoFont, err := win32.CreateFont(&mono)
 	if err != nil {
 		win32.DeleteObject(font)
-		win32.DeleteObject(boldFont)
 		return err
 	}
-	old := []windows.Handle{a.font, a.boldFont, a.monoFont}
-	a.font, a.boldFont, a.monoFont = font, boldFont, monoFont
+	old := []windows.Handle{a.font, a.monoFont}
+	a.font, a.monoFont = font, monoFont
 	a.fontFace = lf.Face()
 	a.fontPt = max(int((-lf.Height*72+int32(a.dpi)/2)/int32(a.dpi)), 8)
-	a.applyFonts()
 	for _, h := range old {
 		win32.DeleteObject(h)
 	}
 	return nil
 }
 
-// applyFonts sets the fonts of the operation screen's controls and the rich
-// edits' zoom and margins for the current DPI.
-func (a *app) applyFonts() {
-	for _, c := range a.controls() {
-		win32.SetFont(c, a.font)
-	}
-	if a.op.title != 0 {
-		win32.SetFont(a.op.title, a.boldFont)
-	}
-	if a.op.log != 0 {
-		win32.SetFont(a.op.log, a.monoFont)
-	}
-	pad := uintptr(widget.Scale(a.dpi).Px(reportPadding))
-	for _, re := range []win32.HWND{a.op.report, a.op.log} {
-		if re == 0 {
-			continue
-		}
-		// The rich edit lays out RTF point sizes at the system DPI.
-		win32.SendMessage(re, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
-		win32.SendMessage(re, win32.EM_SETMARGINS, win32.EC_LEFTMARGIN|win32.EC_RIGHTMARGIN, pad|pad<<16)
-	}
-}
-
-// controls returns the operation screen's controls that use the message font.
-func (a *app) controls() []win32.HWND {
-	all := []win32.HWND{a.op.detail, a.op.report, a.op.destLabel, a.op.destEdit, a.op.destBrowse, a.op.destCheck, a.op.destNote}
-	all = append(all, a.op.buttons[:]...)
-	out := all[:0]
-	for _, c := range all {
-		if c != 0 {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
-// createOperation creates the operation screen's controls, hidden.
-func (a *app) createOperation() error {
-	o := &a.op
-	var err error
-	create := func(class string, style uint32, id uintptr) win32.HWND {
-		if err != nil {
-			return 0
-		}
-		var c win32.HWND
-		c, err = win32.CreateWindow(0, class, "", win32.WS_CHILD|style, 0, 0, 0, 0, a.hwnd, id)
-		return c
-	}
-	o.title = create("STATIC", win32.SS_NOPREFIX|win32.SS_CENTERIMAGE, 0)
-	o.detail = create("STATIC", win32.SS_NOPREFIX|win32.SS_CENTERIMAGE|win32.SS_PATHELLIPSIS, 0)
-	o.progress = create(win32.PROGRESS_CLASS, 0, 0)
-	o.report = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
-	o.log = create(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
-	o.destLabel = create("STATIC", 0, 0) // &-prefix: Alt+F moves to the field after it
-	o.destEdit = create("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idDestEdit)
-	o.destBrowse = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, idDestBrowse)
-	o.destCheck = create("BUTTON", win32.WS_TABSTOP|win32.BS_AUTOCHECKBOX, idDestCheck)
-	o.destNote = create("STATIC", win32.SS_NOPREFIX, 0)
-	for i := range o.buttons {
-		o.buttons[i] = create("BUTTON", win32.WS_TABSTOP|win32.BS_PUSHBUTTON, uintptr(idOpButton+i))
-	}
-	if err != nil {
-		return err
-	}
-	bg := uintptr(win32.SysColor(win32.COLOR_WINDOW))
-	win32.SendMessage(o.report, win32.EM_SETBKGNDCOLOR, 0, bg)
-	win32.SendMessage(o.log, win32.EM_SETBKGNDCOLOR, 0, bg)
-	win32.SendMessage(o.log, win32.EM_SETTEXTMODE, win32.TM_PLAINTEXT, 0)
-	win32.SendMessage(o.log, win32.EM_EXLIMITTEXT, 0, 64<<20)
-	win32.SendMessage(o.progress, win32.PBM_SETRANGE32, 0, 1000)
-	return nil
-}
-
 // setShown shows or hides a control. A hidden control is also disabled, so
-// the dialog manager skips it: otherwise its access key (e.g. Alt+B of the
-// hidden "Back up now") would win over the visible one.
+// the dialog manager skips it: otherwise its access key would win over the
+// visible one.
 func setShown(c win32.HWND, shown bool) {
 	win32.SetVisible(c, shown)
 	win32.Enable(c, shown)
 }
 
-// applyOpVisibility shows the operation screen's controls that the page,
-// the content mode, and the buttons call for.
-func (a *app) applyOpVisibility() {
-	on := a.page == pageOperation
-	o := &a.op
-	c := a.opContent
-	setShown(o.title, on)
-	setShown(o.detail, on)
-	setShown(o.progress, on && a.opShowProgress)
-	setShown(o.report, on && (c == contentReport || c == contentReportAndLog))
-	setShown(o.log, on && (c == contentLog || c == contentReportAndLog))
-	for _, d := range []win32.HWND{o.destLabel, o.destEdit, o.destBrowse, o.destCheck, o.destNote} {
-		setShown(d, on && c == contentDestination)
-	}
-	for i, b := range o.buttons {
-		setShown(b, on && i < len(a.opButtons))
-	}
-}
-
-// layout positions the shell or the operation screen.
+// layout positions the shell.
 func (a *app) layout() {
-	if a.op.log == 0 || a.shell.sidebar == nil {
+	if a.shell.sidebar == nil {
 		return
 	}
-	client := win32.ClientRect(a.hwnd)
-	if a.page != pageOperation {
-		a.layoutShell(client)
-		return
-	}
-	s := widget.Scale(a.dpi)
-	l := layoutOperation(s, client.Width(), client.Height(), a.opContent, a.opShowProgress)
-	o := &a.op
-	for c, r := range map[win32.HWND]win32.Rect{o.title: l.title, o.detail: l.detail, o.progress: l.progress, o.report: l.report, o.log: l.log,
-		o.destLabel: l.destLabel, o.destEdit: l.destEdit, o.destBrowse: l.destBrowse, o.destCheck: l.destCheck, o.destNote: l.destNote} {
-		win32.SetWindowPos(c, r)
-	}
-	for i, b := range o.buttons {
-		win32.SetWindowPos(b, l.buttons[i])
-	}
+	a.layoutShell(win32.ClientRect(a.hwnd))
 }
 
 // startCheck takes a new snapshot in the background; it can take a while
@@ -483,56 +342,20 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		a.restyle()
 		win32.SetWindowPos(hwnd, *win32.RectParam(lparam))
 		a.layout()
-		if a.opReport != nil {
-			win32.SetRichText(a.op.report, reportRTF(*a.opReport, a.fontFace, a.fontPt))
-		}
 		return 0
 	case win32.WM_ACTIVATEAPP:
 		if wparam != 0 && a.run == nil && a.snapshot != nil && time.Since(a.snapshot.Checked) > recheckAfter {
 			a.startCheck()
 		}
 		return 0
-	case win32.WM_CTLCOLORSTATIC:
-		win32.SetBkModeTransparent(wparam)
-		if win32.HWND(lparam) == a.op.title {
-			if _, color := statusMarker(a.opTitleStatus); color != 0 {
-				win32.SetTextColor(wparam, rtfColors[color])
-			}
-		}
-		return uintptr(win32.SysColorBrush(win32.COLOR_WINDOW))
 	case win32.WM_COMMAND:
-		id, code := win32.LoWord(wparam), win32.HiWord(wparam)
-		switch {
-		case id == win32.IDOK && a.page == view.PageBackups && win32.Focus() == a.shell.backups.list:
+		if win32.LoWord(wparam) == win32.IDOK && a.page == view.PageBackups && win32.Focus() == a.shell.backups.list {
 			// Enter in the list restores the selection (spec BK-4).
 			if a.shell.backups.bar.Restore.Enabled {
 				a.do(view.ActionRestore)
 			}
 			return 0
-		case id == win32.IDCANCEL && a.page == pageOperation:
-			a.clickCancel() // Esc
-			return 0
-		case id == idDestEdit && code == win32.EN_CHANGE:
-			a.updateDestination()
-			return 0
-		case id == idDestCheck && code == win32.BN_CLICKED:
-			a.updateDestination()
-			return 0
-		case id == idDestBrowse && code == win32.BN_CLICKED:
-			a.browseDestination()
-			return 0
-		case code == win32.BN_CLICKED && lparam != 0 && a.page == pageOperation:
-			if i := int(id) - idOpButton; i >= 0 && i < len(a.opButtons) {
-				a.opButtons[i].onClick()
-			}
-			return 0
 		}
-	case win32.DM_GETDEFID:
-		// Enter clicks the first button of the operation screen.
-		if a.page == pageOperation && len(a.opButtons) > 0 {
-			return win32.DC_HASDEFID<<16 | uintptr(idOpButton)
-		}
-		return 0
 	case msgSnapshot:
 		a.snapshotDone()
 		return 0
@@ -561,9 +384,13 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case msgWorkerDone:
 		a.onWorkerDone()
 		return 0
-	case win32.WM_TIMER:
-		if wparam == elapsedTimerID {
-			a.updateElapsed()
+	case msgDestChecked:
+		a.mu.Lock()
+		c := a.pendingDest
+		a.pendingDest = nil
+		a.mu.Unlock()
+		if a.wizard != nil {
+			a.wizard.destChecked(c)
 		}
 		return 0
 	case win32.WM_CLOSE:
@@ -580,7 +407,7 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case win32.WM_DESTROY:
-		for _, f := range []windows.Handle{a.font, a.boldFont, a.monoFont} {
+		for _, f := range []windows.Handle{a.font, a.monoFont} {
 			win32.DeleteObject(f)
 		}
 		a.theme.Fonts.Close()
@@ -610,17 +437,4 @@ func appIcon(size int32) windows.Handle {
 		return icon
 	}
 	return win32.LoadIcon(appIconIDFallback, size)
-}
-
-// setAccessibleNames names the operation screen's controls screen readers
-// cannot name from a label: the rich edits (their window text is the
-// content) and the progress bar.
-func (a *app) setAccessibleNames() {
-	for hwnd, name := range map[win32.HWND]string{
-		a.op.report:   "Preflight summary",
-		a.op.log:      "Log",
-		a.op.progress: "Progress",
-	} {
-		win32.SetAccessibleName(hwnd, name)
-	}
 }

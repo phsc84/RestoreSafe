@@ -372,3 +372,44 @@ func ListKeyOf(hdr *NMHdr) *NMLVKeyDown { return (*NMLVKeyDown)(unsafe.Pointer(h
 
 // ListDrawOf returns the NMLVCUSTOMDRAW behind hdr.
 func ListDrawOf(hdr *NMHdr) *NMLVCustomDraw { return (*NMLVCustomDraw)(unsafe.Pointer(hdr)) }
+
+// Plain lists and checkboxes.
+const (
+	LVS_EX_CHECKBOXES   = 0x00000004
+	LVM_GETITEMSTATE    = lvmFirst + 44
+	LVIS_STATEIMAGEMASK = 0xF000
+)
+
+// ListSetupPlain prepares a report-mode list without groups: full-row
+// selection, double buffering and, with checkboxes, a checkbox per item.
+func ListSetupPlain(lv HWND, checkboxes bool) {
+	ex := uintptr(LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER)
+	if checkboxes {
+		ex |= LVS_EX_CHECKBOXES
+	}
+	SendMessage(lv, LVM_SETEXTENDEDSTYLE, ex, ex)
+}
+
+// ListAddItem appends an item with the text of column 0; param identifies
+// it. It returns the item's index.
+func ListAddItem(lv HWND, text string, param uintptr) int {
+	t, _ := windows.UTF16PtrFromString(text)
+	it := lvItem{Mask: LVIF_TEXT | LVIF_PARAM, Item: 1 << 30, Text: t, Param: param}
+	return int(int32(SendMessage(lv, LVM_INSERTITEMW, 0, uintptr(unsafe.Pointer(&it)))))
+}
+
+// ListChecked reports whether the checkbox of item i is checked.
+func ListChecked(lv HWND, i int) bool {
+	state := SendMessage(lv, LVM_GETITEMSTATE, uintptr(i), LVIS_STATEIMAGEMASK)
+	return state>>12 == 2
+}
+
+// ListSetChecked checks or clears the checkbox of item i.
+func ListSetChecked(lv HWND, i int, checked bool) {
+	image := uint32(1)
+	if checked {
+		image = 2
+	}
+	it := lvItem{State: image << 12, StateMask: LVIS_STATEIMAGEMASK}
+	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
+}

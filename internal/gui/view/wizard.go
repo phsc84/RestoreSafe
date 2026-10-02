@@ -189,11 +189,13 @@ func DestinationOf(dest string, plan *interact.RestorePlan, err error, checking 
 		dir := Path(s.OutputDir)
 		switch {
 		case s.OutputCode == interact.CodeRestoreTargetExists:
-			v.Folders = append(v.Folders, InfoLine{Text: fmt.Sprintf(destExists, dir), Tone: ToneError, Glyph: GlyphError})
+			v.Folders = append(v.Folders,
+				InfoLine{Text: fmt.Sprintf(destExists, dir), Tone: ToneError, Glyph: GlyphError, Path: true},
+				InfoLine{Text: destExistsRemedy, Tone: ToneSecondary})
 		case s.OutputProblem != "":
 			v.Folders = append(v.Folders, InfoLine{Text: fmt.Sprintf(destInvalid, dir, issueText(s.OutputProblem)), Tone: ToneError, Glyph: GlyphError})
 		default:
-			v.Folders = append(v.Folders, InfoLine{Text: dir, Tone: ToneSuccess, Glyph: GlyphCheck})
+			v.Folders = append(v.Folders, InfoLine{Text: dir, Tone: ToneSuccess, Glyph: GlyphCheck, Path: true})
 		}
 	}
 	v.Space = restoreSpace(*plan)
@@ -240,11 +242,11 @@ func RestoreCheckOf(p interact.RestorePlan, when string, now time.Time) CheckVie
 	var to []string
 	for _, s := range p.Sets {
 		from = append(from, setReadWords(s.SetPlan, now))
-		to = append(to, Path(s.OutputDir))
+		to = append(to, fmt.Sprintf(checkToNew, Path(s.OutputDir)))
 	}
 	v.Lines = []PlanLine{
 		{Label: checkFrom, Text: strings.Join(from, "\n")},
-		{Label: checkTo, Text: fmt.Sprintf(checkToNew, strings.Join(to, ", "))},
+		{Label: checkTo, Paths: to},
 		*spaceLine2(p),
 		{Label: planUnlock, Text: unlockWords(p.Unlock)},
 	}

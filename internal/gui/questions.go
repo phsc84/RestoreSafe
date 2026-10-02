@@ -7,9 +7,9 @@ import (
 	"time"
 )
 
-// questions shows the questions of an operation: the backup plan dialog
-// and the credential dialogs; restore and verify still show their plans on
-// the first GUI's operation screen (replaced in plan phases 7 and 8).
+// questions shows the questions of an operation: the backup plan dialog,
+// the verify confirmation, the restore wizard's check page and the
+// credential dialogs.
 type questions struct{ a *app }
 
 var _ flow.Dialogs = questions{}
@@ -35,8 +35,12 @@ func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer f
 	q.a.plan.ask(opts, answer)
 }
 
+// RestorePlan shows the plan on the restore wizard's check page.
 func (q questions) RestorePlan(p interact.RestorePlan, answer func()) {
-	q.a.showPreflight(p.Details)
+	q.a.machine.RestorePlanShown(p)
+	if q.a.wizard != nil {
+		q.a.wizard.setPlan(p)
+	}
 	answer()
 }
 
@@ -46,8 +50,8 @@ func (q questions) VerifyPlan(p interact.VerifyPlan, answer func()) {
 	answer()
 }
 
-// ConfirmStart asks to verify (figure 7.3), or offers Start and Cancel
-// under the restore preflight.
+// ConfirmStart asks to verify (figure 7.3), or waits for Restore… in the
+// restore wizard.
 func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 	if r := q.a.machine.Current(); r != nil && r.Op == flow.OpVerify && r.Verify != nil {
 		ok := q.a.confirmInfo(view.VerifyConfirm(*r.Verify, q.a.verifyWhat, time.Now()))
@@ -57,14 +61,11 @@ func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 		answer(ok, nil)
 		return
 	}
-	label := "&Start restore"
-	if action == "verification" {
-		label = "&Start verification"
+	if q.a.wizard == nil {
+		answer(false, nil)
+		return
 	}
-	q.a.offerStart([]opButton{
-		{label, func() { q.a.startRunning(); answer(true, nil) }},
-		{"Cancel", func() { answer(false, nil) }},
-	})
+	q.a.wizard.ask(answer)
 }
 
 // ChooseUnlockMethod shows the unlock dialog with the link to the recovery

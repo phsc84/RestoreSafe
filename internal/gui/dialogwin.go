@@ -19,6 +19,9 @@ type dialogWindow struct {
 	// IDCANCEL; defID returns the ID of the default button, 0 for none.
 	onCommand func(id uint16)
 	defID     func() uint16
+	// onMessage sees the window's other messages first; handled stops
+	// the default handling.
+	onMessage func(msg uint32, wparam, lparam uintptr) (result uintptr, handled bool)
 }
 
 var (
@@ -102,6 +105,11 @@ func dialogWindowProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 	d := dialogWindows[hwnd]
 	if d == nil {
 		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
+	}
+	if d.onMessage != nil {
+		if r, ok := d.onMessage(msg, wparam, lparam); ok {
+			return r
+		}
 	}
 	switch msg {
 	case win32.WM_COMMAND:

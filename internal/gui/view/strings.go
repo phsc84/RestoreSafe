@@ -408,7 +408,8 @@ const (
 	footerSelection      = "%s · about %s"
 	destHintEmpty        = "Enter or browse to the folder to restore into."
 	destHintFullPath     = `Enter a full path, such as D:\Restore.`
-	destExists           = "%s already exists. Choose another place, or rename or move that folder."
+	destExists           = "%s already exists"
+	destExistsRemedy     = "Choose another place, or rename or move that folder."
 	destInvalid          = "%s can't be created: %s"
 	spaceUnknownDest     = "The free space at this place is unknown. Check the path."
 	spaceTooLittle       = "Not enough space: about %s needed, %s free"
@@ -442,7 +443,6 @@ const (
 	restoreSkippedOne    = "%s: 1 file isn't in this backup. It couldn't be read when the backup was made; the log names it."
 	restoreSkipped       = "%s: %s files aren't in this backup. They couldn't be read when the backup was made; the log names them."
 	resultIncomplete     = "Restore incomplete"
-	restoreStopped       = "%s: %s"
 	restoreIncompleteDir = "%s is incomplete; don't use it as a full copy."
 	restoreNotRestored   = "%s wasn't restored."
 	restoreNotRestoredN  = "%s weren't restored."
@@ -466,3 +466,9 @@ type WizardTexts struct {
 func WizardTextsOf() WizardTexts {
 	return WizardTexts{whenHeading, whenNote, foldersHeading, foldersNote, destHeading, destCreates}
 }
+
+// Exported for the restore wizard's window.
+const (
+	RestoreButton       = buttonRestoreStart
+	RestoreDetailsTitle = "Restore details"
+)

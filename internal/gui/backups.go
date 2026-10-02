@@ -498,14 +498,28 @@ func (b *backupsPage) isLive() bool {
 	return r != nil && b.logPath != "" && strings.EqualFold(r.b.LogPath(), b.logPath)
 }
 
-// appendLive adds output of the running operation when the pane shows its
-// log.
+// appendLive adds the log lines of the running operation's output when
+// the pane shows its log; notices for the screen only (e.g. "Restore
+// cancelled.") are not in the log file and stay out.
 func (b *backupsPage) appendLive(text string) {
 	if !b.isLive() {
 		return
 	}
-	b.logText += text
+	for _, line := range strings.SplitAfter(text, "\n") {
+		if strings.HasPrefix(line, "[") {
+			b.logText += line
+		}
+	}
 	b.renderLog()
+}
+
+// reloadLog reads the shown log again: after an operation, the file is
+// the exact record.
+func (b *backupsPage) reloadLog() {
+	if path := b.logPath; path != "" {
+		b.logPath = ""
+		b.showLog(path, b.logWhen)
+	}
 }
 
 // renderLog shows the log text with the filter.

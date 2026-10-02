@@ -12,6 +12,7 @@ const (
 	idRunLog
 	idRunDetails
 	idRunDone
+	idRunOpen
 )
 
 // Sizes of the run card, in DIPs.
@@ -48,6 +49,9 @@ type runCard struct {
 	bar                      *widget.ProgressBar
 
 	// Result mode.
+	// do runs the actions of the card's buttons; the app's by default.
+	do func(view.Action)
+
 	result     view.ResultCard
 	icon       *widget.Icon
 	lines      []win32.HWND
@@ -56,7 +60,7 @@ type runCard struct {
 }
 
 func newRunCard(a *app, parent win32.HWND) (*runCard, error) {
-	r := &runCard{a: a, acts: actions{}}
+	r := &runCard{a: a, acts: actions{}, do: a.do}
 	c, err := newCard(a.theme, parent, 0, r.acts)
 	if err != nil {
 		return nil, err
@@ -64,7 +68,7 @@ func newRunCard(a *app, parent win32.HWND) (*runCard, error) {
 	r.card = c
 	c.panel.OnCommand = func(id, code uint16) {
 		if action, ok := r.acts[id]; ok && (code == win32.BN_CLICKED || code == 0) {
-			a.do(action)
+			r.do(action)
 		}
 	}
 	c.panel.Show(false)
@@ -138,13 +142,16 @@ func (r *runCard) showResult(v view.ResultCard) {
 	}
 	r.title = p.Label(v.Title, widget.TextTitle, t.Palette.Text)
 	for _, line := range v.Lines {
-		r.lines = append(r.lines, p.Label(line, widget.TextBody, t.Palette.Text))
+		r.lines = append(r.lines, p.Paragraph(line, widget.TextBody, t.Palette.Text))
 	}
 	if v.Details != nil {
 		r.details = r.acts.link(p, *v.Details, idRunDetails)
 	}
 	if v.Log != nil {
 		r.resultBtns = append(r.resultBtns, r.acts.button(p, *v.Log, idRunLog, false))
+	}
+	if v.Open != nil {
+		r.resultBtns = append(r.resultBtns, r.acts.button(p, *v.Open, idRunOpen, false))
 	}
 	r.resultBtns = append(r.resultBtns, r.acts.button(p, v.Done, idRunDone, true))
 	p.Show(true)
@@ -161,19 +168,60 @@ func (r *runCard) hide() {
 	r.card.panel.Show(false)
 }
 
-// height returns the height the card needs, in DIPs.
-func (r *runCard) height() int32 {
+// height returns the height in pixels the card needs at width pixels.
+func (r *runCard) height(width int32) int32 {
+	s := r.a.theme.Scale
 	switch r.mode {
 	case runProgress:
-		return 2*widget.CardPadding + runTitleHeight + runTrailHeight + 2*runLineHeight + runBarHeight + 4*runGap
+		return s.Px(2*widget.CardPadding + runTitleHeight + runTrailHeight + 2*runLineHeight + runBarHeight + 4*runGap)
 	case runResult:
-		lines := int32(len(r.lines))
+		g := r.resultGeometry(width)
+		text := s.Px(runTitleHeight+runGap) + g.linesHeight()
 		if r.details != 0 {
-			lines++
+			text += s.Px(runLineHeight)
 		}
-		return 2*widget.CardPadding + max(runTitleHeight+runGap+lines*runLineHeight, runIconSize)
+		if g.buttonsBelow {
+			text += s.Px(runGap*2) + s.Px(widget.ButtonHeight)
+		}
+		return 2*s.Px(widget.CardPadding) + max(text, s.Px(runIconSize))
 	}
 	return 0
+}
+
+// resultGeometry is the layout of the result at a card width.
+type resultGeometry struct {
+	textWidth int32
+	// buttonsBelow puts the buttons on their own row when they would leave
+	// the title too little room.
+	buttonsBelow bool
+	lineHeights  []int32
+}
+
+func (g resultGeometry) linesHeight() int32 {
+	h := int32(0)
+	for _, l := range g.lineHeights {
+		h += l
+	}
+	return h
+}
+
+func (r *runCard) resultGeometry(width int32) resultGeometry {
+	t := r.a.theme
+	s := t.Scale
+	g := resultGeometry{textWidth: max(width-2*s.Px(widget.CardPadding)-s.Px(runIconSize+12), s.Px(100))}
+	buttons := int32(0)
+	for i, b := range r.resultBtns {
+		if i > 0 {
+			buttons += s.Px(8)
+		}
+		buttons += buttonWidth(t, b)
+	}
+	titleW, _ := t.Fonts.Measure(r.result.Title, widget.TextTitle)
+	g.buttonsBelow = titleW+s.Px(16)+buttons > g.textWidth
+	for _, line := range r.result.Lines {
+		g.lineHeights = append(g.lineHeights, max(t.Fonts.MeasureWrapped(line, widget.TextBody, g.textWidth), s.Px(runLineHeight)))
+	}
+	return g
 }
 
 // place puts the card at rect and lays out its controls.
@@ -208,21 +256,36 @@ func (r *runCard) place(rect win32.Rect) {
 		win32.SetWindowPos(r.bytes, halves[0].Rest())
 		win32.SetWindowPos(r.left, halves[1].Rest())
 	case runResult:
+		g := r.resultGeometry(rect.Width())
 		if r.icon != nil {
 			icon := area.Left(runIconSize)
 			icon.Bottom = icon.Top + s.Px(runIconSize)
 			win32.SetWindowPos(r.icon.HWND(), icon)
 			area.Left(12)
 		}
+		var buttons widget.Area
+		if g.buttonsBelow {
+			buttons = widget.NewArea(s, area.Bottom(widget.ButtonHeight))
+			area.Bottom(runGap * 2)
+		}
 		top := widget.NewArea(s, area.Top(runTitleHeight))
+		if !g.buttonsBelow {
+			buttons = top
+		}
 		for i := len(r.resultBtns) - 1; i >= 0; i-- {
-			win32.SetWindowPos(r.resultBtns[i], top.RightPx(buttonWidth(t, r.resultBtns[i])))
-			top.Right(8)
+			b := r.resultBtns[i]
+			rr := buttons.RightPx(buttonWidth(t, b))
+			if !g.buttonsBelow {
+				rr.Top += (rr.Height() - s.Px(widget.ButtonHeight)) / 2
+				rr.Bottom = rr.Top + s.Px(widget.ButtonHeight)
+			}
+			win32.SetWindowPos(b, rr)
+			buttons.Right(8)
 		}
 		win32.SetWindowPos(r.title, top.Rest())
 		area.Top(runGap)
-		for _, l := range r.lines {
-			win32.SetWindowPos(l, area.Top(runLineHeight))
+		for i, l := range r.lines {
+			win32.SetWindowPos(l, area.TopPx(g.lineHeights[i]))
 		}
 		if r.details != 0 {
 			linkW, _ := t.Fonts.Measure(r.result.Details.Text, widget.TextSmall)

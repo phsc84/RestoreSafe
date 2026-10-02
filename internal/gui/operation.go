@@ -8,6 +8,8 @@ import (
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
+	"RestoreSafe/internal/workflow/restore"
+	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"fmt"
 	"strings"
@@ -20,7 +22,6 @@ type runState struct {
 	b      *flow.Bridge
 	cancel context.CancelFunc
 	doneCh chan workerEnd
-	report *interact.Report // last preflight report (operation screen)
 }
 
 // workerEnd is how the worker ended: the workflow's error and the facts of
@@ -41,10 +42,20 @@ func runFacts(logPath string) logging.RunFacts {
 	return facts
 }
 
-// startOperation runs op on sets (restore and verify) in a worker
-// goroutine. Backup and verify show their progress on the Overview, a
-// backup after its plan dialog; restore uses the operation screen.
-func (a *app) startOperation(op flow.Op, sets []naming.BackupEntry) {
+// opRequest is an operation and what the user chose for it.
+type opRequest struct {
+	op flow.Op
+	// sets are the sets to restore or verify; destination is where to
+	// restore them.
+	sets        []naming.BackupEntry
+	destination string
+}
+
+// startOperation runs req in a worker goroutine. A backup opens its plan
+// dialog; backup and verify show their progress on the Overview; a restore
+// runs in the restore wizard, which started it.
+func (a *app) startOperation(req opRequest) {
+	op := req.op
 	if !a.machine.Start(op) {
 		return
 	}
@@ -63,8 +74,6 @@ func (a *app) startOperation(op flow.Op, sets []naming.BackupEntry) {
 		if op == flow.OpBackup {
 			a.openPlanDialog()
 		}
-	} else {
-		a.showOpScreen(op)
 	}
 	a.updateTaskbar()
 
@@ -82,18 +91,11 @@ func (a *app) startOperation(op flow.Op, sets []naming.BackupEntry) {
 		case flow.OpBackup:
 			err = backup.Run(ctx, u, cfg, exeDir)
 		case flow.OpRestore:
-			err = a.runRestore(ctx, u, cfg, exeDir, sets)
+			err = restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets: req.sets, Destination: req.destination})
 		case flow.OpVerify:
-			err = a.runVerify(ctx, u, cfg, exeDir, sets)
+			err = verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets: req.sets})
 		}
 	}()
-}
-
-// onScreen reports whether the current operation uses the first GUI's
-// operation screen.
-func (a *app) onScreen() bool {
-	r := a.machine.Current()
-	return r != nil && r.Op == flow.OpRestore
 }
 
 // runStarted records that the user started the backup in the plan dialog.
@@ -107,6 +109,9 @@ func (a *app) runStarted() {
 // bar and on the taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
+	if a.wizard != nil {
+		a.wizard.update()
+	}
 	if a.page == view.PageBackups {
 		a.shell.backups.update()
 	}
@@ -133,15 +138,10 @@ func (a *app) onProgress() {
 	if a.machine.Stage() != flow.StageRunning {
 		return
 	}
-	if a.onScreen() {
-		a.opScreenProgress(p)
-		a.updateTaskbar()
-		return
-	}
 	a.refreshRun()
 }
 
-// onOutput keeps new output for "Show log" and the operation screen.
+// onOutput keeps new output for the log pane.
 func (a *app) onOutput() {
 	if a.run == nil {
 		return
@@ -150,7 +150,6 @@ func (a *app) onOutput() {
 	if text != "" {
 		a.logText.WriteString(text)
 		a.shell.backups.appendLive(text)
-		win32.AppendText(a.op.log, strings.ReplaceAll(text, "\n", "\r\n"))
 	}
 }
 
@@ -161,7 +160,7 @@ func (a *app) confirmCancel() {
 	case flow.CancelNow:
 		a.cancelRun()
 	case flow.CancelAsk:
-		if a.confirm(a.hwnd, view.CancelConfirm(a.machine.Current().Op, false)) {
+		if a.confirm(a.dialogOwner(), view.CancelConfirm(a.machine.Current().Op, false)) {
 			a.cancelRun()
 		}
 	}
@@ -181,11 +180,6 @@ func (a *app) cancelRun() {
 	if a.plan != nil {
 		a.plan.close()
 	}
-	if a.onScreen() {
-		a.opScreenCancelling()
-		a.updateTaskbar()
-		return
-	}
 	a.refreshRun()
 }
 
@@ -199,9 +193,8 @@ func (a *app) onWorkerDone() {
 	end := <-r.doneCh
 	r.cancel()
 	a.onOutput()
-	win32.KillTimer(a.hwnd, elapsedTimerID)
+	a.shell.backups.reloadLog()
 	a.run = nil
-	a.progressText = ""
 	if a.plan != nil {
 		// The plan blocked the start: the result card says why.
 		a.plan.close()
@@ -211,12 +204,14 @@ func (a *app) onWorkerDone() {
 		win32.DestroyWindow(a.hwnd)
 		return
 	}
-	run := a.machine.Current()
-	if a.onScreen() {
-		a.opScreenResult(run, r.report)
-	} else {
-		a.startCheck()
+	if run := a.machine.Current(); run.Op == flow.OpRestore && a.wizard != nil && a.wizard.workerDone() {
+		// The restore ended before it started; the wizard shows why.
 		a.refreshRun()
+		return
+	}
+	a.startCheck()
+	a.refreshRun()
+	if a.wizard == nil {
 		a.focusPage()
 	}
 	a.updateTaskbar()
@@ -225,14 +220,12 @@ func (a *app) onWorkerDone() {
 	}
 }
 
-// dismiss ends the shown result: the Overview shows the state again, which
-// is checked anew after the first GUI's operation screen.
+// dismiss ends the shown result, and closes the restore wizard that shows
+// it: the Overview shows the state again.
 func (a *app) dismiss() {
-	wasOnScreen := a.page == pageOperation
 	a.machine.Dismiss()
-	a.showPage(view.PageOverview)
-	if wasOnScreen {
-		a.startCheck()
+	if a.wizard != nil {
+		a.wizard.close()
 	}
 	a.refreshShell()
 	a.updateTaskbar()
@@ -347,4 +340,15 @@ func (a *app) updateTaskbar() {
 			tb.SetValue(1000, 1000)
 		}
 	}
+}
+
+// opName returns the operation's name as the workflows use it in messages.
+func opName(o flow.Op) string {
+	switch o {
+	case flow.OpRestore:
+		return "Restore"
+	case flow.OpVerify:
+		return "Verification"
+	}
+	return "Backup"
 }
