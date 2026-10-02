@@ -4,14 +4,27 @@ The manual part of the GUI test plan ([SPEC-restoresafe-gui.md](SPEC-restoresafe
 
 Release gate (16.7): every row is **Passed**, or **Accepted** with a reason in the Notes column. No row may stay **Open**.
 
-Status of the last run: not run yet. The status-first UI is specified, not implemented. The results of the first GUI (2026-09-27) no longer apply.
+Status of the last run: **pre-run** on 2026-10-02 by Claude (Claude Code): `go test ./...` and the scripts of `scripts/gui-test` at 150 % on one monitor, plus scripted walks through the pages and dialogs. Rows those runs covered completely are **Passed (script)**; the notes of Open rows say what was pre-checked. Everything that needs a person, real YubiKeys, other scalings, Narrator or high contrast is Open for the manual run. The results of the first GUI (2026-09-27) no longer apply.
 
 | Run | |
 |---|---|
-| Date, commit | |
-| Windows build, scaling, monitors | |
-| YubiKeys used | |
-| Tester | |
+| Date, commit | Pre-run 2026-10-02, `gui-redesign` at fade221 and later (docs only) |
+| Windows build, scaling, monitors | Windows 11 Pro 10.0.26200.9457, 150 %, one monitor |
+| YubiKeys used | none (password-only test configurations) |
+| Tester | pre-run: Claude; manual run: open |
+
+## Known differences from the spec
+
+Found while building; they are not defects of the run. Decide for each whether it is **Accepted** for 2.0.0 or needs a change.
+
+| Spec | Difference |
+|---|---|
+| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" files (no fact records them). |
+| OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. |
+| CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. |
+| RW-1 | The wizard is resizable; its progress page leaves empty space below the card. |
+| 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. |
+| 16.4 | `Overdue` has no script variant: a backup's date is in its encrypted header. |
 
 ## 1. Status and Overview
 
@@ -19,15 +32,15 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| OV-1 | Protected: green hero, "Check details" opens the full health report, **Check again** updates it | Open | |
-| OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | |
+| OV-1 | Protected: green hero, "Check details" opens the full health report, **Check again** updates it | Open | Script: hero title and action ok (Check-States). Check details and Check again: by hand. |
+| OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | Script: hero ok; key setup from Back up now… ran in the smoke test. |
 | OV-1 | `Overdue` (`reminder_days: 1`, newest backup older than a day): amber hero, **Back up now…** | Open | |
-| OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count, "Show files" lists them | Open | |
-| OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show in Backups** marks the affected rows | Open | |
-| OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | |
-| OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | |
+| OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count, "Show files" lists them | Open | Script: hero names folder and count. "Show files" is not implemented (see Known differences). |
+| OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show in Backups** marks the affected rows | Open | Script: red hero, Show in Backups. Marked rows on Backups: by hand. |
+| OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | Script: red hero with Check again and Edit config. Back up now… is not shown (see Known differences). |
+| OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more", Check details lists all | Open | |
-| OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | |
+| OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | Tooltips added in 10a. |
 | OV-4 | Backup directory bar: segments and tooltips plausible compared with Explorer's drive properties | Open | |
 | OV-6 | Keys card for each authentication mode; YubiKey connected and not connected; "next backup creates new keys" after changing `recovery_code` and Reload | Open | |
 | OV-8 | Switching to another window for more than 5 minutes and back runs the check again | Open | |
@@ -36,30 +49,30 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| BP-1 | Plan shows type, number and reason per folder; a folder with a problem shows it instead of a type | Open | |
+| BP-1 | Plan shows type, number and reason per folder; a folder with a problem shows it instead of a type | Open | Pre-checked: differential and full rows, a missing folder. |
 | BP-2 | Space line: fits (ok), only the estimate fits (warning), doesn't fit (error, no **Start**) on a small USB stick | Open | |
 | BP-2 | Afterwards line names the chain retention removes; after the run exactly those files are gone from the backup directory (compare in Explorer) | Open | |
-| BP-4 | **Full backup instead**: plan switches to full for every folder and back with **Back to plan** | Open | |
+| BP-4 | **Full backup instead**: plan switches to full for every folder and back with **Back to plan** | Passed (script) | Full backup instead and Back to plan, 2026-10-02. |
 | BP-4 | **New keys + full backup…**: confirmation (figure 6.2), then key setup, then full backups | Open | |
-| CR-2 | First backup, mode 1 with recovery code: password twice, code shown on two lines, can't be selected or copied (clipboard checked), wrong retype shows the reason, right one continues | Open | |
-| CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Open | |
-| CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Open | |
-| CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Open | |
-| BR-1 | Progress card: step trail, folder n of N, bytes, speed, time left appear as specified; Folders card follows | Open | |
+| CR-2 | First backup, mode 1 with recovery code: password twice, code shown on two lines, can't be selected or copied (clipboard checked), wrong retype shows the reason, right one continues | Open | Script: password twice, code read from the two static lines and retyped. Clipboard and wrong retype: by hand. |
+| CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Open | Needs YubiKeys. |
+| CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Open | Needs a YubiKey. |
+| CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Passed (script) | "Wrong password. 2 attempts left." under the field, then the right one, 2026-10-02. |
+| BR-1 | Progress card: step trail, folder n of N, bytes, speed, time left appear as specified; Folders card follows | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
 | BR-5 | Taskbar button shows progress, indeterminate while unlocking, amber after warnings, red after a failure | Open | |
-| BR-7 | Result cards: finished, finished with warnings, failed (backup directory full), cancelled | Open | |
+| BR-7 | Result cards: finished, finished with warnings, failed (backup directory full), cancelled | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
 | BR-8 | Operation ends while another window is in front: taskbar button flashes until activated | Open | |
 
 ## 3. Backups page
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| BK-1 | Runs newest first, the newest expanded; group header with size, duration, warnings, "new keys" | Open | |
+| BK-1 | Runs newest first, the newest expanded; group header with size, duration, warnings, "new keys" | Open | Pre-checked: order, newest expanded, header with size, duration, "new keys", failed and cancelled runs. |
 | BK-2 | Types, "based on", chain IDs and sizes match the files in Explorer | Open | |
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
-| BK-5 | Log pane: log of the selected run, filter, **Open**; live while an operation runs | Open | |
+| BK-5 | Log pane: log of the selected run, filter, **Open**; live while an operation runs | Open | Pre-checked: selected run, live during verify and restore. |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
-| BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | |
+| BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Backups page. |
 | BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |
 | BK-9 | Empty state with **Back up now…** | Open | |
 
@@ -67,25 +80,25 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| RW-3 | Wizard from a run and from a single set: preselection as specified | Open | |
+| RW-3 | Wizard from a run and from a single set: preselection as specified | Open | Pre-checked from a run and from a set. |
 | RW-4 | Differential folders show the full backup read with them; the single-file note is visible | Open | |
-| RW-5 | Existing target folder blocks Next; renaming it in Explorer and returning unblocks | Open | |
+| RW-5 | Existing target folder blocks Next; renaming it in Explorer and returning unblocks | Open | Pre-checked: an existing folder blocks Next. |
 | RW-5 | "Restore into the backup directory" fills the path | Open | |
 | RW-6 | Nothing exists in the destination before **Restore…** is pressed | Open | |
-| RW-8 | Full and differential restore; restored files compared byte for byte with the sources, including timestamps and attributes | Open | |
-| RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | |
+| RW-8 | Full and differential restore; restored files compared byte for byte with the sources, including timestamps and attributes | Open | Script: restored files equal to the source by hash. Timestamps and attributes: by hand. |
+| RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | The "older version" line is not implemented (see Known differences). |
 | RW-8 | `Damaged`: "Restore incomplete" in red, naming the folder | Open | |
-| CR-1 | Restore unlocked with the recovery code only | Open | |
-| CR-1 | Restore with the spare YubiKey only | Open | |
+| CR-1 | Restore unlocked with the recovery code only | Open | Pre-checked for a verify through "Use your recovery code instead". |
+| CR-1 | Restore with the spare YubiKey only | Open | Needs YubiKeys. |
 
 ## 5. Cancel and close
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| BR-6 | Cancel during a backup (1 GB or more): confirmation, "Cancelling…", no `.tmp` parts left, completed folders kept, no retention ran | Open | |
-| BR-6 | Cancel during restore and during verify | Open | |
-| BP-6 | Cancel in the plan, in the unlock dialog, in each key-setup step: nothing written | Open | |
-| 6.4 | Close the window during a question and during a running backup | Open | |
+| BR-6 | Cancel during a backup (1 GB or more): confirmation, "Cancelling…", no `.tmp` parts left, completed folders kept, no retention ran | Open | Pre-checked with 800 MB: confirmation, cancelled card, no .tmp parts left. |
+| BR-6 | Cancel during restore and during verify | Open | Pre-checked: restore. |
+| BP-6 | Cancel in the plan, in the unlock dialog, in each key-setup step: nothing written | Open | Pre-checked: plan (Esc), unlock dialog. |
+| 6.4 | Close the window during a question and during a running backup | Open | Pre-checked: during planning, during a running backup. |
 | 12.4 | Log off during a backup: Windows shows "RestoreSafe is stopping a backup" and waits | Open | |
 | 15 | Backup directory disconnected during a backup: failed result card, red hero, the next backup removes the leftovers | Open | |
 
@@ -94,8 +107,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ID | Check | Status | Notes |
 |---|---|---|---|
 | ST-1 | **Edit config.yaml** opens the loaded file (also with `-config`) | Open | |
-| ST-2 | Reload after a valid change: all pages update | Open | |
-| ST-2 | Reload after an invalid change: error on the card, previous configuration still active | Open | |
+| ST-2 | Reload after a valid change: all pages update | Passed (script) | retention_keep and verify_after_backup changed and shown, 2026-10-02. |
+| ST-2 | Reload after an invalid change: error on the card, previous configuration still active | Passed (script) | YAML error with its line on the card; values unchanged, 2026-10-02. |
 | ST-2 | Reload disabled while an operation runs | Open | |
 | ST-3 to ST-9 | Every value matches `config.yaml`; tooltips name the keys | Open | |
 | 14 | Broken `config.yaml` at start: message box, then RestoreSafe ends | Open | |
@@ -105,18 +118,18 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ID | Check | Status | Notes |
 |---|---|---|---|
 | 3.3 | Every figure of the mockups compared side by side with its screenshot (`Screenshot.ps1`) | Open | |
-| 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | Open | |
+| 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | Open | 150 % pre-checked; a simulated DPI change of the plan and password dialogs to 100 % pre-checked. |
 | 15 | Moving the window between monitors with different scaling | Open | |
 | 3.2 | Minimum window size: nothing overlaps, all buttons visible | Open | |
-| 15 | High contrast (Aquatic and Desert): every status still readable, icons visible, focus visible | Open | |
+| 15 | High contrast (Aquatic and Desert): every status still readable, icons visible, focus visible | Open | New in 10a: system colors in high contrast. Not run (it changes the system theme). |
 
 ## 8. Keyboard and screen reader
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
 | 3.2 | Keyboard only: `Ctrl+1` to `Ctrl+3`, `Ctrl+B`, `F5`, Tab order on every page, `Enter` and `Esc` in every dialog, a full backup and restore without the mouse | Open | |
-| 15 | Access keys are unique per page and dialog; hidden pages don't react to them (`Accessibility.ps1`) | Open | |
-| 15 | Narrator: sidebar, hero state, card contents, list rows with status, step trail, progress, credential fields are announced in a sensible order | Open | |
+| 15 | Access keys are unique per page and dialog; hidden pages don't react to them (`Accessibility.ps1`) | Passed (script) | Accessibility.ps1: pages, plan dialog, wizard pages, 2026-10-02. |
+| 15 | Narrator: sidebar, hero state, card contents, list rows with status, step trail, progress, credential fields are announced in a sensible order | Open | MSAA pre-check: the Backups list exposes a named list with its rows. |
 
 ## 9. Usability session (16.6)
 
