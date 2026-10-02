@@ -5,21 +5,17 @@ package view
 
 // Application and shell.
 const (
-	appName         = "RestoreSafe"
-	navOverview     = "Overview"
-	navBackups      = "Backups"
-	navSettings     = "Settings"
-	statusReady     = "Ready"
-	statusChecking  = "Checking…"
-	statusFreeSpace = "%s free in backup directory"
+	appName        = "RestoreSafe"
+	navOverview    = "Overview"
+	navBackups     = "Backups"
+	navSettings    = "Settings"
+	statusChecking = "Checking…"
 )
 
 // Hero titles and lines (spec 5, figure 5.3).
 const (
 	heroProtected       = "Your folders are protected"
 	heroEmpty           = "Create your first backup"
-	heroEmptyLine       = "%s to %s. RestoreSafe creates your keys first."
-	heroEmptyLineKeys   = "%s to %s."
 	heroFacts           = "%s · Last backup %s"
 	heroMore            = " · and %d more problems"
 	heroMoreOne         = " · and 1 more problem"
@@ -60,17 +56,16 @@ const (
 const (
 	buttonBackUp       = "&Back up now…"
 	buttonCheckAgain   = "Check &again"
+	buttonRefresh      = "Re&fresh"
 	buttonEditConfig   = "&Edit config"
 	buttonShowBackups  = "&Show in Backups"
-	linkCheckDetails   = "Check details"
-	linkShowInBackups  = "Show in Backups"
-	linkDetails        = "Details"
 	reasonBlockedCheck = "Fix the problems the check found first."
 )
 
 // Overview cards (spec 5, figure 5.1).
 const (
-	cardFolders        = "Folders (%d)"
+	cardFolders        = "Folders to back up"
+	cardStorage        = "Backup directory"
 	folderNext         = "next: %s"
 	folderNoBackup     = "no backup yet"
 	folderMissing      = "Can't be found"
@@ -117,7 +112,6 @@ const (
 	settingsBackupDir    = "Backup directory"
 	buttonEditConfigFile = "&Edit config.yaml"
 	buttonOpenFolder     = "&Open in Explorer"
-	detailsTitle         = "Check details"
 	buttonClose          = "Close"
 )
 
@@ -211,10 +205,6 @@ const (
 	folderBackingUpPct     = "Backing up, %d%%"
 	folderCancelled        = "Cancelled"
 	folderFailed           = "Failed"
-	activityPlanning       = "Preparing…"
-	activityCancelling     = "Cancelling…"
-	activityItem           = "%s %s"
-	activityPercent        = " · %d%%"
 	cancelBackup           = "Cancel this backup?"
 	cancelBackupContent    = "Folders already backed up in this run are kept. The folder being backed up now is discarded. No old backups are removed."
 	cancelRestore          = "Cancel this restore?"
@@ -319,8 +309,6 @@ const (
 // Backups page (spec 7).
 const (
 	backupsEmptyLine     = "Your backups appear here after the first backup."
-	backupsStatusOne     = "1 run · %s"
-	backupsStatus        = "%d runs · %s"
 	columnFolder         = "Folder"
 	columnType           = "Type"
 	columnBasedOn        = "Based on"

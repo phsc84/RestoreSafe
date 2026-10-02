@@ -14,7 +14,7 @@ func TestScriptsKnowTheControlIDs(t *testing.T) {
 	t.Parallel()
 	ids := map[string]int{
 		"Sidebar": idSidebar, "HeroPrimary": idHeroPrimary, "HeroSecondary": idHeroSecondary,
-		"HeroLink": idHeroLink, "HeroTitle": idHeroTitle,
+		"HeroTitle": idHeroTitle,
 		"RunCancel": idRunCancel, "RunLog": idRunLog, "RunDetails": idRunDetails, "RunDone": idRunDone,
 		"RunOpen": idRunOpen, "RunTitle": idRunTitle,
 		"PlanStart": idPlanStart, "PlanFull": idPlanFull, "PlanNewKeys": idPlanNewKeys,

@@ -46,7 +46,6 @@ const (
 	ActionNone Action = iota
 	ActionBackUp
 	ActionCheckAgain
-	ActionCheckDetails
 	ActionShowInBackups
 	ActionEditConfig
 	ActionOpenSettings
@@ -96,9 +95,8 @@ type Hero struct {
 	Tone  Tone
 	Glyph Glyph
 	Title string
-	// Line carries the facts; Link follows it ("Check details").
+	// Line carries the facts.
 	Line string
-	Link Button
 	// Primary is the one fix action; Secondary is optional (errors only).
 	Primary   Button
 	Secondary *Button
@@ -122,7 +120,6 @@ type FolderRow struct {
 // FoldersCard lists the configured folders.
 type FoldersCard struct {
 	Title string
-	Link  Button
 	Rows  []FolderRow
 }
 
@@ -145,6 +142,7 @@ type Segment struct {
 
 // StorageCard is the backup directory and its space (spec OV-4).
 type StorageCard struct {
+	Title    string
 	Path     string
 	Used     string
 	Segments []Segment
@@ -162,7 +160,6 @@ type SetRow struct {
 // LastBackupCard is the newest backup run (spec OV-5).
 type LastBackupCard struct {
 	Title string
-	Link  Button
 	Tone  Tone
 	Glyph Glyph
 	Line  string
@@ -194,15 +191,15 @@ type Overview struct {
 	Storage    StorageCard
 	LastBackup LastBackupCard
 	Keys       KeysCard
-	// Status is the right part of the status bar.
-	Status string
+	// Refresh takes a new snapshot of the machine (F5).
+	Refresh Button
 }
 
 // OverviewOf computes the Overview from the snapshot s (nil while the
 // first check runs), the configuration and the time.
 func OverviewOf(s *health.Snapshot, cfg *config.Config, now time.Time) Overview {
 	if s == nil {
-		return Overview{Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}}
+		return Overview{Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
 	}
 	o := Overview{
 		Hero:       heroOf(s, cfg, now),
@@ -210,9 +207,7 @@ func OverviewOf(s *health.Snapshot, cfg *config.Config, now time.Time) Overview 
 		Storage:    storageOf(s),
 		LastBackup: lastBackupOf(s, now),
 		Keys:       keysOf(s),
-	}
-	if s.Storage.Known {
-		o.Status = fmt.Sprintf(statusFreeSpace, Size(s.Storage.FreeBytes))
+		Refresh:    Button{Text: buttonRefresh, Action: ActionCheckAgain, Enabled: true},
 	}
 	return o
 }
@@ -222,30 +217,21 @@ func heroOf(s *health.Snapshot, cfg *config.Config, now time.Time) Hero {
 	if !backUp.Enabled {
 		backUp.Reason = reasonBlockedCheck
 	}
-	details := Button{Text: linkCheckDetails, Action: ActionCheckDetails, Enabled: true}
 	folders := folderCount(s)
 
 	switch s.State {
 	case health.StateEmpty:
-		line := fmt.Sprintf(heroEmptyLine, folders, s.BackupDir)
-		if s.Keys.Exists {
-			line = fmt.Sprintf(heroEmptyLineKeys, folders, s.BackupDir)
-		}
-		if len(s.Problems) > 0 {
-			line += more(len(s.Problems))
-		}
-		return Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroEmpty, Line: line, Link: details, Primary: backUp}
+		return Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroEmpty, Primary: backUp}
 	case health.StateProtected:
 		line := folders
 		if newest := newestRun(s); newest != nil {
 			line = fmt.Sprintf(heroFacts, folders, When(newest.Created, now))
 		}
-		return Hero{Tone: ToneSuccess, Glyph: GlyphCheck, Title: heroProtected, Line: line, Link: details, Primary: backUp}
+		return Hero{Tone: ToneSuccess, Glyph: GlyphCheck, Title: heroProtected, Line: line, Primary: backUp}
 	}
 
 	p := s.Problems[0]
 	h := problemHero(p, s, cfg, now, backUp)
-	h.Link = details
 	if n := len(s.Problems) - 1; n > 0 {
 		h.Line += more(n)
 	}
@@ -335,7 +321,7 @@ func newestRun(s *health.Snapshot) *catalog.BackupRunSummary {
 }
 
 func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
-	card := FoldersCard{Title: fmt.Sprintf(cardFolders, len(s.Folders)), Link: Button{Text: linkDetails, Action: ActionOpenSettings, Enabled: true}}
+	card := FoldersCard{Title: cardFolders}
 	for _, f := range s.Folders {
 		row := FolderRow{Name: f.BackupName, Path: Path(f.Resolved)}
 		switch {
@@ -389,7 +375,7 @@ func badgeOf(e naming.BackupEntry) Badge {
 }
 
 func storageOf(s *health.Snapshot) StorageCard {
-	card := StorageCard{Path: Path(s.BackupDir)}
+	card := StorageCard{Title: cardStorage, Path: Path(s.BackupDir)}
 	st := s.Storage
 	if !st.Known || st.TotalBytes <= 0 {
 		card.Used = storageUnknown
@@ -411,11 +397,10 @@ func storageOf(s *health.Snapshot) StorageCard {
 }
 
 func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
-	card := LastBackupCard{Title: cardLastBackup, Link: Button{Text: linkShowInBackups, Action: ActionShowInBackups, Enabled: true}}
+	card := LastBackupCard{Title: cardLastBackup}
 	run := newestRun(s)
 	if run == nil {
 		card.Line, card.Tone, card.Glyph = lastBackupNone, ToneSecondary, GlyphNone
-		card.Link.Enabled = false
 		card.Note, card.NoteTone = laterRunNote(s, time.Time{}, now)
 		return card
 	}

@@ -15,9 +15,9 @@ import (
 const (
 	idHeroPrimary = 401 + iota
 	idHeroSecondary
-	idHeroLink
 	idCardLinks // idCardLinks+i is the link of card i
 	idHeroTitle = 409
+	idRefresh   = 410
 )
 
 // Sizes of the Overview page, in DIPs.
@@ -37,6 +37,7 @@ const (
 	nextWidth         = 80
 	iconWidth         = 22
 	linkPadding       = 12
+	refreshHeight     = 22
 )
 
 // overviewPage is the Overview (spec 5): the hero and four cards.
@@ -48,8 +49,8 @@ type overviewPage struct {
 
 	heroIcon                   *widget.Icon
 	heroTitle, heroLine        win32.HWND
-	heroLink                   win32.HWND
 	heroPrimary, heroSecondary win32.HWND
+	refresh                    win32.HWND
 
 	folders, storage, last, keys *card
 
@@ -78,9 +79,9 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	o.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
 	win32.SetControlID(o.heroTitle, idHeroTitle)
 	o.heroLine = panel.Paragraph("", widget.TextSmall, t.Palette.TextSecondary)
-	o.heroLink = o.acts.link(panel, view.Button{Text: " ", Enabled: true}, idHeroLink)
 	o.heroPrimary = o.acts.button(panel, view.Button{Text: " "}, idHeroPrimary, true)
 	o.heroSecondary = o.acts.button(panel, view.Button{Text: " "}, idHeroSecondary, false)
+	o.refresh = o.acts.button(panel, view.Button{Text: " "}, idRefresh, false)
 	if o.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
 	}
@@ -117,13 +118,17 @@ func (o *overviewPage) update() {
 		win32.SetStyle(o.heroTitle, style|win32.SS_ENDELLIPSIS)
 	}
 	win32.SetText(o.heroLine, h.Line)
-	o.setButton(o.heroLink, h.Link, idHeroLink, true)
 	o.setButton(o.heroPrimary, h.Primary, idHeroPrimary, true)
 	if h.Secondary != nil {
 		o.setButton(o.heroSecondary, *h.Secondary, idHeroSecondary, true)
 	} else {
 		o.setButton(o.heroSecondary, view.Button{}, idHeroSecondary, false)
 	}
+	r := o.view.Refresh
+	r.Enabled = r.Enabled && !o.a.checking
+	win32.SetText(o.refresh, r.Text)
+	win32.Enable(o.refresh, r.Enabled)
+	win32.SetVisible(o.refresh, r.Text != "")
 	o.showRun()
 	o.fillFolders()
 	o.fillStorage()
@@ -169,7 +174,7 @@ func (o *overviewPage) showRun() {
 	for _, h := range []win32.HWND{o.heroTitle, o.heroLine} {
 		win32.SetVisible(h, heroShown)
 	}
-	for _, h := range []win32.HWND{o.heroLink, o.heroPrimary, o.heroSecondary} {
+	for _, h := range []win32.HWND{o.heroPrimary, o.heroSecondary, o.refresh} {
 		if !heroShown {
 			setShown(h, false)
 		}
@@ -195,7 +200,7 @@ func (o *overviewPage) fillFolders() {
 	v := o.view.Folders
 	c := o.folders
 	c.reset()
-	c.heading(v.Title, &v.Link)
+	c.heading(v.Title, nil)
 	states := o.runStates()
 	o.folderStatus = map[string]win32.HWND{}
 	o.folderSig = folderSig(states)
@@ -278,8 +283,9 @@ func (o *overviewPage) fillStorage() {
 	v := o.view.Storage
 	c := o.storage
 	c.reset()
-	c.row(cardHeadingHeight,
-		cell{hwnd: c.panel.PathLabel(v.Path, widget.TextStrong, t.Palette.Text), fill: true},
+	c.heading(v.Title, nil)
+	c.row(cardRowHeight,
+		cell{hwnd: c.panel.PathLabel(v.Path, widget.TextBody, t.Palette.Text), fill: true},
 		cell{hwnd: c.label(v.Used, widget.TextSmall, t.Palette.TextSecondary), px: measure(t, v.Used, widget.TextSmall)})
 	if len(v.Segments) == 0 {
 		return
@@ -311,7 +317,7 @@ func (o *overviewPage) fillLastBackup() {
 	v := o.view.LastBackup
 	c := o.last
 	c.reset()
-	c.heading(v.Title, &v.Link)
+	c.heading(v.Title, nil)
 	line := []cell{}
 	if v.Glyph != view.GlyphNone {
 		icon, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall)
@@ -424,10 +430,12 @@ type cardRow struct {
 type cell struct {
 	hwnd win32.HWND
 	// icon is drawn in front of hwnd, within the cell.
-	icon   win32.HWND
-	dip    int32
-	px     int32
-	fill   bool
+	icon win32.HWND
+	dip  int32
+	px   int32
+	fill bool
+	// weight is the share of a fill cell in the free width; 0 counts as 1.
+	weight int32
 	height int32
 }
 
@@ -535,7 +543,7 @@ func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
 	for _, c := range cells {
 		switch {
 		case c.fill:
-			fills++
+			fills += c.share()
 		case c.px > 0:
 			fixed += c.px
 		default:
@@ -552,7 +560,7 @@ func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
 		w := s.Px(c.dip)
 		switch {
 		case c.fill:
-			w = fillW
+			w = fillW * c.share()
 		case c.px > 0:
 			w = c.px
 		}
@@ -668,22 +676,24 @@ func (o *overviewPage) layoutHero(r win32.Rect) {
 	win32.SetWindowPos(o.heroTitle, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + s.Px(heroTitleHeight)})
 	y += s.Px(heroTitleHeight)
 	win32.SetWindowPos(o.heroLine, win32.Rect{Left: x, Top: y, Right: x + g.lineWidth, Bottom: y + g.lineHeight})
-	link := win32.Rect{Left: x + g.lineWidth + s.Px(8), Top: y, Right: x + g.lineWidth + s.Px(8) + g.linkWidth, Bottom: y + s.Px(heroLineHeight)}
-	if g.linkBelow {
-		y += g.lineHeight
-		link = win32.Rect{Left: x, Top: y, Right: x + g.linkWidth, Bottom: y + s.Px(heroLineHeight)}
+	row := win32.Rect{Left: x + g.lineWidth + s.Px(8), Top: y, Bottom: y + s.Px(heroLineHeight)}
+	if g.refreshBelow {
+		row = win32.Rect{Left: x, Top: y + g.lineHeight, Bottom: y + g.lineHeight + s.Px(heroLineHeight)}
 	}
-	win32.SetWindowPos(o.heroLink, link)
+	row.Top += (s.Px(heroLineHeight) - s.Px(refreshHeight)) / 2
+	row.Bottom = row.Top + s.Px(refreshHeight)
+	row.Right = row.Left + g.refreshWidth
+	win32.SetWindowPos(o.refresh, row)
 }
 
 // heroGeometry is the layout of the hero's text at a width.
 type heroGeometry struct {
 	textWidth, textHeight int32
 	lineWidth, lineHeight int32
-	linkWidth             int32
-	// linkBelow puts "Check details" under a line that wraps.
-	linkBelow bool
-	height    int32
+	refreshWidth          int32
+	// refreshBelow puts the Refresh button under a line that wraps.
+	refreshBelow bool
+	height       int32
 }
 
 // heroGeometry lays the hero's text out at width pixels: the line wraps
@@ -699,16 +709,16 @@ func (o *overviewPage) heroGeometry(width int32) heroGeometry {
 	line := win32.Text(o.heroLine)
 	lineW, _ := t.Fonts.Measure(line, widget.TextSmall)
 	lineW += s.Px(4)
-	linkW, _ := t.Fonts.Measure(o.view.Hero.Link.Text, widget.TextSmall)
-	g.linkWidth = linkW + s.Px(linkPadding)
+	rw, _ := t.Fonts.Measure(win32.Text(o.refresh), widget.TextSmall)
+	g.refreshWidth = rw + s.Px(20)
 	g.lineWidth, g.lineHeight = lineW, s.Px(heroLineHeight)
-	if lineW+s.Px(8)+g.linkWidth > g.textWidth {
-		g.linkBelow = true
+	if lineW+s.Px(8)+g.refreshWidth > g.textWidth {
+		g.refreshBelow = true
 		g.lineWidth = g.textWidth
 		g.lineHeight = max(t.Fonts.MeasureWrapped(line, widget.TextSmall, g.textWidth), s.Px(heroLineHeight))
 	}
 	g.textHeight = s.Px(heroTitleHeight) + g.lineHeight
-	if g.linkBelow {
+	if g.refreshBelow {
 		g.textHeight += s.Px(heroLineHeight)
 	}
 	g.height = max(s.Px(heroHeight), g.textHeight+s.Px(8))
@@ -734,13 +744,14 @@ func heroButtonWidth(t *widget.Theme, b win32.HWND) int32 {
 // setButton shows b on the existing control h, or hides it.
 func (o *overviewPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
 	shown = shown && b.Text != ""
-	if h == o.heroLink {
-		win32.SetText(h, "<a>"+b.Text+"</a>")
-	} else {
-		win32.SetText(h, b.Text)
-	}
+	win32.SetText(h, b.Text)
 	win32.SetVisible(h, shown)
 	win32.Enable(h, shown && b.Enabled)
 	o.acts[id] = b.Action
 	win32.Invalidate(h)
+}
+
+// share returns the weight of a fill cell.
+func (c cell) share() int32 {
+	return max(c.weight, 1)
 }

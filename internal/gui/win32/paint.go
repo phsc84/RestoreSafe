@@ -88,6 +88,7 @@ var (
 	procBeginPaint             = user32.NewProc("BeginPaint")
 	procEndPaint               = user32.NewProc("EndPaint")
 	procInvalidateRect         = user32.NewProc("InvalidateRect")
+	procRedrawWindow           = user32.NewProc("RedrawWindow")
 	procFillRect               = user32.NewProc("FillRect")
 	procDrawTextW              = user32.NewProc("DrawTextW")
 	procGetDC                  = user32.NewProc("GetDC")
@@ -284,4 +285,11 @@ var procIsWindowVisible = user32.NewProc("IsWindowVisible")
 func IsWindowVisible(hwnd HWND) bool {
 	r, _, _ := procIsWindowVisible.Call(uintptr(hwnd))
 	return r != 0
+}
+
+// RedrawAll repaints hwnd and all its descendants, erasing their
+// backgrounds.
+func RedrawAll(hwnd HWND) {
+	const flags = 0x0001 | 0x0004 | 0x0080 | 0x0100 // INVALIDATE|ERASE|ALLCHILDREN|UPDATENOW
+	procRedrawWindow.Call(uintptr(hwnd), 0, 0, flags)
 }

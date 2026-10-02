@@ -261,38 +261,6 @@ func planBadge(f interact.FolderPlan) Badge {
 	return Badge{Kind: BadgeFull, Text: badgeFull, Name: badgeFullName}
 }
 
-// RunActivity is the left part of the status bar while r runs, e.g.
-// "Backing up Projects · 62%"; "" when r is not running.
-func RunActivity(r *flow.Run) string {
-	if r == nil {
-		return ""
-	}
-	switch r.Stage {
-	case flow.StagePlanning:
-		return activityPlanning
-	case flow.StageCancelling:
-		return activityCancelling
-	case flow.StageRunning:
-	default:
-		return ""
-	}
-	p := r.Progress
-	switch p.Phase {
-	case interact.PhaseBackingUp, interact.PhaseVerifying, interact.PhaseRestoring:
-		text := fmt.Sprintf(activityItem, runTitle(r.Op), p.Item)
-		if p.Phase == interact.PhaseVerifying && r.Op == flow.OpBackup {
-			text = fmt.Sprintf(activityItem, titleVerifying, p.Item)
-		}
-		if f := p.Fraction(); f >= 0 {
-			text += fmt.Sprintf(activityPercent, int(f*100))
-		}
-		return text
-	case interact.PhaseCleaningUp:
-		return progressCleaningUp
-	}
-	return progressUnlocking
-}
-
 // CancelConfirm asks before cancelling the running op (figure 6.3); when
 // closing, before closing the window (spec 6.4).
 func CancelConfirm(op flow.Op, closing bool) Confirm {

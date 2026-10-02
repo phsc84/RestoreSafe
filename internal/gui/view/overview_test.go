@@ -55,8 +55,8 @@ func TestOverviewHeroOfEveryScenario(t *testing.T) {
 			if (h.Secondary == nil) != (tc.secondary == ActionNone) || (h.Secondary != nil && h.Secondary.Action != tc.secondary) {
 				t.Fatalf("secondary %+v, want %d", h.Secondary, tc.secondary)
 			}
-			if h.Link.Action != ActionCheckDetails || h.Line == "" {
-				t.Fatalf("the hero needs its facts and Check details: %+v", h)
+			if h.Line == "" && tc.condition != scenario.Empty {
+				t.Fatalf("the hero needs its facts: %+v", h)
 			}
 			checkWriting(t, o)
 		})
@@ -67,7 +67,7 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 	t.Parallel()
 	o, s := overviewOf(t, scenario.Protected)
 
-	if o.Folders.Title != "Folders (2)" || len(o.Folders.Rows) != 2 {
+	if o.Folders.Title != "Folders to back up" || len(o.Folders.Rows) != 2 {
 		t.Fatalf("folders: %+v", o.Folders)
 	}
 	for _, row := range o.Folders.Rows {
@@ -100,9 +100,6 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 	if k.Methods != "Password only" || !strings.HasPrefix(k.Details, "Created ") || k.Note != "" {
 		t.Fatalf("keys: %+v", k)
 	}
-	if !strings.HasSuffix(o.Status, " free in backup directory") {
-		t.Fatalf("status: %q", o.Status)
-	}
 }
 
 func TestOverviewCardsShowProblems(t *testing.T) {
@@ -119,10 +116,10 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 	}
 
 	o, _ = overviewOf(t, scenario.Empty)
-	if o.LastBackup.Line != "No backups yet" || o.LastBackup.Link.Enabled || o.Keys.Note != "Your first backup creates your keys." {
+	if o.LastBackup.Line != "No backups yet" || o.Keys.Note != "Your first backup creates your keys." {
 		t.Fatalf("empty: %+v %+v", o.LastBackup, o.Keys)
 	}
-	if !strings.Contains(o.Hero.Line, "RestoreSafe creates your keys first") {
+	if o.Hero.Line != "" {
 		t.Fatalf("empty hero: %+v", o.Hero)
 	}
 
@@ -137,7 +134,7 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 	}
 
 	o, _ = overviewOf(t, scenario.BackupDirUnreachable)
-	if o.Storage.Used != "Free space unknown" || o.Status != "" || o.Storage.Segments != nil {
+	if o.Storage.Used != "Free space unknown" || o.Storage.Segments != nil {
 		t.Fatalf("unreachable: %+v", o.Storage)
 	}
 	if o.Hero.Primary.Action != ActionCheckAgain {

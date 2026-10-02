@@ -34,7 +34,7 @@ func rowsByFolder(p BackupsPage) map[string]BackupRow {
 
 func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	t.Parallel()
-	p, s, _ := backupsOf(t, scenario.Protected)
+	p, _, _ := backupsOf(t, scenario.Protected)
 	if p.Empty != nil || len(p.Groups) != 1 || !p.Groups[0].Expanded {
 		t.Fatalf("one expanded run: %+v", p.Groups)
 	}
@@ -47,21 +47,13 @@ func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	if docs.Badge.Text != "FULL" || docs.BasedOn != "-" || docs.Chain == "" || docs.Status.Text != "Complete" || !docs.Usable {
 		t.Fatalf("Docs row %+v", docs)
 	}
-	if p.Retention == nil || p.Retention.Button == nil || p.Status != "1 run · "+Size(sumSizes(s)) {
-		t.Fatalf("retention %+v, status %q", p.Retention, p.Status)
+	if p.Retention == nil || p.Retention.Button == nil {
+		t.Fatalf("retention %+v", p.Retention)
 	}
 	if len(p.Filters) != 3 || p.Filters[0].Text != "All folders" || p.Filter != 0 {
 		t.Fatalf("filters %+v", p.Filters)
 	}
 	checkWriting(t, p)
-}
-
-func sumSizes(s *health.Snapshot) int64 {
-	var n int64
-	for _, info := range s.Sets {
-		n += info.SizeBytes
-	}
-	return n
 }
 
 func TestBackupsShowTheProblems(t *testing.T) {

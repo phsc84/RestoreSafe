@@ -33,14 +33,14 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| OV-1 | Protected: green hero, "Check details" opens the full health report, **Check again** updates it | Open | Script: hero title and action ok (Check-States). Check details and Check again: by hand. |
+| OV-1 | Protected: green hero, **Refresh** updates it | Open | Script: hero title and action ok (Check-States). Refresh: by hand. |
 | OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | Script: hero ok; key setup from Back up now… ran in the smoke test. |
 | OV-1 | `Overdue` (`reminder_days: 1`, newest backup older than a day): amber hero, **Back up now…** | Open | |
 | OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count, "Show files" lists them | Open | Script: hero names folder and count. "Show files" is not implemented (see Known differences). |
 | OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show in Backups** marks the affected rows | Open | Script: red hero, Show in Backups. Marked rows on Backups: by hand. |
 | OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | Script: red hero with Check again and Edit config. Back up now… is not shown (see Known differences). |
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
-| OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more", Check details lists all | Open | |
+| OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
 | OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | Tooltips added in 10a. |
 | OV-4 | Backup directory bar: segments and tooltips plausible compared with Explorer's drive properties | Open | |
 | OV-6 | Keys card for each authentication mode; YubiKey connected and not connected; "next backup creates new keys" after changing `recovery_code` and Reload | Open | |

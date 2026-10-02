@@ -22,14 +22,3 @@ func Title(version, configName string) string {
 	}
 	return fmt.Sprintf(titleWithConfig, appName, version, configName)
 }
-
-// Activity is the left part of the status bar.
-func Activity(checking bool) string {
-	if checking {
-		return statusChecking
-	}
-	return statusReady
-}
-
-// DetailsTitle is the title of the Check details dialog.
-const DetailsTitle = detailsTitle

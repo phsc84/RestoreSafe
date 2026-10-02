@@ -53,17 +53,11 @@ func TestProgressCardFollowsTheSteps(t *testing.T) {
 	if c.Bytes != "550 MB of 1000 MB" || c.Speed != "50 MB/s" || c.Left != "Less than a minute left" {
 		t.Fatalf("bytes %q, speed %q, left %q", c.Bytes, c.Speed, c.Left)
 	}
-	if a := RunActivity(r); a != "Backing up Documents · 55%" {
-		t.Fatalf("activity %q", a)
-	}
 
 	m.Progressed(interact.Progress{Phase: interact.PhaseVerifying, Index: 1, Count: 2, Item: "Documents", Total: 10}, planNow.Add(20*time.Second))
 	c = ProgressCardOf(r, planNow.Add(20*time.Second))
 	if trail(c) != "+Unlock keys > +Back up > *Verify 1 of 2 > Clean up" || c.Line != "Verifying Documents" {
 		t.Fatalf("verifying: %q %q", trail(c), c.Line)
-	}
-	if a := RunActivity(r); a != "Verifying Documents · 0%" {
-		t.Fatalf("activity %q", a)
 	}
 
 	m.Cancelling()

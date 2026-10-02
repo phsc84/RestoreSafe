@@ -92,8 +92,6 @@ type BackupsPage struct {
 	Groups    []RunGroup
 	// Empty is set when there is nothing to list (spec BK-9).
 	Empty *EmptyState
-	// Status is the right part of the status bar: "12 runs · 186 GB".
-	Status string
 }
 
 // EmptyState is a page without content.
@@ -117,16 +115,6 @@ func BackupsOf(s *health.Snapshot, cfg *config.Config, r *flow.Run, folder strin
 	p.Retention = retentionLine(s, cfg, now)
 	p.Lines = problemLines(s, cfg, now)
 	p.Groups = groupsOf(s, r, folder, now)
-	var bytes int64
-	for _, info := range s.Sets {
-		bytes += info.SizeBytes
-	}
-	runs := len(s.Runs)
-	if runs == 1 {
-		p.Status = fmt.Sprintf(backupsStatusOne, Size(bytes))
-	} else {
-		p.Status = fmt.Sprintf(backupsStatus, runs, Size(bytes))
-	}
 	return p
 }
 

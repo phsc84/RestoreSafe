@@ -97,6 +97,9 @@ func (p *Panel) add(c child, class, text string, style uint32, id uintptr) win32
 		return 0
 	}
 	c.hwnd = hwnd
+	if c.primary {
+		win32.TrackHover(hwnd)
+	}
 	win32.SetFont(hwnd, p.theme.Fonts.Get(c.style))
 	p.children = append(p.children, c)
 	return hwnd
@@ -228,6 +231,8 @@ func (p *Panel) drawPrimary(di *win32.DrawItemStruct) {
 	case di.ItemState&win32.ODS_DISABLED != 0:
 		back, fore = pal.Control, pal.TextSecondary
 	case di.ItemState&win32.ODS_SELECTED != 0:
+		back = pal.AccentText
+	case win32.IsHot(di.HwndItem):
 		back = pal.AccentText
 	}
 	r := di.Item

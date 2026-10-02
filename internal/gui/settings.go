@@ -18,7 +18,6 @@ const (
 const (
 	settingsTitleHeight = 32
 	settingLabelWidth   = 190
-	settingNameWidth    = 130
 )
 
 // settingsPage is the Settings page (spec 10): the configuration in use,
@@ -102,8 +101,8 @@ func (sp *settingsPage) update() {
 	c.heading(v.FoldersTitle, nil)
 	for _, f := range v.Folders {
 		c.row(cardRowHeight,
-			cell{hwnd: c.label(f.Name, widget.TextBody, pal.Text), dip: settingNameWidth},
-			cell{hwnd: c.panel.PathLabel(f.Path, widget.TextSmall, pal.TextSecondary), fill: true},
+			cell{hwnd: c.label(f.Name, widget.TextBody, pal.Text), fill: true, weight: 2},
+			cell{hwnd: c.panel.PathLabel(f.Path, widget.TextSmall, pal.TextSecondary), fill: true, weight: 3},
 			sp.status(c, f.Status, f.Tone, f.Glyph))
 	}
 	sp.rows(c, v.FolderRows)

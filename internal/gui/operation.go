@@ -105,8 +105,8 @@ func (a *app) runStarted() {
 	a.focusPage()
 }
 
-// refreshRun shows the state of the backup on the Overview, in the status
-// bar and on the taskbar button.
+// refreshRun shows the state of the backup on the Overview, and on the
+// taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
 	if a.wizard != nil {
@@ -115,17 +115,7 @@ func (a *app) refreshRun() {
 	if a.page == view.PageBackups {
 		a.shell.backups.update()
 	}
-	a.refreshActivity()
 	a.updateTaskbar()
-}
-
-// refreshActivity shows what happens in the status bar.
-func (a *app) refreshActivity() {
-	text := view.RunActivity(a.machine.Current())
-	if text == "" {
-		text = view.Activity(a.checking)
-	}
-	win32.SetText(a.shell.activity, text)
 }
 
 // onProgress shows the latest progress report.

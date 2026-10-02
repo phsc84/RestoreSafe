@@ -62,7 +62,6 @@ $Ids = [ordered]@{
   Sidebar          = 301
   HeroPrimary      = 401
   HeroSecondary    = 402
-  HeroLink         = 403
   HeroTitle        = 409
   RunCancel        = 420
   RunLog           = 421

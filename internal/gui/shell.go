@@ -12,8 +12,6 @@ import (
 type shell struct {
 	sidebar  *widget.Sidebar
 	status   *widget.Panel
-	activity win32.HWND
-	info     win32.HWND
 	overview *overviewPage
 	backups  *backupsPage
 	settings *settingsPage
@@ -40,8 +38,6 @@ func (a *app) createShell() error {
 		return err
 	}
 	a.shell.status = status
-	a.shell.activity = status.Label(view.Activity(true), widget.TextCaption, t.Palette.TextSecondary)
-	a.shell.info = status.RightLabel("", widget.TextCaption, t.Palette.TextSecondary)
 
 	if a.shell.overview, err = newOverviewPage(a); err != nil {
 		return err
@@ -68,7 +64,6 @@ func (a *app) showPage(page int) {
 		p.Show(i == page)
 	}
 	a.shell.sidebar.Select(page)
-	a.refreshInfo()
 	a.layout()
 }
 
@@ -81,14 +76,14 @@ func (a *app) layoutShell(client win32.Rect) {
 	for _, p := range a.pagePanels() {
 		win32.SetWindowPos(p.HWND(), content)
 	}
-	status := widget.NewArea(a.theme.Scale, win32.ClientRect(a.shell.status.HWND()))
-	status.Inset(12, 0, 12, 0)
-	halves := status.Columns(12, 1, 1)
-	win32.SetWindowPos(a.shell.activity, halves[0].Rest())
-	win32.SetWindowPos(a.shell.info, halves[1].Rest())
 	a.shell.overview.layout()
 	a.shell.backups.layout()
 	a.shell.settings.layout()
+	for i, p := range a.pagePanels() {
+		if i == a.page {
+			win32.RedrawAll(p.HWND())
+		}
+	}
 }
 
 // refreshShell shows the current snapshot on the pages and the status bar.
@@ -99,19 +94,7 @@ func (a *app) refreshShell() {
 	a.shell.overview.update()
 	a.shell.backups.update()
 	a.shell.settings.update()
-	a.refreshActivity()
-	a.refreshInfo()
 	a.layout()
-}
-
-// refreshInfo shows the right part of the status bar: the free space on
-// the Overview, the runs and their size on Backups.
-func (a *app) refreshInfo() {
-	info := a.shell.overview.view.Status
-	if a.page == view.PageBackups {
-		info = a.shell.backups.view.Status
-	}
-	win32.SetText(a.shell.info, info)
 }
 
 // restyleShell applies the theme's fonts after a DPI change.
@@ -167,10 +150,6 @@ func (a *app) do(action view.Action) {
 		}
 	case view.ActionCheckAgain:
 		a.startCheck()
-	case view.ActionCheckDetails:
-		if a.snapshot != nil {
-			a.showDetails(a.hwnd, view.DetailsTitle, a.snapshot.Check.Report())
-		}
 	case view.ActionShowInBackups:
 		a.showPage(view.PageBackups)
 	case view.ActionOpenSettings:
