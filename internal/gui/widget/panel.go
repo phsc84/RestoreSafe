@@ -32,6 +32,11 @@ type Panel struct {
 	OnCommand func(id, code uint16)
 	// OnNotify receives WM_NOTIFY of controls other than links.
 	OnNotify func(hdr *win32.NMHdr) uintptr
+	// OnScroll is called when the user scrolled a panel that SetScroll made
+	// scrollable; the owner lays its children out at ScrollOffset.
+	OnScroll func()
+	content  int32 // height of the content in pixels, 0 when not scrolling
+	offset   int32
 }
 
 // child is a control the panel created; it styles it.
@@ -197,6 +202,15 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 			p.drawPrimary(di)
 			return 1, true
 		}
+	case win32.WM_VSCROLL:
+		p.scrollBy(wparam)
+		return 0, true
+	case win32.WM_MOUSEWHEEL:
+		if p.content > 0 {
+			delta := int32(int16(win32.HiWord(wparam)))
+			p.ScrollTo(p.offset - delta*p.theme.Scale.Px(wheelStep)/win32.WHEEL_DELTA)
+			return 0, true
+		}
 	case win32.WM_DESTROY:
 		if p.brush != 0 {
 			win32.DeleteObject(p.brush)
@@ -263,4 +277,55 @@ func (p *Panel) Paragraph(text string, style TextStyle, color Color) win32.HWND 
 // text in the middle ("C:\Users\...\Backups") when it does not fit.
 func (p *Panel) PathLabel(text string, style TextStyle, color Color) win32.HWND {
 	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_PATHELLIPSIS, 0)
+}
+
+// wheelStep is how far one notch of the mouse wheel scrolls, in DIPs.
+const wheelStep = 60
+
+// SetScroll makes the panel scrollable for content of height pixels: a
+// scroll bar appears when the content is taller than the panel. 0 turns
+// scrolling off.
+func (p *Panel) SetScroll(height int32) {
+	p.content = height
+	view := win32.ClientRect(p.hwnd).Height()
+	p.offset = max(min(p.offset, height-view), 0)
+	win32.SetVScroll(p.hwnd, height, view, p.offset)
+}
+
+// ScrollOffset returns how far the content is scrolled, in pixels.
+func (p *Panel) ScrollOffset() int32 { return p.offset }
+
+// ScrollTo scrolls to offset pixels, within the content.
+func (p *Panel) ScrollTo(offset int32) {
+	view := win32.ClientRect(p.hwnd).Height()
+	offset = max(min(offset, p.content-view), 0)
+	if offset == p.offset {
+		return
+	}
+	p.offset = offset
+	win32.SetVScroll(p.hwnd, p.content, view, offset)
+	if p.OnScroll != nil {
+		p.OnScroll()
+	}
+}
+
+func (p *Panel) scrollBy(wparam uintptr) {
+	view := win32.ClientRect(p.hwnd).Height()
+	line := p.theme.Scale.Px(wheelStep / 2)
+	switch win32.LoWord(wparam) {
+	case win32.SB_LINEUP:
+		p.ScrollTo(p.offset - line)
+	case win32.SB_LINEDOWN:
+		p.ScrollTo(p.offset + line)
+	case win32.SB_PAGEUP:
+		p.ScrollTo(p.offset - view)
+	case win32.SB_PAGEDOWN:
+		p.ScrollTo(p.offset + view)
+	case win32.SB_THUMBTRACK:
+		p.ScrollTo(win32.VScrollTrack(p.hwnd))
+	case win32.SB_TOP:
+		p.ScrollTo(0)
+	case win32.SB_BOTTOM:
+		p.ScrollTo(p.content)
+	}
 }

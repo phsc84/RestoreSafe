@@ -16,7 +16,7 @@ type shell struct {
 	info     win32.HWND
 	overview *overviewPage
 	backups  *backupsPage
-	settings *settingsInterim
+	settings *settingsPage
 }
 
 // sidebarGlyphs are the icons of the pages, in the order of view.Navigation.
@@ -49,7 +49,7 @@ func (a *app) createShell() error {
 	if a.shell.backups, err = newBackupsPage(a); err != nil {
 		return err
 	}
-	if a.shell.settings, err = newSettingsInterim(a); err != nil {
+	if a.shell.settings, err = newSettingsPage(a); err != nil {
 		return err
 	}
 	a.refreshShell()
@@ -98,6 +98,7 @@ func (a *app) refreshShell() {
 	}
 	a.shell.overview.update()
 	a.shell.backups.update()
+	a.shell.settings.update()
 	a.refreshActivity()
 	a.refreshInfo()
 	a.layout()
@@ -120,7 +121,7 @@ func (a *app) restyleShell() {
 	a.shell.overview.restyle()
 	a.shell.backups.restyle()
 	a.shell.backups.update()
-	a.shell.settings.panel.Restyle()
+	a.shell.settings.restyle()
 }
 
 // shortcut handles the keyboard shortcuts of spec 3.2; it reports whether
@@ -184,6 +185,8 @@ func (a *app) do(action view.Action) {
 		a.showResultDetails()
 	case view.ActionDismiss:
 		a.dismiss()
+	case view.ActionReload:
+		a.reload()
 	case view.ActionOpenBackupDir:
 		a.open(a.backupDir, false)
 	}

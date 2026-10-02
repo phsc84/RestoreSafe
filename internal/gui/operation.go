@@ -204,6 +204,9 @@ func (a *app) onWorkerDone() {
 		win32.DestroyWindow(a.hwnd)
 		return
 	}
+	if cfg := a.deferredConfig; cfg != nil && !a.machine.Busy() {
+		a.useConfig(cfg)
+	}
 	if run := a.machine.Current(); run.Op == flow.OpRestore && a.wizard != nil && a.wizard.workerDone() {
 		// The restore ended before it started; the wizard shows why.
 		a.refreshRun()

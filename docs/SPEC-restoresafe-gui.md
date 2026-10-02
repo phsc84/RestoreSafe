@@ -873,7 +873,7 @@ The result of the last backup and verify (`ShowResult`, the returned error, and 
 
 ### 11.6 Reload
 
-A function that loads and validates the configuration again, returning the same errors as at start. The GUI swaps the configuration only when no operation runs. `-config` stays the way to select a different file.
+A function that loads and validates the configuration again, returning the same errors as at start. The GUI swaps the configuration only when no operation runs. It is `config.Load` itself, run on a worker goroutine; a file read while an operation runs is used once the operation has finished. `-config` stays the way to select a different file.
 
 ### 11.7 Progress
 

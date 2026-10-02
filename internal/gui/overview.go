@@ -405,7 +405,9 @@ type cardRow struct {
 // cell is a control in a row: of a width in DIPs or pixels, or filling the
 // space the other cells leave; height (DIPs) centers a lower control.
 type cell struct {
-	hwnd   win32.HWND
+	hwnd win32.HWND
+	// icon is drawn in front of hwnd, within the cell.
+	icon   win32.HWND
 	dip    int32
 	px     int32
 	fill   bool
@@ -514,6 +516,11 @@ func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
 			h := s.Px(c.height)
 			cr.Top += (r.Height() - h) / 2
 			cr.Bottom = cr.Top + h
+		}
+		if c.icon != 0 {
+			w := s.Px(iconWidth)
+			win32.SetWindowPos(c.icon, win32.Rect{Left: cr.Left, Top: cr.Top, Right: cr.Left + w, Bottom: cr.Bottom})
+			cr.Left += w
 		}
 		if c.hwnd != 0 {
 			win32.SetWindowPos(c.hwnd, cr)

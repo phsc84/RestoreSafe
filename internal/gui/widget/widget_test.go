@@ -313,3 +313,32 @@ func TestListViewCheckboxes(t *testing.T) {
 		t.Fatal("cleared")
 	}
 }
+
+func TestPanelScrolls(t *testing.T) {
+	th, host := testTheme(t)
+	p, err := NewPanel(th, host, 0, PanelStyle{Back: Light.Surface})
+	if err != nil {
+		t.Fatal(err)
+	}
+	win32.SetWindowPos(p.HWND(), win32.Rect{Right: 200, Bottom: 100})
+	scrolled := 0
+	p.OnScroll = func() { scrolled++ }
+	p.SetScroll(300)
+	win32.SendMessage(p.HWND(), win32.WM_VSCROLL, win32.SB_PAGEDOWN, 0)
+	if p.ScrollOffset() != 100 || scrolled != 1 {
+		t.Fatalf("page down: offset %d, %d calls", p.ScrollOffset(), scrolled)
+	}
+	win32.SendMessage(p.HWND(), win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
+	if p.ScrollOffset() != 200 {
+		t.Fatalf("bottom: offset %d, want 200", p.ScrollOffset())
+	}
+	wheelUp := uintptr(uint16(win32.WHEEL_DELTA)) << 16
+	win32.SendMessage(p.HWND(), win32.WM_MOUSEWHEEL, wheelUp, 0)
+	if p.ScrollOffset() != 140 {
+		t.Fatalf("wheel: offset %d, want 140", p.ScrollOffset())
+	}
+	p.SetScroll(80) // everything fits
+	if p.ScrollOffset() != 0 {
+		t.Fatalf("fits: offset %d", p.ScrollOffset())
+	}
+}

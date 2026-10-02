@@ -45,6 +45,7 @@ const (
 	msgLogLoaded   = win32.WM_APP + 4 // a log file for the Backups page was read
 	msgListFocus   = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
 	msgDestChecked = win32.WM_APP + 6 // the restore wizard's destination check is done
+	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
 )
 
 const (
@@ -76,6 +77,14 @@ type app struct {
 	wizard *restoreWizard // open restore wizard, if any
 	// lastDestination is where the last restore of this session went.
 	lastDestination string
+	// reloading is set while the configuration file is read again;
+	// reloadErr is why it did not load; deferredConfig waits for the
+	// running operation; recheck checks again after the running check,
+	// which used the previous configuration.
+	reloading      bool
+	reloadErr      error
+	deferredConfig *config.Config
+	recheck        bool
 
 	// taskbar shows the operation on the taskbar button once it exists;
 	// taskbarCreated is the message that says so.
@@ -100,13 +109,14 @@ type app struct {
 	run     *runState    // its worker, nil when none runs
 
 	// The state of the backups.
-	checker     health.Checker
-	snapshot    *health.Snapshot
-	checking    bool
-	mu          sync.Mutex
-	pendingSn   *health.Snapshot
-	pendingLog  *loadedLog
-	pendingDest *destCheck
+	checker       health.Checker
+	snapshot      *health.Snapshot
+	checking      bool
+	mu            sync.Mutex
+	pendingSn     *health.Snapshot
+	pendingLog    *loadedLog
+	pendingDest   *destCheck
+	pendingReload *reloaded
 }
 
 var theApp *app
@@ -295,6 +305,10 @@ func (a *app) snapshotDone() {
 	first := a.snapshot == nil
 	a.snapshot = s
 	a.checking = false
+	if a.recheck {
+		a.recheck = false
+		a.startCheck()
+	}
 	a.refreshShell()
 	// After the first check, the keyboard starts at the hero's action.
 	if first && a.page == view.PageOverview {
@@ -383,6 +397,9 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		return 0
 	case msgWorkerDone:
 		a.onWorkerDone()
+		return 0
+	case msgReloaded:
+		a.reloadDone()
 		return 0
 	case msgDestChecked:
 		a.mu.Lock()

@@ -31,29 +31,5 @@ func Activity(checking bool) string {
 	return statusReady
 }
 
-// SettingsInterim is the Settings page until its cards replace it (plan
-// phase 9): the configuration file and the backup directory.
-type SettingsInterim struct {
-	Title                  string
-	ConfigLabel, Config    string
-	BackupDirLabel, Folder string
-	Edit, Open             Button
-	Line                   string
-}
-
-// SettingsInterimOf computes the interim Settings page.
-func SettingsInterimOf(configPath, backupDir string) SettingsInterim {
-	return SettingsInterim{
-		Title:          navSettings,
-		ConfigLabel:    settingsConfigFile,
-		Config:         configPath,
-		BackupDirLabel: settingsBackupDir,
-		Folder:         backupDir,
-		Edit:           Button{Text: buttonEditConfigFile, Action: ActionEditConfig, Enabled: true},
-		Open:           Button{Text: buttonOpenFolder, Action: ActionOpenBackupDir, Enabled: true},
-		Line:           settingsRestartLine,
-	}
-}
-
 // DetailsTitle is the title of the Check details dialog.
 const DetailsTitle = detailsTitle
