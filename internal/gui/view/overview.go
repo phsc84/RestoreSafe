@@ -108,8 +108,10 @@ type Hero struct {
 type FolderRow struct {
 	Name, Path string
 	// Date is the date of the newest backup; Badge its type.
-	Date  string
-	Badge *Badge
+	Date string
+	// DateTip is the exact date and time.
+	DateTip string
+	Badge   *Badge
 	// Next is the type of the next backup, NextReason why.
 	Next, NextReason string
 	// Problem replaces date and type for a folder that cannot be backed up.
@@ -138,6 +140,7 @@ type Segment struct {
 	Kind     SegmentKind
 	Fraction float64
 	Text     string // legend
+	Tip      string // the exact size
 }
 
 // StorageCard is the backup directory and its space (spec OV-4).
@@ -164,6 +167,8 @@ type LastBackupCard struct {
 	Glyph Glyph
 	Line  string
 	Rows  []SetRow
+	// LineTip is the exact date and time of the run.
+	LineTip string
 	// Note tells of a later backup that failed or was cancelled before it
 	// wrote a set.
 	Note     string
@@ -344,6 +349,7 @@ func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
 		default:
 			if f.Newest != nil {
 				row.Date = When(f.Newest.Created(), now)
+				row.DateTip = Exact(f.Newest.Created())
 				b := badgeOf(f.Newest.Entry)
 				row.Badge = &b
 			} else {
@@ -394,9 +400,9 @@ func storageOf(s *health.Snapshot) StorageCard {
 	total := float64(st.TotalBytes)
 	card.Used = fmt.Sprintf(storageUsed, Size(used), Size(st.TotalBytes))
 	card.Segments = []Segment{
-		{Kind: SegmentBackups, Fraction: float64(st.BackupBytes) / total, Text: fmt.Sprintf(legendBackups, Size(st.BackupBytes))},
-		{Kind: SegmentOther, Fraction: float64(other) / total, Text: fmt.Sprintf(legendOther, Size(other))},
-		{Kind: SegmentFree, Fraction: float64(st.FreeBytes) / total, Text: fmt.Sprintf(legendFree, Size(st.FreeBytes))},
+		{Kind: SegmentBackups, Fraction: float64(st.BackupBytes) / total, Text: fmt.Sprintf(legendBackups, Size(st.BackupBytes)), Tip: ExactSize(st.BackupBytes)},
+		{Kind: SegmentOther, Fraction: float64(other) / total, Text: fmt.Sprintf(legendOther, Size(other)), Tip: ExactSize(other)},
+		{Kind: SegmentFree, Fraction: float64(st.FreeBytes) / total, Text: fmt.Sprintf(legendFree, Size(st.FreeBytes)), Tip: ExactSize(st.FreeBytes)},
 	}
 	if st.FullEstimate > 0 {
 		card.Estimate = fmt.Sprintf(storageEstimate, Size(st.FullEstimate))
@@ -424,6 +430,7 @@ func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
 		folders = fmt.Sprintf(folderMany, n)
 	}
 	card.Line = fmt.Sprintf(lastBackupLine, capitalize(When(run.Created, now)), folders, Size(size))
+	card.LineTip = Exact(run.Created)
 	card.Tone, card.Glyph = ToneSuccess, GlyphCheck
 	if facts, ok := s.Facts[run.RunID]; ok && facts.Backup != nil {
 		if facts.Backup.Seconds > 0 {

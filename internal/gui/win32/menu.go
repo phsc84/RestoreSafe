@@ -169,3 +169,37 @@ func Focus() HWND {
 	r, _, _ := procGetFocus.Call()
 	return HWND(r)
 }
+
+// SetHandCursor shows the hand cursor of links.
+func SetHandCursor() {
+	c, _, _ := procLoadCursorW.Call(0, idcHand)
+	procSetCursor.Call(c)
+}
+
+const idcHand = 32649
+
+var procGetWindow = user32.NewProc("GetWindow")
+
+const (
+	gwChild    = 5
+	gwHwndNext = 2
+)
+
+// ChildWindows returns the direct child windows of parent, in z-order.
+func ChildWindows(parent HWND) []HWND {
+	var out []HWND
+	h, _, _ := procGetWindow.Call(uintptr(parent), gwChild)
+	for h != 0 {
+		out = append(out, HWND(h))
+		h, _, _ = procGetWindow.Call(h, gwHwndNext)
+	}
+	return out
+}
+
+// ChildRect returns the rectangle of child in its parent's client
+// coordinates.
+func ChildRect(child HWND) Rect {
+	r := WindowRect(child)
+	tl := ScreenToClient(Parent(child), Point{X: r.Left, Y: r.Top})
+	return Rect{Left: tl.X, Top: tl.Y, Right: tl.X + r.Width(), Bottom: tl.Y + r.Height()}
+}

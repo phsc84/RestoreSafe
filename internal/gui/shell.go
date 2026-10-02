@@ -228,3 +228,23 @@ func (m actions) link(p *widget.Panel, b view.Button, id uint16) win32.HWND {
 	m[id] = b.Action
 	return h
 }
+
+// paletteChanged follows Windows into or out of high contrast: the pages
+// are built again in the new colors.
+func (a *app) paletteChanged() {
+	p := widget.CurrentPalette()
+	if p == a.theme.Palette || a.shell.sidebar == nil {
+		return
+	}
+	a.theme.Palette = p
+	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.overview.panel.HWND(), a.shell.backups.panel.HWND(), a.shell.settings.panel.HWND()} {
+		win32.DestroyWindow(h)
+	}
+	a.shell = shell{}
+	if err := a.createShell(); err != nil {
+		return
+	}
+	a.showPage(a.page)
+	a.refreshShell()
+	a.focusPage()
+}

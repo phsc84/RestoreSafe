@@ -22,6 +22,7 @@ type Palette struct {
 	Neutral, NeutralBack  Color // empty state, unknown
 	BarBackups, BarOther  Color // storage bar segments; the free part uses SurfaceAlt
 	SelectionBar, Control Color // sidebar selection bar; control backgrounds
+	OnAccent              Color // text on Accent (the primary button)
 }
 
 // Light is the light palette of spec 3.3.
@@ -50,6 +51,7 @@ var Light = Palette{
 	BarOther:      RGB(0xB9, 0xC0, 0xC9),
 	SelectionBar:  RGB(0x0F, 0x6C, 0xBD),
 	Control:       RGB(0xE2, 0xE6, 0xEA),
+	OnAccent:      RGB(0xFF, 0xFF, 0xFF),
 }
 
 // Sizes in DIPs (spec 3.2 and 3.3).

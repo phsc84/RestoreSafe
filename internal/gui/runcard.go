@@ -37,10 +37,11 @@ const (
 // runCard is the operation on the Overview in place of the hero (spec
 // OV-7): the progress card while it runs (6.2), then its result (6.3).
 type runCard struct {
-	a    *app
-	card *card
-	mode runMode
-	acts actions
+	a     *app
+	theme *widget.Theme
+	card  *card
+	mode  runMode
+	acts  actions
 
 	// Progress mode.
 	title, line, bytes, left win32.HWND
@@ -60,25 +61,13 @@ type runCard struct {
 }
 
 func newRunCard(a *app, parent win32.HWND) (*runCard, error) {
-	r := &runCard{a: a, acts: actions{}, do: a.do}
-	c, err := newCard(a.theme, parent, 0, r.acts)
-	if err != nil {
-		return nil, err
-	}
-	r.card = c
-	c.panel.OnCommand = func(id, code uint16) {
-		if action, ok := r.acts[id]; ok && (code == win32.BN_CLICKED || code == 0) {
-			r.do(action)
-		}
-	}
-	c.panel.Show(false)
-	return r, nil
+	return newRunCardWith(a, a.theme, parent)
 }
 
 // showProgress shows v, creating the progress controls when the card
 // showed something else.
 func (r *runCard) showProgress(v view.ProgressCard) {
-	t := r.a.theme
+	t := r.theme
 	p := r.card.panel
 	if r.mode != runProgress {
 		r.card.reset()
@@ -126,7 +115,7 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 
 // showResult shows the result v.
 func (r *runCard) showResult(v view.ResultCard) {
-	t := r.a.theme
+	t := r.theme
 	p := r.card.panel
 	r.card.reset()
 	r.mode = runResult
@@ -170,7 +159,7 @@ func (r *runCard) hide() {
 
 // height returns the height in pixels the card needs at width pixels.
 func (r *runCard) height(width int32) int32 {
-	s := r.a.theme.Scale
+	s := r.theme.Scale
 	switch r.mode {
 	case runProgress:
 		return s.Px(2*widget.CardPadding + runTitleHeight + runTrailHeight + 2*runLineHeight + runBarHeight + 4*runGap)
@@ -206,7 +195,7 @@ func (g resultGeometry) linesHeight() int32 {
 }
 
 func (r *runCard) resultGeometry(width int32) resultGeometry {
-	t := r.a.theme
+	t := r.theme
 	s := t.Scale
 	g := resultGeometry{textWidth: max(width-2*s.Px(widget.CardPadding)-s.Px(runIconSize+12), s.Px(100))}
 	buttons := int32(0)
@@ -228,7 +217,7 @@ func (r *runCard) resultGeometry(width int32) resultGeometry {
 func (r *runCard) place(rect win32.Rect) {
 	p := r.card.panel
 	win32.SetWindowPos(p.HWND(), rect)
-	t := r.a.theme
+	t := r.theme
 	s := t.Scale
 	area := widget.NewArea(s, win32.ClientRect(p.HWND()))
 	area.Inset(widget.CardPadding, widget.CardPadding, widget.CardPadding, widget.CardPadding)
@@ -310,4 +299,22 @@ func (r *runCard) focus() {
 func buttonWidth(t *widget.Theme, h win32.HWND) int32 {
 	w, _ := t.Fonts.Measure(win32.Text(h), widget.TextBody)
 	return max(w+t.Scale.Px(buttonPadding), t.Scale.Px(minButtonWidth))
+}
+
+// newRunCardWith creates a run card that draws with theme, for a dialog
+// with a theme of its own.
+func newRunCardWith(a *app, theme *widget.Theme, parent win32.HWND) (*runCard, error) {
+	r := &runCard{a: a, theme: theme, acts: actions{}, do: a.do}
+	c, err := newCard(theme, parent, 0, r.acts)
+	if err != nil {
+		return nil, err
+	}
+	r.card = c
+	c.panel.OnCommand = func(id, code uint16) {
+		if action, ok := r.acts[id]; ok && (code == win32.BN_CLICKED || code == 0) {
+			r.do(action)
+		}
+	}
+	c.panel.Show(false)
+	return r, nil
 }

@@ -15,6 +15,12 @@ type dialogWindow struct {
 	hwnd  win32.HWND
 	owner win32.HWND
 	panel *widget.Panel
+	// theme is the dialog's own copy of the app's theme: a DPI change of
+	// the dialog gives it fonts at the new scale (ownFonts) and calls
+	// onDpi with the previous scale, after the window took its new size.
+	theme    *widget.Theme
+	ownFonts bool
+	onDpi    func(old widget.Scale)
 	// onCommand receives the clicks of the panel's buttons and links and
 	// IDCANCEL; defID returns the ID of the default button, 0 for none.
 	onCommand func(id uint16)
@@ -56,8 +62,9 @@ func newDialogWindow(t *widget.Theme, owner win32.HWND, class, title string) (*d
 	if err != nil {
 		return nil, err
 	}
-	d := &dialogWindow{hwnd: hwnd, owner: owner}
-	panel, err := widget.NewPanel(t, hwnd, 0, widget.PanelStyle{Back: t.Palette.Surface})
+	own := *t
+	d := &dialogWindow{hwnd: hwnd, owner: owner, theme: &own}
+	panel, err := widget.NewPanel(d.theme, hwnd, 0, widget.PanelStyle{Back: t.Palette.Surface})
 	if err != nil {
 		win32.DestroyWindow(hwnd)
 		return nil, err
@@ -82,7 +89,7 @@ func (d *dialogWindow) command(id uint16) {
 // over the owner, otherwise it keeps its position.
 func (d *dialogWindow) resize(w, h int32, place bool) {
 	dpi := win32.DpiForWindow(d.hwnd)
-	frame := win32.WindowRectForClient(win32.Rect{Right: w, Bottom: h}, dialogStyle, dialogExStyle, dpi)
+	frame := win32.WindowRectForClient(win32.Rect{Right: w, Bottom: h}, win32.Style(d.hwnd), dialogExStyle, dpi)
 	r := win32.WindowRect(d.hwnd)
 	if place {
 		o := win32.WindowRect(d.owner)
@@ -93,9 +100,36 @@ func (d *dialogWindow) resize(w, h int32, place bool) {
 	win32.SetWindowPos(d.panel.HWND(), win32.Rect{Right: w, Bottom: h})
 }
 
+// dpiChanged gives the dialog fonts at scale s, takes the size Windows
+// suggests and lets the dialog lay itself out again.
+func (d *dialogWindow) dpiChanged(s widget.Scale, suggested win32.Rect) {
+	old := d.theme.Scale
+	if s == old {
+		return
+	}
+	fonts, err := widget.NewFonts(s)
+	if err != nil {
+		return
+	}
+	previous, owned := d.theme.Fonts, d.ownFonts
+	d.theme.Fonts, d.theme.Scale, d.ownFonts = fonts, s, true
+	win32.SetWindowPos(d.hwnd, suggested)
+	win32.SetWindowPos(d.panel.HWND(), win32.ClientRect(d.hwnd))
+	d.panel.Restyle()
+	if d.onDpi != nil {
+		d.onDpi(old)
+	}
+	if owned {
+		previous.Close()
+	}
+}
+
 // destroy closes the dialog and gives the activation back to the owner,
 // which the caller enabled again first.
 func (d *dialogWindow) destroy() {
+	if d.ownFonts {
+		defer d.theme.Fonts.Close()
+	}
 	delete(dialogWindows, d.hwnd)
 	win32.SetForeground(d.owner)
 	win32.DestroyWindow(d.hwnd)
@@ -112,6 +146,9 @@ func dialogWindowProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 		}
 	}
 	switch msg {
+	case win32.WM_DPICHANGED:
+		d.dpiChanged(widget.Scale(win32.HiWord(wparam)), *win32.RectParam(lparam))
+		return 0
 	case win32.WM_COMMAND:
 		d.command(win32.LoWord(wparam))
 		return 0

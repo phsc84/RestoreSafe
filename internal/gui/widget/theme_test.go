@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"RestoreSafe/internal/gui/win32"
 	"math"
 	"testing"
 )
@@ -52,5 +53,15 @@ func TestPaletteTextContrast(t *testing.T) {
 		if c := contrast(pair[0], pair[1]); c < 4.5 {
 			t.Errorf("%s: contrast %.2f, want at least 4.5", name, c)
 		}
+	}
+}
+
+func TestHighContrastUsesTheSystemColors(t *testing.T) {
+	p := HighContrast()
+	if p.Text != Color(win32.SysColor(win32.COLOR_WINDOWTEXT)) || p.Surface != Color(win32.SysColor(win32.COLOR_WINDOW)) || p.OnAccent != Color(win32.SysColor(win32.COLOR_HIGHLIGHTTEXT)) {
+		t.Fatalf("palette %+v", p)
+	}
+	if p.Success != p.Text || p.Error != p.Text {
+		t.Fatal("in high contrast, status is carried by glyphs and words, not by color")
 	}
 }

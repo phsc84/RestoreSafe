@@ -58,6 +58,7 @@ func (a *app) openPlanDialog() {
 		return
 	}
 	p := &planDialog{a: a, win: win}
+	win.onDpi = func(widget.Scale) { p.build(false) }
 	win.onCommand = p.command
 	win.defID = func() uint16 {
 		if p.start != 0 && win32.IsEnabled(p.start) {
@@ -88,7 +89,7 @@ func (p *planDialog) ask(opts interact.BackupStartOptions, answer func(interact.
 // build creates the controls for the current state and sizes the dialog.
 func (p *planDialog) build(place bool) {
 	a := p.a
-	t := a.theme
+	t := p.win.theme
 	s := t.Scale
 	pal := t.Palette
 	panel := p.win.panel
@@ -150,7 +151,7 @@ func (p *planDialog) build(place bool) {
 
 // content adds the plan: heading, folders, lines, issues.
 func (p *planDialog) content(st *stack) {
-	t := p.a.theme
+	t := p.win.theme
 	pal := t.Palette
 	v := p.view
 	panel := p.win.panel

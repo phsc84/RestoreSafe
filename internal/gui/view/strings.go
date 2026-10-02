@@ -342,6 +342,8 @@ const (
 	runCancelled         = "%s · Backup cancelled before a folder was backed up"
 	runIncomplete        = "Unfinished backups of %s"
 	runNoSets            = "No folder was backed up. The log says why."
+	tipCreated           = "Created %s"
+	tipBasedOn           = "Based on %s"
 	runPartCancelled     = "cancelled"
 	runPartFailed        = "failed"
 	runPartNewKeys       = "new keys"

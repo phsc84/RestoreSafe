@@ -34,6 +34,11 @@ type Trail struct {
 	theme *Theme
 	back  Color
 	steps []TrailStep
+	// spans are the horizontal extents of the steps as last painted.
+	spans [][2]int32
+	// OnClick receives a click on a done step (its index); nil makes the
+	// steps plain text.
+	OnClick func(step int)
 }
 
 // NewTrail creates a trail on parent, whose background is back.
@@ -79,11 +84,13 @@ func (tr *Trail) paint(hdc uintptr, r win32.Rect) {
 		checkStyle = TextSmall
 	}
 	checkW, _ := t.Fonts.Measure(check, checkStyle)
+	tr.spans = tr.spans[:0]
 	for i, step := range tr.steps {
 		if i > 0 {
 			text(hdc, t, sep, win32.Rect{Left: x, Top: r.Top, Right: x + sepW, Bottom: r.Bottom}, TextSmall, pal.TextSecondary, flags)
 			x += sepW + s.Px(trailGap)
 		}
+		start := x
 		style, color := TextSmall, pal.TextSecondary
 		switch step.State {
 		case StepDone:
@@ -105,10 +112,39 @@ func (tr *Trail) paint(hdc uintptr, r win32.Rect) {
 		if step.State == StepCurrent {
 			x += s.Px(trailPillPadding)
 		}
+		tr.spans = append(tr.spans, [2]int32{start, x})
 	}
 }
 
-func (tr *Trail) message(win32.HWND, uint32, uintptr, uintptr) (uintptr, bool) { return 0, false }
+// stepAt returns the done step at x, or -1.
+func (tr *Trail) stepAt(x int32) int {
+	for i, sp := range tr.spans {
+		if x >= sp[0] && x < sp[1] && i < len(tr.steps) && tr.steps[i].State == StepDone {
+			return i
+		}
+	}
+	return -1
+}
+
+func (tr *Trail) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
+	if tr.OnClick == nil {
+		return 0, false
+	}
+	switch msg {
+	case win32.WM_SETCURSOR:
+		pt := win32.ScreenToClient(hwnd, win32.CursorPos())
+		if tr.stepAt(pt.X) >= 0 {
+			win32.SetHandCursor()
+			return 1, true
+		}
+	case win32.WM_LBUTTONUP:
+		if i := tr.stepAt(win32.PointParam(lparam).X); i >= 0 {
+			tr.OnClick(i)
+			return 0, true
+		}
+	}
+	return 0, false
+}
 
 // ProgressBar is the standard progress bar, smooth or as a marquee while
 // the total is unknown (spec 3.4).

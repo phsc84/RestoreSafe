@@ -125,11 +125,12 @@ func (a *app) openWizard(runID naming.BackupID, set string) {
 		return 0
 	}
 	win.onMessage = w.message
+	win.onDpi = func(widget.Scale) { w.build() }
 	win.panel.OnCommand = w.command
 	win.panel.OnNotify = w.notify
 	a.wizard = w
 	yubikey.SetParentWindow(uintptr(win.hwnd))
-	s := a.theme.Scale
+	s := win.theme.Scale
 	win.resize(s.Px(wizardWidth), s.Px(wizardHeight), true)
 	win32.Enable(a.hwnd, false)
 	w.show(view.WizardWhen)
@@ -147,7 +148,7 @@ func (w *restoreWizard) show(page int) {
 // build creates the controls of the current page.
 func (w *restoreWizard) build() {
 	a := w.a
-	t := a.theme
+	t := w.win.theme
 	pal := t.Palette
 	p := w.win.panel
 	win32.KillTimer(w.win.hwnd, checkTimerID)
@@ -166,6 +167,7 @@ func (w *restoreWizard) build() {
 				steps = append(steps, widget.TrailStep{Text: s.Text, State: widget.StepState(s.State)})
 			}
 			tr.Set(steps)
+			tr.OnClick = w.goTo
 			w.trail = tr
 		}
 	}
@@ -231,7 +233,7 @@ func (w *restoreWizard) build() {
 	case view.WizardCheck:
 		w.buildCheck()
 	case view.WizardProgress, view.WizardResult:
-		if rc, err := newRunCard(a, p.HWND()); err == nil {
+		if rc, err := newRunCardWith(a, t, p.HWND()); err == nil {
 			p.Adopt(rc.card.panel.HWND())
 			rc.do = w.do
 			w.run = rc
@@ -255,7 +257,7 @@ func (w *restoreWizard) build() {
 // newList creates a list on the page with columns of widths (DIPs, 0
 // fills).
 func (w *restoreWizard) newList(checkboxes bool, columns []string, widths []int32) win32.HWND {
-	t := w.a.theme
+	t := w.win.theme
 	lv := w.child(win32.WC_LISTVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.LVS_REPORT|win32.LVS_SINGLESEL|win32.LVS_SHOWSELALWAYS|win32.LVS_NOSORTHEADER, idWizList)
 	win32.ListSetupPlain(lv, checkboxes)
 	for i, c := range columns {
@@ -273,13 +275,13 @@ func (w *restoreWizard) child(class string, style uint32, id uintptr) win32.HWND
 		return 0
 	}
 	p.Adopt(h)
-	win32.SetFont(h, w.a.theme.Fonts.Get(widget.TextBody))
+	win32.SetFont(h, w.win.theme.Fonts.Get(widget.TextBody))
 	return h
 }
 
 // noteRow creates an information note: its icon and its text.
 func (w *restoreWizard) noteRow(text string) (win32.HWND, win32.HWND) {
-	t := w.a.theme
+	t := w.win.theme
 	p := w.win.panel
 	var icon win32.HWND
 	if i, err := widget.NewIcon(t, p.HWND(), t.Palette.Surface, widget.TextIconSmall); err == nil {
@@ -293,7 +295,7 @@ func (w *restoreWizard) noteRow(text string) (win32.HWND, win32.HWND) {
 // buildCheck creates page 4: the workflow's plan, or a marquee until it
 // arrives.
 func (w *restoreWizard) buildCheck() {
-	t := w.a.theme
+	t := w.win.theme
 	pal := t.Palette
 	p := w.win.panel
 	s := t.Scale
@@ -409,7 +411,7 @@ func (w *restoreWizard) showResults(v view.DestinationView) {
 	if w.results == nil {
 		return
 	}
-	t := w.a.theme
+	t := w.win.theme
 	pal := t.Palette
 	s := t.Scale
 	w.results.Clear()
@@ -435,7 +437,7 @@ func (w *restoreWizard) showResults(v view.DestinationView) {
 
 // layout places the controls of the current page.
 func (w *restoreWizard) layout() {
-	t := w.a.theme
+	t := w.win.theme
 	s := t.Scale
 	p := w.win.panel
 	area := widget.NewArea(s, win32.ClientRect(p.HWND()))
@@ -509,7 +511,7 @@ func (w *restoreWizard) layout() {
 // fitColumns gives the filling column of the page's list the width the
 // others leave.
 func (w *restoreWizard) fitColumns(width int32) {
-	s := w.a.theme.Scale
+	s := w.win.theme.Scale
 	widths := whenColumns
 	if w.page == view.WizardFolders {
 		widths = foldersColumns
@@ -680,11 +682,7 @@ func (w *restoreWizard) showLog() {
 	if err != nil {
 		return
 	}
-	lines := view.LogLinesOf(string(data), view.LogAll)
-	w.a.showViewer(w.win.hwnd, view.LogPaneTitle("", filepath.Base(path)), func(re win32.HWND) {
-		win32.SetRichText(re, logRTF(lines, w.a.fontPt))
-		win32.SendMessage(re, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
-	})
+	w.a.showLog(w.win.hwnd, view.LogPaneTitle("", filepath.Base(path)), string(data))
 }
 
 // startCheck checks the destination after delayMs, or now.
@@ -837,7 +835,7 @@ func (w *restoreWizard) notify(hdr *win32.NMHdr) uintptr {
 // customDraw greys the rows that cannot be restored and draws the type
 // badges.
 func (w *restoreWizard) customDraw(cd *win32.NMLVCustomDraw) uintptr {
-	t := w.a.theme
+	t := w.win.theme
 	pal := t.Palette
 	i := int(cd.ItemParam) - 1
 	enabled := true
@@ -915,4 +913,16 @@ func (w *restoreWizard) close() {
 	win32.Enable(a.hwnd, true)
 	w.win.destroy()
 	a.focusPage()
+}
+
+// goTo goes back to a completed step (RW-1); leaving page 4 ends the
+// workflow, which has written nothing yet.
+func (w *restoreWizard) goTo(page int) {
+	if page >= w.page || w.page > view.WizardCheck {
+		return
+	}
+	if w.page == view.WizardCheck {
+		w.a.cancelRun()
+	}
+	w.show(page)
 }

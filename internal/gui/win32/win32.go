@@ -276,7 +276,7 @@ func ModuleHandle() windows.Handle {
 
 // InitCommonControls registers the common control classes the GUI uses.
 func InitCommonControls() error {
-	icc := initCommonControlsEx{ICC: ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS | ICC_LINK_CLASS | ICC_LISTVIEW_CLASSES}
+	icc := initCommonControlsEx{ICC: ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS | ICC_LINK_CLASS | ICC_LISTVIEW_CLASSES | ICC_BAR_CLASSES}
 	icc.Size = uint32(unsafe.Sizeof(icc))
 	if r, _, err := procInitCommonControlsEx.Call(uintptr(unsafe.Pointer(&icc))); r == 0 {
 		return lastErr("InitCommonControlsEx", err)

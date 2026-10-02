@@ -97,3 +97,32 @@ func Path(p string) string {
 	}
 	return filepath.Clean(p)
 }
+
+// Exact is the full date and time of t, for tooltips: "Wed 30 Sep 2026,
+// 09:12:03".
+func Exact(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Local().Format("Mon 2 Jan 2006, 15:04:05")
+}
+
+// ExactSize is a byte count in full, for tooltips: "1,234,567 bytes".
+func ExactSize(bytes int64) string {
+	s := strconv.FormatInt(max(bytes, 0), 10)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	if bytes == 1 {
+		return s + " byte"
+	}
+	return s + " bytes"
+}
+
+// KeyTip names the config.yaml key behind a setting.
+func KeyTip(key string) string {
+	if key == "" {
+		return ""
+	}
+	return "config.yaml: " + key
+}

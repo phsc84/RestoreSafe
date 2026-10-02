@@ -223,7 +223,7 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 // drawPrimary draws an accent-filled button with white text.
 func (p *Panel) drawPrimary(di *win32.DrawItemStruct) {
 	pal := p.theme.Palette
-	back, fore := pal.Accent, RGB(0xFF, 0xFF, 0xFF)
+	back, fore := pal.Accent, pal.OnAccent
 	switch {
 	case di.ItemState&win32.ODS_DISABLED != 0:
 		back, fore = pal.Control, pal.TextSecondary

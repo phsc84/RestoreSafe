@@ -15,7 +15,17 @@ import (
 type detailsDialog struct {
 	hwnd, report, close win32.HWND
 	open                bool
+	// filters are All and Warnings and errors of a log; refilter shows the
+	// log with a filter. Both are nil for a report.
+	filters  []win32.HWND
+	refilter func(re win32.HWND, f view.LogFilter)
 }
+
+// Control IDs of the log filter.
+const (
+	idViewerAll = 101 + iota
+	idViewerWarnings
+)
 
 var (
 	activeDetails      *detailsDialog
@@ -48,9 +58,24 @@ func (a *app) showText(owner win32.HWND, title, text string) {
 	})
 }
 
+// showLog shows a log modal to owner, with the filter of the log pane
+// (spec BK-5, RW-8).
+func (a *app) showLog(owner win32.HWND, title, text string) {
+	show := func(re win32.HWND, f view.LogFilter) {
+		win32.SetRichText(re, logRTF(view.LogLinesOf(text, f), a.fontPt))
+		win32.SendMessage(re, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
+	}
+	a.openViewer(owner, title, func(re win32.HWND) { show(re, view.LogAll) }, show)
+}
+
 // showViewer shows a read-only rich edit that fill fills, modal to owner,
 // with a Close button.
 func (a *app) showViewer(owner win32.HWND, title string, fill func(re win32.HWND)) {
+	a.openViewer(owner, title, fill, nil)
+}
+
+// openViewer shows the viewer; refilter, when set, adds the log filter.
+func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND), refilter func(re win32.HWND, f view.LogFilter)) {
 	if !detailsClassExists {
 		wc := win32.WndClassEx{
 			WndProc:    windows.NewCallback(detailsProc),
@@ -75,12 +100,22 @@ func (a *app) showViewer(owner win32.HWND, title string, fill func(re win32.HWND
 	if err != nil {
 		return
 	}
-	d := &detailsDialog{hwnd: hwnd, open: true}
+	d := &detailsDialog{hwnd: hwnd, open: true, refilter: refilter}
 	d.report, _ = win32.CreateWindow(0, win32.MSFTEDIT_CLASS, title,
 		win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL,
 		0, 0, 0, 0, hwnd, 0)
 	d.close, _ = win32.CreateWindow(0, "BUTTON", view.ButtonClose, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, 0, 0, 0, 0, hwnd, win32.IDOK)
 	win32.SetFont(d.close, a.font)
+	if refilter != nil {
+		lp := view.LogPaneOf()
+		all, _ := win32.CreateWindow(0, "BUTTON", lp.All, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.WS_GROUP|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, 0, 0, 0, 0, hwnd, idViewerAll)
+		warn, _ := win32.CreateWindow(0, "BUTTON", lp.Warnings, win32.WS_CHILD|win32.WS_VISIBLE|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, 0, 0, 0, 0, hwnd, idViewerWarnings)
+		for _, b := range []win32.HWND{all, warn} {
+			win32.SetFont(b, a.font)
+		}
+		win32.SetChecked(all, true)
+		d.filters = []win32.HWND{all, warn}
+	}
 	win32.SendMessage(d.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
 	win32.SendMessage(d.report, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
 	fill(d.report)
@@ -115,6 +150,15 @@ func (d *detailsDialog) layout(s widget.Scale) {
 	area.Inset(detailsMargin, detailsMargin, detailsMargin, detailsMargin)
 	buttons := widget.NewArea(s, area.Bottom(widget.ButtonHeight))
 	win32.SetWindowPos(d.close, buttons.Right(closeWidth))
+	for i, b := range d.filters {
+		w := int32(closeWidth)
+		if i == 1 {
+			w = 2 * closeWidth
+		}
+		r := buttons.Left(w)
+		win32.SetWindowPos(b, r)
+		buttons.Left(6)
+	}
 	area.Bottom(detailsMargin)
 	win32.SetWindowPos(d.report, area.Rest())
 }
@@ -128,6 +172,14 @@ func detailsProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	case win32.WM_COMMAND:
 		if id := win32.LoWord(wparam); id == win32.IDOK || id == win32.IDCANCEL {
 			d.open = false
+			return 0
+		}
+		switch win32.LoWord(wparam) {
+		case idViewerAll:
+			d.refilter(d.report, view.LogAll)
+			return 0
+		case idViewerWarnings:
+			d.refilter(d.report, view.LogWarnings)
 			return 0
 		}
 	case win32.WM_CLOSE:

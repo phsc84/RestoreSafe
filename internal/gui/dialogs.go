@@ -58,14 +58,18 @@ type credentialAnswer struct {
 // runCredentialDialog shows v modal to the main window until the user
 // answers.
 func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
-	t := a.theme
-	s := t.Scale
-	pal := t.Palette
 	owner := a.dialogOwner()
+	t := a.theme
+	if dw := dialogWindows[owner]; dw != nil {
+		t = dw.theme // the restore wizard, at its scale
+	}
 	win, err := newDialogWindow(t, owner, credentialClass, v.Title)
 	if err != nil {
 		return credentialAnswer{}
 	}
+	t = win.theme
+	s := t.Scale
+	pal := t.Palette
 	d := &credentialDialog{win: win, fields: v.Fields, open: true, noCancel: v.Cancel == ""}
 	activeCredential = d
 	win.onCommand = func(id uint16) {
@@ -90,7 +94,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	}
 	if len(v.CodeLines) > 0 {
 		st.gap(12)
-		font, err := a.codeFont()
+		font, err := codeFont(uint32(s))
 		if err == nil {
 			d.codeFont = font
 		}
@@ -153,6 +157,9 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	}
 	win32.SetWindowPos(okButton, row.RightPx(max(buttonWidth(t, okButton), s.Px(dialogButton))))
 
+	// A DPI change scales the controls in place: rebuilding would lose
+	// what was typed.
+	win.onDpi = func(old widget.Scale) { d.rescale(old, win.theme) }
 	a.modal = win.hwnd
 	win32.Enable(owner, false)
 	win32.ShowWindow(win.hwnd, win32.SW_SHOWNORMAL)
@@ -185,10 +192,10 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	return credentialAnswer{values: d.values, ok: d.ok, link: d.linked}
 }
 
-// codeFont creates the font for a displayed code: monospaced, bold, and
-// about twice the message font's size. The caller deletes it.
-func (a *app) codeFont() (windows.Handle, error) {
-	lf, err := win32.MessageFont(a.dpi)
+// codeFont creates the font for a displayed code at dpi: monospaced, bold,
+// and about twice the message font's size. The caller deletes it.
+func codeFont(dpi uint32) (windows.Handle, error) {
+	lf, err := win32.MessageFont(dpi)
 	if err != nil {
 		return 0, err
 	}
@@ -285,4 +292,26 @@ func (a *app) dialogOwner() win32.HWND {
 		return a.wizard.win.hwnd
 	}
 	return a.hwnd
+}
+
+// rescale moves and sizes the dialog's controls from the scale old to the
+// theme's, and gives the edits and the code their fonts at it.
+func (d *credentialDialog) rescale(old widget.Scale, t *widget.Theme) {
+	ratio := func(v int32) int32 { return v * int32(t.Scale) / int32(old) }
+	for _, c := range win32.ChildWindows(d.win.panel.HWND()) {
+		r := win32.ChildRect(c)
+		win32.SetWindowPos(c, win32.Rect{Left: ratio(r.Left), Top: ratio(r.Top), Right: ratio(r.Right), Bottom: ratio(r.Bottom)})
+	}
+	for _, e := range d.edits {
+		win32.SetFont(e, t.Fonts.Get(widget.TextBody))
+	}
+	if len(d.code) > 0 {
+		if font, err := codeFont(uint32(t.Scale)); err == nil {
+			for _, c := range d.code {
+				win32.SetFont(c, font)
+			}
+			win32.DeleteObject(d.codeFont)
+			d.codeFont = font
+		}
+	}
 }

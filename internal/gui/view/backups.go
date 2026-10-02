@@ -46,7 +46,9 @@ type InfoLine struct {
 // BackupRow is one backup set in the list (spec BK-2).
 type BackupRow struct {
 	// Set is the set's name, which identifies the row.
-	Set        string
+	Set string
+	// Tip describes the row in full: set name, path, created, full backup.
+	Tip        string
 	Folder     string
 	Path       string
 	Badge      Badge
@@ -423,6 +425,18 @@ func rowOf(s *health.Snapshot, info catalog.SetInfo, r *flow.Run, now time.Time)
 	if st, ok := verifying(r, e); ok {
 		row.Status = st
 	}
+	tip := []string{set}
+	if row.Path != "" {
+		tip = append(tip, row.Path)
+	}
+	if info.Complete() {
+		tip = append(tip, fmt.Sprintf(tipCreated, Exact(info.Created())))
+	}
+	if row.BasedOnTip != "" {
+		tip = append(tip, fmt.Sprintf(tipBasedOn, row.BasedOnTip))
+	}
+	tip = append(tip, ExactSize(info.SizeBytes))
+	row.Tip = strings.Join(tip, "\n")
 	return row
 }
 

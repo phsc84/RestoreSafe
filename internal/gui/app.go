@@ -214,7 +214,7 @@ func (a *app) createWindow() error {
 	if err != nil {
 		return err
 	}
-	a.theme = &widget.Theme{Palette: widget.Light, Fonts: fonts, Scale: widget.Scale(a.dpi)}
+	a.theme = &widget.Theme{Palette: widget.CurrentPalette(), Fonts: fonts, Scale: widget.Scale(a.dpi)}
 	if err := a.createFonts(); err != nil {
 		return err
 	}
@@ -357,6 +357,9 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		win32.SetWindowPos(hwnd, *win32.RectParam(lparam))
 		a.layout()
 		return 0
+	case win32.WM_SETTINGCHANGE, win32.WM_SYSCOLORCHANGE:
+		a.paletteChanged()
+		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
 	case win32.WM_ACTIVATEAPP:
 		if wparam != 0 && a.run == nil && a.snapshot != nil && time.Since(a.snapshot.Checked) > recheckAfter {
 			a.startCheck()

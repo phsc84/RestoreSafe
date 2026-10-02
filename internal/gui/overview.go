@@ -87,6 +87,8 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 		}
 		(*c).panel.OnCommand = o.command
 	}
+	// More than five folders scroll within the card (spec OV-3).
+	o.folders.maxHeight = 2*widget.CardPadding + cardHeadingHeight + 5*(cardRowHeight+rowGap)
 	return o, nil
 }
 
@@ -188,7 +190,7 @@ func (o *overviewPage) fillFolders() {
 	o.folderStatus = map[string]win32.HWND{}
 	o.folderSig = folderSig(states)
 	for _, row := range v.Rows {
-		name := c.label(row.Name, widget.TextBody, t.Palette.Text)
+		name := c.tip(c.label(row.Name, widget.TextBody, t.Palette.Text), row.Path)
 		if state, ok := states[row.Name]; ok {
 			icon := cell{dip: iconWidth}
 			if state.Glyph != view.GlyphNone {
@@ -208,12 +210,12 @@ func (o *overviewPage) fillFolders() {
 			c.row(cardRowHeight, cell{hwnd: name, dip: nameWidth}, cell{hwnd: c.label(row.Problem, widget.TextSmall, toneColor(t.Palette, row.Tone)), fill: true})
 			continue
 		}
-		cells := []cell{{hwnd: name, fill: true}, {hwnd: c.label(row.Date, widget.TextSmall, toneColor(t.Palette, row.Tone)), dip: dateWidth}}
+		cells := []cell{{hwnd: name, fill: true}, {hwnd: c.tip(c.label(row.Date, widget.TextSmall, toneColor(t.Palette, row.Tone)), row.DateTip), dip: dateWidth}}
 		if row.Badge != nil {
 			b := c.badge(*row.Badge)
 			cells = append(cells, cell{hwnd: b.HWND(), px: b.Width(), height: 18})
 		}
-		cells = append(cells, cell{hwnd: c.label(row.Next, widget.TextCaption, t.Palette.TextSecondary), dip: nextWidth})
+		cells = append(cells, cell{hwnd: c.tip(c.label(row.Next, widget.TextCaption, t.Palette.TextSecondary), row.NextReason), dip: nextWidth})
 		c.row(cardRowHeight, cells...)
 	}
 }
@@ -286,7 +288,7 @@ func (o *overviewPage) fillStorage() {
 	}
 	var legend []cell
 	for _, s := range v.Segments {
-		legend = append(legend, cell{hwnd: c.label(s.Text, widget.TextCaption, t.Palette.TextSecondary), fill: true})
+		legend = append(legend, cell{hwnd: c.tip(c.label(s.Text, widget.TextCaption, t.Palette.TextSecondary), s.Tip), fill: true})
 	}
 	c.row(cardRowHeight, legend...)
 	if v.Estimate != "" {
@@ -309,7 +311,7 @@ func (o *overviewPage) fillLastBackup() {
 			line = append(line, cell{hwnd: icon.HWND(), dip: iconWidth})
 		}
 	}
-	line = append(line, cell{hwnd: c.label(v.Line, widget.TextBody, t.Palette.Text), fill: true})
+	line = append(line, cell{hwnd: c.tip(c.label(v.Line, widget.TextBody, t.Palette.Text), v.LineTip), fill: true})
 	c.row(cardRowHeight, line...)
 	for _, row := range v.Rows {
 		b := c.badge(row.Badge)
@@ -393,7 +395,12 @@ type card struct {
 	panel  *widget.Panel
 	linkID uint16
 	acts   actions
-	rows   []cardRow
+	tips   *widget.Tooltips
+	// maxHeight caps the card's height in DIPs (0: none); the rows
+	// scroll within it. placed is where the card was placed last.
+	maxHeight int32
+	placed    win32.Rect
+	rows      []cardRow
 }
 
 // cardRow is a row of a card, height in DIPs.
@@ -419,10 +426,18 @@ func newCard(t *widget.Theme, parent win32.HWND, linkID uint16, acts actions) (*
 	if err != nil {
 		return nil, err
 	}
-	return &card{theme: t, panel: p, linkID: linkID, acts: acts}, nil
+	tips, _ := widget.NewTooltips(t, parent) //nolint:errcheck // the card works without tips
+	return &card{theme: t, panel: p, linkID: linkID, acts: acts, tips: tips}, nil
+}
+
+// tip shows text when the mouse rests on hwnd.
+func (c *card) tip(hwnd win32.HWND, text string) win32.HWND {
+	c.tips.Set(hwnd, text)
+	return hwnd
 }
 
 func (c *card) reset() {
+	c.tips.Clear()
 	c.panel.Clear()
 	c.rows = nil
 }
@@ -458,6 +473,15 @@ func (c *card) row(height int32, cells ...cell) {
 
 // height returns the height the card needs, in DIPs.
 func (c *card) height() int32 {
+	h := c.contentHeight()
+	if c.maxHeight > 0 {
+		h = min(h, c.maxHeight)
+	}
+	return h
+}
+
+// contentHeight returns the height of all rows, in DIPs.
+func (c *card) contentHeight() int32 {
 	h := int32(2 * widget.CardPadding)
 	for i, r := range c.rows {
 		h += r.height
@@ -468,11 +492,22 @@ func (c *card) height() int32 {
 	return h
 }
 
-// place puts the card at r and lays out its rows.
+// place puts the card at r and lays out its rows; a card taller than its
+// maxHeight scrolls.
 func (c *card) place(r win32.Rect) {
+	c.placed = r
 	win32.SetWindowPos(c.panel.HWND(), r)
 	s := c.theme.Scale
+	content := int32(0)
+	if c.maxHeight > 0 && c.contentHeight() > c.maxHeight {
+		content = s.Px(c.contentHeight())
+		if c.panel.OnScroll == nil {
+			c.panel.OnScroll = func() { c.place(c.placed) }
+		}
+	}
+	c.panel.SetScroll(content)
 	area := widget.NewArea(s, win32.ClientRect(c.panel.HWND()))
+	area.R.Top -= c.panel.ScrollOffset()
 	area.Inset(widget.CardPadding, widget.CardPadding, widget.CardPadding, widget.CardPadding)
 	for i, row := range c.rows {
 		if i > 0 {

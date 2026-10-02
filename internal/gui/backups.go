@@ -112,6 +112,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.lines.OnCommand = b.command
 	b.list = b.child(win32.WC_LISTVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.LVS_REPORT|win32.LVS_SINGLESEL|win32.LVS_SHOWSELALWAYS|win32.LVS_NOSORTHEADER, idBackupsList)
 	win32.ListSetup(b.list)
+	win32.ListEnableInfoTips(b.list)
 	for i, c := range view.BackupsOf(nil, nil, nil, "", time.Now()).Columns {
 		win32.ListInsertColumn(b.list, i, c, t.Scale.Px(150), i == 3)
 	}
@@ -594,6 +595,11 @@ func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
 		}
 	case win32.NM_RCLICK:
 		b.contextMenu()
+	case win32.LVN_GETINFOTIP:
+		n := win32.ListInfoTipOf(hdr)
+		if ref, ok := b.rowAt(int(n.Item)); ok && ref.row >= 0 {
+			n.SetText(b.view.Groups[ref.group].Rows[ref.row].Tip)
+		}
 	case win32.NM_CUSTOMDRAW:
 		return b.customDraw(win32.ListDrawOf(hdr))
 	}

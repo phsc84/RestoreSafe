@@ -413,3 +413,39 @@ func ListSetChecked(lv HWND, i int, checked bool) {
 	it := lvItem{State: image << 12, StateMask: LVIS_STATEIMAGEMASK}
 	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
 }
+
+// Info tips of list items.
+const (
+	LVS_EX_INFOTIP = 0x00000400
+	LVN_GETINFOTIP = lvnFirst - 58 // LVN_GETINFOTIPW
+)
+
+// NMLVGetInfoTip is NMLVGETINFOTIPW.
+type NMLVGetInfoTip struct {
+	Hdr     NMHdr
+	Flags   uint32
+	Text    *uint16
+	TextMax int32
+	Item    int32
+	SubItem int32
+	Param   uintptr
+}
+
+// ListInfoTipOf returns the NMLVGETINFOTIPW behind hdr.
+func ListInfoTipOf(hdr *NMHdr) *NMLVGetInfoTip { return (*NMLVGetInfoTip)(unsafe.Pointer(hdr)) }
+
+// SetText writes the tip text into the list's buffer.
+func (n *NMLVGetInfoTip) SetText(text string) {
+	if n.Text == nil || n.TextMax <= 0 {
+		return
+	}
+	u, _ := windows.UTF16FromString(text)
+	buf := unsafe.Slice(n.Text, n.TextMax)
+	k := copy(buf[:n.TextMax-1], u)
+	buf[min(k, int(n.TextMax)-1)] = 0
+}
+
+// ListEnableInfoTips shows the info tips of the items.
+func ListEnableInfoTips(lv HWND) {
+	SendMessage(lv, LVM_SETEXTENDEDSTYLE, LVS_EX_INFOTIP, LVS_EX_INFOTIP)
+}

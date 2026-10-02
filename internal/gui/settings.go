@@ -168,7 +168,7 @@ func (sp *settingsPage) rows(c *card, rows []view.Setting) {
 			s.Px(cardRowHeight))
 		c.row(h*96/int32(s)+1,
 			cell{hwnd: c.panel.Paragraph(r.Label, widget.TextSmall, pal.TextSecondary), dip: labelDip},
-			cell{hwnd: c.panel.Paragraph(r.Value, widget.TextBody, value), fill: true})
+			cell{hwnd: c.tip(c.panel.Paragraph(r.Value, widget.TextBody, value), view.KeyTip(r.Key)), fill: true})
 	}
 }
 

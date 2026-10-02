@@ -61,8 +61,9 @@ func TestListViewStructSizes(t *testing.T) {
 		"LVHITTESTINFO":  unsafe.Sizeof(lvHitTestInfo{}),
 		"NMLVCUSTOMDRAW": unsafe.Sizeof(NMLVCustomDraw{}),
 		"NMLISTVIEW":     unsafe.Sizeof(NMListView{}),
+		"NMLVGETINFOTIP": unsafe.Sizeof(NMLVGetInfoTip{}),
 	} {
-		want := map[string]uintptr{"LVITEMW": 88, "LVGROUP": 152, "LVCOLUMNW": 56, "LVHITTESTINFO": 24, "NMLVCUSTOMDRAW": 136, "NMLISTVIEW": 64}[name]
+		want := map[string]uintptr{"LVITEMW": 88, "LVGROUP": 152, "LVCOLUMNW": 56, "LVHITTESTINFO": 24, "NMLVCUSTOMDRAW": 136, "NMLISTVIEW": 64, "NMLVGETINFOTIP": 64}[name]
 		if got != want {
 			t.Errorf("%s: %d bytes, want %d", name, got, want)
 		}

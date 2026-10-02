@@ -342,3 +342,46 @@ func TestPanelScrolls(t *testing.T) {
 		t.Fatalf("fits: offset %d", p.ScrollOffset())
 	}
 }
+
+func TestTooltipsAddAndClear(t *testing.T) {
+	th, host := testTheme(t)
+	p, err := NewPanel(th, host, 0, PanelStyle{Back: Light.Surface})
+	if err != nil {
+		t.Fatal(err)
+	}
+	label := p.Label("Docs", TextBody, Light.Text)
+	tips, err := NewTooltips(th, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tips.Set(label, `C:\Users\phs\Documents`)
+	const ttmGetToolCount = 0x040D
+	if n := win32.SendMessage(tips.tip, ttmGetToolCount, 0, 0); n != 1 {
+		t.Fatalf("%d tools", n)
+	}
+	if win32.Style(label)&win32.SS_NOTIFY == 0 {
+		t.Fatal("a static gets the mouse for its tip")
+	}
+	tips.Clear()
+	if n := win32.SendMessage(tips.tip, ttmGetToolCount, 0, 0); n != 0 {
+		t.Fatalf("%d tools after Clear", n)
+	}
+}
+
+func TestTrailReportsClicksOnDoneSteps(t *testing.T) {
+	th, host := testTheme(t)
+	tr, err := NewTrail(th, host, Light.Surface)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var clicked []int
+	tr.OnClick = func(i int) { clicked = append(clicked, i) }
+	tr.Set([]TrailStep{{"1 When", StepDone}, {"2 Folders", StepCurrent}, {"3 Destination", StepWaiting}})
+	render(t, tr.HWND(), 400, 24) // paints, which records where the steps are
+	at := func(x int32) uintptr { return uintptr(uint16(x)) | uintptr(12)<<16 }
+	win32.SendMessage(tr.HWND(), win32.WM_LBUTTONUP, 0, at(tr.spans[0][0]+4)) // done: reported
+	win32.SendMessage(tr.HWND(), win32.WM_LBUTTONUP, 0, at(tr.spans[1][0]+4)) // current: not
+	if len(clicked) != 1 || clicked[0] != 0 {
+		t.Fatalf("clicks %v", clicked)
+	}
+}
