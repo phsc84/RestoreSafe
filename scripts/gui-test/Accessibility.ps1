@@ -7,6 +7,8 @@
 #                              readers read classic Win32 controls)
 #   Test-AccessKeys $hwnd      problems: buttons without an access key,
 #                              access keys used twice
+#   Test-Overlaps $hwnd        (GuiDriver.ps1) labels that lie over a
+#                              control and would take its clicks
 # As a check:
 #   .\Accessibility.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\...\smoke\config.yaml
 #   walks the three pages, the backup plan dialog and the restore wizard's
@@ -64,12 +66,14 @@ if ($Exe) {
     foreach ($page in 0, 1, 2) {
       Go-Page $main $page
       $problems += Test-AccessKeys $main ("page " + @("Create backup", "Restore backup", "Settings")[$page])
+      $problems += Test-Overlaps $main ("page " + @("Create backup", "Restore backup", "Settings")[$page])
     }
     Go-Page $main 0
     Click-Control $main HeroPrimary
     $plan = Wait-Until { Find-Window $p.Id "RestoreSafePlan" } 20 "plan"
     Wait-Until { Find-Control $plan PlanStart -Enabled } 60 "plan" | Out-Null
     $problems += Test-AccessKeys $plan "backup plan"
+    $problems += Test-Overlaps $plan "backup plan"
     Click-Control $plan PlanCancel
     Start-Sleep -Seconds 1
     Go-Page $main 1
@@ -78,12 +82,14 @@ if ($Exe) {
     $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "wizard"
     foreach ($n in 1, 2, 3) {
       $problems += Test-AccessKeys $wiz "wizard page $n"
+      $problems += Test-Overlaps $wiz "wizard page $n"
       Click-Control $wiz WizardNext
     }
     $problems += Test-AccessKeys $wiz "wizard page 4"
+    $problems += Test-Overlaps $wiz "wizard page 4"
     Click-Control $wiz WizardCancel
   } finally { Stop-Process $p -Force -ErrorAction SilentlyContinue }
   if ($problems) { $problems; exit 1 }
-  "access keys ok"
+  "access keys and label overlaps ok"
   exit 0
 }

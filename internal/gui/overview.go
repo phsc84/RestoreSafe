@@ -571,7 +571,9 @@ func (o *overviewPage) layoutHero(r win32.Rect) {
 	if g.refreshBelow {
 		row = win32.Rect{Left: x, Top: y + g.lineHeight, Bottom: y + g.lineHeight + s.Px(heroLineHeight)}
 	}
-	row.Top += (s.Px(heroLineHeight) - s.Px(refreshHeight)) / 2
+	// Centered on the line, but never up into the title: a label under the
+	// button would take its clicks.
+	row.Top += max((s.Px(heroLineHeight)-s.Px(refreshHeight))/2, 0)
 	row.Bottom = row.Top + s.Px(refreshHeight)
 	row.Right = row.Left + g.refreshWidth
 	win32.SetWindowPos(o.refresh, row)

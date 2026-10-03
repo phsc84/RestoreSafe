@@ -285,14 +285,18 @@ func (r *runCard) place(rect win32.Rect) {
 			win32.SetWindowPos(r.icon.HWND(), icon)
 			area.Left(12)
 		}
-		var buttons widget.Area
+		// The buttons sit in their own row, or at the right of the title's
+		// row, which the title then leaves to them: a label under a
+		// button would take its clicks.
+		var buttons *widget.Area
 		if g.buttonsBelow {
-			buttons = widget.NewArea(s, area.Bottom(widget.ButtonHeight))
+			below := widget.NewArea(s, area.Bottom(widget.ButtonHeight))
 			area.Bottom(runGap * 2)
+			buttons = &below
 		}
 		top := widget.NewArea(s, area.Top(runTitleHeight))
-		if !g.buttonsBelow {
-			buttons = top
+		if buttons == nil {
+			buttons = &top
 		}
 		for i := len(r.resultBtns) - 1; i >= 0; i-- {
 			b := r.resultBtns[i]

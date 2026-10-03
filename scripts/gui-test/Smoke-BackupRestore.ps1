@@ -53,6 +53,7 @@ try {
     Click-Control $plan PlanStart
     Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
     $r = Result $main; Snap $main "backup-$i"; "Backup $($i): $r"
+    $o = Test-Overlaps $main "backup result"; if ($o) { $o; $failed = $true }
     if ($r -notlike "Backup finished*") { $failed = $true }
     Click-Control $main RunDone
   }
@@ -77,6 +78,7 @@ try {
   Click-Control $wiz WizardNext
   Answer-Credentials $p.Id $Password { Find-Control $wiz RunDone -Enabled }
   $r = Result $wiz; Snap $wiz "restore-result"; "Restore:  $r"
+  $o = Test-Overlaps $wiz "restore result"; if ($o) { $o; $failed = $true }
   if ($r -notlike "Restore finished*") { $failed = $true }
   Click-Control $wiz RunDone
 
@@ -88,6 +90,7 @@ try {
   Click-TaskButton $p.Id "Verify…"
   Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
   $r = Result $main; Snap $main "verify-result"; "Verify:   $r"
+  $o = Test-Overlaps $main "verify result"; if ($o) { $o; $failed = $true }
   if ($r -notlike "Verification finished*") { $failed = $true }
   Click-Control $main RunDone
 } catch {

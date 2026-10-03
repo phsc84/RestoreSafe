@@ -226,3 +226,23 @@ function Shot($hwnd, [string]$path) {
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
 }
+
+# Test-Overlaps returns the visible labels of $parent that lie over a
+# visible button, link, list or field: a label with a tooltip receives the
+# mouse, so it would take the control's clicks. A click message (Click)
+# doesn't notice; a user's click does.
+function Test-Overlaps([IntPtr]$parent, [string]$where) {
+  $shown = @([U]::Children($parent) | Where-Object { [U]::IsWindowVisible($_) })
+  $labels = @($shown | Where-Object { [U]::Class($_) -eq "Static" })
+  $controls = @($shown | Where-Object { @("Button", "SysLink", "SysListView32", "Edit", "ComboBox", "RichEdit50W") -contains [U]::Class($_) })
+  foreach ($l in $labels) {
+    $a = New-Object U+RECT; [U]::GetWindowRect($l, [ref]$a) | Out-Null
+    if ($a.R -le $a.L -or $a.B -le $a.T) { continue }
+    foreach ($c in $controls) {
+      $b = New-Object U+RECT; [U]::GetWindowRect($c, [ref]$b) | Out-Null
+      if ($a.L -lt $b.R -and $b.L -lt $a.R -and $a.T -lt $b.B -and $b.T -lt $a.B) {
+        "$($where): label '$([U]::Text($l))' lies over $([U]::Class($c)) '$([U]::Text($c))'"
+      }
+    }
+  }
+}
