@@ -133,7 +133,8 @@ func rtfEscape(s string) string {
 }
 
 // logRTF renders log lines as RTF for the log pane: monospaced, warnings
-// in amber, errors in red; the text itself carries WARN and ERROR.
+// in amber, errors in red, a note (no warnings) muted; the text itself
+// carries WARN and ERROR.
 func logRTF(lines []view.LogLine, fontPt int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `{\rtf1\ansi\deff0{\fonttbl{\f0\fmodern Consolas;}}%s\fs%d `, rtfColorTable, fontPt*2)
@@ -144,6 +145,8 @@ func logRTF(lines []view.LogLine, fontPt int) string {
 			color = colorWarn
 		case view.ToneError:
 			color = colorError
+		case view.ToneSecondary:
+			color = colorMuted
 		}
 		fmt.Fprintf(&b, `{\cf%d %s}\par `, color, rtfEscape(l.Text))
 	}

@@ -577,7 +577,7 @@ const (
 // LogLinesOf returns the lines of the log text to show (spec BK-5): as the
 // file stores them, without the machine-readable fact lines; WARN and
 // ERROR lines are marked. LogWarnings keeps only those, with the lines
-// that continue them.
+// that continue them; when there are none, a line says so.
 func LogLinesOf(text string, filter LogFilter) []LogLine {
 	var out []LogLine
 	keep := false
@@ -599,6 +599,9 @@ func LogLinesOf(text string, filter LogFilter) []LogLine {
 			continue
 		}
 		out = append(out, LogLine{Text: line, Tone: tone})
+	}
+	if filter == LogWarnings && len(out) == 0 && strings.TrimSpace(text) != "" {
+		out = append(out, LogLine{Text: logNoWarnings, Tone: ToneSecondary})
 	}
 	return out
 }
@@ -629,12 +632,12 @@ func LogPaneTitle(when, file string) string {
 
 // LogPane are the labels of the log pane's buttons.
 type LogPane struct {
-	All, Warnings, Open, Hide, Show string
+	All, Warnings, Open string
 }
 
 // LogPaneOf returns the labels of the log pane.
 func LogPaneOf() LogPane {
-	return LogPane{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog, Hide: buttonHideLog, Show: buttonShowLog}
+	return LogPane{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog}
 }
 
 // Menu are the items of the list's context menu (spec BK-4).

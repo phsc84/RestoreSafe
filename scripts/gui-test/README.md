@@ -32,7 +32,7 @@ $cfg = "C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"
 # Access keys of all pages and dialogs.
 .\Accessibility.ps1 -Exe $exe -Config $cfg
 
-# Screenshot of the Overview for the README.
+# Screenshot of the Create backup page for the README.
 .\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\Screenshot_v2.0.0_overview.png -Scale 0.667
 ```
 

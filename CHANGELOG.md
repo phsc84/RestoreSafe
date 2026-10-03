@@ -10,10 +10,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - Windows application instead of the console menu, built around the question "are my folders protected?":
-  - **Overview**: the status (protected, warning, error, or no backup yet) with the action that fixes a problem, the folders with their newest backup and the type of the next one, the backup directory and its free space, the last backup, and the keys. The backups are checked at start, after every operation, with **Check again** or F5, and when you return after five minutes.
+  - **Create backup** page: the status (protected, warning, error, or no backup yet) with the action that fixes a problem, the folders with their newest backup and the type of the next one, the last backup run, the backup directory and its free space, and the keys. The backups are checked at start, after every operation, with **Refresh** or F5 (which also reads `config.yaml` again), and when you return after five minutes.
   - **Backup plan** before every backup: full or differential per folder and why, the space, how you unlock, and what retention removes if the backup succeeds.
-  - Progress on the Overview with steps, speed, and time left, also on the taskbar button; Cancel at any time (completed backup sets are kept, the unfinished one is removed); a result card that says what happened per folder.
-  - **Backups** page: every backup run with its sets, types, sizes, and status (complete, verified, skipped files, incomplete, damaged), the log of the selected run, and Restore and Verify.
+  - Progress with steps, speed, and time left (a backup on Create backup, a restore or verification on Restore backup), also on the taskbar button; Cancel at any time (completed backup sets are kept, the unfinished one is removed); a result card that says what happened per folder.
+  - **Restore backup** page: every backup run with its sets, types, sizes, and status (complete, verified, skipped files, incomplete, damaged), the log of the selected run, and Restore and Verify for a folder or, through the date of a run, all its folders.
   - **Restore wizard**: when, which folders, where to, and a last check; it checks the destination folders and the free space while you type.
   - **Settings** page: the configuration in words, **Edit config.yaml**, and **Reload** (no restart needed after a change).
   - Operable by keyboard (access keys, Ctrl+1 to Ctrl+3, Ctrl+B, F5) and readable by screen readers; follows the display scaling of each monitor and Windows high contrast.
@@ -25,7 +25,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey.
 - **New keys + full backup…** in the backup plan creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
 - `password_min_length` (default 12, at least 8) for new passwords.
-- `reminder_days` (default 7, 0 = off): the Overview reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
+- `reminder_days` (default 7, 0 = off): the Create backup page reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
 - `exclude` patterns for files and directories to leave out of backups.
 - `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
 - `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).

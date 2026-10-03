@@ -84,7 +84,6 @@ $Ids = [ordered]@{
   LogAll           = 605
   LogWarnings      = 606
   LogOpen          = 607
-  LogToggle        = 608
   EmptyBackUp      = 609
   WizardBack       = 701
   WizardNext       = 702

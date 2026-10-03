@@ -21,7 +21,7 @@ Found while building; they are not defects of the run. Decide for each whether i
 |---|---|
 | OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" files (no fact records them). |
 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. |
-| BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written: for a differential it is much larger than the size on the Backups page. |
+| BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written: for a differential it is much larger than the size on the Restore backup page. |
 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. |
 | RW-1 | The wizard is resizable; its progress page leaves empty space below the card. |
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. |
@@ -37,7 +37,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | Script: hero ok; key setup from Back up now… ran in the smoke test. |
 | OV-1 | `Overdue` (`reminder_days: 1`, newest backup older than a day): amber hero, **Back up now…** | Open | |
 | OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count, "Show files" lists them | Open | Script: hero names folder and count. "Show files" is not implemented (see Known differences). |
-| OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show in Backups** marks the affected rows | Open | Script: red hero, Show in Backups. Marked rows on Backups: by hand. |
+| OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show backups** marks the affected rows | Open | Script: red hero, Show backups. Marked rows on Restore backup: by hand. |
 | OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | Script: red hero with Check again and Edit config. Back up now… is not shown (see Known differences). |
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
@@ -71,9 +71,9 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-1 | Runs newest first, the newest expanded; group header with size, duration, warnings, "new keys" | Open | Pre-checked: order, newest expanded, header with size, duration, "new keys", failed and cancelled runs. |
 | BK-2 | Types, "based on", chain IDs and sizes match the files in Explorer | Open | |
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
-| BK-5 | Log pane: log of the selected run, filter, **Open**; live while an operation runs | Open | Pre-checked: selected run, live during verify and restore. |
+| BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs | Open | Pre-checked: selected run, live during verify and restore. |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
-| BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Backups page. |
+| BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |
 | BK-9 | Empty state with **Back up now…** | Open | |
 

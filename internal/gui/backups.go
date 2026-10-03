@@ -21,7 +21,7 @@ const (
 	idLogAll
 	idLogWarnings
 	idLogOpen
-	idLogToggle
+	_ // 608 was the log pane's Hide log button; the IDs after it keep their values
 	idEmptyBackUp
 	idLineButtons = 640 // idLineButtons+i is the button of line i
 )
@@ -83,8 +83,7 @@ type backupsPage struct {
 
 	splitter                      *widget.Splitter
 	logTitle, logAll, logWarnings win32.HWND
-	logOpen, logToggle, logEdit   win32.HWND
-	logShown                      bool
+	logOpen, logEdit              win32.HWND
 	logRatio                      float64
 	logPath                       string
 	logText                       string
@@ -109,7 +108,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &backupsPage{a: a, panel: panel, acts: actions{}, logShown: true, logRatio: 0.35, collapsed: map[naming.BackupID]bool{}}
+	b := &backupsPage{a: a, panel: panel, acts: actions{}, logRatio: 0.35, collapsed: map[naming.BackupID]bool{}}
 	b.title = panel.Label(view.BackupsOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
 	b.filter = b.child("COMBOBOX", win32.WS_TABSTOP|win32.WS_VSCROLL|win32.CBS_DROPDOWNLIST, idBackupsFilter)
 	win32.SetAccessibleName(b.filter, view.FilterName)
@@ -140,7 +139,6 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.logAll = b.child("BUTTON", win32.WS_TABSTOP|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE|win32.WS_GROUP, idLogAll)
 	b.logWarnings = b.child("BUTTON", win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, idLogWarnings)
 	b.logOpen = panel.Button(lp.Open, idLogOpen)
-	b.logToggle = panel.Button(lp.Hide, idLogToggle)
 	win32.SetText(b.logAll, lp.All)
 	win32.SetText(b.logWarnings, lp.Warnings)
 	win32.SetChecked(b.logAll, true)
@@ -203,7 +201,7 @@ func (b *backupsPage) update() {
 
 	b.showRun()
 	empty := v.Empty != nil
-	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify, b.logTitle, b.logAll, b.logWarnings, b.logOpen, b.logToggle, b.logEdit, b.splitter.HWND()} {
+	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify, b.logTitle, b.logAll, b.logWarnings, b.logOpen, b.logEdit, b.splitter.HWND()} {
 		setShown(h, !empty)
 	}
 	b.lines.Show(!empty && (v.Retention != nil || len(v.Lines) > 0))
@@ -222,7 +220,6 @@ func (b *backupsPage) update() {
 	b.fillLines()
 	b.fillList()
 	b.updateBar()
-	win32.SetText(b.logToggle, b.toggleText())
 	b.layout()
 }
 
@@ -496,11 +493,6 @@ func (b *backupsPage) showLogOf(path string) {
 		}
 	}
 	b.updateBar()
-	if !b.logShown {
-		b.logShown = true
-		win32.SetText(b.logToggle, b.toggleText())
-		b.layout()
-	}
 	b.showLog(path, when)
 }
 
@@ -599,13 +591,6 @@ func (b *backupsPage) renderLog() {
 	win32.SendMessage(b.logEdit, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
 }
 
-func (b *backupsPage) toggleText() string {
-	if b.logShown {
-		return view.LogPaneOf().Hide
-	}
-	return view.LogPaneOf().Show
-}
-
 func (b *backupsPage) command(id, code uint16) {
 	a := b.a
 	switch {
@@ -624,10 +609,6 @@ func (b *backupsPage) command(id, code uint16) {
 		if b.logPath != "" {
 			a.open(b.logPath, true)
 		}
-	case id == idLogToggle && code == win32.BN_CLICKED:
-		b.logShown = !b.logShown
-		win32.SetText(b.logToggle, b.toggleText())
-		b.layout()
 	case code == win32.BN_CLICKED || code == 0:
 		if action, ok := b.acts[id]; ok {
 			a.do(action)
@@ -835,11 +816,8 @@ func (b *backupsPage) layout() {
 	header := s.Px(logHeaderHeight)
 	split := s.Px(widget.SplitterHeight)
 	avail := bottom.Height() - bar - split - header
-	logH := int32(0)
-	if b.logShown {
-		logH = max(int32(float64(avail)*b.logRatio), s.Px(minLogHeight))
-		logH = min(logH, max(avail-s.Px(minListHeight), 0))
-	}
+	logH := max(int32(float64(avail)*b.logRatio), s.Px(minLogHeight))
+	logH = min(logH, max(avail-s.Px(minListHeight), 0))
 	listH := max(avail-logH, 0)
 	y := bottom.Top
 	win32.SetWindowPos(b.list, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + listH})
@@ -853,11 +831,10 @@ func (b *backupsPage) layout() {
 	win32.SetWindowPos(b.barText, barArea.Rest())
 	y += bar
 	win32.SetWindowPos(b.splitter.HWND(), win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + split})
-	setShown(b.splitter.HWND(), b.logShown)
 	y += split
 	head := widget.NewArea(s, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + header})
 	head.Inset(0, 1, 0, 1)
-	for _, h := range []win32.HWND{b.logToggle, b.logOpen, b.logWarnings, b.logAll} {
+	for _, h := range []win32.HWND{b.logOpen, b.logWarnings, b.logAll} {
 		w, _ := t.Fonts.Measure(win32.Text(h), widget.TextBody)
 		win32.SetWindowPos(h, head.RightPx(max(w+s.Px(24), s.Px(logButtonWidth))))
 		head.Right(6)
@@ -865,10 +842,6 @@ func (b *backupsPage) layout() {
 	win32.SetWindowPos(b.logTitle, head.Rest())
 	y += header
 	win32.SetWindowPos(b.logEdit, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + logH})
-	setShown(b.logEdit, b.logShown)
-	for _, h := range []win32.HWND{b.logAll, b.logWarnings, b.logOpen} {
-		win32.SetVisible(h, b.logShown)
-	}
 }
 
 // chosen returns the selected sets that can be restored or verified.

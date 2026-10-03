@@ -368,7 +368,8 @@ const (
 	logTitleOf           = "Log of %s (%s)"
 	logFilterAll         = "&All"
 	logFilterWarnings    = "&Warnings and errors"
-	buttonOpenLog        = "Op&en"
+	buttonOpenLog        = "Open in &Editor"
+	logNoWarnings        = "No warnings or errors in this log."
 )
 
 // Names screen readers announce, and the list's menu.
@@ -376,8 +377,6 @@ const (
 	FilterName      = "Folder filter"
 	BackupsListName = "Backups"
 	LogPaneName     = "Log"
-	buttonHideLog   = "&Hide log"
-	buttonShowLog   = "Show &log"
 	menuRestoreText = "&Restore…"
 	menuVerifyText  = "&Verify…"
 	menuCopyName    = "&Copy set name"
