@@ -1,9 +1,11 @@
 package gui
 
 import (
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
+	"time"
 )
 
 // Control IDs of the run card.
@@ -35,14 +37,18 @@ const (
 	runResult
 )
 
-// runCard is the operation on the Overview in place of the hero (spec
-// OV-7): the progress card while it runs (6.2), then its result (6.3).
+// runCard is the operation at the top of a page: a backup on Create backup
+// in place of the hero (spec OV-7), a restore or verification on Restore
+// backup. It shows the progress card while the operation runs (6.2), then
+// its result (6.3).
 type runCard struct {
 	a     *app
 	theme *widget.Theme
 	card  *card
 	mode  runMode
 	acts  actions
+	// resultOf is the run whose result the card shows.
+	resultOf *flow.Run
 
 	// Progress mode.
 	title, line, bytes, left win32.HWND
@@ -147,6 +153,30 @@ func (r *runCard) showResult(v view.ResultCard) {
 	}
 	r.resultBtns = append(r.resultBtns, r.acts.button(p, v.Done, idRunDone, true))
 	p.Show(true)
+}
+
+// follow shows run on the card: its progress while it is busy, then its
+// result; nil hides the card. It reports whether the card's mode changed.
+func (r *runCard) follow(run *flow.Run, busy bool) bool {
+	mode := r.mode
+	switch {
+	case run != nil && busy:
+		r.resultOf = nil
+		r.showProgress(view.ProgressCardOf(run, time.Now()))
+	case run != nil && run.Stage == flow.StageFinished:
+		if r.resultOf != run {
+			if c := view.ResultCardOf(run); c != nil {
+				r.showResult(*c)
+				r.resultOf = run
+			} else {
+				r.hide()
+			}
+		}
+	default:
+		r.resultOf = nil
+		r.hide()
+	}
+	return r.mode != mode
 }
 
 // hide hides the card.

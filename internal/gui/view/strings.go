@@ -6,8 +6,8 @@ package view
 // Application and shell.
 const (
 	appName        = "RestoreSafe"
-	navOverview    = "Overview"
-	navBackups     = "Backups"
+	navOverview    = "Create backup"
+	navBackups     = "Restore backup"
 	navSettings    = "Settings"
 	statusChecking = "Checking…"
 )
@@ -22,6 +22,8 @@ const (
 	heroChecking        = "Checking your backups…"
 	heroConfigInvalid   = "RestoreSafe can't read its configuration"
 	heroConfigLine      = "Check config.yaml, then start RestoreSafe again."
+	heroReloadTitle     = "config.yaml can't be loaded"
+	heroReloadLine      = "RestoreSafe keeps using the previous settings. Fix config.yaml, then click Refresh. %s"
 	heroDirUnreachable  = "The backup directory isn't reachable"
 	heroDirUnreachLine  = "%s doesn't respond. Check the drive or the network connection."
 	heroDirNotWritable  = "RestoreSafe can't write to the backup directory"
@@ -58,7 +60,7 @@ const (
 	buttonCheckAgain   = "Check &again"
 	buttonRefresh      = "Re&fresh"
 	buttonEditConfig   = "&Edit config"
-	buttonShowBackups  = "&Show in Backups"
+	buttonShowBackups  = "&Show backups"
 	reasonBlockedCheck = "Fix the problems the check found first."
 )
 
@@ -77,15 +79,13 @@ const (
 	legendOther        = "Other %s"
 	legendFree         = "Free %s"
 	storageEstimate    = "A full backup of all folders needs about %s"
-	cardLastBackup     = "Last backup"
 	lastBackupLine     = "%s · %s · %s"
 	lastBackupDuration = " · %s"
 	lastBackupNone     = "No backups yet"
-	laterFailed        = "The backup of %s failed; the Backups page has its log."
+	laterFailed        = "The backup of %s failed; the Restore backup page has its log."
 	laterCancelled     = "The backup of %s was cancelled before it backed up a folder."
 	basedOnFull        = "based on FULL of %s"
 	basedOnMissing     = "its full backup is missing"
-	newChain           = "full backup"
 	cardKeys           = "Keys"
 	keysCreated        = "Created %s"
 	keysSpare          = "2 YubiKeys"
@@ -324,7 +324,6 @@ const (
 	chainOne             = "1 chain"
 	chainMany            = "%d chains"
 	nextRemoves          = "If your next backup succeeds, it removes %s (%s): %s."
-	buttonRetention      = "Retention &settings"
 	buttonOpenBackupDir  = "&Open backup folder"
 	legacyLine           = "%s files from RestoreSafe 1.x are in the backup folder. RestoreSafe 2 can't restore them; keep RestoreSafe 1.0.2 for that. They're never changed."
 	leftoverLine         = "Leftovers of an interrupted backup (%s files) are removed by the next backup."

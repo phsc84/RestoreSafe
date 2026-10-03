@@ -88,8 +88,8 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 - Default size 1000 × 700 DIP, minimum 820 × 600 DIP. Centered on the monitor of the cursor at start.
 - Title: `RestoreSafe <version>`. When the configuration isn't the default `config.yaml` next to the exe, the title adds the file name: `RestoreSafe 2.0.0 · home-backup.yaml`.
-- Layout: title bar, sidebar (148 DIP), content area, status bar (24 DIP).
-- Sidebar items: **Overview**, **Backups**, **Settings**. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
+- Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
+- Sidebar items: **Create backup** (the Overview page, section 5), **Restore backup** (the Backups page, section 7), **Settings**. The sidebar names the pages by their action; this document keeps the section names Overview and Backups. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
 - Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons, as today.
 - Status bar: current activity on the left ("Ready", "Checking…", "Backing up Documents · 62%"). On the right: the backup directory's free space on Overview and Settings; the number of runs and total size on Backups.
 - While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
@@ -120,6 +120,7 @@ The implementation may use the user's Windows accent color instead of the accent
 | Corner radius | Cards 8 px, controls and badges 4 px |
 | Control height | Buttons 28 px (small 26 px), edit fields 26 px, list rows 26 to 28 px, group headers 28 px, sidebar rows 34 px |
 | Hero icon | 52 px circle, 28 px glyph |
+| Focus outline | 2 px in the text color, following the rounded shape of buttons, toggles and the selected sidebar row; shown only after keyboard use (Tab, arrow keys), never after a click |
 
 ### 3.4 Control mapping
 
@@ -171,11 +172,11 @@ This section connects the screens. Every operation follows the same five steps; 
 
 | Step | Backup | Restore | Verify |
 |---|---|---|---|
-| 1. Choose | "Back up now…" | Restore wizard pages 1 to 3 (8) | Selected run or set on Backups |
+| 1. Choose | "Back up now…" | Restore wizard pages 1 to 3 (8) | Selected run or set on Restore backup |
 | 2. Plan | Backup plan dialog (6.1) | Restore wizard page 4 (8) | Verify dialog (7.3) |
 | 3. Unlock | Unlock or new-keys dialogs (9) | Unlock dialog (9) | Unlock dialog (9) |
-| 4. Run | Progress card on Overview (6.2) | Wizard progress page | Progress card on Overview |
-| 5. Result | Result card on Overview (6.3) | Wizard result page | Result card on Overview, status on Backups |
+| 4. Run | Progress card on Create backup (6.2) | Wizard progress page, progress card on Restore backup | Progress card on Restore backup |
+| 5. Result | Result card on Create backup (6.3) | Wizard result page, result card on Restore backup | Result card and status on Restore backup |
 
 The plan comes from the workflow (`ShowBackupPlan`, `ShowRestorePlan`, `ShowVerifyPlan`, section 11.2), and the choice of step 1 goes into the workflow as a request (restore and verify, 12.3), so the UI never computes a plan of its own that could disagree with what the workflow then does.
 
@@ -279,7 +280,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 | OV-4 | The backup directory card shows the path, a segmented bar (backups, other data, free) and a legend. Backups is the size of all 2.0 set parts in the directory; Other is used space minus Backups; Free comes from the file system. Each segment's tooltip shows exact bytes. The last line estimates a new full backup of all folders as the sum of each folder's newest full backup (trailer data length). |
 | OV-5 | The Last backup card shows the newest run: date, number of folders, total size, duration, and one line per set with its type and, for a differential, the full backup it's based on. "Show in Backups" opens Backups with the run selected. Without backups it shows "No backups yet". |
 | OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode`, spare YubiKey, recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys." |
-| OV-7 | While an operation runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. |
+| OV-7 | While a backup runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. A restore or verification shows these cards on the Backups page instead (BK-8, RW-9); meanwhile the hero stays, with "Back up now…" disabled. |
 | OV-8 | The health check runs at start, after each operation, on **Check again**, on `F5`, and when the window is activated and the last check is older than 5 minutes. It runs on a worker goroutine; the hero keeps the last state and shows "Checking…" in its sub line meanwhile. A check never blocks the UI thread, even when the backup directory is an unreachable network share. |
 
 ## 6. Backup plan and run
@@ -425,7 +426,7 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 │   Overview   │                                                                                       │
 │ > Backups    │ ┌───────────────────────────────────────────────────────────────────────────────────┐ │
 │   Settings   │ │ (i) Keeps 3 chains per folder. Your next full backup of Pictures removes its      │ │
-│              │ │     chain of 6 Jul (6 backups, 41 GB).                     [ Retention settings ] │ │
+│              │ │     chain of 6 Jul (6 backups, 41 GB).                                            │ │
 │              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
 │              │ ┌───────────────────────────────────────────────────────────────────────────────────┐ │
 │              │ │   Folder        Type      Based on         Size     Chain    Status               │ │
@@ -493,8 +494,8 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 | BK-4 | Selecting a set or a run shows the selection in words and its actions in the action bar: **Restore…** (opens the wizard with that run and, for a set, only that folder checked) and **Verify…** (figure 7.3; a run verifies all its sets). A set whose full backup is missing or that is incomplete can't be restored or verified; the action bar says why. With no selection the action bar shows a hint. Double-click or `Enter` starts Restore. A context menu offers Restore…, Verify…, Copy set name, Open backup folder. |
 | BK-5 | Log pane: title with the log file name, filter (All, Warnings and errors), **Open** (opens the file in its default application). It sits below a splitter (default about 30% of the content height) and can be collapsed. The log of the selected run is loaded on demand from the backup directory; for the running operation it's appended live from `Output()`. Log lines are shown as the log file stores them, with WARN and ERROR lines colored and marked. Restore and verify append to the log of the run they read, so their entries appear in the same pane. |
 | BK-6 | Problem lines (figure 7.2) sit above the list: health check errors and warnings about the inventory (missing full backup, incomplete sets, name/header mismatch) with their remedy, and information lines for 1.x backups and leftover `.tmp` files. Affected rows are marked in the list. |
-| BK-7 | The retention line (figure 7.1) explains the rule in words (`retention_keep` chains per folder, `retention_keep_differentials` per chain, or "Keeps all backups" when both are 0) and names the chains the next backup would remove, from the same prediction as BP-2. Retention never runs from this page; it runs only after a successful backup. "Retention settings" opens Settings at Retention. |
-| BK-8 | Verify: after figure 7.3, the credential dialogs follow and the progress card appears on Overview; the Backups page shows the running set with progress in its Status cell. When verification ends, the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
+| BK-7 | The retention line (figure 7.1) explains the rule in words (`retention_keep` chains per folder, `retention_keep_differentials` per chain, or "Keeps all backups" when both are 0) and names the chains the next backup would remove, from the same prediction as BP-2. Retention never runs from this page; it runs only after a successful backup. |
+| BK-8 | Verify: after figure 7.3, the credential dialogs follow and the progress card appears at the top of the Backups page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
 | BK-9 | Empty state: "No backups yet", "Your backups appear here after the first backup.", and a **Back up now…** button. |
 
 ## 8. Restore wizard
@@ -654,7 +655,7 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 | RW-6 | Page 4 is the restore preflight (`ShowRestorePlan`), shown as a summary: backups read (each differential with its full), folders created, space, and the unlock methods the key set accepts. Blocking issues from the workflow replace **Restore…** with the issue and its remedy. "Show details" opens the full report. Nothing is written before **Restore…**; **Restore…** opens the credential dialogs (section 9). |
 | RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed, time left (as BR-3), taskbar progress. Cancel asks with figure 8.5. |
 | RW-8 | Result page: success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines with "Show files"; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in a dialog with the same filter as BK-5. |
-| RW-9 | While the wizard runs a restore, the main window shows the progress card too (Overview) and stays usable for reading; starting another operation is disabled. |
+| RW-9 | While the wizard runs a restore, the main window shows the progress card too, at the top of the Backups page, then the result card, and stays usable for reading; starting another operation is disabled. |
 
 ## 9. Credential dialogs
 

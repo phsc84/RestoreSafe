@@ -47,7 +47,7 @@ func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	if docs.Badge.Text != "FULL" || docs.BasedOn != "-" || docs.Chain == "" || docs.Status.Text != "Complete" || !docs.Usable {
 		t.Fatalf("Docs row %+v", docs)
 	}
-	if p.Retention == nil || p.Retention.Button == nil {
+	if p.Retention == nil || p.Retention.Button != nil {
 		t.Fatalf("retention %+v", p.Retention)
 	}
 	if len(p.Filters) != 3 || p.Filters[0].Text != "All folders" || p.Filter != 0 {
@@ -135,8 +135,8 @@ func TestBackupsListAFailedRunByItsLog(t *testing.T) {
 		t.Fatalf("selection of a failed run %+v", bar)
 	}
 	o := OverviewOf(&s, sc.Config, sc.Now)
-	if !strings.Contains(o.LastBackup.Note, "failed") || o.LastBackup.NoteTone != ToneError {
-		t.Fatalf("the Last backup card tells of the failed run: %+v", o.LastBackup)
+	if !strings.Contains(o.Folders.Last.Note, "failed") || o.Folders.Last.NoteTone != ToneError {
+		t.Fatalf("the Folders card tells of the failed run: %+v", o.Folders.Last)
 	}
 }
 

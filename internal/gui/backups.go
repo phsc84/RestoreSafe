@@ -2,6 +2,7 @@ package gui
 
 import (
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
@@ -58,10 +59,13 @@ type backupsPage struct {
 	view  view.BackupsPage
 
 	title, filter win32.HWND
-	lines         *widget.Panel
-	linesStack    *stack
-	linesSig      string
-	linesHeight   int32 // pixels
+	// run is the restore or verification at the top of the page: its
+	// progress, then its result.
+	run         *runCard
+	lines       *widget.Panel
+	linesStack  *stack
+	linesSig    string
+	linesHeight int32 // pixels
 
 	list    win32.HWND
 	listSig string
@@ -109,6 +113,9 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.title = panel.Label(view.BackupsOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
 	b.filter = b.child("COMBOBOX", win32.WS_TABSTOP|win32.WS_VSCROLL|win32.CBS_DROPDOWNLIST, idBackupsFilter)
 	win32.SetAccessibleName(b.filter, view.FilterName)
+	if b.run, err = newRunCard(a, panel.HWND()); err != nil {
+		return nil, err
+	}
 	if b.lines, err = widget.NewPanel(t, panel.HWND(), 0, widget.PanelStyle{Back: pal.Surface, Outer: pal.Surface, Card: true}); err != nil {
 		return nil, err
 	}
@@ -137,6 +144,9 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	win32.SetText(b.logAll, lp.All)
 	win32.SetText(b.logWarnings, lp.Warnings)
 	win32.SetChecked(b.logAll, true)
+	for _, h := range []win32.HWND{b.logAll, b.logWarnings} {
+		widget.StyleButton(t, h, pal.Surface, false)
+	}
 	b.logEdit = b.child(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
 	win32.SendMessage(b.logEdit, win32.EM_SETBKGNDCOLOR, 0, uintptr(pal.Surface))
 	win32.SendMessage(b.logEdit, win32.EM_EXLIMITTEXT, 0, 64<<20)
@@ -164,6 +174,7 @@ func (b *backupsPage) child(class string, style uint32, id uintptr) win32.HWND {
 func (b *backupsPage) restyle() {
 	t := b.a.theme
 	b.panel.Restyle()
+	b.run.card.panel.Restyle()
 	b.lines.Restyle()
 	for _, h := range []win32.HWND{b.filter, b.list, b.logAll, b.logWarnings} {
 		win32.SetFont(h, t.Fonts.Get(widget.TextBody))
@@ -190,6 +201,7 @@ func (b *backupsPage) update() {
 		win32.ComboSet(b.filter, filters, v.Filter)
 	}
 
+	b.showRun()
 	empty := v.Empty != nil
 	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify, b.logTitle, b.logAll, b.logWarnings, b.logOpen, b.logToggle, b.logEdit, b.splitter.HWND()} {
 		setShown(h, !empty)
@@ -212,6 +224,35 @@ func (b *backupsPage) update() {
 	b.updateBar()
 	win32.SetText(b.logToggle, b.toggleText())
 	b.layout()
+}
+
+// opRun returns the restore or verification the page shows: running, or
+// finished with a result card; nil otherwise. A restore shows once it has
+// started (spec RW-9); before, the restore wizard is its plan.
+func (b *backupsPage) opRun() *flow.Run {
+	r := b.a.machine.Current()
+	if r == nil || r.Op == flow.OpBackup || (r.Op == flow.OpRestore && r.Started.IsZero()) {
+		return nil
+	}
+	return r
+}
+
+// showRun shows the restore or verification on the run card; it reports
+// whether the card appeared or went away.
+func (b *backupsPage) showRun() bool {
+	return b.run.follow(b.opRun(), b.a.machine.Busy())
+}
+
+// updateRun shows a progress report: in full while the page is shown,
+// otherwise only the run card.
+func (b *backupsPage) updateRun() {
+	if b.a.page == view.PageBackups {
+		b.update()
+		return
+	}
+	if b.showRun() {
+		b.layout()
+	}
 }
 
 func (b *backupsPage) filterSig() string {
@@ -389,6 +430,20 @@ func (b *backupsPage) updateBar() {
 		win32.SetText(x.h, x.bt.Text)
 		win32.Enable(x.h, x.bt.Enabled && !b.a.machine.Busy())
 		b.acts[x.id] = x.bt.Action
+	}
+	b.highlightRun()
+}
+
+// highlightRun shows the sets of the selected run highlighted like a
+// selected row: a run is selected through its group header, which the
+// list itself can't show as selected.
+func (b *backupsPage) highlightRun() {
+	for item := range win32.ListItemCount(b.list) {
+		ref, ok := b.rowAt(item)
+		on := ok && b.selSet == "" && b.selRun != "" && b.view.Groups[ref.group].RunID == b.selRun
+		if on != win32.ListHighlighted(b.list, item) {
+			win32.ListHighlight(b.list, item, on)
+		}
 	}
 }
 
@@ -681,7 +736,7 @@ func (b *backupsPage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 			switch cd.SubItem {
 			case 1:
 				win32.SelectFont(cd.HDC, font)
-				if win32.ListSelected(b.list) == int(cd.ItemSpec) {
+				if item := int(cd.ItemSpec); win32.ListSelected(b.list) == item || win32.ListHighlighted(b.list, item) {
 					// The selection highlight shows the badge's text.
 					return win32.CDRF_NEWFONT
 				}
@@ -750,6 +805,10 @@ func (b *backupsPage) layout() {
 	win32.SetWindowPos(b.filter, f)
 	win32.SetWindowPos(b.title, top.Rest())
 	area.Top(8)
+	if b.run.mode != runHidden {
+		b.run.place(area.TopPx(b.run.height(area.Rest().Width())))
+		area.Top(widget.CardGap)
+	}
 
 	if b.view.Empty != nil {
 		win32.SetWindowPos(b.emptyTitle, area.Top(30))
@@ -828,8 +887,12 @@ func (b *backupsPage) chosen() []naming.BackupEntry {
 	return out
 }
 
-// focus puts the keyboard focus on the list.
+// focus puts the keyboard focus on the run card or the list.
 func (b *backupsPage) focus() {
+	if b.run.mode != runHidden {
+		b.run.focus()
+		return
+	}
 	if b.view.Empty != nil {
 		win32.SetFocus(b.emptyButton)
 		return

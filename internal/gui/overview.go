@@ -34,13 +34,15 @@ const (
 	barHeight         = 8
 	nameWidth         = 96
 	dateWidth         = 120
+	basedWidth        = 130
 	nextWidth         = 80
 	iconWidth         = 22
 	linkPadding       = 12
 	refreshHeight     = 22
 )
 
-// overviewPage is the Overview (spec 5): the hero and four cards.
+// overviewPage is the Overview (spec 5): the hero and three cards in one
+// column.
 type overviewPage struct {
 	a     *app
 	panel *widget.Panel
@@ -52,12 +54,13 @@ type overviewPage struct {
 	heroPrimary, heroSecondary win32.HWND
 	refresh                    win32.HWND
 
-	folders, storage, last, keys *card
+	folders, storage, keys *card
 
-	// run replaces the hero while a backup runs and shows its result;
-	// resultOf is the run whose result it shows.
-	run      *runCard
-	resultOf *flow.Run
+	// run replaces the hero while a backup runs and shows its result.
+	run *runCard
+	// busy is whether an operation was busy at the last update: a restore
+	// or verification disables the hero's Back up now.
+	busy bool
 	// folderStatus are the state labels of the Folders card while a backup
 	// runs; folderSig is the shape they were built for.
 	folderStatus map[string]win32.HWND
@@ -85,7 +88,7 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	if o.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
 	}
-	for i, c := range []**card{&o.folders, &o.storage, &o.last, &o.keys} {
+	for i, c := range []**card{&o.folders, &o.storage, &o.keys} {
 		if *c, err = newCard(t, panel.HWND(), uint16(idCardLinks+i), o.acts); err != nil {
 			return nil, err
 		}
@@ -106,6 +109,9 @@ func (o *overviewPage) command(id, code uint16) {
 func (o *overviewPage) update() {
 	o.view = view.OverviewOf(o.a.snapshot, o.a.opts.Config, time.Now())
 	t := o.a.theme
+	if o.a.reloadErr != nil && o.a.snapshot != nil {
+		o.view.Hero = view.ReloadErrorHero(o.a.reloadErr)
+	}
 	h := o.view.Hero
 	fore, circle := heroColors(t.Palette, h.Tone)
 	o.heroIcon.Set(glyphOf(h.Glyph), fore, circle, h.Title)
@@ -118,31 +124,37 @@ func (o *overviewPage) update() {
 		win32.SetStyle(o.heroTitle, style|win32.SS_ENDELLIPSIS)
 	}
 	win32.SetText(o.heroLine, h.Line)
-	o.setButton(o.heroPrimary, h.Primary, idHeroPrimary, true)
+	// While a restore or verification runs, no backup can start.
+	o.busy = o.a.machine.Busy()
+	idle := func(b view.Button) view.Button {
+		b.Enabled = b.Enabled && !(o.busy && b.Action == view.ActionBackUp)
+		return b
+	}
+	o.setButton(o.heroPrimary, idle(h.Primary), idHeroPrimary, true)
 	if h.Secondary != nil {
-		o.setButton(o.heroSecondary, *h.Secondary, idHeroSecondary, true)
+		o.setButton(o.heroSecondary, idle(*h.Secondary), idHeroSecondary, true)
 	} else {
 		o.setButton(o.heroSecondary, view.Button{}, idHeroSecondary, false)
 	}
 	r := o.view.Refresh
 	r.Enabled = r.Enabled && !o.a.checking
+	o.acts[idRefresh] = r.Action
 	win32.SetText(o.refresh, r.Text)
 	win32.Enable(o.refresh, r.Enabled)
 	win32.SetVisible(o.refresh, r.Text != "")
 	o.showRun()
 	o.fillFolders()
 	o.fillStorage()
-	o.fillLastBackup()
 	o.fillKeys()
 	o.layout()
 }
 
-// backupRun returns the operation the Overview shows: running, or
-// finished with a result card; nil otherwise. A restore shows once it has
-// started (spec RW-9); before, the restore wizard is its plan.
+// backupRun returns the backup the page shows: running, or finished with a
+// result card; nil otherwise. Restores and verifications show on Restore
+// backup.
 func (o *overviewPage) backupRun() *flow.Run {
 	r := o.a.machine.Current()
-	if r == nil || (r.Op == flow.OpRestore && r.Started.IsZero()) {
+	if r == nil || r.Op != flow.OpBackup {
 		return nil
 	}
 	return r
@@ -151,24 +163,7 @@ func (o *overviewPage) backupRun() *flow.Run {
 // showRun shows the run card in place of the hero while a backup runs or
 // its result is shown (spec OV-7).
 func (o *overviewPage) showRun() {
-	r := o.backupRun()
-	switch {
-	case r != nil && o.a.machine.Busy():
-		o.resultOf = nil
-		o.run.showProgress(view.ProgressCardOf(r, time.Now()))
-	case r != nil && r.Stage == flow.StageFinished:
-		if o.resultOf != r {
-			if c := view.ResultCardOf(r); c != nil {
-				o.run.showResult(*c)
-				o.resultOf = r
-			} else {
-				o.run.hide()
-			}
-		}
-	default:
-		o.resultOf = nil
-		o.run.hide()
-	}
+	o.run.follow(o.backupRun(), o.a.machine.Busy())
 	heroShown := o.run.mode == runHidden
 	win32.SetVisible(o.heroIcon.HWND(), heroShown)
 	for _, h := range []win32.HWND{o.heroTitle, o.heroLine} {
@@ -184,6 +179,9 @@ func (o *overviewPage) showRun() {
 // updateRun shows a progress report: the run card and the Folders card
 // change in place.
 func (o *overviewPage) updateRun() {
+	if o.backupRun() == nil && o.run.mode == runHidden && o.busy == o.a.machine.Busy() {
+		return // a restore or verification still running, or none
+	}
 	if o.run.mode != runProgress {
 		o.update()
 		return
@@ -230,8 +228,30 @@ func (o *overviewPage) fillFolders() {
 			b := c.badge(*row.Badge)
 			cells = append(cells, cell{hwnd: b.HWND(), px: b.Width(), height: 18})
 		}
-		cells = append(cells, cell{hwnd: c.tip(c.label(row.Next, widget.TextCaption, t.Palette.TextSecondary), row.NextReason), dip: nextWidth})
+		cells = append(cells,
+			cell{hwnd: c.label(row.Based, widget.TextSmall, toneColor(t.Palette, row.BasedTone)), dip: basedWidth},
+			cell{hwnd: c.tip(c.label(row.Next, widget.TextCaption, t.Palette.TextSecondary), row.NextReason), dip: nextWidth})
 		c.row(cardRowHeight, cells...)
+	}
+	o.fillLastRun(c, v.Last)
+}
+
+// fillLastRun adds the sum-up of the newest backup run below the folders.
+func (o *overviewPage) fillLastRun(c *card, v view.LastRun) {
+	t := o.a.theme
+	line := []cell{}
+	if v.Glyph != view.GlyphNone {
+		icon, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall)
+		if err == nil {
+			c.panel.Adopt(icon.HWND())
+			icon.Set(glyphOf(v.Glyph), toneColor(t.Palette, v.Tone), widget.NoCircle, "")
+			line = append(line, cell{hwnd: icon.HWND(), dip: iconWidth})
+		}
+	}
+	line = append(line, cell{hwnd: c.tip(c.label(v.Line, widget.TextSmall, t.Palette.TextSecondary), v.LineTip), fill: true})
+	c.row(cardRowHeight, line...)
+	if v.Note != "" {
+		c.row(cardRowHeight, cell{hwnd: c.label(v.Note, widget.TextSmall, toneColor(t.Palette, v.NoteTone)), fill: true})
 	}
 }
 
@@ -312,40 +332,21 @@ func (o *overviewPage) fillStorage() {
 	}
 }
 
-func (o *overviewPage) fillLastBackup() {
-	t := o.a.theme
-	v := o.view.LastBackup
-	c := o.last
-	c.reset()
-	c.heading(v.Title, nil)
-	line := []cell{}
-	if v.Glyph != view.GlyphNone {
-		icon, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall)
-		if err == nil {
-			c.panel.Adopt(icon.HWND())
-			icon.Set(glyphOf(v.Glyph), toneColor(t.Palette, v.Tone), widget.NoCircle, "")
-			line = append(line, cell{hwnd: icon.HWND(), dip: iconWidth})
-		}
-	}
-	line = append(line, cell{hwnd: c.tip(c.label(v.Line, widget.TextBody, t.Palette.Text), v.LineTip), fill: true})
-	c.row(cardRowHeight, line...)
-	for _, row := range v.Rows {
-		b := c.badge(row.Badge)
-		c.row(cardRowHeight,
-			cell{dip: iconWidth},
-			cell{hwnd: c.label(row.Name, widget.TextSmall, t.Palette.Text), dip: nameWidth},
-			cell{hwnd: b.HWND(), px: b.Width(), height: 18},
-			cell{hwnd: c.label(row.Based, widget.TextSmall, toneColor(t.Palette, row.Tone)), fill: true})
-	}
-}
-
 func (o *overviewPage) fillKeys() {
 	t := o.a.theme
 	v := o.view.Keys
 	c := o.keys
 	c.reset()
 	c.heading(v.Title, nil)
-	if v.Methods != "" {
+	// The YubiKey status sits at the right of the methods line, like the
+	// used space on the storage card.
+	yubi := func() cell {
+		return cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), px: measure(t, v.YubiKey, widget.TextSmall)}
+	}
+	switch {
+	case v.Methods != "" && v.YubiKey != "":
+		c.row(cardRowHeight, cell{hwnd: c.label(v.Methods, widget.TextBody, t.Palette.Text), fill: true}, yubi())
+	case v.Methods != "":
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Methods, widget.TextBody, t.Palette.Text), fill: true})
 	}
 	if v.Details != "" {
@@ -354,7 +355,7 @@ func (o *overviewPage) fillKeys() {
 	if v.Note != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Note, widget.TextSmall, toneColor(t.Palette, v.Tone)), fill: true})
 	}
-	if v.YubiKey != "" {
+	if v.Methods == "" && v.YubiKey != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), fill: true})
 	}
 }
@@ -372,22 +373,16 @@ func (o *overviewPage) layout() {
 		o.layoutHero(area.TopPx(o.heroGeometry(area.Rest().Width()).height))
 	}
 
-	area.Top(widget.CardGap)
-	top := area.Columns(widget.CardGap, 5, 4)
-	h1 := max(o.folders.height(), o.storage.height())
-	o.folders.place(top[0].Top(h1))
-	o.storage.place(top[1].Top(h1))
-	area.Top(h1 + widget.CardGap)
-	bottom := area.Columns(widget.CardGap, 5, 4)
-	h2 := max(o.last.height(), o.keys.height())
-	o.last.place(bottom[0].Top(h2))
-	o.keys.place(bottom[1].Top(h2))
+	for _, c := range []*card{o.folders, o.storage, o.keys} {
+		area.Top(widget.CardGap)
+		c.place(area.Top(c.height()))
+	}
 }
 
 // restyle applies new fonts after a DPI change.
 func (o *overviewPage) restyle() {
 	o.panel.Restyle()
-	for _, c := range []*card{o.folders, o.storage, o.last, o.keys, o.run.card} {
+	for _, c := range []*card{o.folders, o.storage, o.keys, o.run.card} {
 		c.panel.Restyle()
 	}
 	o.update()

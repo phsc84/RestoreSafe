@@ -100,27 +100,38 @@ func TestPanelPassesClicksAndLinks(t *testing.T) {
 	}
 }
 
-func TestPrimaryButtonIsAccentFilled(t *testing.T) {
+func TestButtonsArePainted(t *testing.T) {
 	th, host := testTheme(t)
 	p, err := NewPanel(th, host, 0, PanelStyle{Back: Light.Surface})
 	if err != nil {
 		t.Fatal(err)
 	}
-	button := p.PrimaryButton("&Back up now…", 7)
-	draw := func(state uint32) func(x, y int32) Color {
-		screen := win32.GetDC(0)
-		mem := win32.CreateCompatibleDC(screen)
-		bmp := win32.CreateCompatibleBitmap(screen, 120, 28)
-		win32.ReleaseDC(0, screen)
-		old := win32.SelectObject(mem, bmp)
-		t.Cleanup(func() { win32.SelectObject(mem, old); win32.DeleteObject(bmp); win32.DeleteDC(mem) })
-		di := win32.DrawItemStruct{HwndItem: button, HDC: mem, Item: win32.Rect{Right: 120, Bottom: 28}, ItemState: state}
-		win32.SendMessage(p.HWND(), win32.WM_DRAWITEM, 7, uintptr(unsafe.Pointer(&di)))
-		return func(x, y int32) Color { return Color(win32.Pixel(mem, x, y)) }
+	primary := p.PrimaryButton("&Back up now…", 7)
+	px := render(t, primary, 120, 28)
+	expect(t, "primary", px(4, 14), Light.Accent)
+	expect(t, "corner", px(0, 0), Light.Surface)
+	win32.Enable(primary, false)
+	expect(t, "disabled primary", render(t, primary, 120, 28)(4, 14), Light.Control)
+
+	secondary := p.Button("&Refresh", 8)
+	px = render(t, secondary, 120, 28)
+	expect(t, "secondary", px(4, 14), Light.Surface)
+	expect(t, "secondary border", px(60, 0), Light.Lines)
+	win32.SendMessage(secondary, win32.BM_SETSTATE, 1, 0)
+	expect(t, "pushed", render(t, secondary, 120, 28)(4, 14), Light.Control)
+	win32.SendMessage(secondary, win32.BM_SETSTATE, 0, 0)
+
+	// With the keyboard cues shown, the focused button has the solid
+	// outline of the sidebar, 2 pixels wide.
+	win32.SetFocus(secondary)
+	const uisClear, cues = 2, win32.UISF_HIDEFOCUS | win32.UISF_HIDEACCEL
+	win32.SendMessage(secondary, win32.WM_UPDATEUISTATE, uisClear|cues<<16, 0)
+	if win32.SendMessage(secondary, win32.BM_GETSTATE, 0, 0)&win32.BST_FOCUS == 0 {
+		t.Skip("the test window can't take the focus")
 	}
-	expect(t, "enabled", draw(0)(4, 14), Light.Accent)
-	expect(t, "disabled", draw(win32.ODS_DISABLED)(4, 14), Light.Control)
-	expect(t, "corner", draw(0)(0, 0), Light.Surface)
+	px = render(t, secondary, 120, 28)
+	expect(t, "focus outline", px(60, 0), Light.Text)
+	expect(t, "focus outline inside", px(60, 1), Light.Text)
 }
 
 func TestBadgeIconAndBar(t *testing.T) {
@@ -164,7 +175,7 @@ func TestBadgeIconAndBar(t *testing.T) {
 
 func TestSidebarSelection(t *testing.T) {
 	th, host := testTheme(t)
-	items := []SidebarItem{{GlyphHome, "Overview"}, {GlyphHistory, "Backups"}, {GlyphSettings, "Settings"}}
+	items := []SidebarItem{{GlyphArchive, "Create backup"}, {GlyphHistory, "Restore backup"}, {GlyphSettings, "Settings"}}
 	s, err := NewSidebar(th, host, 0, items)
 	if err != nil {
 		t.Fatal(err)

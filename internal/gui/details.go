@@ -116,6 +116,9 @@ func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND
 		win32.SetChecked(all, true)
 		d.filters = []win32.HWND{all, warn}
 	}
+	for _, h := range append([]win32.HWND{d.close}, d.filters...) {
+		widget.StyleButton(a.theme, h, widget.Color(win32.SysColor(win32.COLOR_WINDOW)), false)
+	}
 	win32.SendMessage(d.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
 	win32.SendMessage(d.report, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
 	fill(d.report)

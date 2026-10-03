@@ -63,7 +63,7 @@ if ($Exe) {
     Wait-Until { (Text-Of $main HeroTitle) -notlike "Checking*" } 30 "health check" | Out-Null
     foreach ($page in 0, 1, 2) {
       Go-Page $main $page
-      $problems += Test-AccessKeys $main ("page " + @("Overview", "Backups", "Settings")[$page])
+      $problems += Test-AccessKeys $main ("page " + @("Create backup", "Restore backup", "Settings")[$page])
     }
     Go-Page $main 0
     Click-Control $main HeroPrimary

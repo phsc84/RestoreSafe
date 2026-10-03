@@ -88,12 +88,9 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 		t.Fatalf("the segments must fill the bar: %.3f", sum)
 	}
 
-	lb := o.LastBackup
-	if !strings.HasPrefix(lb.Line, "Today, ") || !strings.Contains(lb.Line, "2 folders") || !strings.HasSuffix(lb.Line, " · less than a minute") || len(lb.Rows) != 2 || lb.Tone != ToneSuccess {
+	lb := o.Folders.Last
+	if !strings.HasPrefix(lb.Line, "Today, ") || !strings.Contains(lb.Line, "2 folders") || !strings.HasSuffix(lb.Line, " · less than a minute") || lb.Tone != ToneSuccess {
 		t.Fatalf("last backup: %+v", lb)
-	}
-	if lb.Rows[0].Based != "full backup" {
-		t.Fatalf("a full backup starts its chain: %+v", lb.Rows[0])
 	}
 
 	k := o.Keys
@@ -116,8 +113,8 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 	}
 
 	o, _ = overviewOf(t, scenario.Empty)
-	if o.LastBackup.Line != "No backups yet" || o.Keys.Note != "Your first backup creates your keys." {
-		t.Fatalf("empty: %+v %+v", o.LastBackup, o.Keys)
+	if o.Folders.Last.Line != "No backups yet" || o.Keys.Note != "Your first backup creates your keys." {
+		t.Fatalf("empty: %+v %+v", o.Folders.Last, o.Keys)
 	}
 	if o.Hero.Line != "" {
 		t.Fatalf("empty hero: %+v", o.Hero)

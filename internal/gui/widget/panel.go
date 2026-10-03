@@ -45,6 +45,7 @@ type child struct {
 	style   TextStyle
 	color   Color
 	primary bool
+	button  bool // painted by StyleButton
 	link    bool
 	styled  bool // false for widgets that draw their own text
 }
@@ -73,13 +74,13 @@ func (p *Panel) Label(text string, style TextStyle, color Color) win32.HWND {
 
 // Button creates a standard push button; & marks its access key.
 func (p *Panel) Button(text string, id uintptr) win32.HWND {
-	return p.add(child{style: TextBody, styled: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
+	return p.add(child{style: TextBody, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
 }
 
 // PrimaryButton creates the accent-filled button of the page (spec 2:
 // one per window).
 func (p *Panel) PrimaryButton(text string, id uintptr) win32.HWND {
-	return p.add(child{style: TextBody, primary: true, styled: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_OWNERDRAW, id)
+	return p.add(child{style: TextBody, primary: true, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
 }
 
 // Link creates a link; its click reaches OnCommand with code 0.
@@ -97,8 +98,8 @@ func (p *Panel) add(c child, class, text string, style uint32, id uintptr) win32
 		return 0
 	}
 	c.hwnd = hwnd
-	if c.primary {
-		win32.TrackHover(hwnd)
+	if c.button {
+		StyleButton(p.theme, hwnd, p.style.Back, c.primary)
 	}
 	win32.SetFont(hwnd, p.theme.Fonts.Get(c.style))
 	p.children = append(p.children, c)
@@ -199,12 +200,6 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 			return p.OnNotify(hdr), true
 		}
 		return 0, true
-	case win32.WM_DRAWITEM:
-		di := win32.DrawItemParam(lparam)
-		if c := p.find(di.HwndItem); c != nil && c.primary {
-			p.drawPrimary(di)
-			return 1, true
-		}
 	case win32.WM_VSCROLL:
 		p.scrollBy(wparam)
 		return 0, true
@@ -221,40 +216,6 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 		}
 	}
 	return 0, false
-}
-
-// drawPrimary draws an accent-filled button with white text.
-func (p *Panel) drawPrimary(di *win32.DrawItemStruct) {
-	pal := p.theme.Palette
-	back, fore := pal.Accent, pal.OnAccent
-	switch {
-	case di.ItemState&win32.ODS_DISABLED != 0:
-		back, fore = pal.Control, pal.TextSecondary
-	case di.ItemState&win32.ODS_SELECTED != 0:
-		back = pal.AccentText
-	case win32.IsHot(di.HwndItem):
-		back = pal.AccentText
-	}
-	r := di.Item
-	fill(di.HDC, r, p.style.Back)
-	inner := r
-	inner.Right--
-	inner.Bottom--
-	roundRect(di.HDC, inner, p.theme.Scale.Px(ControlRadius*2), back, back)
-	flags := uint32(win32.DT_CENTER | win32.DT_VCENTER | win32.DT_SINGLELINE)
-	if di.ItemState&win32.ODS_NOACCEL != 0 {
-		flags |= win32.DT_HIDEPREFIX
-	}
-	text(di.HDC, p.theme, win32.Text(di.HwndItem), r, TextBody, fore, flags)
-	if di.ItemState&win32.ODS_FOCUS != 0 {
-		focus := r
-		inset := p.theme.Scale.Px(3)
-		focus.Left += inset
-		focus.Top += inset
-		focus.Right -= inset
-		focus.Bottom -= inset
-		win32.DrawFocusRect(di.HDC, focus)
-	}
 }
 
 // RightLabel creates a right-aligned text control.

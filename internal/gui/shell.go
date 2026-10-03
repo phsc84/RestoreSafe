@@ -18,7 +18,7 @@ type shell struct {
 }
 
 // sidebarGlyphs are the icons of the pages, in the order of view.Navigation.
-var sidebarGlyphs = []widget.Glyph{widget.GlyphHome, widget.GlyphHistory, widget.GlyphSettings}
+var sidebarGlyphs = []widget.Glyph{widget.GlyphArchive, widget.GlyphHistory, widget.GlyphSettings}
 
 func (a *app) createShell() error {
 	t := a.theme
@@ -149,7 +149,7 @@ func (a *app) do(action view.Action) {
 			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
 		}
 	case view.ActionCheckAgain:
-		a.startCheck()
+		a.reload() // re-reads config.yaml, then checks again
 	case view.ActionShowInBackups:
 		a.showPage(view.PageBackups)
 	case view.ActionOpenSettings:

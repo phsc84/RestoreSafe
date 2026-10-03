@@ -17,6 +17,10 @@ type Sidebar struct {
 	items    []SidebarItem
 	selected int
 	focused  bool
+	// keyboard is whether the user reached or moved the sidebar with the
+	// keyboard: only then does the selected row show the focus outline,
+	// as in standard Windows controls.
+	keyboard bool
 	// OnSelect is called when the user selects another item.
 	OnSelect func(index int)
 }
@@ -91,16 +95,23 @@ func (s *Sidebar) paint(hdc uintptr, r win32.Rect) {
 			back := row
 			back.Right--
 			back.Bottom--
-			roundRect(hdc, back, sc.Px(ControlRadius*2), pal.Control, pal.Control)
+			line := pal.Control
+			if s.focused && s.keyboard {
+				line = pal.Text
+			}
+			roundRect(hdc, back, sc.Px(ControlRadius*2), pal.Control, line)
+			if line != pal.Control {
+				// A second pass inside the first makes the focus outline
+				// 2 pixels wide.
+				inner := win32.Rect{Left: back.Left + 1, Top: back.Top + 1, Right: back.Right - 1, Bottom: back.Bottom - 1}
+				roundRect(hdc, inner, sc.Px(ControlRadius*2)-2, pal.Control, line)
+			}
 			bar := row
 			bar.Right = bar.Left + sc.Px(SelectionBarWidth)
 			inset := sc.Px(8)
 			bar.Top += inset
 			bar.Bottom -= inset
 			fill(hdc, bar, pal.SelectionBar)
-			if s.focused {
-				win32.DrawFocusRect(hdc, row)
-			}
 		}
 		glyph := row
 		glyph.Left += sc.Px(12)
@@ -121,6 +132,10 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 	case win32.WM_GETDLGCODE:
 		return win32.DLGC_WANTARROWS, true
 	case win32.WM_KEYDOWN:
+		if !s.keyboard {
+			s.keyboard = true
+			win32.Invalidate(hwnd)
+		}
 		switch wparam {
 		case win32.VK_UP:
 			s.choose(s.selected - 1)
@@ -135,7 +150,9 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 		}
 		return 0, true
 	case win32.WM_LBUTTONDOWN:
+		s.keyboard = false
 		win32.SetFocus(hwnd)
+		win32.Invalidate(hwnd)
 		y := int32(int16(win32.HiWord(lparam)))
 		client := win32.ClientRect(hwnd)
 		for i := range s.items {
@@ -146,6 +163,11 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 		return 0, true
 	case win32.WM_SETFOCUS, win32.WM_KILLFOCUS:
 		s.focused = msg == win32.WM_SETFOCUS
+		// Reached with Tab: the outline shows. Focus that comes back with
+		// the window (after a click) leaves it as it was.
+		if s.focused && win32.KeyDown(win32.VK_TAB) {
+			s.keyboard = true
+		}
 		win32.Invalidate(hwnd)
 		return 0, true
 	}

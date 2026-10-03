@@ -265,6 +265,7 @@ func IsWindow(hwnd HWND) bool {
 // Messages and keys of the main window.
 const (
 	WM_ACTIVATEAPP = 0x001C
+	VK_TAB         = 0x09
 	VK_CONTROL     = 0x11
 	VK_F5          = 0x74
 	SS_RIGHT       = 0x0002
@@ -291,5 +292,11 @@ func IsWindowVisible(hwnd HWND) bool {
 // backgrounds.
 func RedrawAll(hwnd HWND) {
 	const flags = 0x0001 | 0x0004 | 0x0080 | 0x0100 // INVALIDATE|ERASE|ALLCHILDREN|UPDATENOW
+	procRedrawWindow.Call(uintptr(hwnd), 0, 0, flags)
+}
+
+// RedrawNow repaints hwnd at once, without erasing its background.
+func RedrawNow(hwnd HWND) {
+	const flags = 0x0001 | 0x0100 // INVALIDATE|UPDATENOW
 	procRedrawWindow.Call(uintptr(hwnd), 0, 0, flags)
 }

@@ -180,7 +180,7 @@ func retentionLine(s *health.Snapshot, cfg *config.Config, now time.Time) *InfoL
 		}
 		text += " " + fmt.Sprintf(nextRemoves, backupCount(len(s.Retention)), Size(bytes), strings.Join(groups, "; "))
 	}
-	return &InfoLine{Text: text, Tone: ToneInfo, Glyph: GlyphInfo, Button: &Button{Text: buttonRetention, Action: ActionOpenSettings, Enabled: true}}
+	return &InfoLine{Text: text, Tone: ToneInfo, Glyph: GlyphInfo}
 }
 
 func chainCount(n int) string {

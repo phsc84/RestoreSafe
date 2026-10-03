@@ -1,6 +1,6 @@
 ﻿# Smoke-BackupRestore.ps1 - backs up twice through the plan dialog (a full,
 # then differentials), restores one folder of the newest run through the
-# restore wizard, verifies the newest run from the Backups page, and
+# restore wizard, verifies the newest run from the Restore backup page, and
 # compares the restored folder with its source (spec 16.4).
 #
 # Use a test configuration with authentication_mode 1 (password only); the

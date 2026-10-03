@@ -52,8 +52,9 @@ type opRequest struct {
 }
 
 // startOperation runs req in a worker goroutine. A backup opens its plan
-// dialog; backup and verify show their progress on the Overview; a restore
-// runs in the restore wizard, which started it.
+// dialog and shows its progress on Create backup; a verification shows its
+// progress on Restore backup; a restore runs in the restore wizard, which
+// started it, and shows its progress on Restore backup too.
 func (a *app) startOperation(req opRequest) {
 	op := req.op
 	if !a.machine.Start(op) {
@@ -68,12 +69,14 @@ func (a *app) startOperation(req opRequest) {
 	a.logText.Reset()
 	u := flow.NewUI(r.b, questions{a})
 
-	if op != flow.OpRestore {
+	switch op {
+	case flow.OpBackup:
 		a.showPage(view.PageOverview)
 		a.refreshRun()
-		if op == flow.OpBackup {
-			a.openPlanDialog()
-		}
+		a.openPlanDialog()
+	case flow.OpVerify:
+		a.showPage(view.PageBackups)
+		a.refreshRun()
 	}
 	a.updateTaskbar()
 
@@ -105,16 +108,14 @@ func (a *app) runStarted() {
 	a.focusPage()
 }
 
-// refreshRun shows the state of the backup on the Overview, and on the
+// refreshRun shows the state of the operation on its page, and on the
 // taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
 	if a.wizard != nil {
 		a.wizard.update()
 	}
-	if a.page == view.PageBackups {
-		a.shell.backups.update()
-	}
+	a.shell.backups.updateRun()
 	a.updateTaskbar()
 }
 

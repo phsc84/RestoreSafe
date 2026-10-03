@@ -49,8 +49,9 @@ const (
 	LVIF_STATE   = 0x0008
 	LVIF_GROUPID = 0x0100
 
-	LVIS_FOCUSED  = 0x0001
-	LVIS_SELECTED = 0x0002
+	LVIS_FOCUSED     = 0x0001
+	LVIS_SELECTED    = 0x0002
+	LVIS_DROPHILITED = 0x0008
 
 	LVCF_FMT     = 0x0001
 	LVCF_WIDTH   = 0x0002
@@ -448,4 +449,19 @@ func (n *NMLVGetInfoTip) SetText(text string) {
 // ListEnableInfoTips shows the info tips of the items.
 func ListEnableInfoTips(lv HWND) {
 	SendMessage(lv, LVM_SETEXTENDEDSTYLE, LVS_EX_INFOTIP, LVS_EX_INFOTIP)
+}
+
+// ListHighlight shows item i highlighted like a selected one, or not,
+// without selecting it: for the items of a selected group.
+func ListHighlight(lv HWND, i int, on bool) {
+	it := lvItem{StateMask: LVIS_DROPHILITED}
+	if on {
+		it.State = LVIS_DROPHILITED
+	}
+	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
+}
+
+// ListHighlighted reports whether item i is highlighted (ListHighlight).
+func ListHighlighted(lv HWND, i int) bool {
+	return SendMessage(lv, LVM_GETITEMSTATE, uintptr(i), LVIS_DROPHILITED) != 0
 }

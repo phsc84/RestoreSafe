@@ -58,7 +58,7 @@ var Light = Palette{
 const (
 	WindowWidth, WindowHeight       = 1000, 700
 	WindowMinWidth, WindowMinHeight = 820, 600
-	SidebarWidth                    = 148
+	SidebarWidth                    = 160
 	SidebarRowHeight                = 34
 	StatusBarHeight                 = 24
 	ContentPaddingX                 = 18
@@ -117,7 +117,7 @@ var (
 	GlyphError    = Glyph{0xE711, "✖"}
 	GlyphInfo     = Glyph{0xE946, "ⓘ"}
 	GlyphShield   = Glyph{0xEA18, "◯"}
-	GlyphHome     = Glyph{0xE80F, "⌂"}
+	GlyphArchive  = Glyph{0xE7B8, "▤"}
 	GlyphHistory  = Glyph{0xE81C, "≡"}
 	GlyphSettings = Glyph{0xE713, "⚙"}
 	GlyphFolder   = Glyph{0xE8B7, "▭"}

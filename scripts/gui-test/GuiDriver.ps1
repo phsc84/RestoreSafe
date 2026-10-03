@@ -141,7 +141,7 @@ function Text-Of($parent, [string]$name) {
   if ($c) { [U]::Text($c) } else { "" }
 }
 
-# Go-Page shows a page of the main window: 0 Overview, 1 Backups, 2
+# Go-Page shows a page of the main window: 0 Create backup, 1 Restore backup, 2
 # Settings, through the sidebar's keys.
 function Go-Page($main, [int]$page) {
   $bar = Find-Control $main Sidebar

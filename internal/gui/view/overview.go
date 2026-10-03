@@ -110,6 +110,10 @@ type FolderRow struct {
 	// DateTip is the exact date and time.
 	DateTip string
 	Badge   *Badge
+	// Based says which full backup a differential builds on, BasedTone
+	// whether it is still there.
+	Based     string
+	BasedTone Tone
 	// Next is the type of the next backup, NextReason why.
 	Next, NextReason string
 	// Problem replaces date and type for a folder that cannot be backed up.
@@ -117,10 +121,12 @@ type FolderRow struct {
 	Tone    Tone
 }
 
-// FoldersCard lists the configured folders.
+// FoldersCard lists the configured folders and sums up the newest backup
+// run (spec OV-3, OV-5).
 type FoldersCard struct {
 	Title string
 	Rows  []FolderRow
+	Last  LastRun
 }
 
 // SegmentKind is the kind of a storage bar segment.
@@ -149,21 +155,11 @@ type StorageCard struct {
 	Estimate string
 }
 
-// SetRow is one backup set of the Last backup card.
-type SetRow struct {
-	Name  string
-	Badge Badge
-	Based string
-	Tone  Tone
-}
-
-// LastBackupCard is the newest backup run (spec OV-5).
-type LastBackupCard struct {
-	Title string
+// LastRun sums up the newest backup run below the folders.
+type LastRun struct {
 	Tone  Tone
 	Glyph Glyph
 	Line  string
-	Rows  []SetRow
 	// LineTip is the exact date and time of the run.
 	LineTip string
 	// Note tells of a later backup that failed or was cancelled before it
@@ -186,11 +182,10 @@ type KeysCard struct {
 
 // Overview is everything the Overview page shows.
 type Overview struct {
-	Hero       Hero
-	Folders    FoldersCard
-	Storage    StorageCard
-	LastBackup LastBackupCard
-	Keys       KeysCard
+	Hero    Hero
+	Folders FoldersCard
+	Storage StorageCard
+	Keys    KeysCard
 	// Refresh takes a new snapshot of the machine (F5).
 	Refresh Button
 }
@@ -202,14 +197,24 @@ func OverviewOf(s *health.Snapshot, cfg *config.Config, now time.Time) Overview 
 		return Overview{Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
 	}
 	o := Overview{
-		Hero:       heroOf(s, cfg, now),
-		Folders:    foldersOf(s, now),
-		Storage:    storageOf(s),
-		LastBackup: lastBackupOf(s, now),
-		Keys:       keysOf(s),
-		Refresh:    Button{Text: buttonRefresh, Action: ActionCheckAgain, Enabled: true},
+		Hero:    heroOf(s, cfg, now),
+		Folders: foldersOf(s, now),
+		Storage: storageOf(s),
+		Keys:    keysOf(s),
+		Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain, Enabled: true},
 	}
 	return o
+}
+
+// ReloadErrorHero is the hero while config.yaml could not be read again.
+func ReloadErrorHero(err error) Hero {
+	reason := issueText(strings.ReplaceAll(err.Error(), "\nRemedy: ", " Remedy: "))
+	return Hero{
+		Tone: ToneError, Glyph: GlyphError,
+		Title:   heroReloadTitle,
+		Line:    fmt.Sprintf(heroReloadLine, reason),
+		Primary: Button{Text: buttonEditConfig, Action: ActionEditConfig, Enabled: true},
+	}
 }
 
 func heroOf(s *health.Snapshot, cfg *config.Config, now time.Time) Hero {
@@ -321,7 +326,7 @@ func newestRun(s *health.Snapshot) *catalog.BackupRunSummary {
 }
 
 func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
-	card := FoldersCard{Title: cardFolders}
+	card := FoldersCard{Title: cardFolders, Last: lastRunOf(s, now)}
 	for _, f := range s.Folders {
 		row := FolderRow{Name: f.BackupName, Path: Path(f.Resolved)}
 		switch {
@@ -338,6 +343,7 @@ func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
 				row.DateTip = Exact(f.Newest.Created())
 				b := badgeOf(f.Newest.Entry)
 				row.Badge = &b
+				row.Based, row.BasedTone = basedOn(s, f.Newest.Entry, now)
 			} else {
 				row.Date, row.Tone = folderNoBackup, ToneWarning
 			}
@@ -396,8 +402,22 @@ func storageOf(s *health.Snapshot) StorageCard {
 	return card
 }
 
-func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
-	card := LastBackupCard{Title: cardLastBackup}
+// basedOn says which full backup the differential e builds on; it is empty
+// for a full backup.
+func basedOn(s *health.Snapshot, e naming.BackupEntry, now time.Time) (string, Tone) {
+	if !e.IsDiff() {
+		return "", ToneNeutral
+	}
+	for _, info := range s.Sets {
+		if info.Complete() && !info.Entry.IsDiff() && info.Entry.ChainKey() == e.ChainKey() {
+			return fmt.Sprintf(basedOnFull, ShortDay(info.Created(), now)), ToneSecondary
+		}
+	}
+	return basedOnMissing, ToneError
+}
+
+func lastRunOf(s *health.Snapshot, now time.Time) LastRun {
+	card := LastRun{}
 	run := newestRun(s)
 	if run == nil {
 		card.Line, card.Tone, card.Glyph = lastBackupNone, ToneSecondary, GlyphNone
@@ -433,19 +453,6 @@ func lastBackupOf(s *health.Snapshot, now time.Time) LastBackupCard {
 		}
 	}
 	card.Note, card.NoteTone = laterRunNote(s, run.Created, now)
-	for _, e := range run.Entries {
-		row := SetRow{Name: e.DirectoryName, Badge: badgeOf(e), Based: newChain}
-		if e.IsDiff() {
-			row.Based = basedOnMissing
-			row.Tone = ToneError
-			for _, info := range s.Sets {
-				if info.Complete() && !info.Entry.IsDiff() && info.Entry.ChainKey() == e.ChainKey() {
-					row.Based, row.Tone = fmt.Sprintf(basedOnFull, ShortDay(info.Created(), now)), ToneSecondary
-				}
-			}
-		}
-		card.Rows = append(card.Rows, row)
-	}
 	return card
 }
 
@@ -465,10 +472,10 @@ func keysOf(s *health.Snapshot) KeysCard {
 	card.Methods = capitalize(k.Methods)
 	details := []string{fmt.Sprintf(keysCreated, ShortDay(k.Created, s.Checked))}
 	if k.SpareYubiKey {
-		details = append([]string{keysSpare}, details...)
+		details = append(details, keysSpare)
 	}
 	if k.RecoveryCode {
-		details = append([]string{keysRecovery}, details...)
+		details = append(details, keysRecovery)
 	}
 	card.Details = capitalize(strings.Join(details, " · "))
 	if k.NewKeysReason != "" {
