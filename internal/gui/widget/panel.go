@@ -37,6 +37,10 @@ type Panel struct {
 	OnScroll func()
 	content  int32 // height of the content in pixels, 0 when not scrolling
 	offset   int32
+	// tip shows the tips of the children: their own (Tip) and the full
+	// text of a label that is cut off. tipText keeps the shown text alive.
+	tip     win32.HWND
+	tipText []uint16
 }
 
 // child is a control the panel created; it styles it.
@@ -48,6 +52,11 @@ type child struct {
 	button  bool // painted by StyleButton
 	link    bool
 	styled  bool // false for widgets that draw their own text
+	// cuts is set for one-line text that may be shortened with "…".
+	cuts bool
+	// tip is the child's own tip; tool whether the tooltip knows it.
+	tip  string
+	tool bool
 }
 
 // NewPanel creates a panel as a child of parent.
@@ -69,7 +78,7 @@ func (p *Panel) Back() Color { return p.style.Back }
 
 // Label creates a text control. Its text is shown as is (no & prefixes).
 func (p *Panel) Label(text string, style TextStyle, color Color) win32.HWND {
-	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS, 0)
+	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS, 0)
 }
 
 // Button creates a standard push button; & marks its access key.
@@ -103,6 +112,9 @@ func (p *Panel) add(c child, class, text string, style uint32, id uintptr) win32
 	}
 	win32.SetFont(hwnd, p.theme.Fonts.Get(c.style))
 	p.children = append(p.children, c)
+	if c.cuts {
+		p.addTool(&p.children[len(p.children)-1])
+	}
 	return hwnd
 }
 
@@ -119,6 +131,9 @@ func (p *Panel) SetColor(hwnd win32.HWND, color Color) {
 // Clear destroys the panel's children.
 func (p *Panel) Clear() {
 	for _, c := range p.children {
+		if c.tool {
+			win32.RemoveTooltip(p.tip, c.hwnd)
+		}
 		win32.DestroyWindow(c.hwnd)
 	}
 	p.children = nil
@@ -190,6 +205,11 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 		return 0, true
 	case win32.WM_NOTIFY:
 		hdr := win32.NMHdrParam(lparam)
+		if hdr.Code == win32.TTN_GETDISPINFOW && p.tip != 0 && hdr.HwndFrom == p.tip {
+			p.tipText, _ = windows.UTF16FromString(p.tipOf(win32.HWND(hdr.IDFrom)))
+			win32.TooltipTextOf(hdr).Text = &p.tipText[0]
+			return 0, true
+		}
 		if c := p.find(hdr.HwndFrom); c != nil && c.link && (hdr.Code == win32.NM_CLICK || hdr.Code == win32.NM_RETURN) {
 			if p.OnCommand != nil {
 				p.OnCommand(uint16(hdr.IDFrom), 0)
@@ -220,7 +240,7 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 
 // RightLabel creates a right-aligned text control.
 func (p *Panel) RightLabel(text string, style TextStyle, color Color) win32.HWND {
-	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS|win32.SS_RIGHT, 0)
+	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS|win32.SS_RIGHT, 0)
 }
 
 // SetText changes the text of a control.
@@ -242,7 +262,7 @@ func (p *Panel) Paragraph(text string, style TextStyle, color Color) win32.HWND 
 // PathLabel creates a one-line text control that shortens a path in its
 // text in the middle ("C:\Users\...\Backups") when it does not fit.
 func (p *Panel) PathLabel(text string, style TextStyle, color Color) win32.HWND {
-	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_PATHELLIPSIS, 0)
+	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_PATHELLIPSIS, 0)
 }
 
 // wheelStep is how far one notch of the mouse wheel scrolls, in DIPs.
@@ -294,4 +314,54 @@ func (p *Panel) scrollBy(wparam uintptr) {
 	case win32.SB_BOTTOM:
 		p.ScrollTo(p.content)
 	}
+}
+
+// Tip shows text when the mouse rests on the child hwnd, as well as the
+// full text of a label that is cut off.
+func (p *Panel) Tip(hwnd win32.HWND, text string) {
+	c := p.find(hwnd)
+	if c == nil {
+		return
+	}
+	c.tip = text
+	if text != "" {
+		p.addTool(c)
+	}
+}
+
+// addTool lets the panel's tooltip ask for the tip of c.
+func (p *Panel) addTool(c *child) {
+	if c.tool {
+		return
+	}
+	if p.tip == 0 {
+		h, err := win32.NewTooltipWindow(p.hwnd, p.theme.Scale.Px(tipWidth))
+		if err != nil {
+			return
+		}
+		p.tip = h
+	}
+	win32.AddTooltipCallback(p.tip, c.hwnd)
+	c.tool = true
+}
+
+// tipOf returns the tip of the child hwnd: its full text when it is cut
+// off, and its own tip; "" shows none.
+func (p *Panel) tipOf(hwnd win32.HWND) string {
+	c := p.find(hwnd)
+	if c == nil {
+		return ""
+	}
+	var lines []string
+	if c.cuts {
+		text := win32.Text(hwnd)
+		w, _ := p.theme.Fonts.Measure(text, c.style)
+		if w > win32.ClientRect(hwnd).Width() {
+			lines = append(lines, text)
+		}
+	}
+	if c.tip != "" && (len(lines) == 0 || c.tip != lines[0]) {
+		lines = append(lines, c.tip)
+	}
+	return strings.Join(lines, "\n")
 }

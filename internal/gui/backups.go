@@ -121,6 +121,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.lines.OnCommand = b.command
 	b.list = b.child(win32.WC_LISTVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.LVS_REPORT|win32.LVS_SINGLESEL|win32.LVS_SHOWSELALWAYS|win32.LVS_NOSORTHEADER, idBackupsList)
 	win32.ListSetup(b.list)
+	widget.StyleListHeader(t, b.list)
 	win32.ListEnableInfoTips(b.list)
 	for i, c := range view.BackupsOf(nil, nil, nil, "", time.Now()).Columns {
 		win32.ListInsertColumn(b.list, i, c, t.Scale.Px(150), i == 3)

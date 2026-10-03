@@ -20,12 +20,8 @@ const (
 
 // Sizes of the plan dialog, in DIPs.
 const (
-	planWidth      = 680
-	planMargin     = 18
-	planRowHeight  = 24
-	planNameWidth  = 130
-	planBadgeWidth = 64
-	planAboutWidth = 72
+	planWidth  = 680
+	planMargin = 18
 )
 
 const planClass = "RestoreSafePlan"
@@ -46,6 +42,9 @@ type planDialog struct {
 	showRemoves bool
 	view        view.BackupPlanView
 	start       win32.HWND
+	// table lists the folders; it outlives the rebuilds, so the widths
+	// the user gives its columns stay.
+	table *table
 }
 
 // openPlanDialog opens the plan dialog in its waiting state.
@@ -57,8 +56,15 @@ func (a *app) openPlanDialog() {
 	if err != nil {
 		return
 	}
-	p := &planDialog{a: a, win: win}
-	win.onDpi = func(widget.Scale) { p.build(false) }
+	p := &planDialog{a: a, win: win, table: newTable(win.theme, win.panel.HWND(), 0)}
+	win.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
+		r, _ := p.table.notify(hdr)
+		return r
+	}
+	win.onDpi = func(widget.Scale) {
+		p.table.restyle()
+		p.build(false)
+	}
 	win.onCommand = p.command
 	win.defID = func() uint16 {
 		if p.start != 0 && win32.IsEnabled(p.start) {
@@ -97,6 +103,7 @@ func (p *planDialog) build(place bool) {
 	p.start = 0
 	st := newStack(t, panel, s.Px(planWidth-2*planMargin))
 
+	p.table.show(p.plan != nil)
 	if p.plan == nil {
 		p.view = view.BackupPlanView{Cancel: view.Button{Text: view.ButtonCancel, Action: view.ActionCancel, Enabled: true}}
 		st.para(view.PlanPreparing, widget.TextBody, pal.Text, view.GlyphNone)
@@ -161,43 +168,8 @@ func (p *planDialog) content(st *stack) {
 		st.para(v.KeysNote, widget.TextSmall, pal.AccentText, view.GlyphInfo)
 	}
 	st.gap(10)
-	st.row(planRowHeight,
-		cell{dip: iconWidth},
-		cell{hwnd: panel.Label(view.PlanColumnFolder, widget.TextCaption, pal.TextSecondary), dip: planNameWidth},
-		cell{hwnd: panel.Label(view.PlanColumnType, widget.TextCaption, pal.TextSecondary), dip: planBadgeWidth},
-		cell{hwnd: panel.Label(view.PlanColumnWhy, widget.TextCaption, pal.TextSecondary), fill: true},
-		cell{hwnd: panel.RightLabel(view.PlanColumnAbout, widget.TextCaption, pal.TextSecondary), dip: planAboutWidth})
-	for _, row := range v.Rows {
-		icon := cell{dip: iconWidth}
-		if row.Glyph != view.GlyphNone {
-			icon.hwnd = st.icon(row.Glyph, toneColor(pal, row.Tone))
-		}
-		badge := cell{dip: planBadgeWidth}
-		if row.Badge != nil {
-			if b, err := widget.NewBadge(t, panel.HWND(), pal.Surface); err == nil {
-				panel.Adopt(b.HWND())
-				fore, back := badgeColors(pal, row.Badge.Kind)
-				b.Set(row.Badge.Text, fore, back, row.Badge.Name)
-				badge = cell{hwnd: b.HWND(), px: min(b.Width(), t.Scale.Px(planBadgeWidth)), height: 18}
-			}
-		}
-		why := toneColor(pal, row.Tone)
-		if row.Tone == view.ToneNeutral {
-			why = pal.TextSecondary
-		}
-		cells := []cell{icon,
-			{hwnd: panel.Label(row.Name, widget.TextBody, pal.Text), dip: planNameWidth},
-			badge,
-			{hwnd: panel.Label(row.Why, widget.TextSmall, why), fill: true},
-			{hwnd: panel.RightLabel(row.About, widget.TextSmall, pal.Text), dip: planAboutWidth}}
-		if row.Badge == nil {
-			// A problem takes the width of the type and the reason.
-			cells = []cell{icon,
-				{hwnd: panel.Label(row.Name, widget.TextBody, pal.Text), dip: planNameWidth},
-				{hwnd: panel.Label(row.Why, widget.TextSmall, why), fill: true}}
-		}
-		st.row(planRowHeight, cells...)
-	}
+	p.table.set(v.Table())
+	st.table(p.table)
 	st.gap(12)
 	for _, line := range []view.PlanLine{v.Space, v.Unlock, v.Afterwards} {
 		color := pal.Text

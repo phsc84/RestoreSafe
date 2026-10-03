@@ -354,27 +354,37 @@ func TestPanelScrolls(t *testing.T) {
 	}
 }
 
-func TestTooltipsAddAndClear(t *testing.T) {
+func TestPanelTips(t *testing.T) {
 	th, host := testTheme(t)
 	p, err := NewPanel(th, host, 0, PanelStyle{Back: Light.Surface})
 	if err != nil {
 		t.Fatal(err)
 	}
-	label := p.Label("Docs", TextBody, Light.Text)
-	tips, err := NewTooltips(th, host)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tips.Set(label, `C:\Users\phs\Documents`)
+	const long = `C:\Users\phs\Documents\Projects\RestoreSafe\sandbox`
+	path := p.PathLabel(long, TextBody, Light.Text)
+	name := p.Label("Docs", TextBody, Light.Text)
+	p.Tip(name, `C:\Users\phs\Documents`)
+	win32.SetWindowPos(path, win32.Rect{Right: 60, Bottom: 20})
+	win32.SetWindowPos(name, win32.Rect{Right: 200, Bottom: 20})
 	const ttmGetToolCount = 0x040D
-	if n := win32.SendMessage(tips.tip, ttmGetToolCount, 0, 0); n != 1 {
+	if n := win32.SendMessage(p.tip, ttmGetToolCount, 0, 0); n != 2 {
 		t.Fatalf("%d tools", n)
 	}
-	if win32.Style(label)&win32.SS_NOTIFY == 0 {
+	if win32.Style(name)&win32.SS_NOTIFY == 0 {
 		t.Fatal("a static gets the mouse for its tip")
 	}
-	tips.Clear()
-	if n := win32.SendMessage(tips.tip, ttmGetToolCount, 0, 0); n != 0 {
+	if got := p.tipOf(path); got != long {
+		t.Fatalf("a shortened path shows in full: %q", got)
+	}
+	if got := p.tipOf(name); got != `C:\Users\phs\Documents` {
+		t.Fatalf("a label that fits shows only its own tip: %q", got)
+	}
+	win32.SetWindowPos(path, win32.Rect{Right: 2000, Bottom: 20})
+	if got := p.tipOf(path); got != "" {
+		t.Fatalf("a path that fits has no tip: %q", got)
+	}
+	p.Clear()
+	if n := win32.SendMessage(p.tip, ttmGetToolCount, 0, 0); n != 0 {
 		t.Fatalf("%d tools after Clear", n)
 	}
 }

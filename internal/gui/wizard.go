@@ -77,6 +77,8 @@ type restoreWizard struct {
 	checkSeq  int
 	results   *widget.Panel
 	resultsSt *stack
+	// destTable lists the folders the restore creates (page 3).
+	destTable *table
 
 	// Page 4: the workflow's plan and its question.
 	plan    *interact.RestorePlan
@@ -153,7 +155,7 @@ func (w *restoreWizard) build() {
 	p := w.win.panel
 	win32.KillTimer(w.win.hwnd, checkTimerID)
 	p.Clear()
-	w.trail, w.bar, w.run, w.results = nil, nil, nil, nil
+	w.trail, w.bar, w.run, w.results, w.destTable = nil, nil, nil, nil, nil
 	w.heading, w.note, w.noteIcon, w.list, w.destEdit, w.browse, w.intoBackupDir, w.creates = 0, 0, 0, 0, 0, 0, 0, 0
 	w.footer, w.back, w.next, w.cancel = 0, 0, 0, 0
 	w.checkSt = nil
@@ -228,6 +230,11 @@ func (w *restoreWizard) build() {
 		if rp, err := widget.NewPanel(t, p.HWND(), 0, widget.PanelStyle{Back: pal.Surface}); err == nil {
 			p.Adopt(rp.HWND())
 			w.results = rp
+			w.destTable = newTable(t, rp.HWND(), 0)
+			rp.OnNotify = func(hdr *win32.NMHdr) uintptr {
+				r, _ := w.destTable.notify(hdr)
+				return r
+			}
 		}
 		w.startCheck(0)
 	case view.WizardCheck:
@@ -260,6 +267,7 @@ func (w *restoreWizard) newList(checkboxes bool, columns []string, widths []int3
 	t := w.win.theme
 	lv := w.child(win32.WC_LISTVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.LVS_REPORT|win32.LVS_SINGLESEL|win32.LVS_SHOWSELALWAYS|win32.LVS_NOSORTHEADER, idWizList)
 	win32.ListSetupPlain(lv, checkboxes)
+	widget.StyleListHeader(t, lv)
 	for i, c := range columns {
 		win32.ListInsertColumn(lv, i, c, t.Scale.Px(max(widths[i], 60)), i == len(columns)-1)
 	}
@@ -420,13 +428,14 @@ func (w *restoreWizard) showResults(v view.DestinationView) {
 	if v.Hint != "" {
 		st.para(v.Hint, widget.TextBody, pal.TextSecondary, view.GlyphNone)
 	}
-	for _, f := range v.Folders {
-		if f.Path {
-			st.pathLine(f.Text, widget.TextBody, toneColor(pal, f.Tone), f.Glyph, false)
-		} else {
-			st.pathLine(f.Text, widget.TextSmall, toneColor(pal, f.Tone), view.GlyphNone, true)
-		}
-		st.gap(2)
+	w.destTable.show(v.Hint == "")
+	if v.Hint == "" {
+		w.destTable.set(v.Folders)
+		st.table(w.destTable)
+	}
+	if v.Remedy != "" {
+		st.gap(6)
+		st.para(v.Remedy, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 	}
 	if v.Space != nil {
 		st.gap(10)

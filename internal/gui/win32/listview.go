@@ -465,3 +465,35 @@ func ListHighlight(lv HWND, i int, on bool) {
 func ListHighlighted(lv HWND, i int) bool {
 	return SendMessage(lv, LVM_GETITEMSTATE, uintptr(i), LVIS_DROPHILITED) != 0
 }
+
+// Columns and size of a list.
+const (
+	LVM_DELETECOLUMN        = lvmFirst + 28
+	LVM_APPROXIMATEVIEWRECT = lvmFirst + 64
+	LVM_GETCOLUMNWIDTH      = lvmFirst + 29
+	LVM_GETHEADER           = lvmFirst + 31
+)
+
+// ListDeleteColumns removes all n columns.
+func ListDeleteColumns(lv HWND, n int) {
+	for i := n - 1; i >= 0; i-- {
+		SendMessage(lv, LVM_DELETECOLUMN, uintptr(i), 0)
+	}
+}
+
+// ListColumnWidth returns the width of column i in pixels.
+func ListColumnWidth(lv HWND, i int) int32 {
+	return int32(SendMessage(lv, LVM_GETCOLUMNWIDTH, uintptr(i), 0))
+}
+
+// ListViewHeight returns the height in pixels the list's header and n
+// rows need, without the border. (LVM_APPROXIMATEVIEWRECT alone counts a
+// row too many in report view; the difference of two counts is the row.)
+func ListViewHeight(lv HWND, n int) int32 {
+	approx := func(n int) int32 {
+		return int32(HiWord(SendMessage(lv, LVM_APPROXIMATEVIEWRECT, uintptr(n), uintptr(0xFFFFFFFF))))
+	}
+	row := approx(2) - approx(1)
+	header := WindowRect(HWND(SendMessage(lv, LVM_GETHEADER, 0, 0))).Height()
+	return header + int32(n)*row
+}

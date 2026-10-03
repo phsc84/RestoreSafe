@@ -70,19 +70,20 @@ func TestDestinationChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	v := DestinationOf(dest, &plan, nil, false)
-	if !v.Next || len(v.Folders) != 2 || v.Folders[0].Tone != ToneSuccess || v.Space == nil || v.Space.Tone != ToneSuccess {
+	if !v.Next || len(v.Folders.Rows) != 2 || v.Folders.Rows[0].Cells[2].Tone != ToneSuccess || v.Remedy != "" || v.Space == nil || v.Space.Tone != ToneSuccess {
 		t.Fatalf("free destination %+v", v)
 	}
+	checkTable(t, v.Folders, "Folder", "Restored to", "Check")
 	if err := os.Mkdir(filepath.Join(dest, "Docs"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	plan, _ = restore.PlanDestination(sc.Config, s.BackupDir, s.Sets, sets, dest)
 	v = DestinationOf(dest, &plan, nil, false)
 	exists := false
-	for _, f := range v.Folders {
-		exists = exists || (f.Tone == ToneError && strings.Contains(f.Text, "already exists"))
+	for _, f := range v.Folders.Rows {
+		exists = exists || (f.Cells[2].Tone == ToneError && f.Cells[2].Text == "Already exists")
 	}
-	if v.Next || !exists {
+	if v.Next || !exists || v.Remedy == "" {
 		t.Fatalf("an existing folder blocks Next: %+v", v)
 	}
 	for _, tc := range []struct{ dest, hint string }{{"", "Enter or browse"}, {`Restore`, "full path"}} {

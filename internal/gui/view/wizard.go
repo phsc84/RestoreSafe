@@ -163,9 +163,12 @@ func SelectionFooter(choices []FolderChoice, checked map[naming.BackupEntry]bool
 type DestinationView struct {
 	// Hint is shown instead of the checks while there is nothing to check.
 	Hint string
-	// Folders are the folders the restore creates, with their state.
-	Folders []InfoLine
-	Space   *InfoLine
+	// Folders are the folders the restore creates, with their state; empty
+	// while there is a hint.
+	Folders Table
+	// Remedy says what to do about folders that already exist.
+	Remedy string
+	Space  *InfoLine
 	// Checking is set while the checks run.
 	Checking bool
 	Next     bool
@@ -185,18 +188,21 @@ func DestinationOf(dest string, plan *interact.RestorePlan, err error, checking 
 		return DestinationView{Hint: issueText(err.Error())}
 	}
 	v := DestinationView{Next: !plan.HasErrors()}
+	v.Folders = Table{Name: destCreates, Columns: []Column{{Title: columnFolder, Width: 140}, {Title: columnRestoredTo, Fill: true}, {Title: columnCheck, Width: 160}}}
 	for _, s := range plan.Sets {
 		dir := Path(s.OutputDir)
+		check := TableCell{Text: destNew, Tone: ToneSuccess}
 		switch {
 		case s.OutputCode == interact.CodeRestoreTargetExists:
-			v.Folders = append(v.Folders,
-				InfoLine{Text: fmt.Sprintf(destExists, dir), Tone: ToneError, Glyph: GlyphError, Path: true},
-				InfoLine{Text: destExistsRemedy, Tone: ToneSecondary})
+			check = TableCell{Text: destExists, Tone: ToneError}
+			v.Remedy = destExistsRemedy
 		case s.OutputProblem != "":
-			v.Folders = append(v.Folders, InfoLine{Text: fmt.Sprintf(destInvalid, dir, issueText(s.OutputProblem)), Tone: ToneError, Glyph: GlyphError})
-		default:
-			v.Folders = append(v.Folders, InfoLine{Text: dir, Tone: ToneSuccess, Glyph: GlyphCheck, Path: true})
+			check = TableCell{Text: fmt.Sprintf(destInvalid, issueText(s.OutputProblem)), Tone: ToneError}
 		}
+		v.Folders.Rows = append(v.Folders.Rows, TableRow{
+			Tip:   joinTip(dir, check.Text),
+			Cells: []TableCell{{Text: s.Set.DirectoryName}, {Text: dir}, check},
+		})
 	}
 	v.Space = restoreSpace(*plan)
 	return v

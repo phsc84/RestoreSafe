@@ -23,7 +23,7 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 
 ## Screenshots
 
-The **Create backup** page answers "are my folders protected?": the status at the top, then the folders with their newest backup and the last backup run, the backup directory, and the keys:
+The **Create backup** page answers "are my folders protected?": the status at the top, then the folders with their newest backup and the type of the next one, the backup directory, and the keys:
 
 <img src="docs/images/Screenshot_v2.0.0_overview.png" alt="Create backup page with the status, the folders, the backup directory, and the keys">
 
@@ -145,7 +145,7 @@ RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created b
 
 Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`:
 
-- **Create backup** - whether your folders are protected, and **Back up now…**. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. Below: your folders with their newest backup, the full backup a differential builds on, and the type of the next one, then the last backup run; the backup directory and its free space; and your keys.
+- **Create backup** - whether your folders are protected, and **Back up now…**. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. Below: your folders with the date of their newest backup and the type of the next one (and a note when the last backup failed or was cancelled); the backup directory and its free space; and your keys.
 - **Restore backup** - every backup run with its backup sets, the log of the selected run, and **Restore…** and **Verify…**. Click a folder to act on that folder, or the date of a run to act on all its folders.
 - **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
 

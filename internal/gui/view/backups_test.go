@@ -135,8 +135,8 @@ func TestBackupsListAFailedRunByItsLog(t *testing.T) {
 		t.Fatalf("selection of a failed run %+v", bar)
 	}
 	o := OverviewOf(&s, sc.Config, sc.Now)
-	if !strings.Contains(o.Folders.Last.Note, "failed") || o.Folders.Last.NoteTone != ToneError {
-		t.Fatalf("the Folders card tells of the failed run: %+v", o.Folders.Last)
+	if !strings.Contains(o.Folders.Note, "failed") || o.Folders.NoteTone != ToneError {
+		t.Fatalf("the Folders card tells of the failed run: %+v", o.Folders)
 	}
 }
 

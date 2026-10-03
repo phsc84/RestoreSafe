@@ -5,8 +5,6 @@ import (
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
-	"fmt"
-	"slices"
 	"strings"
 	"time"
 )
@@ -32,23 +30,20 @@ const (
 	rowGap            = 4
 	cardHeadingHeight = 22
 	barHeight         = 8
-	nameWidth         = 96
-	dateWidth         = 120
-	basedWidth        = 130
-	nextWidth         = 80
 	iconWidth         = 22
 	linkPadding       = 12
 	refreshHeight     = 22
 )
 
-// overviewPage is the Overview (spec 5): the hero and three cards in one
-// column.
+// overviewPage is the Overview (spec 5): the title, the hero and three
+// cards in one column.
 type overviewPage struct {
 	a     *app
 	panel *widget.Panel
 	view  view.Overview
 	acts  actions
 
+	title                      win32.HWND
 	heroIcon                   *widget.Icon
 	heroTitle, heroLine        win32.HWND
 	heroPrimary, heroSecondary win32.HWND
@@ -61,10 +56,8 @@ type overviewPage struct {
 	// busy is whether an operation was busy at the last update: a restore
 	// or verification disables the hero's Back up now.
 	busy bool
-	// folderStatus are the state labels of the Folders card while a backup
-	// runs; folderSig is the shape they were built for.
-	folderStatus map[string]win32.HWND
-	folderSig    string
+	// folderTable lists the folders in the Folders card.
+	folderTable *table
 }
 
 func newOverviewPage(a *app) (*overviewPage, error) {
@@ -78,6 +71,7 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	if o.heroIcon, err = widget.NewIcon(t, panel.HWND(), t.Palette.Surface, widget.TextIcon); err != nil {
 		return nil, err
 	}
+	o.title = panel.Label(view.OverviewOf(nil, nil, time.Now()).Title, widget.TextTitle, t.Palette.Text)
 	// Creation order is the tab order.
 	o.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
 	win32.SetControlID(o.heroTitle, idHeroTitle)
@@ -94,8 +88,12 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 		}
 		(*c).panel.OnCommand = o.command
 	}
-	// More than five folders scroll within the card (spec OV-3).
-	o.folders.maxHeight = 2*widget.CardPadding + cardHeadingHeight + 5*(cardRowHeight+rowGap)
+	// More than five folders scroll within the table (spec OV-3).
+	o.folderTable = newTable(t, o.folders.panel.HWND(), 0)
+	o.folders.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
+		r, _ := o.folderTable.notify(hdr)
+		return r
+	}
 	return o, nil
 }
 
@@ -187,69 +185,19 @@ func (o *overviewPage) updateRun() {
 		return
 	}
 	o.showRun()
-	if !o.updateFolderStates() {
-		o.fillFolders()
-		o.layout()
-	}
+	o.folderTable.set(o.view.Folders.Table(o.runStates()))
 }
 
+// fillFolders shows the folders in the table and, below it, a note on a
+// failed or cancelled backup.
 func (o *overviewPage) fillFolders() {
 	t := o.a.theme
 	v := o.view.Folders
 	c := o.folders
 	c.reset()
 	c.heading(v.Title, nil)
-	states := o.runStates()
-	o.folderStatus = map[string]win32.HWND{}
-	o.folderSig = folderSig(states)
-	for _, row := range v.Rows {
-		name := c.tip(c.label(row.Name, widget.TextBody, t.Palette.Text), row.Path)
-		if state, ok := states[row.Name]; ok {
-			icon := cell{dip: iconWidth}
-			if state.Glyph != view.GlyphNone {
-				if i, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall); err == nil {
-					c.panel.Adopt(i.HWND())
-					i.Set(glyphOf(state.Glyph), toneColor(t.Palette, state.Tone), widget.NoCircle, "")
-					icon.hwnd = i.HWND()
-				}
-			}
-			b := c.badge(state.Badge)
-			status := c.label(state.Text, widget.TextSmall, toneColor(t.Palette, state.Tone))
-			o.folderStatus[row.Name] = status
-			c.row(cardRowHeight, icon, cell{hwnd: name, dip: nameWidth}, cell{hwnd: b.HWND(), px: b.Width(), height: 18}, cell{hwnd: status, fill: true})
-			continue
-		}
-		if row.Problem != "" {
-			c.row(cardRowHeight, cell{hwnd: name, dip: nameWidth}, cell{hwnd: c.label(row.Problem, widget.TextSmall, toneColor(t.Palette, row.Tone)), fill: true})
-			continue
-		}
-		cells := []cell{{hwnd: name, fill: true}, {hwnd: c.tip(c.label(row.Date, widget.TextSmall, toneColor(t.Palette, row.Tone)), row.DateTip), dip: dateWidth}}
-		if row.Badge != nil {
-			b := c.badge(*row.Badge)
-			cells = append(cells, cell{hwnd: b.HWND(), px: b.Width(), height: 18})
-		}
-		cells = append(cells,
-			cell{hwnd: c.label(row.Based, widget.TextSmall, toneColor(t.Palette, row.BasedTone)), dip: basedWidth},
-			cell{hwnd: c.tip(c.label(row.Next, widget.TextCaption, t.Palette.TextSecondary), row.NextReason), dip: nextWidth})
-		c.row(cardRowHeight, cells...)
-	}
-	o.fillLastRun(c, v.Last)
-}
-
-// fillLastRun adds the sum-up of the newest backup run below the folders.
-func (o *overviewPage) fillLastRun(c *card, v view.LastRun) {
-	t := o.a.theme
-	line := []cell{}
-	if v.Glyph != view.GlyphNone {
-		icon, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall)
-		if err == nil {
-			c.panel.Adopt(icon.HWND())
-			icon.Set(glyphOf(v.Glyph), toneColor(t.Palette, v.Tone), widget.NoCircle, "")
-			line = append(line, cell{hwnd: icon.HWND(), dip: iconWidth})
-		}
-	}
-	line = append(line, cell{hwnd: c.tip(c.label(v.Line, widget.TextSmall, t.Palette.TextSecondary), v.LineTip), fill: true})
-	c.row(cardRowHeight, line...)
+	o.folderTable.set(v.Table(o.runStates()))
+	c.row(o.folderTable.height(), o.folderTable.cell())
 	if v.Note != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Note, widget.TextSmall, toneColor(t.Palette, v.NoteTone)), fill: true})
 	}
@@ -261,41 +209,6 @@ func (o *overviewPage) runStates() map[string]view.FolderProgress {
 		return view.RunFolders(r)
 	}
 	return nil
-}
-
-// updateFolderStates changes the state texts in place; it returns false
-// when the rows must be built again (an icon appeared, the run ended).
-func (o *overviewPage) updateFolderStates() bool {
-	states := o.runStates()
-	if states == nil || folderSig(states) != o.folderSig {
-		return false
-	}
-	t := o.a.theme
-	for name, s := range states {
-		if h, ok := o.folderStatus[name]; ok {
-			win32.SetText(h, s.Text)
-			o.folders.panel.SetColor(h, toneColor(t.Palette, s.Tone))
-		}
-	}
-	return true
-}
-
-// folderSig describes the shape of the folder rows: which folder has which
-// icon.
-func folderSig(states map[string]view.FolderProgress) string {
-	if states == nil {
-		return ""
-	}
-	names := make([]string, 0, len(states))
-	for name := range states {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	sig := ""
-	for _, name := range names {
-		sig += fmt.Sprintf("%s:%d:%s;", name, states[name].Glyph, states[name].Badge.Text)
-	}
-	return sig
 }
 
 func (o *overviewPage) fillStorage() {
@@ -360,12 +273,15 @@ func (o *overviewPage) fillKeys() {
 	}
 }
 
-// layout places the hero and the cards.
+// layout places the title, the hero or the run card below it, like on
+// Restore backup, and the cards.
 func (o *overviewPage) layout() {
 	t := o.a.theme
 	s := t.Scale
 	area := widget.NewArea(s, win32.ClientRect(o.panel.HWND()))
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
+	win32.SetWindowPos(o.title, area.Top(backupsTitleHeight))
+	area.Top(8)
 
 	if o.run.mode != runHidden {
 		o.run.place(area.TopPx(o.run.height(area.Rest().Width())))
@@ -382,6 +298,7 @@ func (o *overviewPage) layout() {
 // restyle applies new fonts after a DPI change.
 func (o *overviewPage) restyle() {
 	o.panel.Restyle()
+	o.folderTable.restyle()
 	for _, c := range []*card{o.folders, o.storage, o.keys, o.run.card} {
 		c.panel.Restyle()
 	}
@@ -406,12 +323,7 @@ type card struct {
 	panel  *widget.Panel
 	linkID uint16
 	acts   actions
-	tips   *widget.Tooltips
-	// maxHeight caps the card's height in DIPs (0: none); the rows
-	// scroll within it. placed is where the card was placed last.
-	maxHeight int32
-	placed    win32.Rect
-	rows      []cardRow
+	rows   []cardRow
 }
 
 // cardRow is a row of a card, height in DIPs.
@@ -426,9 +338,12 @@ type cell struct {
 	hwnd win32.HWND
 	// icon is drawn in front of hwnd, within the cell.
 	icon win32.HWND
-	dip  int32
-	px   int32
-	fill bool
+	// place, when set, places the cell instead of moving hwnd: a table
+	// fits its columns.
+	place func(win32.Rect)
+	dip   int32
+	px    int32
+	fill  bool
 	// weight is the share of a fill cell in the free width; 0 counts as 1.
 	weight int32
 	height int32
@@ -439,18 +354,16 @@ func newCard(t *widget.Theme, parent win32.HWND, linkID uint16, acts actions) (*
 	if err != nil {
 		return nil, err
 	}
-	tips, _ := widget.NewTooltips(t, parent) //nolint:errcheck // the card works without tips
-	return &card{theme: t, panel: p, linkID: linkID, acts: acts, tips: tips}, nil
+	return &card{theme: t, panel: p, linkID: linkID, acts: acts}, nil
 }
 
 // tip shows text when the mouse rests on hwnd.
 func (c *card) tip(hwnd win32.HWND, text string) win32.HWND {
-	c.tips.Set(hwnd, text)
+	c.panel.Tip(hwnd, text)
 	return hwnd
 }
 
 func (c *card) reset() {
-	c.tips.Clear()
 	c.panel.Clear()
 	c.rows = nil
 }
@@ -486,15 +399,6 @@ func (c *card) row(height int32, cells ...cell) {
 
 // height returns the height the card needs, in DIPs.
 func (c *card) height() int32 {
-	h := c.contentHeight()
-	if c.maxHeight > 0 {
-		h = min(h, c.maxHeight)
-	}
-	return h
-}
-
-// contentHeight returns the height of all rows, in DIPs.
-func (c *card) contentHeight() int32 {
 	h := int32(2 * widget.CardPadding)
 	for i, r := range c.rows {
 		h += r.height
@@ -505,22 +409,11 @@ func (c *card) contentHeight() int32 {
 	return h
 }
 
-// place puts the card at r and lays out its rows; a card taller than its
-// maxHeight scrolls.
+// place puts the card at r and lays out its rows.
 func (c *card) place(r win32.Rect) {
-	c.placed = r
 	win32.SetWindowPos(c.panel.HWND(), r)
 	s := c.theme.Scale
-	content := int32(0)
-	if c.maxHeight > 0 && c.contentHeight() > c.maxHeight {
-		content = s.Px(c.contentHeight())
-		if c.panel.OnScroll == nil {
-			c.panel.OnScroll = func() { c.place(c.placed) }
-		}
-	}
-	c.panel.SetScroll(content)
 	area := widget.NewArea(s, win32.ClientRect(c.panel.HWND()))
-	area.R.Top -= c.panel.ScrollOffset()
 	area.Inset(widget.CardPadding, widget.CardPadding, widget.CardPadding, widget.CardPadding)
 	for i, row := range c.rows {
 		if i > 0 {
@@ -570,7 +463,10 @@ func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
 			win32.SetWindowPos(c.icon, win32.Rect{Left: cr.Left, Top: cr.Top, Right: cr.Left + w, Bottom: cr.Bottom})
 			cr.Left += w
 		}
-		if c.hwnd != 0 {
+		switch {
+		case c.place != nil:
+			c.place(cr)
+		case c.hwnd != 0:
 			win32.SetWindowPos(c.hwnd, cr)
 		}
 		x += w + gap

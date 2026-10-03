@@ -105,15 +105,10 @@ type Hero struct {
 // FolderRow is one folder of the Folders card (spec OV-3).
 type FolderRow struct {
 	Name, Path string
-	// Date is the date of the newest backup; Badge its type.
+	// Date is the date of the newest backup.
 	Date string
 	// DateTip is the exact date and time.
 	DateTip string
-	Badge   *Badge
-	// Based says which full backup a differential builds on, BasedTone
-	// whether it is still there.
-	Based     string
-	BasedTone Tone
 	// Next is the type of the next backup, NextReason why.
 	Next, NextReason string
 	// Problem replaces date and type for a folder that cannot be backed up.
@@ -121,12 +116,13 @@ type FolderRow struct {
 	Tone    Tone
 }
 
-// FoldersCard lists the configured folders and sums up the newest backup
-// run (spec OV-3, OV-5).
+// FoldersCard lists the configured folders (spec OV-3, OV-5).
 type FoldersCard struct {
 	Title string
 	Rows  []FolderRow
-	Last  LastRun
+	// Note tells of a newest backup that failed or was cancelled.
+	Note     string
+	NoteTone Tone
 }
 
 // SegmentKind is the kind of a storage bar segment.
@@ -155,19 +151,6 @@ type StorageCard struct {
 	Estimate string
 }
 
-// LastRun sums up the newest backup run below the folders.
-type LastRun struct {
-	Tone  Tone
-	Glyph Glyph
-	Line  string
-	// LineTip is the exact date and time of the run.
-	LineTip string
-	// Note tells of a later backup that failed or was cancelled before it
-	// wrote a set.
-	Note     string
-	NoteTone Tone
-}
-
 // KeysCard describes the keys (spec OV-6).
 type KeysCard struct {
 	Title   string
@@ -182,6 +165,7 @@ type KeysCard struct {
 
 // Overview is everything the Overview page shows.
 type Overview struct {
+	Title   string
 	Hero    Hero
 	Folders FoldersCard
 	Storage StorageCard
@@ -194,9 +178,10 @@ type Overview struct {
 // first check runs), the configuration and the time.
 func OverviewOf(s *health.Snapshot, cfg *config.Config, now time.Time) Overview {
 	if s == nil {
-		return Overview{Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
+		return Overview{Title: navOverview, Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
 	}
 	o := Overview{
+		Title:   navOverview,
 		Hero:    heroOf(s, cfg, now),
 		Folders: foldersOf(s, now),
 		Storage: storageOf(s),
@@ -326,7 +311,8 @@ func newestRun(s *health.Snapshot) *catalog.BackupRunSummary {
 }
 
 func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
-	card := FoldersCard{Title: cardFolders, Last: lastRunOf(s, now)}
+	card := FoldersCard{Title: cardFolders}
+	card.Note, card.NoteTone = lastRunNote(s, now)
 	for _, f := range s.Folders {
 		row := FolderRow{Name: f.BackupName, Path: Path(f.Resolved)}
 		switch {
@@ -341,14 +327,11 @@ func foldersOf(s *health.Snapshot, now time.Time) FoldersCard {
 			if f.Newest != nil {
 				row.Date = When(f.Newest.Created(), now)
 				row.DateTip = Exact(f.Newest.Created())
-				b := badgeOf(f.Newest.Entry)
-				row.Badge = &b
-				row.Based, row.BasedTone = basedOn(s, f.Newest.Entry, now)
 			} else {
 				row.Date, row.Tone = folderNoBackup, ToneWarning
 			}
 			if f.Next != nil {
-				row.Next = fmt.Sprintf(folderNext, typeOf(f.Next.IsDiff()))
+				row.Next = typeOf(f.Next.IsDiff())
 				row.NextReason = f.Next.Reason
 			}
 		}
@@ -402,58 +385,22 @@ func storageOf(s *health.Snapshot) StorageCard {
 	return card
 }
 
-// basedOn says which full backup the differential e builds on; it is empty
-// for a full backup.
-func basedOn(s *health.Snapshot, e naming.BackupEntry, now time.Time) (string, Tone) {
-	if !e.IsDiff() {
-		return "", ToneNeutral
-	}
-	for _, info := range s.Sets {
-		if info.Complete() && !info.Entry.IsDiff() && info.Entry.ChainKey() == e.ChainKey() {
-			return fmt.Sprintf(basedOnFull, ShortDay(info.Created(), now)), ToneSecondary
-		}
-	}
-	return basedOnMissing, ToneError
-}
-
-func lastRunOf(s *health.Snapshot, now time.Time) LastRun {
-	card := LastRun{}
+// lastRunNote tells of the newest backup when it failed or was cancelled:
+// the folders' dates don't show that.
+func lastRunNote(s *health.Snapshot, now time.Time) (string, Tone) {
 	run := newestRun(s)
 	if run == nil {
-		card.Line, card.Tone, card.Glyph = lastBackupNone, ToneSecondary, GlyphNone
-		card.Note, card.NoteTone = laterRunNote(s, time.Time{}, now)
-		return card
+		return laterRunNote(s, time.Time{}, now)
 	}
-	var size int64
-	for _, info := range s.Sets {
-		if info.Complete() && naming.BackupID(info.Header.RunID) == run.RunID {
-			size += info.SizeBytes
-		}
-	}
-	folders := folderOne
-	if n := len(run.Entries); n != 1 {
-		folders = fmt.Sprintf(folderMany, n)
-	}
-	card.Line = fmt.Sprintf(lastBackupLine, capitalize(When(run.Created, now)), folders, Size(size))
-	card.LineTip = Exact(run.Created)
-	card.Tone, card.Glyph = ToneSuccess, GlyphCheck
 	if facts, ok := s.Facts[run.RunID]; ok && facts.Backup != nil {
-		if facts.Backup.Seconds > 0 {
-			card.Line += fmt.Sprintf(lastBackupDuration, Duration(time.Duration(facts.Backup.Seconds)*time.Second))
-		}
-		switch {
-		case facts.Backup.Result == logging.ResultFailed:
-			card.Line += " · " + runPartFailed
-			card.Tone, card.Glyph = ToneError, GlyphError
-		case facts.Backup.Result == logging.ResultCancelled:
-			card.Line += " · " + runPartCancelled
-			card.Tone, card.Glyph = ToneWarning, GlyphWarning
-		case facts.Backup.Warnings > 0:
-			card.Tone, card.Glyph = ToneWarning, GlyphWarning
+		switch facts.Backup.Result {
+		case logging.ResultFailed:
+			return fmt.Sprintf(laterFailed, When(run.Created, now)), ToneError
+		case logging.ResultCancelled:
+			return fmt.Sprintf(lastCancelled, When(run.Created, now)), ToneSecondary
 		}
 	}
-	card.Note, card.NoteTone = laterRunNote(s, run.Created, now)
-	return card
+	return laterRunNote(s, run.Created, now)
 }
 
 func keysOf(s *health.Snapshot) KeysCard {
@@ -509,4 +456,42 @@ func laterRunNote(s *health.Snapshot, after time.Time, now time.Time) (string, T
 		}
 	}
 	return "", ToneNeutral
+}
+
+// Table is the Folders card as a table (spec OV-3): each folder's newest
+// backup and the type of the next. While a backup runs, states holds each
+// folder's progress, and the table shows the type and state instead
+// (BR-4).
+func (c FoldersCard) Table(states map[string]FolderProgress) Table {
+	if states != nil {
+		t := Table{Name: c.Title, Columns: []Column{{Title: columnFolder, Width: 160}, {Title: columnType, Width: 80}, {Title: columnStatus, Fill: true}}}
+		for _, r := range c.Rows {
+			row := TableRow{Tip: r.Path, Cells: []TableCell{{Text: r.Name}}}
+			if s, ok := states[r.Name]; ok {
+				b := s.Badge
+				row.Cells = append(row.Cells, TableCell{Badge: &b}, TableCell{Text: s.Text, Tone: s.Tone})
+			} else {
+				// Not part of this backup.
+				row.Cells = append(row.Cells, TableCell{}, TableCell{Text: r.Problem, Tone: r.Tone})
+			}
+			t.Rows = append(t.Rows, row)
+		}
+		return t
+	}
+	t := Table{Name: c.Title, Columns: []Column{{Title: columnFolder, Fill: true}, {Title: columnLastBackup, Width: 140}, {Title: columnNextBackup, Width: 100}}}
+	for _, r := range c.Rows {
+		last := r.Date
+		if r.Problem != "" {
+			last = r.Problem
+		}
+		reason := ""
+		if r.NextReason != "" {
+			reason = fmt.Sprintf(tipNextBackup, r.Next, r.NextReason)
+		}
+		t.Rows = append(t.Rows, TableRow{
+			Tip:   joinTip(r.Path, r.DateTip, reason),
+			Cells: []TableCell{{Text: r.Name}, {Text: last, Tone: r.Tone}, {Text: r.Next, Tone: ToneSecondary}},
+		})
+	}
+	return t
 }

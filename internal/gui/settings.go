@@ -32,6 +32,8 @@ type settingsPage struct {
 	config, folders, backupDir *card
 	differential, retention    *card
 	checks, keys, logging      *card
+	// foldersTable lists the folders in the Folders card.
+	foldersTable *table
 	// showArgon2 expands the key derivation values.
 	showArgon2 bool
 	// builtWidth is the page width the rows were measured for; a new width
@@ -52,6 +54,11 @@ func newSettingsPage(a *app) (*settingsPage, error) {
 			return nil, err
 		}
 		(*c).panel.OnCommand = sp.command
+	}
+	sp.foldersTable = newTable(t, sp.folders.panel.HWND(), 0)
+	sp.folders.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
+		r, _ := sp.foldersTable.notify(hdr)
+		return r
 	}
 	panel.OnCommand = sp.command
 	panel.OnScroll = sp.layout
@@ -99,12 +106,8 @@ func (sp *settingsPage) update() {
 	c = sp.folders
 	c.reset()
 	c.heading(v.FoldersTitle, nil)
-	for _, f := range v.Folders {
-		c.row(cardRowHeight,
-			cell{hwnd: c.label(f.Name, widget.TextBody, pal.Text), fill: true, weight: 2},
-			cell{hwnd: c.panel.PathLabel(f.Path, widget.TextSmall, pal.TextSecondary), fill: true, weight: 3},
-			sp.status(c, f.Status, f.Tone, f.Glyph))
-	}
+	sp.foldersTable.set(v.FoldersTable())
+	c.row(sp.foldersTable.height(), sp.foldersTable.cell())
 	sp.rows(c, v.FolderRows)
 
 	c = sp.backupDir
@@ -273,6 +276,7 @@ func (sp *settingsPage) layout() {
 // restyle applies new fonts after a DPI change.
 func (sp *settingsPage) restyle() {
 	sp.panel.Restyle()
+	sp.foldersTable.restyle()
 	for _, c := range sp.cards() {
 		c.panel.Restyle()
 	}

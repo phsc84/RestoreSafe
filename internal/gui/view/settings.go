@@ -216,3 +216,13 @@ func onOff(on bool) string {
 	}
 	return settingOff
 }
+
+// FoldersTable is the configured folders as a table (spec 10): backup
+// name, path and whether the folder is there.
+func (v SettingsPage) FoldersTable() Table {
+	t := Table{Name: v.FoldersTitle, Columns: []Column{{Title: columnFolder, Width: 160}, {Title: columnPath, Fill: true}, {Title: columnStatus, Width: 160}}}
+	for _, f := range v.Folders {
+		t.Rows = append(t.Rows, TableRow{Tip: f.Path, Cells: []TableCell{{Text: f.Name}, {Text: f.Path}, {Text: f.Status, Tone: f.Tone}}})
+	}
+	return t
+}

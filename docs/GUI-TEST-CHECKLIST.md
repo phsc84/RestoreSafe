@@ -42,6 +42,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
 | OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | Tooltips added in 10a. |
+| 3.4 | Tables (Create backup, backup plan, Settings, restore wizard page 3): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | Open | |
+| 3.4 | One-line text cut off with "…" (a long backup directory path in a narrow window) shows its full text in a tooltip; text that fits has none | Open | |
 | OV-4 | Backup directory bar: segments and tooltips plausible compared with Explorer's drive properties | Open | |
 | OV-6 | Keys card for each authentication mode; YubiKey connected and not connected; "next backup creates new keys" after changing `recovery_code` and Reload | Open | |
 | OV-8 | Switching to another window for more than 5 minutes and back runs the check again | Open | |

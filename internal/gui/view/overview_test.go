@@ -67,11 +67,11 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 	t.Parallel()
 	o, s := overviewOf(t, scenario.Protected)
 
-	if o.Folders.Title != "Folders to back up" || len(o.Folders.Rows) != 2 {
+	if o.Title != "Create backup" || o.Folders.Title != "Folders to back up" || len(o.Folders.Rows) != 2 || o.Folders.Note != "" {
 		t.Fatalf("folders: %+v", o.Folders)
 	}
 	for _, row := range o.Folders.Rows {
-		if !strings.HasPrefix(row.Date, "today, ") || row.Badge == nil || row.Badge.Text != "FULL" || row.Next != "next: DIFF" || row.NextReason == "" || row.Problem != "" {
+		if !strings.HasPrefix(row.Date, "today, ") || row.DateTip == "" || row.Next != "DIFF" || row.NextReason == "" || row.Problem != "" {
 			t.Fatalf("folder row: %+v", row)
 		}
 	}
@@ -88,11 +88,6 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 		t.Fatalf("the segments must fill the bar: %.3f", sum)
 	}
 
-	lb := o.Folders.Last
-	if !strings.HasPrefix(lb.Line, "Today, ") || !strings.Contains(lb.Line, "2 folders") || !strings.HasSuffix(lb.Line, " · less than a minute") || lb.Tone != ToneSuccess {
-		t.Fatalf("last backup: %+v", lb)
-	}
-
 	k := o.Keys
 	if k.Methods != "Password only" || !strings.HasPrefix(k.Details, "Created ") || k.Note != "" {
 		t.Fatalf("keys: %+v", k)
@@ -102,19 +97,19 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 func TestOverviewCardsShowProblems(t *testing.T) {
 	t.Parallel()
 	o, _ := overviewOf(t, scenario.SourceMissing)
-	if row := o.Folders.Rows[1]; row.Name != "Pics" || row.Problem != "Can't be found" || row.Tone != ToneError || row.Badge != nil {
+	if row := o.Folders.Rows[1]; row.Name != "Pics" || row.Problem != "Can't be found" || row.Tone != ToneError || row.Date != "" {
 		t.Fatalf("missing folder row: %+v", row)
 	}
 
 	o, _ = overviewOf(t, scenario.BaseMissing)
 	diff := o.Folders.Rows[0]
-	if diff.Badge == nil || diff.Badge.Text != "DIFF 1" || diff.Badge.Name != "Differential 1" || diff.Next != "next: FULL" {
+	if diff.Date == "" || diff.Next != "FULL" {
 		t.Fatalf("a folder whose newest backup is a differential: %+v", diff)
 	}
 
 	o, _ = overviewOf(t, scenario.Empty)
-	if o.Folders.Last.Line != "No backups yet" || o.Keys.Note != "Your first backup creates your keys." {
-		t.Fatalf("empty: %+v %+v", o.Folders.Last, o.Keys)
+	if o.Folders.Rows[0].Date != "no backup yet" || o.Folders.Rows[0].Tone != ToneWarning || o.Folders.Note != "" || o.Keys.Note != "Your first backup creates your keys." {
+		t.Fatalf("empty: %+v %+v", o.Folders, o.Keys)
 	}
 	if o.Hero.Line != "" {
 		t.Fatalf("empty hero: %+v", o.Hero)
@@ -126,7 +121,7 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 	}
 
 	o, _ = overviewOf(t, scenario.FolderNotBackedUp)
-	if row := o.Folders.Rows[2]; row.Date != "no backup yet" || row.Tone != ToneWarning || row.Next != "next: FULL" {
+	if row := o.Folders.Rows[2]; row.Date != "no backup yet" || row.Tone != ToneWarning || row.Next != "FULL" {
 		t.Fatalf("a new folder: %+v", row)
 	}
 

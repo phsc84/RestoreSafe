@@ -363,3 +363,24 @@ func joinAnd(items []string) string {
 
 // IssueText shows a workflow message with its remedy as plain sentences.
 func IssueText(s string) string { return issueText(s) }
+
+// Table is the plan's folders as a table (spec BP-2): the planned type, why,
+// and about how much the backup stores; a folder that is not backed up
+// says why instead.
+func (v BackupPlanView) Table() Table {
+	t := Table{Name: PlanColumnFolder, Columns: []Column{
+		{Title: PlanColumnFolder, Width: 130}, {Title: PlanColumnType, Width: 80},
+		{Title: PlanColumnWhy, Fill: true}, {Title: PlanColumnAbout, Width: 80, Right: true},
+	}}
+	for _, r := range v.Rows {
+		why := r.Tone
+		if why == ToneNeutral {
+			why = ToneSecondary
+		}
+		t.Rows = append(t.Rows, TableRow{
+			Tip:   joinTip(r.Path, r.Why),
+			Cells: []TableCell{{Text: r.Name}, {Badge: r.Badge}, {Text: r.Why, Tone: why}, {Text: r.About}},
+		})
+	}
+	return t
+}
