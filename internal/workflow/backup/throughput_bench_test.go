@@ -23,7 +23,7 @@ import (
 // RESTORESAFE_BENCH_RUNS sets the number of timed runs (default 3).
 func TestThroughputBenchmarkBackup(t *testing.T) {
 	root, runs := benchSettings(t)
-	srcDir := filepath.Join(root, "src")
+	srcDir := filepath.Join(root, "1-src-big")
 	size := ensureBenchData(t, srcDir)
 	t.Logf("dataset: %s (%.2f GiB)", srcDir, float64(size)/(1<<30))
 
@@ -34,8 +34,10 @@ func TestThroughputBenchmarkBackup(t *testing.T) {
 	// The first run warms up caches and is not counted.
 	var times []time.Duration
 	for run := 0; run <= runs; run++ {
-		backupDir := filepath.Join(root, fmt.Sprintf("backup-%d", run))
-		if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		// A new name per run: a folder of an earlier run may still be
+		// pending deletion on a network share.
+		backupDir, err := os.MkdirTemp(root, fmt.Sprintf("backup-%d-", run))
+		if err != nil {
 			t.Fatal(err)
 		}
 		logPath := filepath.Join(t.TempDir(), "bench.log")
@@ -53,9 +55,7 @@ func TestThroughputBenchmarkBackup(t *testing.T) {
 		if runErr != nil {
 			t.Fatalf("backup: %v", runErr)
 		}
-		if err := os.RemoveAll(backupDir); err != nil {
-			t.Logf("cleanup %s: %v", backupDir, err)
-		}
+		testutil.RemoveAll(t, backupDir)
 		if run == 0 {
 			t.Logf("warm-up %6.1fs", elapsed.Seconds())
 			continue

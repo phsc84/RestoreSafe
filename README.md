@@ -96,6 +96,8 @@ Restoring is a wizard: when, which folders, where to, and a last check of what w
 3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
    For any other parameters you may keep the default values or adjust them according to your needs. Every parameter is explained in `config-SAMPLE.yaml`.
+
+   A parameter that is missing from `config.yaml` uses its default value; the Settings page lists such parameters and **Add to config.yaml** writes them into the file with their default values and explanations (a copy of the previous file is kept). A misspelled or unknown parameter is an error, so a typo can't silently fall back to a default.
 4. Choose the authentication mode:
 
    | Setting | Password prompt | Second factor (2FA) | Description |
@@ -131,7 +133,7 @@ Restoring is a wizard: when, which folders, where to, and a last check of what w
 
 If updating to a new major version (v1.x.x → v2.x.x), please also download `config-SAMPLE.yaml`, rename it to `config.yaml` and set the parameters according to your previous `config.yaml`.
 
-This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a new bugfix version (v1.0.1 → v1.0.2).
+This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a new bugfix version (v1.0.1 → v1.0.2): new parameters use their default values, and the Settings page offers to add them to your `config.yaml`.
 
 ### Updating from RestoreSafe 1.x to 2.0
 
@@ -421,7 +423,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 build.bat
 ```
 
-This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\windows\`) and creates `RestoreSafe-<version>.zip` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
+This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
 
 ### Project layout
 
@@ -434,7 +436,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 | `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
 | `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
 | `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
-| `build/windows` | Icon, application manifest, and version information embedded by `build.bat` |
+| `build` | Icon, application manifest, and version information embedded by `build.bat` |
 | `docs` | Specifications and the GUI test checklist |
 | `scripts/gui-test` | PowerShell UI automation: smoke test, status conditions, access keys (see its README) |
 

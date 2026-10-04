@@ -4,7 +4,10 @@ package config
 
 import (
 	"RestoreSafe/internal/security/cryptox"
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -114,6 +117,12 @@ type Config struct {
 	// clamped to their enforced maximums during Load. Populated at load time,
 	// never read from YAML, and surfaced as warnings by the startup health check.
 	Argon2Notices []string `yaml:"-"`
+
+	// MissingKeys lists the settings the file doesn't contain, in the order
+	// of config-SAMPLE.yaml; their defaults apply. A block missing entirely
+	// is listed by its name ("differential"), single keys of a block by
+	// their path ("differential.max_size_percent"). Set by Load.
+	MissingKeys []string `yaml:"-"`
 }
 
 // Backup reminder: the start screen warns when the newest backup is older
@@ -209,8 +218,20 @@ func Load(path string) (*Config, error) {
 			"Remedy: Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.", err)
 	}
 
+	return parse(data)
+}
+
+// parse decodes and validates the contents of a configuration file. Unknown
+// keys are an error; missing keys get their defaults and are listed in
+// MissingKeys (spec 11.6).
+func parse(data []byte) (*Config, error) {
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
+		if unknown := unknownKeysError(err); unknown != nil {
+			return nil, unknown
+		}
 		hint := "\nRemedy: Check YAML syntax (space indentation, correct colons, no tabs)."
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
@@ -218,6 +239,10 @@ func Load(path string) (*Config, error) {
 		}
 
 		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err == nil {
+		cfg.MissingKeys = missingKeys(topMapping(&doc))
 	}
 
 	cfg.withDefaults()

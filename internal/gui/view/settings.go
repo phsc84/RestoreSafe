@@ -5,6 +5,8 @@ import (
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
+	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -49,6 +51,11 @@ type SettingsPage struct {
 	// ConfigError is why the last Reload failed; the previous configuration
 	// stays in use.
 	ConfigError string
+	// Missing names the settings the file lacks, "" for none, with
+	// AddMissing to add them (ST-10); Added names the copy it saved.
+	Missing    string
+	AddMissing Button
+	Added      string
 
 	FoldersTitle string
 	Folders      []FolderSetting
@@ -65,8 +72,9 @@ type SettingsPage struct {
 
 // SettingsOf computes the Settings page from the configuration in use, its
 // file, the snapshot (nil while the first check runs), the error of the
-// last Reload and whether an operation runs (Reload waits for it).
-func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snapshot, reloadErr error, busy bool) SettingsPage {
+// last Reload, whether an operation runs (Reload waits for it) and the copy
+// of the file that Add to config.yaml saved ("" for none).
+func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snapshot, reloadErr error, busy bool, added string) SettingsPage {
 	p := SettingsPage{
 		Title:          navSettings,
 		ConfigTitle:    settingsConfigFile,
@@ -84,6 +92,21 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 	}
 	if reloadErr != nil {
 		p.ConfigError = issueText(strings.ReplaceAll(reloadErr.Error(), "\nRemedy: ", " Remedy: "))
+	}
+	switch n := len(cfg.MissingKeys); {
+	case n == 1:
+		p.Missing = fmt.Sprintf(missingOne, cfg.MissingKeys[0])
+	case n > 1:
+		p.Missing = fmt.Sprintf(missingMany, n, strings.Join(cfg.MissingKeys, ", "))
+	}
+	if p.Missing != "" {
+		p.AddMissing = Button{Text: buttonAddMissing, Action: ActionAddMissing, Enabled: !busy}
+		if busy {
+			p.AddMissing.Reason = reasonAddBusy
+		}
+	}
+	if added != "" {
+		p.Added = fmt.Sprintf(missingAdded, filepath.Base(added))
 	}
 	p.Folders = folderSettings(cfg, s)
 	exclude := settingNothing
@@ -126,6 +149,11 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 			{Label: settingKeep, Value: chains, Key: "retention_keep"},
 			{Label: settingKeepDiffs, Value: diffs, Key: "differential.retention_keep_differentials"},
 		}
+	}
+	// Keeping everything is only the default when the file doesn't choose;
+	// say so, and what is recommended.
+	if slices.Contains(cfg.MissingKeys, "retention_keep") {
+		p.Retention.Rows[0].Value += fmt.Sprintf(keepDefault, chainCount(recommendedKeep))
 	}
 
 	reminder := settingOff

@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// Version is injected by build.bat from build/windows/versioninfo.json
+// Version is injected by build.bat from build/versioninfo.json
 // (-ldflags "-X main.Version=..."); "dev" marks an un-stamped build.
 var Version = "dev"
 

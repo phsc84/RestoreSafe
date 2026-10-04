@@ -166,6 +166,8 @@ func (a *app) do(action view.Action) {
 		a.dismiss()
 	case view.ActionReload:
 		a.reload()
+	case view.ActionAddMissing:
+		a.addMissing()
 	case view.ActionOpenBackupDir:
 		a.open(a.backupDir, false)
 	}

@@ -12,6 +12,7 @@ const (
 	idSettingsReload
 	idSettingsOpen
 	idSettingsMore
+	idSettingsAdd
 )
 
 // Sizes of the Settings page, in DIPs.
@@ -48,7 +49,7 @@ func newSettingsPage(a *app) (*settingsPage, error) {
 		return nil, err
 	}
 	sp := &settingsPage{a: a, panel: panel, acts: actions{}}
-	sp.title = panel.Label(view.SettingsOf(a.opts.Config, a.opts.ConfigPath, a.backupDir, nil, nil, false).Title, widget.TextTitle, t.Palette.Text)
+	sp.title = panel.Label(view.SettingsOf(a.opts.Config, a.opts.ConfigPath, a.backupDir, nil, nil, false, "").Title, widget.TextTitle, t.Palette.Text)
 	for _, c := range []**card{&sp.config, &sp.folders, &sp.backupDir, &sp.differential, &sp.retention, &sp.checks, &sp.keys, &sp.logging} {
 		if *c, err = newCard(t, panel.HWND(), 0, sp.acts); err != nil {
 			return nil, err
@@ -86,7 +87,7 @@ func (sp *settingsPage) command(id, code uint16) {
 // update shows the configuration in use and the state the check found.
 func (sp *settingsPage) update() {
 	a := sp.a
-	sp.view = view.SettingsOf(a.opts.Config, a.opts.ConfigPath, a.backupDir, a.snapshot, a.reloadErr, a.machine.Busy() || a.reloading)
+	sp.view = view.SettingsOf(a.opts.Config, a.opts.ConfigPath, a.backupDir, a.snapshot, a.reloadErr, a.machine.Busy() || a.reloading, a.addedCopy)
 	v := sp.view
 	t := a.theme
 	pal := t.Palette
@@ -101,6 +102,13 @@ func (sp *settingsPage) update() {
 	sp.para(c, v.ConfigNote, widget.TextSmall, pal.TextSecondary)
 	if v.ConfigError != "" {
 		sp.para(c, v.ConfigError, widget.TextSmall, pal.Error)
+	}
+	if v.Added != "" {
+		sp.para(c, v.Added, widget.TextSmall, toneColor(pal, view.ToneSuccess))
+	}
+	if v.Missing != "" {
+		sp.para(c, v.Missing, widget.TextSmall, toneColor(pal, view.ToneInfo))
+		c.row(cardRowHeight+4, sp.button(c, v.AddMissing, idSettingsAdd))
 	}
 
 	c = sp.folders

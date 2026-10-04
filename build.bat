@@ -3,12 +3,12 @@ REM ============================================================
 REM  RestoreSafe build script
 REM  Builds dist\RestoreSafe-<version>.zip and moves the compiled
 REM  RestoreSafe.exe to sandbox\ for manual testing
-REM  The version is managed manually in build\windows\versioninfo.json
+REM  The version is managed manually in build\versioninfo.json
 REM ============================================================
 
 setlocal
 
-set VERSIONINFO=build\windows\versioninfo.json
+set VERSIONINFO=build\versioninfo.json
 set DIST_DIR=dist
 set SANDBOX_DIR=sandbox
 

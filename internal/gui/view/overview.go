@@ -63,6 +63,7 @@ const (
 	ActionStartRestore
 	ActionOpenRestored
 	ActionReload
+	ActionAddMissing
 )
 
 // Button is a button or link of a view.

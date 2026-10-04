@@ -97,6 +97,7 @@ $Ids = [ordered]@{
   SettingsReload   = 802
   SettingsOpen     = 803
   SettingsMore     = 804
+  SettingsAdd      = 805
 }
 
 # Wait-Until runs $cond until it returns something truthy, and returns it.

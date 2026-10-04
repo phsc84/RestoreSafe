@@ -78,7 +78,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 | Item | Requirement |
 |---|---|
 | OS | Windows 11. YubiKey needs 22H2 or later (unchanged). |
-| Common Controls | Version 6 via the existing manifest `build/windows/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
+| Common Controls | Version 6 via the existing manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
 | DPI | `PerMonitorV2` (existing). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
 | Text | UTF-16 (`W` APIs) throughout. |
 | Theme | Light only in 2.0.0. Dark mode follows in 2.1.0 (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
@@ -780,10 +780,11 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 | ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, 2.0 spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. |
 | ST-4 | Backup directory: path, reachability and free space (from the health check), split size, **Open in Explorer**. |
 | ST-5 | Full and differential: `differential.enabled`, `full_backup_interval_days`, `max_size_percent`, in words. |
-| ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
+| ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0; when `retention_keep` is missing from the file, the value adds "(the default; 3 chains recommended)"), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
 | ST-7 | Checks: `verify_after_backup`; the reminder limit (decision 2). |
 | ST-8 | Keys and unlocking: authentication mode in words, spare YubiKey, recovery code, minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." |
 | ST-9 | Logging: `log_level`, `io_diagnostics`. |
+| ST-10 | Missing settings (decision 9): when the file lacks settings that have a default (11.6), a (i) line on the configuration card names their keys, "3 settings aren't in config.yaml, so their defaults apply: reminder_days, recovery_code, differential.", with **Add to config.yaml**. It saves a copy of the file next to it (`<name>.<yyyy-mm-dd_hhmmss>.bak`), adds each missing setting with its default value and its explanation from `config-SAMPLE.yaml`, and reloads (ST-2). Settings of a block that exists already (`differential`, `argon2`) are added at the end of that block, all others at the end of the file under one comment line that says when they were added. Lines already in the file are not changed. Nothing is written unless the user clicks; the button is disabled while an operation runs. Afterwards a line names the copy until the next Reload; a file that can't be written keeps the configuration in use and shows the error as ST-2 does. |
 
 ## 11. Workflow interface
 
@@ -878,6 +879,12 @@ The result of the last backup and verify (`ShowResult`, the returned error, and 
 
 A function that loads and validates the configuration again, returning the same errors as at start. The GUI swaps the configuration only when no operation runs. It is `config.Load` itself, run on a worker goroutine; a file read while an operation runs is used once the operation has finished. `-config` stays the way to select a different file.
 
+`config.Load` is strict about names and lenient about omissions (decision 9):
+
+- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. Every key of RestoreSafe 1.x is still a 2.0 key, so 1.x files don't fail on this.
+- **Missing keys use their defaults** and are listed in `Config.MissingKeys` in the order of `config-SAMPLE.yaml`. A block that is missing entirely is listed by its name (`differential`), single missing keys of a block by their path (`differential.max_size_percent`). `source_directories` and `backup_directory` have no default and stay required.
+- `config.AddMissing(path, now)` writes them (ST-10). It reads the file again, builds the new text, and writes it only when the new text loads, lists no missing keys and gives the same effective configuration as before, so adding defaults can never change what RestoreSafe does. The comments come from `config-SAMPLE.yaml`, embedded in the executable; the values are the defaults of `config`, not the sample's (the sample keeps 3 chains, the default is to keep all). A file in YAML flow style (`{ … }`) is refused with a remedy to add the settings by hand. The new file replaces the old one by rename, keeping its line endings.
+
 ### 11.7 Progress
 
 `interact.Progress` gains two fields; `Step` and `Item` stay for the log and the tests:
@@ -900,7 +907,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 
 | Code | Severity | Message (UI) | Hint and action |
 |---|---|---|---|
-| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start (as today); after Reload on the Settings card. |
+| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start (as today); after Reload on the Settings card. Includes unknown keys (11.6). |
 | `BACKUP_DIR_UNREACHABLE` | Error | The backup directory isn't reachable | Check the drive or network connection. Actions: Check again, Edit config. |
 | `BACKUP_DIR_NOT_WRITABLE` | Error | RestoreSafe can't write to the backup directory | Check the permissions. Action: Open in Explorer. |
 | `SOURCE_MISSING` | Error | A folder to back up can't be found | Connect the drive, or remove the folder from config.yaml. Actions: Check again, Edit config. |
@@ -1046,7 +1053,7 @@ The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set 
 - `cmd/restoresafe/main.go` starts the GUI. It keeps the `-config=<absolute path>` flag.
 - A configuration that cannot be loaded at start (or an invalid `-config` argument) shows an error message box with the message; closing it ends RestoreSafe. After start, Reload (ST-2) keeps the app running instead.
 - The executable uses the Windows GUI subsystem (`-ldflags "-H=windowsgui"`); no console window opens. There is no console frontend and no hidden console mode; the scripted text UI the tests use is `interacttest.Script`, which the release binary does not import.
-- `build/windows/versioninfo.json` references the application manifest `build/windows/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 11.
+- `build/versioninfo.json` references the application manifest `build/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 11.
 - `yubidiag` stays a console tool.
 
 ## 15. Non-functional requirements
@@ -1091,6 +1098,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Run facts | Backup (also when it fails or is cancelled) and verify (also after a backup) write the facts of 11.4 into the right run log; the reader returns duration, warnings and verify results. A log without such lines (older 2.0 runs, a hand-edited or truncated log) yields "unknown" and never an error. | 11.4, BK-1, BK-2, BK-8 |
 | Progress | A recording UI checks per workflow: phases in the order of BR-2, `Index` from 1 to `Count`, `Done` never decreasing within a step, a final report per step. | 11.7, BR-2, RW-7 |
 | Reload | A valid file replaces the configuration; an invalid file keeps the previous one and returns the error; Reload during an operation is refused. `reminder_days` bounds and default. | 11.6, ST-2, decision 2 |
+| Config keys | An unknown key, top level and in a block, fails with its name and line; every key of `Config` and every key of `config-SAMPLE.yaml` is known, and every key with a default can be reported missing. `MissingKeys` for an empty block, a partial block and a minimal file. `AddMissing` on the minimal file, a partial block, a CRLF file and a file without a final newline: the result loads, lists nothing missing, has the same effective configuration, keeps every original line, and the copy equals the old file; a flow-style file is refused and left unchanged. | 11.6, ST-10, decision 9 |
 | Unchanged workflows | The existing workflow and e2e tests pass; they change only for the request parameters, the plan calls, the progress fields and the facts. | 17.1 (criterion 6) |
 
 ### 16.3 GUI logic without windows (Go tests)
@@ -1185,6 +1193,7 @@ The phases, the package layout and the order of the work are in [PLAN-gui-redesi
 | 6 | Single-file restore | Not offered (2.0 spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
 | 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (2.0 spec 7.7). Recovery mode (2.0 spec 13.6) isn't part of this redesign. |
 | 8 | Target release | 2.0.0. The redesign replaces the first GUI before the release; there is no release with the first GUI's home screen. |
+| 9 | Settings missing from config.yaml (decided 2026-10-04) | Missing settings keep using their defaults, so a file from an older version still works; blocking until the file is complete would break every configuration with each new setting. Unknown keys are an error, because a misspelled key silently falls back to its default. The Settings page names the missing settings and adds them on request (ST-10), with a copy of the old file; RestoreSafe never writes config.yaml on its own. Defaults aren't written without asking because a written value can't be told from a chosen one: a default raised in a later version (for example `argon2.memory_mb`) would no longer reach that file. |
 
 ### 18.2 Still valid from the first GUI (decided 2026-09-26)
 

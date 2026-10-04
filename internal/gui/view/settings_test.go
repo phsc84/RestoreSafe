@@ -13,7 +13,7 @@ func settingsOf(t *testing.T, c scenario.Condition, reloadErr error, busy bool) 
 	t.Helper()
 	sc := scenario.Build(t, c)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	return SettingsOf(sc.Config, sc.ConfigPath, s.BackupDir, &s, reloadErr, busy)
+	return SettingsOf(sc.Config, sc.ConfigPath, s.BackupDir, &s, reloadErr, busy, "")
 }
 
 func value(rows []Setting, label string) string {
@@ -95,12 +95,56 @@ func TestSettingsRetentionInWords(t *testing.T) {
 	} {
 		cfg := &config.Config{RetentionKeep: tc.keep, SourceDirectories: []string{`C:\Docs`}}
 		cfg.Differential.RetentionKeepDifferentials = tc.diffs
-		p := SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false)
+		p := SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "")
 		if value(p.Retention.Rows, "Keep") != tc.chains || value(p.Retention.Rows, "Differentials") != tc.rest {
 			t.Fatalf("%d/%d: %+v", tc.keep, tc.diffs, p.Retention.Rows)
 		}
 		if p.Folders[0].Status != "Checking…" {
 			t.Fatalf("before the first check %+v", p.Folders)
 		}
+	}
+}
+
+func TestSettingsNameMissingKeys(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{SourceDirectories: []string{`C:\Docs`}}
+	p := SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "")
+	if p.Missing != "" || p.AddMissing.Action != ActionNone {
+		t.Fatalf("nothing missing: %q", p.Missing)
+	}
+
+	cfg.MissingKeys = []string{"reminder_days"}
+	p = SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "")
+	if p.Missing != "reminder_days isn't in config.yaml, so its default applies." || !p.AddMissing.Enabled {
+		t.Fatalf("one missing: %q %+v", p.Missing, p.AddMissing)
+	}
+
+	cfg.MissingKeys = []string{"reminder_days", "recovery_code", "differential"}
+	p = SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, true, `C:\config.yaml.2026-10-04_153012.bak`)
+	if p.Missing != "3 settings aren't in config.yaml, so their defaults apply: reminder_days, recovery_code, differential." {
+		t.Fatalf("three missing: %q", p.Missing)
+	}
+	if p.AddMissing.Enabled || p.AddMissing.Reason == "" {
+		t.Fatal("adding waits for the running operation")
+	}
+	if !strings.HasSuffix(p.Added, "saved as config.yaml.2026-10-04_153012.bak.") {
+		t.Fatalf("added %q", p.Added)
+	}
+	checkWriting(t, p)
+}
+
+func TestSettingsSayKeepingAllIsTheDefault(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{SourceDirectories: []string{`C:\Docs`}}
+	if v := value(SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "").Retention.Rows, "Keep"); v != "All backups" {
+		t.Fatalf("chosen in the file: %q", v)
+	}
+	cfg.MissingKeys = []string{"retention_keep"}
+	if v := value(SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "").Retention.Rows, "Keep"); v != "All backups (the default; 3 chains recommended)" {
+		t.Fatalf("missing from the file: %q", v)
+	}
+	cfg.Differential.RetentionKeepDifferentials = 2
+	if v := value(SettingsOf(cfg, `C:\config.yaml`, `D:\Backups`, nil, nil, false, "").Retention.Rows, "Keep"); v != "All chains (the default; 3 chains recommended)" {
+		t.Fatalf("missing, with differentials limited: %q", v)
 	}
 }

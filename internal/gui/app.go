@@ -80,11 +80,13 @@ type app struct {
 	// reloading is set while the configuration file is read again;
 	// reloadErr is why it did not load; deferredConfig waits for the
 	// running operation; recheck checks again after the running check,
-	// which used the previous configuration.
+	// which used the previous configuration. addedCopy is the copy of the
+	// file that Add to config.yaml saved, until the next Reload.
 	reloading      bool
 	reloadErr      error
 	deferredConfig *config.Config
 	recheck        bool
+	addedCopy      string
 
 	// taskbar shows the operation on the taskbar button once it exists;
 	// taskbarCreated is the message that says so.

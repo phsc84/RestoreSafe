@@ -30,20 +30,21 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 	if v, err := strconv.Atoi(os.Getenv("RESTORESAFE_BENCH_RUNS")); err == nil && v > 0 {
 		runs = v
 	}
-	srcDir := filepath.Join(root, "src")
+	srcDir := filepath.Join(root, "1-src-big")
 	if _, err := os.Stat(srcDir); err != nil {
 		t.Fatalf("dataset missing, run TestThroughputBenchmarkBackup first: %v", err)
 	}
 
 	// The set to restore lives on the tested volume; writing it is not timed.
-	backupDir := filepath.Join(root, "restore-set")
-	_ = os.RemoveAll(backupDir)
-	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+	// Its folders get new names on every run: a folder of an earlier run may
+	// still be pending deletion on a network share.
+	backupDir, err := os.MkdirTemp(root, "restore-set-")
+	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(backupDir)
+	defer testutil.RemoveAll(t, backupDir)
 	ks, master := testutil.NewPasswordKeySet(t, []byte("bench-pw"))
-	entry := naming.BackupEntry{DirectoryName: "src", ChainID: "BENCH2", Date: "2026-09-28"}
+	entry := naming.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "BENCH2", Date: "2026-09-28"}
 	if _, err := setwriter.Write(setwriter.Params{
 		SourceDir:      srcDir,
 		OutputDir:      backupDir,
@@ -68,10 +69,12 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 	// The first run warms up caches and is not counted.
 	var times []time.Duration
 	for run := 0; run <= runs; run++ {
-		restoreRoot := filepath.Join(root, fmt.Sprintf("restore-%d", run))
+		restoreRoot, err := os.MkdirTemp(root, fmt.Sprintf("restore-%d-", run))
+		if err != nil {
+			t.Fatal(err)
+		}
 		masters := unlock.MasterKeys{ks.ID: append([]byte(nil), master...)}
 		start := time.Now()
-		var err error
 		testutil.CaptureStdout(t, func() {
 			_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, backupDir, restoreRoot, masters, logging.NewConsoleLogger("info", nil))
 		})
@@ -79,9 +82,7 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("restore: %v", err)
 		}
-		if err := os.RemoveAll(restoreRoot); err != nil {
-			t.Logf("cleanup %s: %v", restoreRoot, err)
-		}
+		testutil.RemoveAll(t, restoreRoot)
 		if run == 0 {
 			t.Logf("warm-up %6.1fs", elapsed.Seconds())
 			continue

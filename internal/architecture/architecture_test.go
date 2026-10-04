@@ -12,7 +12,7 @@ const module = "RestoreSafe/"
 // layers lists the package groups from bottom to top. A package may import
 // packages of its own layer and of lower layers, never of higher ones.
 var layers = [][]string{
-	{"internal/fsx", "internal/buildinfo"},
+	{".", "internal/fsx", "internal/buildinfo"}, // ".": the module root, the embedded config-SAMPLE.yaml
 	{"internal/security"},
 	{"internal/config", "internal/logging"},
 	{"internal/format"},
@@ -33,6 +33,20 @@ var workflowRuns = []string{
 // testSupport packages exist for tests only. They are exempt from the
 // layers, but production code must not import them.
 var testSupport = []string{"internal/testutil", "internal/e2e", "internal/architecture"}
+
+// rel returns path relative to the module root: "." for the root package,
+// and path itself when it is outside the module.
+func rel(path string) string {
+	if path == strings.TrimSuffix(module, "/") {
+		return "."
+	}
+	return strings.TrimPrefix(path, module)
+}
+
+// inModule reports whether path is the module root or a package in it.
+func inModule(path string) bool {
+	return path == strings.TrimSuffix(module, "/") || strings.HasPrefix(path, module)
+}
 
 // under reports whether pkg is dir or a package below it.
 func under(pkg, dir string) bool {
@@ -75,10 +89,10 @@ func allImports(t *testing.T) map[string][]string {
 	pkgs := make(map[string][]string)
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		path, imports, _ := strings.Cut(strings.TrimSpace(line), "|")
-		pkg := strings.TrimPrefix(path, module)
+		pkg := rel(path)
 		for _, imp := range strings.Split(imports, ",") {
 			if imp != "" {
-				pkgs[pkg] = append(pkgs[pkg], strings.TrimPrefix(imp, module))
+				pkgs[pkg] = append(pkgs[pkg], rel(imp))
 			}
 		}
 	}
@@ -96,11 +110,11 @@ func moduleImports(t *testing.T) map[string][]string {
 	pkgs := make(map[string][]string)
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		path, imports, _ := strings.Cut(strings.TrimSpace(line), "|")
-		pkg := strings.TrimPrefix(path, module)
+		pkg := rel(path)
 		pkgs[pkg] = nil
 		for _, imp := range strings.Split(imports, ",") {
-			if strings.HasPrefix(imp, module) {
-				pkgs[pkg] = append(pkgs[pkg], strings.TrimPrefix(imp, module))
+			if inModule(imp) {
+				pkgs[pkg] = append(pkgs[pkg], rel(imp))
 			}
 		}
 	}
