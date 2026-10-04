@@ -24,8 +24,8 @@ retention_keep: 3
 
 # Differential backups store only the files that are new or changed since the
 # last full backup. RestoreSafe decides automatically between full and
-# differential and shows the decision before the backup starts; press [F] there
-# to force a full backup.
+# differential and shows the decision in the backup plan before the backup
+# starts; click "Full backup instead" there to force a full backup.
 differential:
   # false = every backup is a full backup. Default: true
   enabled: true
