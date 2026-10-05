@@ -51,10 +51,10 @@ type runCard struct {
 	resultOf *flow.Run
 
 	// Progress mode.
-	title, line, bytes, left win32.HWND
-	cancel, log              win32.HWND
-	trail                    *widget.Trail
-	bar                      *widget.ProgressBar
+	title, line, bytes win32.HWND
+	cancel, log        win32.HWND
+	trail              *widget.Trail
+	bar                *widget.ProgressBar
 
 	// Result mode.
 	// do runs the actions of the card's buttons; the app's by default.
@@ -92,7 +92,6 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 			win32.SetAccessibleName(r.bar.HWND(), "Progress")
 		}
 		r.bytes = p.Label("", widget.TextSmall, t.Palette.TextSecondary)
-		r.left = p.RightLabel("", widget.TextSmall, t.Palette.TextSecondary)
 		r.log = r.acts.link(p, v.Log, idRunLog)
 		p.Show(true)
 	}
@@ -118,7 +117,6 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 		bytes += v.Speed
 	}
 	win32.SetText(r.bytes, bytes)
-	win32.SetText(r.left, v.Left)
 }
 
 // showResult shows the result v.
@@ -274,9 +272,7 @@ func (r *runCard) place(rect win32.Rect) {
 		linkW, _ := t.Fonts.Measure(win32.Text(r.log), widget.TextSmall)
 		win32.SetWindowPos(r.log, bottom.RightPx(linkW+s.Px(linkPadding)))
 		bottom.Right(12)
-		halves := bottom.Columns(12, 1, 1)
-		win32.SetWindowPos(r.bytes, halves[0].Rest())
-		win32.SetWindowPos(r.left, halves[1].Rest())
+		win32.SetWindowPos(r.bytes, bottom.Rest())
 	case runResult:
 		g := r.resultGeometry(rect.Width())
 		if r.icon != nil {

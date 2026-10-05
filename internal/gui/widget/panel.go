@@ -238,11 +238,6 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 	return 0, false
 }
 
-// RightLabel creates a right-aligned text control.
-func (p *Panel) RightLabel(text string, style TextStyle, color Color) win32.HWND {
-	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS|win32.SS_RIGHT, 0)
-}
-
 // SetText changes the text of a control.
 func (p *Panel) SetText(hwnd win32.HWND, text string) { win32.SetText(hwnd, text) }
 

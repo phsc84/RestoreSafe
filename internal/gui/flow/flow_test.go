@@ -225,7 +225,7 @@ func TestMachineProgressResetsTheSpeedPerStep(t *testing.T) {
 	}
 }
 
-func TestSpeedRateAndTimeLeft(t *testing.T) {
+func TestSpeedRate(t *testing.T) {
 	t.Parallel()
 	start := time.Date(2026, 9, 30, 9, 0, 0, 0, time.UTC)
 	var s Speed
@@ -235,29 +235,6 @@ func TestSpeedRateAndTimeLeft(t *testing.T) {
 	if r := s.Rate(); r != 1_000_000 {
 		t.Fatalf("rate %v", r)
 	}
-	left, ok := s.Left(50_000_000, start.Add(20*time.Second))
-	if !ok || left != 30*time.Second {
-		t.Fatalf("left %v %v, want 30s", left, ok)
-	}
-
-	var early Speed
-	early.Add(start, 0)
-	early.Add(start.Add(5*time.Second), 5_000_000)
-	if _, ok := early.Left(50_000_000, start.Add(5*time.Second)); ok {
-		t.Fatal("no time left before the step has run 10 seconds")
-	}
-	if _, ok := s.Left(0, start.Add(20*time.Second)); ok {
-		t.Fatal("no time left without a total")
-	}
-
-	var stalled Speed
-	for i := range 15 {
-		stalled.Add(start.Add(time.Duration(i)*time.Second), 7)
-	}
-	if _, ok := stalled.Left(100, start.Add(15*time.Second)); ok {
-		t.Fatal("no time left while nothing moves")
-	}
-
 	var back Speed
 	back.Add(start, 100)
 	back.Add(start.Add(time.Second), 50)

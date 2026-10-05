@@ -31,7 +31,7 @@ The **Create backup** page answers "are my folders protected?": the status at th
 
 <img src="docs/images/Screenshot_v2.0.0_plan.png" alt="Backup plan with differential backups and the start choices">
 
-While it runs, the page shows the steps, the progress, the speed, and the time left; the Folders card follows each folder:
+While it runs, the page shows the steps, the progress, and the speed; the Folders card follows each folder:
 
 <img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress on the Create backup page">
 
@@ -68,7 +68,7 @@ Restoring is a wizard: when, which folders, where to, and a last check of what w
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed and time left, Cancel at any time, a Restore backup page with every run, its log, a restore wizard and verification, and a Settings page with Reload
+- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, a restore wizard and verification, and a Settings page with Reload
 - Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
 - Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
@@ -163,7 +163,7 @@ Click **Back up now…** (`Ctrl+B`). The backup plan shows, for every folder, wh
 
 Then enter your password and/or confirm the Windows Security prompt of your YubiKey. On your first backup, RestoreSafe creates your keys first (see [What you will see](#what-you-will-see)).
 
-While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, the speed, and the time left; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
+While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, and the speed; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
 
 ### Restore a backup
 On the Restore backup page, select a backup run or one of its folders and click **Restore…** (or double-click it). The restore wizard asks:

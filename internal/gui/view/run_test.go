@@ -50,8 +50,8 @@ func TestProgressCardFollowsTheSteps(t *testing.T) {
 	if trail(c) != "+Unlock keys > *Back up 1 of 2 > Verify > Clean up" || c.Line != "Documents · differential 4" {
 		t.Fatalf("backing up: %q %q", trail(c), c.Line)
 	}
-	if c.Bytes != "550 MB of 1000 MB" || c.Speed != "50 MB/s" || c.Left != "Less than a minute left" {
-		t.Fatalf("bytes %q, speed %q, left %q", c.Bytes, c.Speed, c.Left)
+	if c.Bytes != "550 MB of 1000 MB" || c.Speed != "50 MB/s" {
+		t.Fatalf("bytes %q, speed %q", c.Bytes, c.Speed)
 	}
 
 	m.Progressed(interact.Progress{Phase: interact.PhaseVerifying, Index: 1, Count: 2, Item: "Documents", Total: 10}, planNow.Add(20*time.Second))
@@ -66,26 +66,6 @@ func TestProgressCardFollowsTheSteps(t *testing.T) {
 		t.Fatalf("cancelling: %+v", c)
 	}
 	checkWriting(t, c)
-}
-
-func TestProgressCardTimeLeftNeedsTenSeconds(t *testing.T) {
-	t.Parallel()
-	m, _ := runningBackup()
-	step := interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 1, Item: "Pictures", Total: 10 << 30}
-	for i := range 6 {
-		step.Done = int64(i) * 10 << 20
-		m.Progressed(step, planNow.Add(time.Duration(i)*time.Second))
-	}
-	if c := ProgressCardOf(m.Current(), planNow.Add(5*time.Second)); c.Left != "" || c.Speed == "" || c.Line != "Pictures · full backup" {
-		t.Fatalf("after 5 s: left %q, speed %q, line %q", c.Left, c.Speed, c.Line)
-	}
-	for i := 6; i <= 12; i++ {
-		step.Done = int64(i) * 10 << 20
-		m.Progressed(step, planNow.Add(time.Duration(i)*time.Second))
-	}
-	if c := ProgressCardOf(m.Current(), planNow.Add(12*time.Second)); !strings.HasPrefix(c.Left, "About ") {
-		t.Fatalf("after 12 s: left %q", c.Left)
-	}
 }
 
 func TestProgressCardOfNewKeysAndVerify(t *testing.T) {

@@ -42,7 +42,7 @@ type Run struct {
 	Plan    *interact.BackupPlan
 	Verify  *interact.VerifyPlan
 	Restore *interact.RestorePlan
-	// Progress is the latest report, Speed the rate of its step.
+	// Progress is the latest report, Speed the rate of its folder.
 	Progress interact.Progress
 	Speed    Speed
 	// Finished are the folders backed up or restored so far, in order.

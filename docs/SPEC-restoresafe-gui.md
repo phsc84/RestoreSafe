@@ -226,7 +226,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 │   Settings   │ │ v Unlock keys  >  [Back up 2 of 3]  >  Verify  >  Clean up                        │ │
 │              │ │ Projects · differential                                                           │ │
 │              │ │ [################################################-----------------------------]   │ │
-│              │ │ 0.7 of about 1.1 GB · 86 MB/s                                    About 1 min left │ │
+│              │ │ 0.7 of about 1.1 GB · 86 MB/s                                                     │ │
 │              │ │                                                                        Show log   │ │
 │              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
 │              │                                                                                       │
@@ -350,9 +350,9 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 | ID | Requirement |
 |---|---|
-| BR-1 | The progress card shows a title ("Backing up", "Restoring", "Verifying"), the step trail, the current folder and its type, a progress bar, bytes done of the (estimated) total, speed, time left, **Cancel** and "Show log". |
+| BR-1 | The progress card shows a title ("Backing up", "Restoring", "Verifying"), the step trail, the current folder and its type, a progress bar, bytes done of the (estimated) total, speed, **Cancel** and "Show log". |
 | BR-2 | Step trail for a backup: **Unlock keys** › **Back up n of N** › **Verify** (only with `verify_after_backup`) › **Clean up** (retention). For verify: **Unlock keys** › **Verify n of N**. Completed steps show a check. While keys are unlocked (Argon2 takes seconds) or a Windows Security prompt is open, the bar is a marquee and the line under the title reads "Unlocking keys…" or "Follow the Windows Security prompt". |
-| BR-3 | Speed and time left are computed by the UI from `Progress.Done` over the last 5 seconds. Time left appears only after 10 seconds and when the total is known, is rounded ("About 3 min left", "Less than a minute left"). The total is the size of the folder read, which the workflow measures before it starts, so it carries no "about". |
+| BR-3 | The speed is computed by the UI from `Progress.Done` of the current folder over the last 5 seconds. There is no time left: an estimate would be unreliable, since network speed varies. The bytes line shows the current folder's total, which the workflow measures before it starts, so it carries no "about". |
 | BR-4 | While a backup runs, the Folders table has the columns **Folder**, **Type** (the badge the run gives the folder) and **Status**: done folders show "Done" and their size in green, the current folder its percentage, the others "Waiting"; a folder that failed or was skipped by `on_unreadable_file: fail` says so in red. A folder the run leaves out shows its problem. |
 | BR-5 | Progress is coalesced (12.2): at most one pending progress message; the workflows report four times per second. The taskbar button shows progress (`ITaskbarList3`): normal while running, indeterminate while unlocking, error on failure, paused (amber) when finished with warnings. |
 | BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.5). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
@@ -607,7 +607,7 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 │ v Unlock keys  >  [Restore 1 of 2]                               │
 │ Documents · differential 3, with its full backup of 1 Sep        │
 │ [#########################-------------------------------------] │
-│ 14 of about 38 GB · 92 MB/s                     About 5 min left │
+│ 14 of about 38 GB · 92 MB/s                                      │
 ├──────────────────────────────────────────────────────────────────┤
 │                                                       [ Cancel ] │
 └──────────────────────────────────────────────────────────────────┘
@@ -655,7 +655,7 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 | RW-4 | Page 2 lists the sets of the chosen run with checkboxes, each with its type and, for a differential, the full backup that is read with it. When the wizard was opened on a set, only that folder is checked; otherwise all are. A set that can't be restored (missing full, incomplete) is disabled with the reason. The note about single files (figure 8.2) is always shown. Next needs at least one checked folder. |
 | RW-5 | Page 3: destination path with **Browse…** and the option **Restore into the backup directory** (today's checkbox, as a link that fills in the path). Below, a table of the folder each set will create: **Folder**, **Restored to** (`destination\<backup name>`) and **Check** ("New folder" in green, "Already exists" or "Can't be created: <reason>" in red); what to do about existing folders is said once below the table. A free-space estimate (the sizes of the sets and their full backups; the exact size is only known after unlocking) with (ok), a warning when it may not fit, or an error when it can't fit. Existing folders block Next; space warnings don't. Both checks run when the page opens and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the code that builds the plan `restore.Run` shows on page 4, so the two pages cannot disagree. |
 | RW-6 | Page 4 is the restore preflight (`ShowRestorePlan`), shown as a summary: backups read (each differential with its full), folders created, space, and the unlock methods the key set accepts. Blocking issues from the workflow replace **Restore…** with the issue and its remedy. "Show details" opens the full report. Nothing is written before **Restore…**; **Restore…** opens the credential dialogs (section 9). |
-| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed, time left (as BR-3), taskbar progress. Cancel asks with figure 8.5. |
+| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.5. |
 | RW-8 | Result page: success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines with "Show files"; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in a dialog with the same filter as BK-5. |
 | RW-9 | While the wizard runs a restore, the main window shows the progress card too, at the top of the Backups page, then the result card, and stays usable for reading; starting another operation is disabled. |
 
@@ -899,7 +899,7 @@ type Progress struct {
 }
 ```
 
-The UI computes speed and time left (BR-3). The current file isn't shown (not reported by the workflows; the log has it).
+The UI computes the speed (BR-3). The current file isn't shown (not reported by the workflows; the log has it).
 
 ### 11.8 Problem codes
 
@@ -954,7 +954,7 @@ Carried over from the first GUI; unchanged unless noted.
 |---|---|
 | `cmd/restoresafe` | Starts the GUI (section 14). |
 | `internal/gui` | Composition root and Win32 screens: `Run`, the app, the message loop, the shell (sidebar, status bar), one file per page and dialog. Page files only render views and forward input. |
-| `internal/gui/flow` | Operation lifecycle without Win32: the bridge (12.2), the `interact.UI` implementation (questions go to a `Dialogs` interface the `gui` package implements), the state machine of section 4, speed and time left. |
+| `internal/gui/flow` | Operation lifecycle without Win32: the bridge (12.2), the `interact.UI` implementation (questions go to a `Dialogs` interface the `gui` package implements), the state machine of section 4, the speed. |
 | `internal/gui/view` | View models without Win32: plain functions from snapshot, plans and state to what each page and dialog shows; every user-visible string (`strings.go`) and all formatting (`format.go`). |
 | `internal/gui/widget` | Reusable Win32 controls and the theme: palette and metrics (3.3), fonts and glyphs, DIP scaling, layout helper, card and hero containers, badges, bars, step trail, sidebar, list view with groups. Knows nothing about backups. |
 | `internal/gui/win32` | Thin wrapper over the Win32 functions, structs and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. Structs mirror the Windows SDK layout; every call that can fail returns an error built from `GetLastError`. |
@@ -1110,7 +1110,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with spare and recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
 | Backups view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
 | Restore wizard | Page navigation forward and back, preselection from a run and from a set, Next enablement (no folder checked; an existing target folder; a space warning, which doesn't block), destination checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6 |
-| Speed and time left | Synthetic progress sequences: no time left before 10 seconds, none for an unknown total, "about" for estimates, rounding and "Less than a minute left", a stalled transfer. | BR-3 |
+| Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
 | Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (The first GUI found a real defect this way: a hidden page's access key started a backup.) | 15 |

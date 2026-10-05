@@ -61,7 +61,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Open | Needs YubiKeys. |
 | CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Open | Needs a YubiKey. |
 | CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Passed (script) | "Wrong password. 2 attempts left." under the field, then the right one, 2026-10-02. |
-| BR-1 | Progress card: step trail, folder n of N, bytes, speed, time left appear as specified; Folders card follows | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
+| BR-1 | Progress card: step trail, folder n of N, bytes, speed appear as specified, no time left; Folders card follows | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
 | BR-5 | Taskbar button shows progress, indeterminate while unlocking, amber after warnings, red after a failure | Open | |
 | BR-7 | Result cards: finished, finished with warnings, failed (backup directory full), cancelled | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
 | BR-8 | Operation ends while another window is in front: taskbar button flashes until activated | Open | |

@@ -195,8 +195,6 @@ const (
 	progressSpeed          = "%s/s"
 	typeDifferentialN      = "differential %d"
 	typeFullBackup         = "full backup"
-	leftUnderMinute        = "Less than a minute left"
-	leftAbout              = "About %s left"
 	linkShowLog            = "Show log"
 	buttonCancelling       = "Cancelling…"
 	folderWaiting          = "Waiting"

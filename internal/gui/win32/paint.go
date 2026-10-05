@@ -268,7 +268,6 @@ const (
 	VK_TAB         = 0x09
 	VK_CONTROL     = 0x11
 	VK_F5          = 0x74
-	SS_RIGHT       = 0x0002
 	WS_THICKFRAME  = 0x00040000
 )
 

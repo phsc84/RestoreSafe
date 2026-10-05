@@ -31,10 +31,10 @@ type ProgressCard struct {
 	Line string
 	// Fraction is the bar, -1 for a marquee.
 	Fraction float64
-	// Bytes, Speed and Left are "" while unknown.
-	Bytes, Speed, Left string
-	Cancel             Button
-	Log                Button
+	// Bytes and Speed are "" while unknown.
+	Bytes, Speed string
+	Cancel       Button
+	Log          Button
 }
 
 // ProgressCardOf words the running operation r.
@@ -88,9 +88,6 @@ func ProgressCardOf(r *flow.Run, now time.Time) ProgressCard {
 	}
 	if rate := r.Speed.Rate(); rate > 0 {
 		c.Speed = fmt.Sprintf(progressSpeed, Size(int64(rate)))
-	}
-	if left, ok := r.Speed.Left(p.Total, now); ok {
-		c.Left = leftText(left)
 	}
 	return c
 }
@@ -189,15 +186,6 @@ func folderType(f interact.FolderPlan) string {
 		return fmt.Sprintf(typeDifferentialN, f.DiffNumber)
 	}
 	return typeFullBackup
-}
-
-// leftText rounds the time left: "About 3 min left", "Less than a minute
-// left" (spec BR-3).
-func leftText(d time.Duration) string {
-	if d < time.Minute {
-		return leftUnderMinute
-	}
-	return fmt.Sprintf(leftAbout, Duration(d))
 }
 
 // FolderProgress is a folder's state in the running backup (spec BR-4).
