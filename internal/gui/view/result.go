@@ -290,7 +290,7 @@ func blockingIssues(r *flow.Run) []string {
 // details" shows.
 func firstSentences(s string) string {
 	if i := strings.Index(s, " Remedy: "); i >= 0 {
-		s = s[:i]
+		s = endSentence(s[:i])
 	}
 	return s
 }

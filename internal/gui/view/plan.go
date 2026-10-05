@@ -309,8 +309,23 @@ func (g *removal) text(now time.Time) string {
 }
 
 // issueText shows a workflow message with its remedy as plain sentences.
+// A message that does not end its sentence, such as a wrapped YAML
+// error, gets a full stop before the remedy.
 func issueText(s string) string {
-	return strings.Replace(s, " Remedy: ", " ", 1)
+	msg, remedy, ok := strings.Cut(s, " Remedy: ")
+	if !ok {
+		return s
+	}
+	return endSentence(msg) + " " + remedy
+}
+
+// endSentence adds a full stop to a message that does not end its
+// sentence.
+func endSentence(s string) string {
+	if s == "" || strings.HasSuffix(s, ".") || strings.HasSuffix(s, "!") || strings.HasSuffix(s, "?") {
+		return s
+	}
+	return s + "."
 }
 
 // lowerFirst makes the first letter lower case, for a reason inside a

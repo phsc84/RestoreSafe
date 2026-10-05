@@ -73,7 +73,7 @@ func TestSettingsShowProblemsAndReload(t *testing.T) {
 	}
 
 	p = settingsOf(t, scenario.BackupDirUnreachable, errors.New("Config file is invalid: yaml: line 3: mapping values are not allowed\nRemedy: Check YAML syntax."), false)
-	if p.BackupDirState.Value != "Not reachable" || p.ConfigError != "Config file is invalid: yaml: line 3: mapping values are not allowed Check YAML syntax." {
+	if p.BackupDirState.Value != "Not reachable" || p.ConfigError != "Config file is invalid: yaml: line 3: mapping values are not allowed. Check YAML syntax." {
 		t.Fatalf("dir %+v, error %q", p.BackupDirState, p.ConfigError)
 	}
 

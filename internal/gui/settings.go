@@ -123,7 +123,7 @@ func (sp *settingsPage) update() {
 	c.heading(v.BackupDirTitle, nil)
 	st := v.BackupDirState
 	c.row(cardRowHeight+4,
-		cell{hwnd: c.panel.PathLabel(v.BackupDir, widget.TextBody, pal.Text), fill: true},
+		cell{hwnd: c.panel.PathLabel(v.BackupDir, widget.TextBody, pal.Text), fill: true, height: sp.lineHeight(widget.TextBody)},
 		sp.status(c, st.Value, st.Tone, st.Glyph),
 		sp.button(c, v.Open, idSettingsOpen))
 	sp.rows(c, v.BackupDirRows)
@@ -212,18 +212,28 @@ func (sp *settingsPage) status(c *card, text string, tone view.Tone, glyph view.
 	label := c.label(text, widget.TextSmall, color)
 	w, _ := t.Fonts.Measure(text, widget.TextSmall)
 	w += t.Scale.Px(6)
+	// The text is as high as its line, so the row centers it like the
+	// buttons next to it; the icon centers its glyph in the same height.
+	height := sp.lineHeight(widget.TextSmall)
 	if glyph == view.GlyphNone {
-		return cell{hwnd: label, px: w}
+		return cell{hwnd: label, px: w, height: height}
 	}
 	// The icon and the text share the cell: the icon is placed by the row,
 	// the text after it.
 	icon, err := widget.NewIcon(t, c.panel.HWND(), pal.Surface, widget.TextIconSmall)
 	if err != nil {
-		return cell{hwnd: label, px: w}
+		return cell{hwnd: label, px: w, height: height}
 	}
 	c.panel.Adopt(icon.HWND())
 	icon.Set(glyphOf(glyph), color, widget.NoCircle, "")
-	return cell{hwnd: label, px: w + t.Scale.Px(iconWidth), icon: icon.HWND()}
+	return cell{hwnd: label, px: w + t.Scale.Px(iconWidth), icon: icon.HWND(), height: height}
+}
+
+// lineHeight returns the height of a line of text in style, in DIPs.
+func (sp *settingsPage) lineHeight(style widget.TextStyle) int32 {
+	t := sp.a.theme
+	_, h := t.Fonts.Measure("Ag", style)
+	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
 }
 
 // button creates a button cell for b.

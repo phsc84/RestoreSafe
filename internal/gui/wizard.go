@@ -893,11 +893,12 @@ func (w *restoreWizard) message(msg uint32, wparam, lparam uintptr) (uintptr, bo
 		}
 	case win32.WM_SIZE:
 		win32.SetWindowPos(w.win.panel.HWND(), win32.ClientRect(w.win.hwnd))
-		if w.page == view.WizardCheck {
+		switch w.page {
+		case view.WizardCheck:
 			w.build()
-		} else if w.page == view.WizardDestination {
+		case view.WizardDestination:
 			w.update()
-		} else {
+		default:
 			w.layout()
 		}
 		return 0, true

@@ -277,7 +277,8 @@ func (b *backupsPage) fillLines() {
 	}
 	var sig strings.Builder
 	for _, l := range lines {
-		sig.WriteString(l.Text + "\x00")
+		sig.WriteString(l.Text)
+		sig.WriteByte(0)
 	}
 	if sig.String() == b.linesSig {
 		return
@@ -319,9 +320,13 @@ func (b *backupsPage) fillList() {
 	v := b.view
 	var sig strings.Builder
 	for _, g := range v.Groups {
-		sig.WriteString(string(g.RunID) + "|" + g.Header + "\x00")
+		sig.WriteString(string(g.RunID))
+		sig.WriteByte('|')
+		sig.WriteString(g.Header)
+		sig.WriteByte(0)
 		for _, r := range g.Rows {
-			sig.WriteString(r.Set + "\x00")
+			sig.WriteString(r.Set)
+			sig.WriteByte(0)
 		}
 	}
 	lv := b.list

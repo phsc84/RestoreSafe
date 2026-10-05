@@ -35,7 +35,7 @@ var (
 // locked the goroutine to its thread.
 func useCommonControls6(t *testing.T) {
 	t.Helper()
-	manifest, err := filepath.Abs(filepath.Join("..", "..", "..", "build", "windows", "RestoreSafe.manifest"))
+	manifest, err := filepath.Abs(filepath.Join("..", "..", "..", "build", "RestoreSafe.manifest"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -188,3 +188,19 @@ func TestBackupPlanOfARealPlan(t *testing.T) {
 		})
 	}
 }
+
+func TestIssueTextEndsTheMessageBeforeTheRemedy(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, issue, first string }{
+		{"Not enough space. Remedy: Free up space.", "Not enough space. Free up space.", "Not enough space."},
+		{"yaml: line 3: bad escape Remedy: Check YAML syntax.", "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
+		{"No remedy here", "No remedy here", "No remedy here"},
+	} {
+		if got := issueText(tc.in); got != tc.issue {
+			t.Errorf("issueText(%q) = %q, want %q", tc.in, got, tc.issue)
+		}
+		if got := firstSentences(tc.in); got != tc.first {
+			t.Errorf("firstSentences(%q) = %q, want %q", tc.in, got, tc.first)
+		}
+	}
+}
