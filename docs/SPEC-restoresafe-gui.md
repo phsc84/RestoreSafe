@@ -684,7 +684,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 
 ```text
 ┌────────────────────────────────────────────────────┐
-│ Create your keys  ·  Step 1 of 3               [x] │
+│ Create your keys  ·  Step 1 of 2               [x] │
 ├────────────────────────────────────────────────────┤
 │ Choose a password for your backups.                │
 │ At least 12 characters. You need it for every      │
@@ -704,7 +704,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 
 ```text
 ┌────────────────────────────────────────────────────┐
-│ Your recovery code  ·  Step 3 of 3                 │
+│ Your recovery code                                 │
 ├────────────────────────────────────────────────────┤
 │ Store this code in your password manager or write  │
 │ it down now. It's shown only once and opens your   │
@@ -722,8 +722,8 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 | ID | Requirement |
 |---|---|
 | CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): the prompt names the key set by its creation date when there's more than one key set in the selection. The "attempts left" line from the workflow output is shown under the field (as today). The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
-| CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`): one dialog frame with "Step n of N", where N counts the steps the configuration needs (password; YubiKey; spare YubiKey; recovery code). Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
-| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). |
+| CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`): one dialog frame with "Step n of N", where N counts the dialogs that ask something (password; spare YubiKey), and a single one isn't numbered. YubiKey registration has no dialog of its own (the Windows Security prompt) and the recovery code dialog asks nothing, so neither is numbered; the "Steps:" line still names every step. Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
+| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
 ## 10. Settings page

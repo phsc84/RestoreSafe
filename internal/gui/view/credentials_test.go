@@ -38,13 +38,13 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 	all := interact.KeyPlan{New: true, Password: true, YubiKeys: 2, RecoveryCode: true}
 	q := flow.Question{Prompt: "Enter new backup password (at least 12 characters): "}
 	d := NewPasswordDialogOf(q, all)
-	if d.Title != "Create your keys · Step 1 of 4" || !strings.HasPrefix(d.Hint, "At least 12 characters.") || len(d.Fields) != 2 {
+	if d.Title != "Create your keys · Step 1 of 2" || !strings.HasPrefix(d.Hint, "At least 12 characters.") || len(d.Fields) != 2 {
 		t.Fatalf("password step %+v", d)
 	}
 	if d.Note != "Steps: password › register your YubiKey › register your spare YubiKey › recovery code" {
 		t.Fatalf("steps %q", d.Note)
 	}
-	if s := SpareYubiKeyDialogOf(flow.Question{}, all); s.Title != "Create your keys · Step 3 of 4" || s.Error != "" {
+	if s := SpareYubiKeyDialogOf(flow.Question{}, all); s.Title != "Create your keys · Step 2 of 2" || s.Error != "" {
 		t.Fatalf("spare step %+v", s)
 	}
 	s := SpareYubiKeyDialogOf(flow.Question{Message: "This is YubiKey 1. Remove it and insert your spare YubiKey.", Retry: true}, all)
@@ -52,7 +52,7 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 		t.Fatalf("spare retry %q", s.Error)
 	}
 	r := RecoveryCodeDialogOf("K7QF-9M2D-XW4P-HT6N-3JBV-R8LC", all)
-	if r.Title != "Your recovery code · Step 4 of 4" || r.Cancel != "" || r.Code != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
+	if r.Title != "Your recovery code" || r.Cancel != "" || r.Code != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
 		t.Fatalf("recovery code %+v", r)
 	}
 	if r.Copy != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" {

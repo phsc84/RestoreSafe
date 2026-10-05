@@ -95,7 +95,8 @@ type UI interface {
 	NewPassword(prompt, confirmPrompt string) ([]byte, error)
 
 	// ShowRecoveryCode shows a new recovery code. It is shown only this once.
-	ShowRecoveryCode(code string)
+	// It returns ErrCancelled when the user cancels instead of storing it.
+	ShowRecoveryCode(code string) error
 	// WaitForSpareYubiKey waits until the user has connected the spare
 	// YubiKey. It returns false when the user cancels.
 	WaitForSpareYubiKey() (bool, error)

@@ -115,10 +115,12 @@ func SpareYubiKeyDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDial
 }
 
 // RecoveryCodeDialogOf shows the new recovery code once (figure 9.3), with a
-// button that copies it, e.g. into a password manager.
-func RecoveryCodeDialogOf(code string, keys interact.KeyPlan) CredentialDialog {
+// button that copies it, e.g. into a password manager. It has no Cancel
+// button, but closing it cancels. It is not a numbered step: it asks
+// nothing.
+func RecoveryCodeDialogOf(code string, _ interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
-		Title: stepTitle(recoveryTitle, keys, keyStepRecovery),
+		Title: recoveryTitle,
 		Intro: recoveryIntro,
 		Code:  code,
 		Copy:  code,
@@ -154,8 +156,16 @@ func keySteps(k interact.KeyPlan) []int {
 }
 
 // stepTitle is "<title> · Step n of N", or title alone for a single step.
+// Only the steps that ask in a dialog of their own are numbered: YubiKey
+// registration is the Windows Security prompt, and the recovery code
+// dialog asks nothing.
 func stepTitle(title string, k interact.KeyPlan, step int) string {
-	steps := keySteps(k)
+	var steps []int
+	for _, s := range keySteps(k) {
+		if s != keyStepYubiKey && s != keyStepRecovery {
+			steps = append(steps, s)
+		}
+	}
 	if len(steps) < 2 {
 		return title
 	}

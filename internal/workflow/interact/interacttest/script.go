@@ -167,7 +167,7 @@ func (s *Script) ChooseUnlockMethod(regular string) (bool, error) {
 }
 
 // ShowRecoveryCode prints the recovery code with instructions for keeping it.
-func (s *Script) ShowRecoveryCode(code string) {
+func (s *Script) ShowRecoveryCode(code string) error {
 	s.println()
 	s.println("Your recovery code:")
 	s.println()
@@ -178,6 +178,7 @@ func (s *Script) ShowRecoveryCode(code string) {
 	s.println("  - Store it in your password manager or on paper in a safe place, never next to your backups.")
 	s.println("  - It is shown only this once.")
 	s.println()
+	return nil
 }
 
 // WaitForSpareYubiKey waits for Enter; "q" cancels.

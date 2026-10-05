@@ -39,7 +39,6 @@ type credentialDialog struct {
 	values   [][]byte
 	code     win32.HWND
 	codeFont windows.Handle
-	noCancel bool
 	ok, open bool
 	// linked is set when the user chose the link.
 	linked bool
@@ -71,7 +70,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	t = win.theme
 	s := t.Scale
 	pal := t.Palette
-	d := &credentialDialog{win: win, fields: v.Fields, open: true, noCancel: v.Cancel == ""}
+	d := &credentialDialog{win: win, fields: v.Fields, open: true}
 	activeCredential = d
 	var copyButton win32.HWND
 	win.onCommand = func(id uint16) {
@@ -225,9 +224,6 @@ func codeFont(dpi uint32) (windows.Handle, error) {
 func (d *credentialDialog) close(ok bool) {
 	if !d.open {
 		return
-	}
-	if d.noCancel {
-		ok = true
 	}
 	if d.code != 0 {
 		win32.OverwriteText(d.code)

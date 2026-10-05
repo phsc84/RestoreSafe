@@ -122,10 +122,10 @@ func (q questions) newKeys() interact.KeyPlan {
 	return interact.KeyPlan{New: true, Password: true}
 }
 
-// RecoveryCode shows the new recovery code once (figure 9.3).
-func (q questions) RecoveryCode(code string, answer func()) {
-	q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys()))
-	answer()
+// RecoveryCode shows the new recovery code once (figure 9.3). Closing the
+// dialog cancels the backup.
+func (q questions) RecoveryCode(code string, answer func(bool)) {
+	answer(q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys())).ok)
 }
 
 // SpareYubiKey asks to connect the spare YubiKey.

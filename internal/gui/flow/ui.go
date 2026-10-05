@@ -40,8 +40,8 @@ type Dialogs interface {
 	// NewPassword answers the password and its confirmation, or ok=false
 	// when the user cancelled.
 	NewPassword(q Question, confirmPrompt string, answer func(password, confirm []byte, ok bool))
-	// RecoveryCode shows a new recovery code once.
-	RecoveryCode(code string, answer func())
+	// RecoveryCode shows a new recovery code once; ok=false cancels.
+	RecoveryCode(code string, answer func(ok bool))
 	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
 	SpareYubiKey(q Question, answer func(ok bool))
 }
@@ -199,8 +199,17 @@ func checkNewPassword(pw, confirm []byte) ([]byte, error) {
 }
 
 // ShowRecoveryCode shows the new recovery code once.
-func (u *UI) ShowRecoveryCode(code string) {
-	u.b.Ask(func(answer func(any, error)) { u.d.RecoveryCode(code, func() { answer(nil, nil) }) }, nil, nil) //nolint:errcheck
+func (u *UI) ShowRecoveryCode(code string) error {
+	_, err := u.b.Ask(func(answer func(any, error)) {
+		u.d.RecoveryCode(code, func(ok bool) {
+			if !ok {
+				answer(nil, interact.ErrCancelled)
+				return
+			}
+			answer(nil, nil)
+		})
+	}, nil, interact.ErrCancelled)
+	return err
 }
 
 // WaitForSpareYubiKey waits until the user confirms the spare YubiKey is

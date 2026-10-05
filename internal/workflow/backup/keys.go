@@ -223,6 +223,8 @@ func createRecoveryCode(u interact.UI) (recovery.Code, error) {
 	if err != nil {
 		return recovery.Code{}, err
 	}
-	u.ShowRecoveryCode(code.String())
+	if err := u.ShowRecoveryCode(code.String()); err != nil {
+		return recovery.Code{}, err
+	}
 	return code, nil
 }

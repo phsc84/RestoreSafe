@@ -35,7 +35,7 @@ func (f *fakeDialogs) ConfirmStart(string, func(bool, error))   {}
 func (f *fakeDialogs) ChooseUnlockMethod(_ Question, _ string, answer func(bool, []byte, error)) {
 	answer(f.recovery, f.choiceSecret, nil)
 }
-func (f *fakeDialogs) RecoveryCode(string, func())       {}
+func (f *fakeDialogs) RecoveryCode(string, func(bool))   {}
 func (f *fakeDialogs) SpareYubiKey(Question, func(bool)) {}
 func (f *fakeDialogs) Password(q Question, answer func([]byte, error)) {
 	f.questions = append(f.questions, q)
