@@ -103,11 +103,15 @@ func cellText(r view.TableRow, col int) string {
 // height returns the height in DIPs the table needs to show its rows, at
 // most tableMaxRows; more rows scroll within it.
 func (tb *table) height() int32 {
+	return tb.heightOf(min(max(len(tb.v.Rows), 1), tableMaxRows))
+}
+
+// heightOf returns the height in DIPs of the table showing n rows.
+func (tb *table) heightOf(n int) int32 {
 	if tb.hwnd == 0 {
 		return 0
 	}
 	s := tb.theme.Scale
-	n := min(max(len(tb.v.Rows), 1), tableMaxRows)
 	px := win32.ListViewHeight(tb.hwnd, n) + 2*win32.SystemMetric(win32.SM_CXBORDER, uint32(s)) + s.Px(2)
 	return (px*96 + int32(s) - 1) / int32(s)
 }
@@ -234,4 +238,69 @@ func (tb *table) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 // cell returns a card row cell that holds the table over the row's width.
 func (tb *table) cell() cell {
 	return cell{hwnd: tb.hwnd, place: tb.place, fill: true}
+}
+
+// tableMinRows is the fewest rows a table that the user sizes shows.
+const tableMinRows = 3
+
+// tableSizer lets the user set the height of the table in a card with a
+// splitter in the gap below the card; the cards below keep their height
+// and move, and the page scrolls when they no longer fit.
+type tableSizer struct {
+	theme    *widget.Theme
+	page     *widget.Panel
+	card     *card
+	table    *table
+	splitter *widget.Splitter
+	// height is the table's height in DIPs as the user dragged it, 0 until
+	// then.
+	height int32
+}
+
+// newTableSizer creates the splitter on page; layout lays the page out
+// after a drag.
+func newTableSizer(t *widget.Theme, page *widget.Panel, c *card, tb *table, layout func()) (*tableSizer, error) {
+	sp, err := widget.NewSplitter(t, page.HWND(), t.Palette.Surface)
+	if err != nil {
+		return nil, err
+	}
+	page.Adopt(sp.HWND())
+	z := &tableSizer{theme: t, page: page, card: c, table: tb, splitter: sp}
+	sp.OnMove = func(top int32) {
+		z.moved(top)
+		layout()
+	}
+	return z, nil
+}
+
+// rowHeight returns the table's height in DIPs: as the user dragged it, or
+// else as many rows as it has, from tableMinRows to tableMaxRows.
+func (z *tableSizer) rowHeight() int32 {
+	least := z.table.heightOf(tableMinRows)
+	if z.height > 0 {
+		return max(z.height, least)
+	}
+	return max(z.table.height(), least)
+}
+
+// place puts the splitter in the middle of gap, the space below the card.
+func (z *tableSizer) place(gap win32.Rect) {
+	split := z.theme.Scale.Px(widget.SplitterHeight)
+	gap.Top += (gap.Height() - split) / 2
+	gap.Bottom = gap.Top + split
+	win32.SetWindowPos(z.splitter.HWND(), gap)
+}
+
+// moved sets the table's height for the splitter's new top.
+func (z *tableSizer) moved(top int32) {
+	s := z.theme.Scale
+	tr := win32.WindowRect(z.table.hwnd)
+	cr := win32.WindowRect(z.card.panel.HWND())
+	tableTop := win32.ScreenToClient(z.page.HWND(), win32.Point{X: tr.Left, Y: tr.Top}).Y
+	cardBottom := top - (s.Px(widget.CardGap)-s.Px(widget.SplitterHeight))/2
+	z.height = max(s.Dip(cardBottom-(cr.Bottom-tr.Bottom)-tableTop), z.table.heightOf(tableMinRows))
+	// The table is the card's second row, below the heading.
+	if len(z.card.rows) > 1 {
+		z.card.rows[1].height = z.rowHeight()
+	}
 }

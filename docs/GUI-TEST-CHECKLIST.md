@@ -41,6 +41,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | Script: red hero with Check again and Edit config. Back up now… is not shown (see Known differences). |
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
+| OV-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls when they no longer fit | Open | |
 | OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | Tooltips added in 10a. |
 | 3.4 | Tables (Create backup, backup plan, Settings, restore wizard page 3): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | Open | |
 | 3.4 | One-line text cut off with "…" (a long backup directory path in a narrow window) shows its full text in a tooltip; text that fits has none | Open | |
@@ -73,7 +74,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-1 | Runs newest first, the newest expanded; group header with size, duration, warnings, "new keys" | Open | Pre-checked: order, newest expanded, header with size, duration, "new keys", failed and cancelled runs. |
 | BK-2 | Types, "based on", chain IDs and sizes match the files in Explorer | Open | |
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
-| BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs | Open | Pre-checked: selected run, live during verify and restore. |
+| BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs; the pane shows at least 15 lines, and dragging the splitter far down or making the window small gives the page a scroll bar | Open | Pre-checked: selected run, live during verify and restore. |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |
@@ -114,6 +115,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ST-2 | Reload after an invalid change: error on the card, previous configuration still active | Passed (script) | YAML error with its line on the card; values unchanged, 2026-10-02. |
 | ST-2 | Reload disabled while an operation runs | Open | |
 | ST-3 to ST-9 | Every value matches `config.yaml`; tooltips name the keys | Open | |
+| ST-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls | Open | |
 | 14 | Broken `config.yaml` at start: message box, then RestoreSafe ends | Open | |
 
 ## 7. Display

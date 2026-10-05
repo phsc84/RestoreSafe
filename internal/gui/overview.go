@@ -58,6 +58,9 @@ type overviewPage struct {
 	busy bool
 	// folderTable lists the folders in the Folders card.
 	folderTable *table
+	// sizer is the splitter below the Folders card that sets the table's
+	// height.
+	sizer *tableSizer
 }
 
 func newOverviewPage(a *app) (*overviewPage, error) {
@@ -94,6 +97,10 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 		r, _ := o.folderTable.notify(hdr)
 		return r
 	}
+	if o.sizer, err = newTableSizer(t, panel, o.folders, o.folderTable, o.layout); err != nil {
+		return nil, err
+	}
+	panel.OnScroll = o.layout
 	return o, nil
 }
 
@@ -197,7 +204,7 @@ func (o *overviewPage) fillFolders() {
 	c.reset()
 	c.heading(v.Title, nil)
 	o.folderTable.set(v.Table(o.runStates()))
-	c.row(o.folderTable.height(), o.folderTable.cell())
+	c.row(o.sizer.rowHeight(), o.folderTable.cell())
 	if v.Note != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Note, widget.TextSmall, toneColor(t.Palette, v.NoteTone)), fill: true})
 	}
@@ -274,11 +281,27 @@ func (o *overviewPage) fillKeys() {
 }
 
 // layout places the title, the hero or the run card below it, like on
-// Restore backup, and the cards.
+// Restore backup, and the cards. The page scrolls when they don't fit.
 func (o *overviewPage) layout() {
 	t := o.a.theme
 	s := t.Scale
-	area := widget.NewArea(s, win32.ClientRect(o.panel.HWND()))
+	client := win32.ClientRect(o.panel.HWND())
+	var total int32
+	// A scroll bar that comes or goes changes the width, and with it the
+	// hero's height.
+	for range 2 {
+		total = o.contentHeight(client.Width())
+		o.panel.SetScroll(total)
+		now := win32.ClientRect(o.panel.HWND())
+		if now.Width() == client.Width() {
+			break
+		}
+		client = now
+	}
+	page := client
+	page.Top -= o.panel.ScrollOffset()
+	page.Bottom = page.Top + max(total, client.Height())
+	area := widget.NewArea(s, page)
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
 	win32.SetWindowPos(o.title, area.Top(backupsTitleHeight))
 	area.Top(8)
@@ -290,9 +313,29 @@ func (o *overviewPage) layout() {
 	}
 
 	for _, c := range []*card{o.folders, o.storage, o.keys} {
-		area.Top(widget.CardGap)
+		gap := area.Top(widget.CardGap)
+		if c == o.storage {
+			o.sizer.place(gap)
+		}
 		c.place(area.Top(c.height()))
 	}
+}
+
+// contentHeight returns the height in pixels of the page's content at a
+// page width.
+func (o *overviewPage) contentHeight(width int32) int32 {
+	s := o.a.theme.Scale
+	inner := width - 2*s.Px(widget.ContentPaddingX)
+	h := 2*s.Px(widget.ContentPaddingY) + s.Px(backupsTitleHeight) + s.Px(8)
+	if o.run.mode != runHidden {
+		h += o.run.height(inner)
+	} else {
+		h += o.heroGeometry(inner).height
+	}
+	for _, c := range []*card{o.folders, o.storage, o.keys} {
+		h += s.Px(widget.CardGap) + s.Px(c.height())
+	}
+	return h
 }
 
 // restyle applies new fonts after a DPI change.

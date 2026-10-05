@@ -35,6 +35,9 @@ type settingsPage struct {
 	checks, keys, logging      *card
 	// foldersTable lists the folders in the Folders card.
 	foldersTable *table
+	// sizer is the splitter below the Folders card that sets the table's
+	// height.
+	sizer *tableSizer
 	// showArgon2 expands the key derivation values.
 	showArgon2 bool
 	// builtWidth is the page width the rows were measured for; a new width
@@ -60,6 +63,9 @@ func newSettingsPage(a *app) (*settingsPage, error) {
 	sp.folders.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
 		r, _ := sp.foldersTable.notify(hdr)
 		return r
+	}
+	if sp.sizer, err = newTableSizer(t, panel, sp.folders, sp.foldersTable, sp.layout); err != nil {
+		return nil, err
 	}
 	panel.OnCommand = sp.command
 	panel.OnScroll = sp.layout
@@ -115,7 +121,7 @@ func (sp *settingsPage) update() {
 	c.reset()
 	c.heading(v.FoldersTitle, nil)
 	sp.foldersTable.set(v.FoldersTable())
-	c.row(sp.foldersTable.height(), sp.foldersTable.cell())
+	c.row(sp.sizer.rowHeight(), sp.foldersTable.cell())
 	sp.rows(c, v.FolderRows)
 
 	c = sp.backupDir
@@ -270,6 +276,9 @@ func (sp *settingsPage) layout() {
 	win32.SetWindowPos(sp.title, win32.Rect{Left: left, Top: y, Right: right, Bottom: y + s.Px(settingsTitleHeight)})
 	y += s.Px(settingsTitleHeight)
 	full := func(c *card) {
+		if c == sp.backupDir {
+			sp.sizer.place(win32.Rect{Left: left, Top: y, Right: right, Bottom: y + gap})
+		}
 		y += gap
 		h := s.Px(c.height())
 		c.place(win32.Rect{Left: left, Top: y, Right: right, Bottom: y + h})

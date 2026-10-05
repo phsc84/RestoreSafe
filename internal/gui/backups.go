@@ -42,10 +42,17 @@ const (
 	actionBarHeight    = 36
 	logHeaderHeight    = 30
 	minListHeight      = 80
-	minLogHeight       = 60
 	lineGap            = 4
 	logButtonWidth     = 64
 )
+
+// logMinLines is how many lines the log pane shows at least; when the list
+// above it leaves less room, the page scrolls.
+const logMinLines = 15
+
+// defaultLogShare is the log pane's share of the room below the cards
+// until the user drags the splitter.
+const defaultLogShare = 0.35
 
 // Column widths of the list, in DIPs; the status column takes the rest.
 var backupColumnWidths = []int32{150, 72, 110, 80, 76}
@@ -84,11 +91,13 @@ type backupsPage struct {
 	splitter                      *widget.Splitter
 	logTitle, logAll, logWarnings win32.HWND
 	logOpen, logEdit              win32.HWND
-	logRatio                      float64
-	logPath                       string
-	logText                       string
-	logSeq                        int
-	logFilter                     view.LogFilter
+	// listHeight is the list's height in DIPs as the user dragged the
+	// splitter; 0 until then.
+	listHeight int32
+	logPath    string
+	logText    string
+	logSeq     int
+	logFilter  view.LogFilter
 
 	emptyTitle, emptyLine, emptyButton win32.HWND
 
@@ -108,7 +117,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &backupsPage{a: a, panel: panel, acts: actions{}, logRatio: 0.35, collapsed: map[naming.BackupID]bool{}}
+	b := &backupsPage{a: a, panel: panel, acts: actions{}, collapsed: map[naming.BackupID]bool{}}
 	b.title = panel.Label(view.BackupsOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
 	b.filter = b.child("COMBOBOX", win32.WS_TABSTOP|win32.WS_VSCROLL|win32.CBS_DROPDOWNLIST, idBackupsFilter)
 	win32.SetAccessibleName(b.filter, view.FilterName)
@@ -155,6 +164,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.emptyButton = panel.PrimaryButton(" ", idEmptyBackUp)
 	panel.OnCommand = b.command
 	panel.OnNotify = b.notify
+	panel.OnScroll = b.layout
 	b.restyle()
 	return b, nil
 }
@@ -759,32 +769,88 @@ func (b *backupsPage) refOf(param uintptr) (rowRef, bool) {
 	return b.rows[p-1], true
 }
 
-// splitterMoved resizes the list and the log pane.
+// splitterMoved sets the list's height; the log pane takes the rest, at
+// least logMinLines lines.
 func (b *backupsPage) splitterMoved(top int32) {
-	listTop, logBottom := b.splitRange()
-	avail := logBottom - listTop
-	if avail <= 0 {
-		return
-	}
 	s := b.a.theme.Scale
-	logH := logBottom - top - s.Px(widget.SplitterHeight) - s.Px(logHeaderHeight)
-	b.logRatio = min(max(float64(logH)/float64(avail), 0.1), 0.8)
+	r := win32.WindowRect(b.list)
+	listTop := win32.ScreenToClient(b.panel.HWND(), win32.Point{X: r.Left, Y: r.Top}).Y
+	b.listHeight = s.Dip(max(top-listTop-s.Px(actionBarHeight), s.Px(minListHeight)))
 	b.layout()
 }
 
-// splitRange returns the top of the list and the bottom of the log pane.
-func (b *backupsPage) splitRange() (int32, int32) {
-	r := win32.WindowRect(b.list)
-	top := win32.ScreenToClient(b.panel.HWND(), win32.Point{X: r.Left, Y: r.Top}).Y
-	client := win32.ClientRect(b.panel.HWND())
-	return top, client.Bottom - b.a.theme.Scale.Px(widget.ContentPaddingY)
+// logMinHeight returns the height in pixels of the log pane showing
+// logMinLines lines.
+func (b *backupsPage) logMinHeight() int32 {
+	hdc := win32.GetDC(0)
+	old := win32.SelectFont(hdc, b.a.monoFont)
+	line := win32.DrawText(hdc, "Ag", win32.Rect{}, win32.DT_CALCRECT|win32.DT_SINGLELINE|win32.DT_NOPREFIX).Height()
+	win32.SelectFont(hdc, old)
+	win32.ReleaseDC(0, hdc)
+	// The border and the rich edit's inner margin.
+	return logMinLines*line + b.a.theme.Scale.Px(8)
 }
 
-// layout places the page's controls.
+// splitHeights divides avail pixels between the list and the log pane; the
+// two may need more than avail, and then the page scrolls.
+func (b *backupsPage) splitHeights(avail int32) (listH, logH int32) {
+	s := b.a.theme.Scale
+	logMin := b.logMinHeight()
+	if b.listHeight > 0 {
+		listH = max(s.Px(b.listHeight), s.Px(minListHeight))
+	} else {
+		listH = max(avail-max(int32(float64(avail)*defaultLogShare), logMin), s.Px(minListHeight))
+	}
+	return listH, max(avail-listH, logMin)
+}
+
+// headHeight returns the height in pixels of the title, the run card and
+// the lines above the list, with their gaps, at a page width.
+func (b *backupsPage) headHeight(width int32) int32 {
+	s := b.a.theme.Scale
+	h := s.Px(backupsTitleHeight) + s.Px(8)
+	if b.run.mode != runHidden {
+		h += b.run.height(width-2*s.Px(widget.ContentPaddingX)) + s.Px(widget.CardGap)
+	}
+	if win32.IsWindowVisible(b.lines.HWND()) && b.linesStack != nil {
+		h += b.linesHeight + s.Px(widget.CardGap)
+	}
+	return h
+}
+
+// layout places the page's controls. The log pane fills the page below the
+// list; the page scrolls when the list leaves it fewer than logMinLines
+// lines.
 func (b *backupsPage) layout() {
 	t := b.a.theme
 	s := t.Scale
-	area := widget.NewArea(s, win32.ClientRect(b.panel.HWND()))
+	client := win32.ClientRect(b.panel.HWND())
+	bar := s.Px(actionBarHeight)
+	header := s.Px(logHeaderHeight)
+	split := s.Px(widget.SplitterHeight)
+	var listH, logH, total int32
+	if b.view.Empty == nil {
+		// A scroll bar that comes or goes changes the width, and with it
+		// the run card's height.
+		for range 2 {
+			fixed := 2*s.Px(widget.ContentPaddingY) + b.headHeight(client.Width()) + bar + split + header
+			listH, logH = b.splitHeights(client.Height() - fixed)
+			total = fixed + listH + logH
+			b.panel.SetScroll(total)
+			now := win32.ClientRect(b.panel.HWND())
+			if now.Width() == client.Width() {
+				break
+			}
+			client = now
+		}
+	} else {
+		b.panel.SetScroll(0)
+		client = win32.ClientRect(b.panel.HWND())
+	}
+	page := client
+	page.Top -= b.panel.ScrollOffset()
+	page.Bottom = page.Top + max(total, client.Height())
+	area := widget.NewArea(s, page)
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
 	top := widget.NewArea(s, area.Top(backupsTitleHeight))
 	f := top.Right(filterWidth)
@@ -816,15 +882,8 @@ func (b *backupsPage) layout() {
 		area.Top(widget.CardGap)
 	}
 
-	// The log pane at the bottom, the list above it.
+	// The list, its action bar, the splitter and the log pane.
 	bottom := area.Rest()
-	bar := s.Px(actionBarHeight)
-	header := s.Px(logHeaderHeight)
-	split := s.Px(widget.SplitterHeight)
-	avail := bottom.Height() - bar - split - header
-	logH := max(int32(float64(avail)*b.logRatio), s.Px(minLogHeight))
-	logH = min(logH, max(avail-s.Px(minListHeight), 0))
-	listH := max(avail-logH, 0)
 	y := bottom.Top
 	win32.SetWindowPos(b.list, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + listH})
 	y += listH
