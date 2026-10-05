@@ -183,7 +183,7 @@ function Click-TaskButton([int]$procId, [string]$text, [int]$seconds = 30) {
 
 # Answer-Credentials answers the credential dialogs until $done returns
 # true: a new password (two fields), the password (one masked field), the
-# recovery code shown at key setup (read, then typed back), and nothing
+# recovery code shown at key setup (read, then confirmed), and nothing
 # else. It returns the recovery code it saw, if any.
 function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done, [int]$seconds = 180) {
   $code = $script:RecoveryCode
@@ -194,14 +194,11 @@ function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done,
     if (-not $dlg) { Start-Sleep -Milliseconds 300; continue }
     $edits = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Edit" })
     $lines = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Static" } | ForEach-Object { [U]::Text($_) } | Where-Object { $_ -match '^[0-9A-Z]{4,}(-[0-9A-Z]{4,})+$' })
-    $labels = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Static" } | ForEach-Object { [U]::Text($_) })
     if ($edits.Count -eq 0 -and $lines.Count -gt 0) {
       $script:RecoveryCode = $lines -join "-"
       [U]::PostMessage($dlg, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null
     } elseif ($edits.Count -eq 2) {
       Fill-Dialog $dlg @($password, $password)
-    } elseif ($edits.Count -eq 1 -and $labels -contains "Recovery code") {
-      Fill-Dialog $dlg @($script:RecoveryCode)
     } elseif ($edits.Count -eq 1) {
       Fill-Dialog $dlg @($password)
     }

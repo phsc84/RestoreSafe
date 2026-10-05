@@ -119,7 +119,7 @@ func TestBackupPlanNewKeysAndRemovals(t *testing.T) {
 	if v.KeysNote != "New keys will be created: recovery_code enabled in config.yaml. Every folder gets a full backup." {
 		t.Fatalf("keys note %q", v.KeysNote)
 	}
-	if v.Unlock.Text != "New password, register 2 YubiKeys (4 prompts), write down a recovery code" {
+	if v.Unlock.Text != "New password, register 2 YubiKeys (4 prompts), store a recovery code" {
 		t.Fatalf("unlock %q", v.Unlock.Text)
 	}
 	if v.Afterwards.Text != "Remove 4 old backups (42 GB)." || v.RemovesLink == "" {

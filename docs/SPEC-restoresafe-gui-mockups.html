@@ -145,7 +145,7 @@ svg.i{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:2;stroke-l
 .tdl .ex{padding:0 16px 12px 56px;font-size:12px;color:var(--acc)}
 .tdl .tf{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;background:var(--surf2);border-top:1px solid var(--line)}
 .pw{display:inline-flex;align-items:center;height:26px;padding:0 8px;width:220px;border:1px solid var(--line2);border-bottom:2px solid var(--accf);border-radius:4px;background:var(--fld);letter-spacing:2px;font-size:12px}
-.code{font:600 22px/1.5 Consolas,"IBM Plex Mono",monospace;letter-spacing:2px;padding:10px 0 10px 24px}
+.code{font:600 17px/1.5 Consolas,"IBM Plex Mono",monospace;letter-spacing:1px;padding:10px 0;text-align:center}
 .stg{display:grid;grid-template-columns:130px 1fr;gap:4px 12px;font-size:12px}
 .stg .k{color:var(--mut)}
 @media (max-width:640px){.dgrid{grid-template-columns:1fr}}
@@ -422,11 +422,11 @@ svg.i{width:1em;height:1em;stroke:currentColor;fill:none;stroke-width:2;stroke-l
 <figcaption>Figure 9.2: New keys, password (CR-2).</figcaption></figure>
 
 <figure><div class="mock"><div class="dlg"><div class="dt"><span>Your recovery code · Step 3 of 3</span></div>
-<div class="dbody short"><div style="font-size:13px">Write this code on paper now. It's shown only once and opens your backups on its own.</div>
-<div class="code">K7QF-9M2D-XW4P<br>HT6N-3JBV-R8LC</div>
-<div class="mu" style="font-size:12px">Keep it in a safe place, never next to your backups or on this computer.</div></div>
-<div class="dfoot"><span class="sm"></span><span class="btn p">I have written it down</span></div></div></div>
-<figcaption>Figure 9.3: Recovery code (CR-3). Static control, can't be selected or copied; not a task dialog.</figcaption></figure>
+<div class="dbody short"><div style="font-size:13px">Store this code in your password manager or write it down now. It&rsquo;s shown only once and opens your backups on its own.</div>
+<div class="code">K7QF-9M2D-XW4P-HT6N-3JBV-R8LC</div>
+<div class="mu" style="font-size:12px">Keep it in a safe place, never next to your backups or unencrypted on this computer.</div></div>
+<div class="dfoot"><span class="btn">Copy</span><span class="sm"></span><span class="btn p">I have stored it</span></div></div></div>
+<figcaption>Figure 9.3: Recovery code (CR-3). Static control; the code is copied only with Copy (kept out of the clipboard history); not a task dialog.</figcaption></figure>
 </div>
 
 <!-- ============================ 10 SETTINGS ============================ -->

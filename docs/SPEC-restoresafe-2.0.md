@@ -211,7 +211,7 @@ man_key   = HKDF-SHA256(V, salt = header_hash, info = "RestoreSafe v2 manifest")
 - 25 random characters (125 bits) in Crockford Base32 (no I, L, O, U), followed by a 5-character checksum group (first bits of SHA-256 over the 25 characters), displayed as 6 groups of 5: `7KQ2M-X9D4T-...-CHECK`.
 - Input is case-insensitive and ignores spaces and dashes. The checksum catches typos before the slow Argon2 derivation.
 - `check` in the slot stores the checksum group only (not secret; it's derivable from the code).
-- The recovery code alone unlocks the key set, **in every mode including 2FA**. The enrollment screen says so explicitly and tells the user to store the code offline (paper, safe), never next to the backups.
+- The recovery code alone unlocks the key set, **in every mode including 2FA**. The enrollment screen says so explicitly and tells the user to store the code in a password manager or offline (paper, safe), never next to the backups.
 
 #### 4.4.3 Multiple YubiKey slots
 
@@ -371,7 +371,7 @@ Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] c
 1. Modes 1/2: new password + confirmation; minimum length enforced (6.6).
 2. Modes 2/3: register YubiKey 1 and derive its secret (two Windows prompts, as in 1.x).
 3. If `yubikey_spare: true`: *"Remove YubiKey 1 and insert your spare YubiKey."* Register and derive (two prompts). Registration passes YubiKey 1's credential ID as exclude list, so registering the **same** YubiKey twice is refused by the key itself; RestoreSafe reports this and asks again for the spare.
-4. If `recovery_code: true`: show the code with the warning of 4.4.2; the user must type it back correctly before the backup starts.
+4. If `recovery_code: true`: show the code with the warning of 4.4.2; the user stores it (copy button or paper) before the backup starts. There is no retype step.
 5. Generate V, create all slots, and check each slot unwraps with the in-memory KEK before anything is written.
 
 The preflight states exactly which prompts will appear (password, number of YubiKey prompts, recovery code).
@@ -707,7 +707,7 @@ Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_cod
 1. You choose a password (at least 12 characters) and enter it twice.
 2. You register your YubiKey (two Windows Security prompts).
 3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
-4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Write it down and type it back to confirm.
+4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Copy it into your password manager or write it down.
 5. Then every source directory gets a full backup.
 
 **Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.

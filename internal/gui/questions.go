@@ -128,16 +128,6 @@ func (q questions) RecoveryCode(code string, answer func()) {
 	answer()
 }
 
-// RetypeRecoveryCode asks for the recovery code shown before.
-func (q questions) RetypeRecoveryCode(qu flow.Question, answer func(string, error)) {
-	res := q.a.runCredentialDialog(view.RetypeDialogOf(qu, q.newKeys()))
-	if !res.ok {
-		answer("", interact.ErrCancelled)
-		return
-	}
-	answer(string(res.values[0]), nil)
-}
-
 // SpareYubiKey asks to connect the spare YubiKey.
 func (q questions) SpareYubiKey(qu flow.Question, answer func(bool)) {
 	answer(q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys())).ok)

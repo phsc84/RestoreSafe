@@ -175,14 +175,9 @@ func (s *Script) ShowRecoveryCode(code string) {
 	s.println()
 	s.println("  - This code alone restores every backup made with these keys, even without")
 	s.println("    password or YubiKey. Treat it like the key to a safe.")
-	s.println("  - Write it down on paper and store it in a safe place, never next to your backups.")
+	s.println("  - Store it in your password manager or on paper in a safe place, never next to your backups.")
 	s.println("  - It is shown only this once.")
 	s.println()
-}
-
-// RetypeRecoveryCode reads the recovery code typed back by the user.
-func (s *Script) RetypeRecoveryCode() (string, error) {
-	return s.readLine("Type the recovery code to confirm you wrote it down: ")
 }
 
 // WaitForSpareYubiKey waits for Enter; "q" cancels.

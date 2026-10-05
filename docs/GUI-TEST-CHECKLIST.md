@@ -57,7 +57,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BP-2 | Afterwards line names the chain retention removes; after the run exactly those files are gone from the backup directory (compare in Explorer) | Open | |
 | BP-4 | **Full backup instead**: plan switches to full for every folder and back with **Back to plan** | Passed (script) | Full backup instead and Back to plan, 2026-10-02. |
 | BP-4 | **New keys + full backup…**: confirmation (figure 6.2), then key setup, then full backups | Open | |
-| CR-2 | First backup, mode 1 with recovery code: password twice, code shown on two lines, can't be selected or copied (clipboard checked), wrong retype shows the reason, right one continues | Open | Script: password twice, code read from the two static lines and retyped. Clipboard and wrong retype: by hand. |
+| CR-2 | First backup, mode 1 with recovery code: password twice, code shown on one line, can't be selected; **Copy** puts the whole code on the clipboard (one line with dashes), the button then reads Copied, and the code doesn't appear in the clipboard history (Win+V); **I have stored it** continues without a retype step | Open | Script: password twice, code read from its static line. Copy and clipboard history: by hand. |
 | CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Open | Needs YubiKeys. |
 | CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Open | Needs a YubiKey. |
 | CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Passed (script) | "Wrong password. 2 attempts left." under the field, then the right one, 2026-10-02. |

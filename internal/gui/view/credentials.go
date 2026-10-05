@@ -24,10 +24,13 @@ type CredentialDialog struct {
 	Fields []Field
 	// Error is under the fields: what was wrong with the last answer.
 	Error string
-	// CodeLines is a recovery code to write down, in lines of groups.
-	CodeLines []string
-	Note      string
-	OK        string
+	// Code is a recovery code to store, shown on one line.
+	Code string
+	// Copy is the text the Copy button puts on the clipboard; "" for no
+	// Copy button.
+	Copy string
+	Note string
+	OK   string
 	// Cancel is "" when the dialog cannot be cancelled.
 	Cancel string
 	// Link is an alternative answer, e.g. "Use your recovery code instead";
@@ -111,38 +114,17 @@ func SpareYubiKeyDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDial
 	}
 }
 
-// RecoveryCodeDialogOf shows the new recovery code once (figure 9.3).
+// RecoveryCodeDialogOf shows the new recovery code once (figure 9.3), with a
+// button that copies it, e.g. into a password manager.
 func RecoveryCodeDialogOf(code string, keys interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
-		Title:     stepTitle(recoveryTitle, keys, keyStepRecovery),
-		Intro:     recoveryIntro,
-		CodeLines: CodeLines(code),
-		Note:      recoveryNote,
-		OK:        buttonWrittenDown,
+		Title: stepTitle(recoveryTitle, keys, keyStepRecovery),
+		Intro: recoveryIntro,
+		Code:  code,
+		Copy:  code,
+		Note:  recoveryNote,
+		OK:    buttonStored,
 	}
-}
-
-// RetypeDialogOf asks for the recovery code just shown (spec 13.3).
-func RetypeDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDialog {
-	return CredentialDialog{
-		Title:  stepTitle(recoveryTitle, keys, keyStepRecovery),
-		Intro:  retypeIntro,
-		Fields: []Field{{Label: fieldRecoveryCode}},
-		Error:  retryError(q),
-		OK:     buttonNext,
-		Cancel: buttonCancel,
-	}
-}
-
-// CodeLines splits a recovery code (groups separated by dashes) into two
-// lines of equal group count, so it fits the dialog in a large font.
-func CodeLines(code string) []string {
-	groups := strings.Split(code, "-")
-	if len(groups) < 2 {
-		return []string{code}
-	}
-	half := (len(groups) + 1) / 2
-	return []string{strings.Join(groups[:half], "-"), strings.Join(groups[half:], "-")}
 }
 
 // The steps of creating keys (spec CR-2).

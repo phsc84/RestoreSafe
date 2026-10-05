@@ -131,15 +131,15 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}}
 		stubEnrollment(t, s)
 		// First Enter with YubiKey 1 still connected (refused), then swap to
-		// the spare; then a wrong and the right recovery code.
-		s.lines = []string{"", "<swap>", "WRONG-CODE", s.code.String()}
+		// the spare.
+		s.lines = []string{"", "<swap>"}
 		cfg := &config.Config{AuthenticationMode: mode, YubiKeySpare: true, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
 		ks, master, err, out := enroll(t, s, cfg)
 		if err != nil {
 			t.Fatalf("mode %d: enrollKeySet: %v\n%s", mode, err, out)
 		}
-		if !strings.Contains(out, "This is YubiKey 1") || !strings.Contains(out, s.code.String()) || !strings.Contains(out, "Recovery code confirmed") {
+		if !strings.Contains(out, "This is YubiKey 1") || !strings.Contains(out, s.code.String()) {
 			t.Fatalf("mode %d: unexpected output %q", mode, out)
 		}
 		if len(ks.Slots) != 3 || ks.YubiKeyCount() != 2 || !ks.HasSlotType(container.SlotRecovery) {
@@ -160,15 +160,6 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		if got, err := ks.Unlock(2, s.code.Secret()); err != nil || !bytes.Equal(got, master) {
 			t.Fatalf("mode %d: recovery code does not unlock: %v", mode, err)
 		}
-	}
-}
-
-func TestEnrollKeySetFailsWhenRecoveryCodeNotConfirmed(t *testing.T) {
-	s := &enrollStub{passwords: [][2]string{{"a long password", "a long password"}}, lines: []string{"x", "y", "z"}}
-	stubEnrollment(t, s)
-	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "Recovery code not confirmed") {
-		t.Fatalf("expected unconfirmed recovery code error, got %v", err)
 	}
 }
 

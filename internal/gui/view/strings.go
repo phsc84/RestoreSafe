@@ -138,7 +138,7 @@ const (
 	unlockNewPassword      = "new password"
 	unlockRegisterOne      = "register your YubiKey (2 prompts)"
 	unlockRegisterTwo      = "register 2 YubiKeys (4 prompts)"
-	unlockRecoveryCode     = "write down a recovery code"
+	unlockRecoveryCode     = "store a recovery code"
 	afterVerify            = "Verify each new backup."
 	afterRemove            = "Remove %s (%s)."
 	afterRemoveIfOK        = "If the backup succeeds, remove %s (%s)."
@@ -271,7 +271,7 @@ const (
 	buttonUnlock         = "Unlock"
 	buttonNext           = "Next"
 	buttonContinue       = "Continue"
-	buttonWrittenDown    = "I have written it down"
+	buttonStored         = "I have stored it"
 	createKeysTitle      = "Create your keys"
 	recoveryTitle        = "Your recovery code"
 	stepOf               = "%s · Step %d of %d"
@@ -285,9 +285,8 @@ const (
 	stepNameRecovery     = "recovery code"
 	spareIntro           = "Remove your YubiKey and connect your spare YubiKey."
 	spareHint            = "Windows then asks twice for the PIN of the spare YubiKey."
-	recoveryIntro        = "Write this code on paper now. It's shown only once and opens your backups on its own."
-	recoveryNote         = "Keep it in a safe place, never next to your backups or on this computer."
-	retypeIntro          = "Type the code you wrote down, to check your note."
+	recoveryIntro        = "Store this code in your password manager or write it down now. It's shown only once and opens your backups on its own."
+	recoveryNote         = "Keep it in a safe place, never next to your backups or unencrypted on this computer."
 	attemptsLeft         = "%s attempts left."
 	attemptLeftOne       = "1 attempt left."
 )
@@ -302,6 +301,8 @@ const (
 	PlanColumnWhy    = "Why"
 	PlanColumnAbout  = "About"
 	ButtonCancel     = buttonCancel
+	ButtonCopy       = "Copy"
+	ButtonCopied     = "Copied"
 	LogTitle         = "Log"
 	DetailsOfResult  = "Details"
 )

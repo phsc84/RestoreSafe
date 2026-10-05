@@ -17,6 +17,7 @@ var (
 	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
 	procSetClipboardData = user32.NewProc("SetClipboardData")
 	procCloseClipboard   = user32.NewProc("CloseClipboard")
+	procRegisterClipFmt  = user32.NewProc("RegisterClipboardFormatW")
 	procSetCapture       = user32.NewProc("SetCapture")
 	procReleaseCapture   = user32.NewProc("ReleaseCapture")
 	procSetCursor        = user32.NewProc("SetCursor")
@@ -104,7 +105,17 @@ func ClientToScreen(hwnd HWND, pt Point) Point {
 }
 
 // CopyText puts text on the clipboard.
-func CopyText(owner HWND, text string) error {
+func CopyText(owner HWND, text string) error { return copyText(owner, text, false) }
+
+// CopySecretText puts a secret on the clipboard, marked so that Windows
+// keeps it out of the clipboard history and the cloud clipboard, and
+// clipboard monitors leave it alone.
+func CopySecretText(owner HWND, text string) error { return copyText(owner, text, true) }
+
+// Clipboard formats that mark a secret; their value is a DWORD 0.
+var secretClipboardFormats = []string{"ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"}
+
+func copyText(owner HWND, text string, secret bool) error {
 	u, err := windows.UTF16FromString(text)
 	if err != nil {
 		return err
@@ -114,19 +125,43 @@ func CopyText(owner HWND, text string) error {
 	}
 	defer procCloseClipboard.Call()
 	procEmptyClipboard.Call()
-	size := uintptr(len(u) * 2)
+	if err := setClipboardData(cfUnicodeText, unsafe.Pointer(&u[0]), uintptr(len(u)*2)); err != nil {
+		return err
+	}
+	if !secret {
+		return nil
+	}
+	var zero uint32
+	for _, name := range secretClipboardFormats {
+		n, err := windows.UTF16PtrFromString(name)
+		if err != nil {
+			return err
+		}
+		format, _, err := procRegisterClipFmt.Call(uintptr(unsafe.Pointer(n)))
+		if format == 0 {
+			return lastErr("RegisterClipboardFormat", err)
+		}
+		if err := setClipboardData(format, unsafe.Pointer(&zero), unsafe.Sizeof(zero)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// setClipboardData copies size bytes at p to the open clipboard as format.
+func setClipboardData(format uintptr, p unsafe.Pointer, size uintptr) error {
 	h, _, err := procGlobalAlloc.Call(gmemMoveable, size)
 	if h == 0 {
 		return lastErr("GlobalAlloc", err)
 	}
-	p, _, _ := procGlobalLock.Call(h)
-	if p == 0 {
+	dst, _, _ := procGlobalLock.Call(h)
+	if dst == 0 {
 		procGlobalFree.Call(h)
 		return fmt.Errorf("GlobalLock failed")
 	}
-	procRtlMoveMemory.Call(p, uintptr(unsafe.Pointer(&u[0])), size)
+	procRtlMoveMemory.Call(dst, uintptr(p), size)
 	procGlobalUnlock.Call(h)
-	if r, _, err := procSetClipboardData.Call(cfUnicodeText, h); r == 0 {
+	if r, _, err := procSetClipboardData.Call(format, h); r == 0 {
 		procGlobalFree.Call(h)
 		return lastErr("SetClipboardData", err)
 	}

@@ -52,12 +52,11 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 		t.Fatalf("spare retry %q", s.Error)
 	}
 	r := RecoveryCodeDialogOf("K7QF-9M2D-XW4P-HT6N-3JBV-R8LC", all)
-	if r.Title != "Your recovery code · Step 4 of 4" || r.Cancel != "" || strings.Join(r.CodeLines, "|") != "K7QF-9M2D-XW4P|HT6N-3JBV-R8LC" {
+	if r.Title != "Your recovery code · Step 4 of 4" || r.Cancel != "" || r.Code != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
 		t.Fatalf("recovery code %+v", r)
 	}
-	retry := RetypeDialogOf(flow.Question{Message: "The code does not match the recovery code shown above. Remedy: Check your note. 2 attempt(s) remaining.", Retry: true}, all)
-	if retry.Error != "The code does not match the recovery code shown above. Check your note. 2 attempts left." {
-		t.Fatalf("retype retry %q", retry.Error)
+	if r.Copy != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" {
+		t.Fatalf("the Copy button copies the whole code: %q", r.Copy)
 	}
 
 	only := interact.KeyPlan{New: true, Password: true}
@@ -66,16 +65,6 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 		t.Fatalf("password only %+v", d)
 	}
 	checkWriting(t, NewPasswordDialogOf(mismatch, all))
-}
-
-func TestCodeLines(t *testing.T) {
-	t.Parallel()
-	if got := CodeLines("ABC"); len(got) != 1 || got[0] != "ABC" {
-		t.Fatalf("a code without groups stays on one line: %q", got)
-	}
-	if got := CodeLines("AAAAA-BBBBB-CCCCC-DDDDD-EEEEE"); strings.Join(got, "|") != "AAAAA-BBBBB-CCCCC|DDDDD-EEEEE" {
-		t.Fatalf("odd group count: %q", got)
-	}
 }
 
 func TestUnlockChoiceByKeyType(t *testing.T) {

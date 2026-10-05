@@ -42,7 +42,6 @@ type Dialogs interface {
 	NewPassword(q Question, confirmPrompt string, answer func(password, confirm []byte, ok bool))
 	// RecoveryCode shows a new recovery code once.
 	RecoveryCode(code string, answer func())
-	RetypeRecoveryCode(q Question, answer func(code string, err error))
 	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
 	SpareYubiKey(q Question, answer func(ok bool))
 }
@@ -57,7 +56,6 @@ type UI struct {
 	seenOutput         int
 	lastPasswordPrompt string
 	newPasswordAsked   bool
-	retypeAsked        bool
 	spareAsked         bool
 	// pendingSecret is a password typed with the choice of the unlock
 	// method, for the next Password question.
@@ -203,19 +201,6 @@ func checkNewPassword(pw, confirm []byte) ([]byte, error) {
 // ShowRecoveryCode shows the new recovery code once.
 func (u *UI) ShowRecoveryCode(code string) {
 	u.b.Ask(func(answer func(any, error)) { u.d.RecoveryCode(code, func() { answer(nil, nil) }) }, nil, nil) //nolint:errcheck
-}
-
-// RetypeRecoveryCode asks for the recovery code shown before.
-func (u *UI) RetypeRecoveryCode() (string, error) {
-	q := Question{Message: u.recentMessage(), Retry: u.retypeAsked}
-	u.retypeAsked = true
-	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.RetypeRecoveryCode(q, func(code string, err error) { answer(code, err) })
-	}, "", interact.ErrCancelled)
-	if err != nil {
-		return "", err
-	}
-	return v.(string), nil
 }
 
 // WaitForSpareYubiKey waits until the user confirms the spare YubiKey is

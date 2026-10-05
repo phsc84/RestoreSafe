@@ -134,7 +134,7 @@ The implementation may use the user's Windows accent color instead of the accent
 | Folder lists (Create backup, backup plan, Settings, restore wizard pages 1 to 3) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) on restore wizard page 2. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
 | One-line text | `STATIC` with an ellipsis (`SS_ENDELLIPSIS`, `SS_PATHELLIPSIS` for paths). When the text is cut off, its tooltip shows it in full; when it fits, there is no such tooltip. |
 | Progress bars | `msctls_progress32` (`PBS_SMOOTH`, marquee while the total is unknown and while keys are unlocked), plus taskbar progress via `ITaskbarList3` |
-| Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, 13.3). |
+| Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
 | Password fields | Edit with `ES_PASSWORD`, read and wiped as in 13.1 |
 | Log pane | Read-only rich edit (`MSFTEDIT_CLASS`, as today) with a severity filter |
 | Health check details | The existing report view (rich edit) in a dialog |
@@ -340,7 +340,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 | ID | Requirement |
 |---|---|
 | BP-1 | The plan lists every source folder in a table: **Folder**, **Type** (badge: differential with its number, or full), **Why** (the reason in plain words) and **About** (the size (for a differential the estimate from 2.0 spec 6.2; for a full the folder size)). A folder with a blocking problem has no type and shows the problem in red under Why. The row's tooltip has the path and the full reason. |
-| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), write down a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
+| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), store a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
 | BP-5 | Blocking issues (`Report.HasErrors`) remove **Start**; the issues are listed in red above the buttons with their remedy. Warnings are listed in amber and don't block. "Show details" shows the full preflight report (split size, exclude patterns, unreadable-file rule, Argon2, log level) in the report view. |
@@ -700,30 +700,30 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 └────────────────────────────────────────────────────┘
 ```
 
-**Figure 9.3: Recovery code** (unchanged content, restyled; static control, can't be selected or copied).
+**Figure 9.3: Recovery code** (static control, can't be selected; **Copy** copies the whole code, 13.3).
 
 ```text
 ┌────────────────────────────────────────────────────┐
 │ Your recovery code  ·  Step 3 of 3                 │
 ├────────────────────────────────────────────────────┤
-│ Write this code on paper now. It's shown only once │
-│ and opens your backups on its own.                 │
+│ Store this code in your password manager or write  │
+│ it down now. It's shown only once and opens your   │
+│ backups on its own.                                │
 │                                                    │
-│        K7QF-9M2D-XW4P                              │
-│        HT6N-3JBV-R8LC                              │
+│           K7QF-9M2D-XW4P-HT6N-3JBV-R8LC            │
 │                                                    │
 │ Keep it in a safe place, never next to your        │
-│ backups or on this computer.                       │
+│ backups or unencrypted on this computer.           │
 ├────────────────────────────────────────────────────┤
-│                         [ I have written it down ] │
+│ [ Copy ]                      [ I have stored it ] │
 └────────────────────────────────────────────────────┘
 ```
 
 | ID | Requirement |
 |---|---|
 | CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): the prompt names the key set by its creation date when there's more than one key set in the selection. The "attempts left" line from the workflow output is shown under the field (as today). The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
-| CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`, `RetypeRecoveryCode`): one dialog frame with "Step n of N", where N counts the steps the configuration needs (password; YubiKey; spare YubiKey; recovery code). Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
-| CR-3 | Recovery code: 13.3 applies unchanged (static control, no copy, overwritten on close, retype in a separate step). |
+| CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`): one dialog frame with "Step n of N", where N counts the steps the configuration needs (password; YubiKey; spare YubiKey; recovery code). Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
+| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
 ## 10. Settings page
@@ -1008,7 +1008,7 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 | `ConfirmStart` | **Restore…** on page 4, **Verify…** in figure 7.3. |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
-| `NewPassword`, `ShowRecoveryCode`, `RetypeRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
+| `NewPassword`, `ShowRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
 | `Progress` | Progress card (6.2), restore progress page (8). |
 
 The user's choice is not a question: the GUI passes it when it starts the workflow, `restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets, Destination})` and `verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets})`. The first GUI's questions `SelectBackups` and `RestoreDestination` are removed from `interact.UI`.
@@ -1040,9 +1040,9 @@ As 13.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` ch
 
 ### 13.3 Recovery code
 
-- Shown once in its own dialog (figure 9.3), in large bold Consolas on two lines of three groups. The code is a static control, so it cannot be selected or copied; there is no Print or Save button. A task dialog is never used, because task dialogs copy their text to the clipboard on `Ctrl+C`.
-- **I have written it down** (or closing the dialog) overwrites the displayed code and closes the dialog; the retype step follows (an edit control, not masked), so the code is not visible while retyping. The code reaches the GUI as a Go string, so it is not zeroed.
-- A wrong code shows the workflow's message and allows the next attempt; after the last attempt the workflow ends.
+- Shown once in its own dialog (figure 9.3), in large bold Consolas on one line (one code, so one line; the font is one and a half times the message font, so all six groups fit). The code is a static control, so it cannot be selected; there is no Print or Save button. A task dialog is never used, because task dialogs copy their text to the clipboard on `Ctrl+C` without the protection below.
+- **Copy** puts the whole code on the clipboard as one line with dashes, e.g. for a password manager, and then reads **Copied**. The clipboard data carries the formats `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` = 0 and `CanUploadToCloudClipboard` = 0, so Windows keeps it out of the clipboard history and the cloud clipboard.
+- **I have stored it** (or closing the dialog) overwrites the displayed code and closes the dialog; the backup continues. There is no retype step: like the recovery codes of other services, the user is trusted to store it. The code reaches the GUI as a Go string, so it is not zeroed.
 
 ### 13.4 YubiKey and Windows Security dialogs
 

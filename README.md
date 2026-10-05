@@ -249,7 +249,7 @@ Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_cod
 1. You choose a password (at least `password_min_length` characters, 12 by default) and enter it twice.
 2. You register your YubiKey (two Windows Security prompts).
 3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
-4. With `recovery_code: true`: RestoreSafe shows your recovery code once, in a window that does not allow copying it. Write it down on paper and type it back to confirm.
+4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Click **Copy** to put it in your password manager, or write it down on paper. Windows keeps the copied code out of the clipboard history and the cloud clipboard.
 5. Then every source directory gets a full backup.
 
 **Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
@@ -275,7 +275,7 @@ The backup plan always tells you in advance when new keys will be created and wh
 | Password | In your head or a password manager | In a file next to your backups |
 | YubiKey | With you | - |
 | Spare YubiKey | At a different, safe place (home safe, trusted person) | In the same bag as your main YubiKey |
-| Recovery code | On paper, in a safe place | Next to your backups, or unencrypted on your computer |
+| Recovery code | In a password manager, or on paper in a safe place | Next to your backups, or unencrypted on your computer |
 
 The recovery code opens your backups **on its own**, even in password + YubiKey mode. Treat it like the key to a safe.
 

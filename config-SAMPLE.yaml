@@ -103,7 +103,7 @@ yubikey_spare: false
 
 # Create a recovery code when new keys are created. The code alone restores
 # every backup made with those keys, even without password or YubiKey (also in
-# mode 2). Write it down and store it offline, never next to your backups.
+# mode 2). Store it in a password manager or on paper, never next to your backups.
 # Default: false
 recovery_code: false
 

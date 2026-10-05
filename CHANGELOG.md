@@ -22,7 +22,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Restore and verify of differential backups; a differential is restored together with its full backup, and the link between them is checked before any file is written.
 - Encrypted manifest in every backup: restore and verify check every file against its SHA-256 checksum.
 - Restore of creation and modification times and of the read-only, hidden, and system attributes.
-- Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey.
+- Keys with multiple unlock methods: optional spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). Either registered YubiKey unlocks the backups; the recovery code unlocks them without password or YubiKey. The recovery code is shown once, with a **Copy** button for your password manager (kept out of the Windows clipboard history).
 - **New keys + full backup…** in the backup plan creates new keys (e.g. to change the password or replace a lost YubiKey); older backups keep opening with the old credentials.
 - `password_min_length` (default 12, at least 8) for new passwords.
 - `reminder_days` (default 7, 0 = off): the Create backup page reminds you when the newest backup is older. RestoreSafe checks it only while it is open.

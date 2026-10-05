@@ -18,7 +18,7 @@ const (
 	credentialWidth  = 440
 	credentialMargin = 18
 	fieldLabelHeight = 20
-	codeLineHeight   = 40
+	codeLineHeight   = 32
 	dialogButton     = 96
 )
 
@@ -27,6 +27,7 @@ const (
 	idCredentialOK     = win32.IDOK
 	idCredentialCancel = 470
 	idCredentialLink   = 471
+	idCredentialCopy   = 472
 )
 
 // credentialDialog is the open credential dialog (spec 9); the GUI shows
@@ -36,7 +37,7 @@ type credentialDialog struct {
 	edits    []win32.HWND
 	fields   []view.Field
 	values   [][]byte
-	code     []win32.HWND
+	code     win32.HWND
 	codeFont windows.Handle
 	noCancel bool
 	ok, open bool
@@ -72,6 +73,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	pal := t.Palette
 	d := &credentialDialog{win: win, fields: v.Fields, open: true, noCancel: v.Cancel == ""}
 	activeCredential = d
+	var copyButton win32.HWND
 	win.onCommand = func(id uint16) {
 		switch id {
 		case idCredentialOK:
@@ -81,6 +83,11 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		case idCredentialLink:
 			d.linked = true
 			d.close(false)
+		case idCredentialCopy:
+			// Into a password manager, say; out of the clipboard history.
+			if win32.CopySecretText(win.hwnd, v.Copy) == nil {
+				win32.SetText(copyButton, view.ButtonCopied)
+			}
 		}
 	}
 	win.defID = func() uint16 { return idCredentialOK }
@@ -92,23 +99,21 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		st.gap(4)
 		st.para(v.Hint, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 	}
-	if len(v.CodeLines) > 0 {
+	if v.Code != "" {
 		st.gap(12)
 		font, err := codeFont(uint32(s))
 		if err == nil {
 			d.codeFont = font
 		}
-		for _, line := range v.CodeLines {
-			// A static control: the code can be neither selected nor copied
-			// (spec 13.3).
-			h, _ := win32.CreateWindow(0, "STATIC", line, win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|win32.SS_CENTER, 0, 0, 0, 0, panel.HWND(), 0)
-			panel.Adopt(h)
-			if font != 0 {
-				win32.SetFont(h, font)
-			}
-			d.code = append(d.code, h)
-			st.row(codeLineHeight, cell{hwnd: h, fill: true})
+		// A static control: the code is copied only with the Copy button
+		// (spec 13.3).
+		h, _ := win32.CreateWindow(0, "STATIC", v.Code, win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|win32.SS_CENTER, 0, 0, 0, 0, panel.HWND(), 0)
+		panel.Adopt(h)
+		if font != 0 {
+			win32.SetFont(h, font)
 		}
+		d.code = h
+		st.row(codeLineHeight, cell{hwnd: h, fill: true})
 		st.gap(8)
 	}
 	for _, f := range v.Fields {
@@ -144,6 +149,9 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	if v.Cancel != "" {
 		cancel = panel.Button(v.Cancel, idCredentialCancel)
 	}
+	if v.Copy != "" {
+		copyButton = panel.Button(view.ButtonCopy, idCredentialCopy)
+	}
 	margin := s.Px(credentialMargin)
 	buttonsH := s.Px(widget.ButtonHeight)
 	w := s.Px(credentialWidth)
@@ -156,6 +164,11 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		row.Right(8)
 	}
 	win32.SetWindowPos(okButton, row.RightPx(max(buttonWidth(t, okButton), s.Px(dialogButton))))
+	if copyButton != 0 {
+		r := row.Rest()
+		r.Right = r.Left + max(buttonWidth(t, copyButton), s.Px(dialogButton))
+		win32.SetWindowPos(copyButton, r)
+	}
 
 	// A DPI change scales the controls in place: rebuilding would lose
 	// what was typed.
@@ -193,13 +206,14 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 }
 
 // codeFont creates the font for a displayed code at dpi: monospaced, bold,
-// and about twice the message font's size. The caller deletes it.
+// and one and a half times the message font's size, so a recovery code
+// fits on one line. The caller deletes it.
 func codeFont(dpi uint32) (windows.Handle, error) {
 	lf, err := win32.MessageFont(dpi)
 	if err != nil {
 		return 0, err
 	}
-	lf.Height *= 2
+	lf.Height = lf.Height * 3 / 2
 	lf.Weight = win32.FW_BOLD
 	lf.FaceName = [32]uint16{}
 	copy(lf.FaceName[:], windows.StringToUTF16("Consolas"))
@@ -215,8 +229,8 @@ func (d *credentialDialog) close(ok bool) {
 	if d.noCancel {
 		ok = true
 	}
-	for _, c := range d.code {
-		win32.OverwriteText(c)
+	if d.code != 0 {
+		win32.OverwriteText(d.code)
 	}
 	if ok {
 		for i, e := range d.edits {
@@ -305,11 +319,9 @@ func (d *credentialDialog) rescale(old widget.Scale, t *widget.Theme) {
 	for _, e := range d.edits {
 		win32.SetFont(e, t.Fonts.Get(widget.TextBody))
 	}
-	if len(d.code) > 0 {
+	if d.code != 0 {
 		if font, err := codeFont(uint32(t.Scale)); err == nil {
-			for _, c := range d.code {
-				win32.SetFont(c, font)
-			}
+			win32.SetFont(d.code, font)
 			win32.DeleteObject(d.codeFont)
 			d.codeFont = font
 		}

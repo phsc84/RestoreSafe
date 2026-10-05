@@ -217,29 +217,12 @@ func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]n
 	return slots, fmt.Errorf("Spare YubiKey registration failed after %d attempts. No backup was written.", maxEnrollAttempts)
 }
 
-// createRecoveryCode shows a new recovery code once and asks the user to type
-// it back, so it is only used when it has been written down correctly.
+// createRecoveryCode creates a new recovery code and shows it once.
 func createRecoveryCode(u interact.UI) (recovery.Code, error) {
 	code, err := generateRecoveryCodeFn()
 	if err != nil {
 		return recovery.Code{}, err
 	}
-	out := u.Output()
 	u.ShowRecoveryCode(code.String())
-	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
-		answer, err := u.RetypeRecoveryCode()
-		if err != nil {
-			return recovery.Code{}, err
-		}
-		typed, err := recovery.Parse(answer)
-		if err == nil && typed == code {
-			fmt.Fprintln(out, "Recovery code confirmed.")
-			return code, nil
-		}
-		if err == nil {
-			err = fmt.Errorf("The code does not match the recovery code shown above. Remedy: Check your note.")
-		}
-		fmt.Fprintln(out, err)
-	}
-	return recovery.Code{}, fmt.Errorf("Recovery code not confirmed. No backup was written.")
+	return code, nil
 }

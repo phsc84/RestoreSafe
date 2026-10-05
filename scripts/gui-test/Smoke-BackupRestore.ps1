@@ -5,7 +5,7 @@
 #
 # Use a test configuration with authentication_mode 1 (password only); the
 # script cannot answer YubiKey prompts. It answers new-key setup (password
-# twice) and a recovery code (reads it from the dialog and types it back).
+# twice) and a recovery code (reads it from the dialog).
 #
 # .\Smoke-BackupRestore.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\...\config.yaml `
 #     -Password "correct horse battery" -RestoreTo C:\...\restored [-ScreenshotDir C:\...\shots]
