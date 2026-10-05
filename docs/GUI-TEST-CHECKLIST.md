@@ -84,7 +84,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| RW-3 | Wizard from a run and from a single set: preselection as specified | Open | Pre-checked from a run and from a set. |
+| RW-3 | Wizard from a run, also opened by clicking one of its folders: the run is preselected and page 2 checks all restorable folders | Open | |
 | RW-4 | Differential folders show the full backup read with them; the single-file note is visible | Open | |
 | RW-5 | Existing target folder blocks Next; renaming it in Explorer and returning unblocks | Open | Pre-checked: an existing folder blocks Next. |
 | RW-5 | "Restore into the backup directory" fills the path | Open | |

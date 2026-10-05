@@ -447,10 +447,15 @@ func (b *backupsPage) updateBar() {
 	b.highlightRun()
 }
 
-// highlightRun shows the sets of the selected run highlighted like a
-// selected row: a run is selected through its group header, which the
-// list itself can't show as selected.
+// highlightRun shows the header of the selected run selected and its sets
+// highlighted like a selected row.
 func (b *backupsPage) highlightRun() {
+	for gi, g := range b.view.Groups {
+		on := b.selSet == "" && b.selRun != "" && g.RunID == b.selRun
+		if on != win32.ListGroupSelected(b.list, int32(gi)) {
+			win32.ListSetGroupSelected(b.list, int32(gi), on)
+		}
+	}
 	for item := range win32.ListItemCount(b.list) {
 		ref, ok := b.rowAt(item)
 		on := ok && b.selSet == "" && b.selRun != "" && b.view.Groups[ref.group].RunID == b.selRun
@@ -460,8 +465,9 @@ func (b *backupsPage) highlightRun() {
 	}
 }
 
-// selectItem makes list item i the selection: its set, or the run of a
-// placeholder.
+// selectItem makes the run of list item i the selection: a run is restored
+// and verified whole, so its sets aren't selected one by one. Incomplete
+// sets have no run; such a set is selected itself.
 func (b *backupsPage) selectItem(item int) {
 	ref, ok := b.rowAt(item)
 	if !ok {
@@ -469,7 +475,10 @@ func (b *backupsPage) selectItem(item int) {
 	}
 	g := b.view.Groups[ref.group]
 	b.selRun, b.selSet = g.RunID, ""
-	if ref.row >= 0 {
+	if g.RunID != "" {
+		// The item keeps the focus, so the arrow keys move on from it.
+		win32.ListDeselect(b.list, item)
+	} else if ref.row >= 0 {
 		b.selSet = g.Rows[ref.row].Set
 	}
 	b.selectionChanged(g)

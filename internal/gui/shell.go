@@ -137,7 +137,7 @@ func (a *app) do(action view.Action) {
 	case view.ActionRestore:
 		b := a.shell.backups
 		if len(b.chosen()) > 0 {
-			a.openWizard(b.selRun, b.selSet)
+			a.openWizard(b.selRun)
 		}
 	case view.ActionOpenRestored:
 		if r := a.machine.Current(); r != nil && r.Restore != nil {

@@ -65,7 +65,6 @@ type restoreWizard struct {
 	// The choices.
 	points  []view.RestorePoint
 	runID   naming.BackupID
-	onSet   string // the set the wizard was opened on, "" for a run
 	folders []view.FolderChoice
 	checked map[naming.BackupEntry]bool
 	dest    string
@@ -101,9 +100,8 @@ type restoreWizard struct {
 	run                *runCard
 }
 
-// openWizard opens the restore wizard on the run runID, and on one of its
-// sets when set is not "".
-func (a *app) openWizard(runID naming.BackupID, set string) {
+// openWizard opens the restore wizard on the run runID.
+func (a *app) openWizard(runID naming.BackupID) {
 	if a.wizard != nil || a.snapshot == nil || a.machine.Busy() {
 		return
 	}
@@ -112,7 +110,7 @@ func (a *app) openWizard(runID naming.BackupID, set string) {
 		return
 	}
 	win32.SetStyle(win.hwnd, win32.Style(win.hwnd)|win32.WS_THICKFRAME)
-	w := &restoreWizard{a: a, win: win, runID: runID, onSet: set, checked: map[naming.BackupEntry]bool{}, dest: a.lastDestination}
+	w := &restoreWizard{a: a, win: win, runID: runID, checked: map[naming.BackupEntry]bool{}, dest: a.lastDestination}
 	if w.dest == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			w.dest = filepath.Join(home, "Restore")
@@ -595,12 +593,7 @@ func (w *restoreWizard) forward() {
 		w.folders = view.RestoreFoldersOf(a.snapshot, w.runID, time.Now())
 		w.checked = map[naming.BackupEntry]bool{}
 		for _, f := range w.folders {
-			w.checked[f.Set] = f.Enabled && (w.onSet == "" || f.Set.String() == w.onSet)
-		}
-		if view.SelectionFooter(w.folders, w.checked) == "" {
-			for _, f := range w.folders {
-				w.checked[f.Set] = f.Enabled
-			}
+			w.checked[f.Set] = f.Enabled
 		}
 		w.show(view.WizardFolders)
 	case view.WizardFolders:

@@ -311,6 +311,30 @@ func ListSelect(lv HWND, i int) {
 	SendMessage(lv, LVM_ENSUREVISIBLE, uintptr(i), 0)
 }
 
+// ListDeselect clears the selection of item i; it keeps the focus.
+func ListDeselect(lv HWND, i int) {
+	it := lvItem{StateMask: LVIS_SELECTED}
+	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
+}
+
+// ListGroupSelected reports whether the header of group id shows selected.
+func ListGroupSelected(lv HWND, id int32) bool {
+	g := lvGroup{Mask: LVGF_STATE, StateMask: LVGS_SELECTED}
+	g.Size = uint32(unsafe.Sizeof(g))
+	SendMessage(lv, LVM_GETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
+	return g.State&LVGS_SELECTED != 0
+}
+
+// ListSetGroupSelected shows the header of group id selected, or not.
+func ListSetGroupSelected(lv HWND, id int32, on bool) {
+	g := lvGroup{Mask: LVGF_STATE, StateMask: LVGS_SELECTED}
+	if on {
+		g.State = LVGS_SELECTED
+	}
+	g.Size = uint32(unsafe.Sizeof(g))
+	SendMessage(lv, LVM_SETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
+}
+
 // ListParam returns the param of item i.
 func ListParam(lv HWND, i int) uintptr {
 	it := lvItem{Mask: LVIF_PARAM, Item: int32(i)}
