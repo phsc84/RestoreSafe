@@ -49,9 +49,8 @@ const (
 	LVIF_STATE   = 0x0008
 	LVIF_GROUPID = 0x0100
 
-	LVIS_FOCUSED     = 0x0001
-	LVIS_SELECTED    = 0x0002
-	LVIS_DROPHILITED = 0x0008
+	LVIS_FOCUSED  = 0x0001
+	LVIS_SELECTED = 0x0002
 
 	LVCF_FMT     = 0x0001
 	LVCF_WIDTH   = 0x0002
@@ -66,7 +65,6 @@ const (
 	LVGS_COLLAPSED   = 0x00000001
 	LVGS_COLLAPSIBLE = 0x00000008
 	LVGS_FOCUSED     = 0x00000010
-	LVGS_SELECTED    = 0x00000020
 
 	LVHT_EX_GROUP_HEADER = 0x10000000
 	LVHT_ONITEM          = 0x0000000E
@@ -89,6 +87,7 @@ const (
 	CDRF_NOTIFYITEMDRAW    = 0x00000020
 	CDRF_NOTIFYSUBITEMDRAW = 0x00000020
 	LVCDI_ITEM             = 0x00000000
+	LVCDI_GROUP            = 0x00000001
 	CDIS_SELECTED          = 0x0001
 )
 
@@ -317,24 +316,6 @@ func ListDeselect(lv HWND, i int) {
 	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
 }
 
-// ListGroupSelected reports whether the header of group id shows selected.
-func ListGroupSelected(lv HWND, id int32) bool {
-	g := lvGroup{Mask: LVGF_STATE, StateMask: LVGS_SELECTED}
-	g.Size = uint32(unsafe.Sizeof(g))
-	SendMessage(lv, LVM_GETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
-	return g.State&LVGS_SELECTED != 0
-}
-
-// ListSetGroupSelected shows the header of group id selected, or not.
-func ListSetGroupSelected(lv HWND, id int32, on bool) {
-	g := lvGroup{Mask: LVGF_STATE, StateMask: LVGS_SELECTED}
-	if on {
-		g.State = LVGS_SELECTED
-	}
-	g.Size = uint32(unsafe.Sizeof(g))
-	SendMessage(lv, LVM_SETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
-}
-
 // ListParam returns the param of item i.
 func ListParam(lv HWND, i int) uintptr {
 	it := lvItem{Mask: LVIF_PARAM, Item: int32(i)}
@@ -367,6 +348,16 @@ func ListHitItem(lv HWND, pt Point) int {
 // or -1.
 func ListFocusedGroup(lv HWND) int32 {
 	return int32(SendMessage(lv, LVM_GETFOCUSEDGROUP, 0, 0))
+}
+
+// LVGGR_HEADER asks LVM_GETGROUPRECT for the header only.
+const LVGGR_HEADER = 1
+
+// ListGroupHeaderRect returns the bounds of the header of group id.
+func ListGroupHeaderRect(lv HWND, id int32) Rect {
+	r := Rect{Top: LVGGR_HEADER}
+	SendMessage(lv, LVM_GETGROUPRECT, uintptr(id), uintptr(unsafe.Pointer(&r)))
+	return r
 }
 
 // ListSubItemRect returns the bounds of column sub of item i.
@@ -473,21 +464,6 @@ func (n *NMLVGetInfoTip) SetText(text string) {
 // ListEnableInfoTips shows the info tips of the items.
 func ListEnableInfoTips(lv HWND) {
 	SendMessage(lv, LVM_SETEXTENDEDSTYLE, LVS_EX_INFOTIP, LVS_EX_INFOTIP)
-}
-
-// ListHighlight shows item i highlighted like a selected one, or not,
-// without selecting it: for the items of a selected group.
-func ListHighlight(lv HWND, i int, on bool) {
-	it := lvItem{StateMask: LVIS_DROPHILITED}
-	if on {
-		it.State = LVIS_DROPHILITED
-	}
-	SendMessage(lv, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
-}
-
-// ListHighlighted reports whether item i is highlighted (ListHighlight).
-func ListHighlighted(lv HWND, i int) bool {
-	return SendMessage(lv, LVM_GETITEMSTATE, uintptr(i), LVIS_DROPHILITED) != 0
 }
 
 // Columns and size of a list.

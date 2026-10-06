@@ -84,10 +84,6 @@ type backupsPage struct {
 	// shownCollapsed is how each group was shown: a group whose state
 	// differs at the next rebuild was changed by the user.
 	shownCollapsed []bool
-	// highlighting is set while highlightRun changes the list's states:
-	// showing a group header selected selects one of its items, which must
-	// not count as the user's choice.
-	highlighting bool
 
 	barText, restore, verify win32.HWND
 	bar                      view.ActionBar
@@ -448,27 +444,14 @@ func (b *backupsPage) updateBar() {
 		win32.Enable(x.h, x.bt.Enabled && !b.a.machine.Busy())
 		b.acts[x.id] = x.bt.Action
 	}
-	b.highlightRun()
+	// The selected run's header is painted selected (customDraw); the list
+	// can't show a group selected itself.
+	win32.Invalidate(b.list)
 }
 
-// highlightRun shows the header of the selected run selected and its sets
-// highlighted like a selected row.
-func (b *backupsPage) highlightRun() {
-	b.highlighting = true
-	defer func() { b.highlighting = false }()
-	for gi, g := range b.view.Groups {
-		on := b.selSet == "" && b.selRun != "" && g.RunID == b.selRun
-		if on != win32.ListGroupSelected(b.list, int32(gi)) {
-			win32.ListSetGroupSelected(b.list, int32(gi), on)
-		}
-	}
-	for item := range win32.ListItemCount(b.list) {
-		ref, ok := b.rowAt(item)
-		on := ok && b.selSet == "" && b.selRun != "" && b.view.Groups[ref.group].RunID == b.selRun
-		if on != win32.ListHighlighted(b.list, item) {
-			win32.ListHighlight(b.list, item, on)
-		}
-	}
+// runSelected reports whether group gi is the selected run.
+func (b *backupsPage) runSelected(gi int) bool {
+	return gi >= 0 && gi < len(b.view.Groups) && b.selSet == "" && b.selRun != "" && b.view.Groups[gi].RunID == b.selRun
 }
 
 // selectItem makes the run of list item i the selection: a run is restored
@@ -654,9 +637,6 @@ func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
 	}
 	switch hdr.Code {
 	case win32.LVN_ITEMCHANGED:
-		if b.highlighting {
-			return 0
-		}
 		n := win32.ListChangeOf(hdr)
 		if n.Changed&win32.LVIF_STATE != 0 && n.NewState&win32.LVIS_SELECTED != 0 && n.OldState&win32.LVIS_SELECTED == 0 {
 			b.selectItem(int(n.Item))
@@ -736,6 +716,15 @@ func (b *backupsPage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 	pal := t.Palette
 	switch cd.DrawStage {
 	case win32.CDDS_PREPAINT:
+		if cd.ItemType == win32.LVCDI_GROUP {
+			// A group (ItemSpec is its ID; Rc holds its rows too): the
+			// selected run's header is filled like a selected row, and the
+			// list draws its text on top.
+			if id := int32(cd.ItemSpec); b.runSelected(int(id)) {
+				widget.FillRect(cd.HDC, win32.ListGroupHeaderRect(b.list, id), pal.Selection)
+			}
+			return win32.CDRF_DODEFAULT
+		}
 		return win32.CDRF_NOTIFYITEMDRAW
 	case win32.CDDS_ITEMPREPAINT:
 		return win32.CDRF_NOTIFYSUBITEMDRAW
@@ -751,7 +740,7 @@ func (b *backupsPage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 			switch cd.SubItem {
 			case 1:
 				win32.SelectFont(cd.HDC, font)
-				if item := int(cd.ItemSpec); win32.ListSelected(b.list) == item || win32.ListHighlighted(b.list, item) {
+				if item := int(cd.ItemSpec); win32.ListSelected(b.list) == item {
 					// The selection highlight shows the badge's text.
 					return win32.CDRF_NEWFONT
 				}
