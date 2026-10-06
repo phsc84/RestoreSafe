@@ -129,7 +129,7 @@ The implementation may use the user's Windows accent color instead of the accent
 | Status hero, cards, progress card | Container windows that paint only their background, border and icon circle (double buffered, DPI aware). All text in them is in standard `STATIC` and `SysLink` controls, so screen readers and UI Automation get names, roles and `AutomationId` without a custom provider. Redrawn only on state change. |
 | Step trail, badges, bars | Small painted controls; each sets its accessible name to its text ("Step 2 of 4, Back up 2 of 3", "Differential 3"). |
 | Backup list | `SysListView32`, report mode, groups enabled (one group per run). Badges and status are custom-drawn cells (`NM_CUSTOMDRAW`). Column headers as for the folder lists. |
-| Folder lists (Create backup, backup plan, Settings, restore wizard pages 1 to 3) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) on restore wizard page 2. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
+| Folder lists (Create backup, backup plan, Settings, restore wizard pages 1 and 2) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) on restore wizard page 1. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
 | One-line text | `STATIC` with an ellipsis (`SS_ENDELLIPSIS`, `SS_PATHELLIPSIS` for paths). When the text is cut off, its tooltip shows it in full; when it fits, there is no such tooltip. |
 | Progress bars | `msctls_progress32` (`PBS_SMOOTH`, marquee while the total is unknown and while keys are unlocked), plus taskbar progress via `ITaskbarList3` |
 | Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
@@ -172,8 +172,8 @@ This section connects the screens. Every operation follows the same five steps; 
 
 | Step | Backup | Restore | Verify |
 |---|---|---|---|
-| 1. Choose | "Back up now…" | Restore wizard pages 1 to 3 (8) | Selected run or set on Restore backup |
-| 2. Plan | Backup plan dialog (6.1) | Restore wizard page 4 (8) | Verify dialog (7.3) |
+| 1. Choose | "Back up now…" | Selected run on Restore backup, then restore wizard page 1 (8) | Selected run or set on Restore backup |
+| 2. Plan | Backup plan dialog (6.1) | Restore wizard page 3 (8) | Verify dialog (7.3) |
 | 3. Unlock | Unlock or new-keys dialogs (9) | Unlock dialog (9) | Unlock dialog (9) |
 | 4. Run | Progress card on Create backup (6.2) | Wizard progress page, progress card on Restore backup | Progress card on Restore backup |
 | 5. Result | Result card on Create backup (6.3) | Wizard result page, result card on Restore backup | Result card and status on Restore backup |
@@ -353,7 +353,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 | BR-3 | The speed is computed by the UI from `Progress.Done` of the current folder over the last 5 seconds. There is no time left: an estimate would be unreliable, since network speed varies. The bytes line shows the current folder's total, which the workflow measures before it starts, so it carries no "about". |
 | BR-4 | While a backup runs, the Folders table has the columns **Folder**, **Type** (the badge the run gives the folder) and **Status**: done folders show "Done" and the size of the backup set written in green (the last progress report of the folder carries it, `Progress.Written`), the current folder its percentage, the others "Waiting"; a folder that failed or was skipped by `on_unreadable_file: fail` says so in red. A folder the run leaves out shows its problem. |
 | BR-5 | Progress is coalesced (12.2): at most one pending progress message; the workflows report four times per second. The taskbar button shows progress (`ITaskbarList3`): normal while running, indeterminate while unlocking, error on failure, paused (amber) when finished with warnings. |
-| BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.5). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
+| BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.4). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
 
 **Figure 6.3: Cancel a backup.** (`TaskDialog`)
 
@@ -502,45 +502,25 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 
 Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (2.0 spec 13.5); the wizard says so where users look for it.
 
-The wizard is one modal dialog with four pages and a progress and result page. It opens from Backups (button, double-click, `Enter`) with the selected run and folder filled in, so most users press Next three times and then Restore.
+The wizard is one modal dialog with three pages and a progress and result page. The restore point is chosen on the Restore backup page: the wizard opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3), so it doesn't ask for the run again. Most users press Next twice and then Restore. To restore from another run, the user cancels and selects it; nothing has been written before Restore.
 
-**Figure 8.1: Page 1, restore point.**
+**Figure 8.1: Page 1, folders.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
 │ Restore                                                      [x] │
 ├──────────────────────────────────────────────────────────────────┤
-│ [1 When] > 2 Folders > 3 Destination > 4 Check                   │
+│ [1 Folders] > 2 Destination > 3 Check                            │
 │                                                                  │
-│ Restore your folders as they were at                             │
+│ Which folders do you want back from today, 09:12?                │
 │ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Date                  Folders                        Size    │ │
+│ │ Folders                                 Type          About  │ │
 │ ├──────────────────────────────────────────────────────────────┤ │
-│ │ > Today, 09:12        Documents, Projects, Pictures  3.4 GB  │ │
-│ │   Sun 27 Sep, 20:05   Documents, Projects, Pictures  1.9 GB  │ │
-│ │   Mon 14 Sep, 18:30   Documents, Projects            0.8 GB  │ │
-│ │   Tue 1 Sep, 17:45    Documents, Projects, Pictures  96 GB   │ │
+│ │ [x] Documents                           DIFF 3  about 38 GB  │ │
+│ │ [ ] Projects                            DIFF 3   about 1 GB  │ │
+│ │ [x] Pictures                            DIFF 6  about 54 GB  │ │
 │ └──────────────────────────────────────────────────────────────┘ │
-│ (i) Differentials are restored together with their full backup.  │
-├──────────────────────────────────────────────────────────────────┤
-│                                   [ Back ]  [ Next ]  [ Cancel ] │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Figure 8.2: Page 2, folders.**
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Restore                                                      [x] │
-├──────────────────────────────────────────────────────────────────┤
-│ v When > [2 Folders] > 3 Destination > 4 Check                   │
-│                                                                  │
-│ Which folders do you want back?                                  │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ [x] Documents   DIFF 3  + FULL of 1 Sep         about 38 GB  │ │
-│ │ [ ] Projects    DIFF 3  + FULL of 1 Sep         about 44 GB  │ │
-│ │ [x] Pictures    DIFF 6  + FULL of 3 Aug          about 54 GB  │ │
-│ └──────────────────────────────────────────────────────────────┘ │
+│ (!) Projects can't be restored: its full backup is missing.      │
 │ (i) Whole folders are restored. To get a single file back,       │
 │     restore its folder to a new place and copy the file.         │
 ├──────────────────────────────────────────────────────────────────┤
@@ -548,54 +528,65 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.3: Page 3, destination.**
+**Figure 8.2: Page 2, destination.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
 │ Restore                                                      [x] │
 ├──────────────────────────────────────────────────────────────────┤
-│ v When > v Folders > [3 Destination] > 4 Check                   │
+│ v Folders > [2 Destination] > 3 Check                            │
 │                                                                  │
 │ Where should the folders go?                                     │
 │ D:\Restore                                         [ Browse... ] │
+│ Restore into the backup directory                                │
 │                                                                  │
 │ RestoreSafe creates one new folder per restored folder:          │
-│   (ok) D:\Restore\Documents                                      │
-│   (x)  D:\Restore\Pictures already exists                        │
-│        Choose another place, or rename or move that folder.      │
-│                                                                  │
-│ (ok) Enough space: about 92 GB needed, 212 GB free on D:         │
+│ ┌──────────────────────────────────────────────────────────────┐ │
+│ │ Folder      Restored to                 Check                │ │
+│ ├──────────────────────────────────────────────────────────────┤ │
+│ │ Documents   D:\Restore\Documents        New folder           │ │
+│ │ Pictures    D:\Restore\Pictures         Already exists       │ │
+│ └──────────────────────────────────────────────────────────────┘ │
+│                            ═════                                 │
+│ Choose another place, or rename or move that folder.             │
+│ (ok) Enough space: about 92 GB needed, 212 GB free               │
 ├──────────────────────────────────────────────────────────────────┤
 │ 2 folders · about 92 GB           [ Back ]  [ Next ]  [ Cancel ] │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.4: Page 4, check.**
+**Figure 8.3: Page 3, check.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
 │ Restore                                                      [x] │
 ├──────────────────────────────────────────────────────────────────┤
-│ v When > v Folders > v Destination > [4 Check]                   │
+│ v Folders > v Destination > [3 Check]                            │
 │                                                                  │
 │ Ready to restore                                                 │
+│ 2 folders from the backup of today, 09:12, each into a new       │
+│ folder in                                                        │
+│ D:\Restore                                                       │
 │                                                                  │
-│ From       Today, 09:12                                          │
-│            Documents: differential 3 + full backup of 1 Sep      │
-│            Pictures: differential 6 + full backup of 3 Aug       │
-│ To         D:\Restore\Documents, D:\Restore\Pictures (new)       │
-│ Space      About 92 GB needed, 212 GB free                       │
-│ Unlock     Password and one YubiKey touch, or recovery code      │
+│ ┌──────────────────────────────────────────────────────────────┐ │
+│ │ Folder       Read from                                       │ │
+│ ├──────────────────────────────────────────────────────────────┤ │
+│ │ Documents    Differential 3 + full backup of 1 Sep           │ │
+│ │ Pictures     Differential 6 + full backup of 3 Aug           │ │
+│ └──────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│ (ok)  Enough space: about 92 GB needed, 212 GB free              │
+│ (key) Unlock with password + YubiKey, or recovery code           │
 │                                                                  │
 │ (i) Every file is checked against its checksum. Nothing in your  │
 │     backups changes, and no existing file is overwritten.        │
-│     > Show details                                               │
+│     Show details                                                 │
 ├──────────────────────────────────────────────────────────────────┤
 │                              [ Back ]  [ Restore... ]  [ Cancel ]│
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.5: Restore progress, and cancel.**
+**Figure 8.4: Restore progress, and cancel.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -619,7 +610,7 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.6: Restore results.**
+**Figure 8.5: Restore results.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -647,13 +638,13 @@ The wizard is one modal dialog with four pages and a progress and result page. I
 
 | ID | Requirement |
 |---|---|
-| RW-1 | Modal dialog, about 560 × 500 DIP, centered on the main window, resizable. Step indicator with numbers; completed steps show a check and can be clicked to go back. Buttons: Back, Next (**Restore…** on page 4), Cancel. `Enter` triggers the default button, `Esc` cancels. Cancel on pages 1 to 4 closes without asking; nothing has been written. |
-| RW-2 | From page 2 on, the footer shows the number of folders and the size estimate of the selection, and updates as it changes. |
-| RW-3 | Page 1 lists backup runs (`catalog.BackupRunSummaries`), newest first, with their folders and size. The run selected on Backups is preselected. Runs whose sets are all unrestorable are shown disabled with the reason. |
-| RW-4 | Page 2 lists the sets of the chosen run with checkboxes, each with its type and, for a differential, the full backup that is read with it. All restorable folders are checked when the page opens. A set that can't be restored (missing full, incomplete) is disabled with the reason. The note about single files (figure 8.2) is always shown. Next needs at least one checked folder. |
-| RW-5 | Page 3: destination path with **Browse…** and the option **Restore into the backup directory** (today's checkbox, as a link that fills in the path). Below, a table of the folder each set will create: **Folder**, **Restored to** (`destination\<backup name>`) and **Check** ("New folder" in green, "Already exists" or "Can't be created: <reason>" in red); what to do about existing folders is said once below the table. A free-space estimate (the sizes of the sets and their full backups; the exact size is only known after unlocking) with (ok), a warning when it may not fit, or an error when it can't fit. Existing folders block Next; space warnings don't. Both checks run when the page opens and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the code that builds the plan `restore.Run` shows on page 4, so the two pages cannot disagree. |
-| RW-6 | Page 4 is the restore preflight (`ShowRestorePlan`), shown as a summary: backups read (each differential with its full), folders created, space, and the unlock methods the key set accepts. Blocking issues from the workflow replace **Restore…** with the issue and its remedy. "Show details" opens the full report. Nothing is written before **Restore…**; **Restore…** opens the credential dialogs (section 9). |
-| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.5. |
+| RW-1 | Modal dialog, about 560 × 500 DIP, centered on the main window, resizable. Step indicator with numbers; completed steps show a check and can be clicked to go back. Buttons: Back, Next (**Restore…** on page 3), Cancel. `Enter` triggers the default button, `Esc` cancels. Cancel on pages 1 to 3 closes without asking; nothing has been written. |
+| RW-2 | On pages 1 to 3, the footer shows the number of folders and the size estimate of the selection, and updates as it changes. |
+| RW-3 | The wizard restores from the run selected on Restore backup (BK-4) and has no page to choose a run: Restore backup is where runs are compared, with their types, status and log. Restore… is only offered for a run with a restorable set (BK-4), so the wizard never opens on a run it can't restore. The run's date stays visible in the heading of page 1 and in the first sentence of page 3. |
+| RW-4 | Page 1 asks "Which folders do you want back from <date of the run>?" and lists the run's sets with checkboxes in three columns: **Folders**, **Type** (badge) and **About** (the size read, for a differential with its full backup). Which full backup a differential is read with is on page 3 and, as "Based on", on Restore backup; page 1 doesn't repeat it. All restorable folders are checked when the wizard opens. A set whose full backup is missing is shown disabled and unchecked, and a warning line below the list names it and says why (figure 8.1). The note about single files (figure 8.1) is always shown. Next needs at least one checked folder. |
+| RW-5 | Page 2: destination path with **Browse…** and the option **Restore into the backup directory** (today's checkbox, as a link that fills in the path with backslashes, as Browse… does, even when the configuration writes it with slashes). Below, a table of the folder each set will create: **Folder**, **Restored to** (`destination\<backup name>`) and **Check** ("New folder" in green, "Already exists" or "Can't be created: <reason>" in red); what to do about existing folders is said once below the table. A splitter below the table sets its height (as on Create backup, OV-3): at least as many rows as it has, up to three, at most the room the page leaves above the space line; the height stays while the wizard is open. A free-space estimate (the sizes of the sets and their full backups; the exact size is only known after unlocking) with (ok), a warning when it may not fit, or an error when it can't fit. Existing folders block Next; space warnings don't. Both checks run when the page opens and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the code that builds the plan `restore.Run` shows on page 3, so the two pages cannot disagree. |
+| RW-6 | Page 3 is the restore preflight (`ShowRestorePlan`), shown as a summary (figure 8.3). One sentence names the number of folders, the run's date and the destination, which follows on its own line, shortened in the middle when it doesn't fit; each folder goes into a new folder of its name there, which page 2 showed, so page 3 doesn't repeat the paths. A table lists each folder with what is read for it (**Folder**, **Read from**: "Full backup" or "Differential 3 + full backup of 1 Sep"; the row's tooltip names the new folder). Below it, the space line as on page 2 and the unlock methods the key set accepts ("Unlock with password + YubiKey, or recovery code"), each with its icon; the checksum note and **Show details** come last, in secondary text. Blocking issues from the workflow replace **Restore…** with the issue and its remedy. "Show details" opens the full report. Nothing is written before **Restore…**; **Restore…** opens the credential dialogs (section 9). |
+| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.4. |
 | RW-8 | Result page: success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in a dialog with the same filter as BK-5. |
 | RW-9 | While the wizard runs a restore, the main window shows the progress card too, at the top of the Backups page, then the result card, and stays usable for reading; starting another operation is disabled. |
 
@@ -999,11 +990,11 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 |---|---|
 | `Output` | Live log (Backups log pane, restore "Show log"). |
 | `ShowBackupPlan` | Backup plan dialog (6.1); its `Details` for "Show details". |
-| `ShowRestorePlan` | Restore page 4 (8); its `Details` for "Show details". |
+| `ShowRestorePlan` | Restore wizard page 3 (8); its `Details` for "Show details". |
 | `ShowVerifyPlan` | Verify dialog (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3), restore result page (8). |
 | `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (new in 2.0; the workflows call it after opening the log). |
-| `ConfirmStart` | **Restore…** on page 4, **Verify…** in figure 7.3. |
+| `ConfirmStart` | **Restore…** on page 3, **Verify…** in figure 7.3. |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
 | `NewPassword`, `ShowRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
@@ -1140,7 +1131,7 @@ Before the release, give one person who hasn't seen the new UI a test configurat
 1. "Are your folders protected? How do you know?"
 2. "Back up now. What kind of backup will Documents get, and why?"
 3. "Get your Documents folder back as it was last Sunday, into D:\Restore."
-4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note on wizard page 2 should get them there.)
+4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note on wizard page 1 should get them there.)
 5. "Something is wrong with your backups (condition BaseMissing). What is it and what should you do?"
 
 A task that fails or needs help is a defect in the UI or its texts, not in the user.

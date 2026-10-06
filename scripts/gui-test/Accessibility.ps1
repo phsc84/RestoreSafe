@@ -80,13 +80,13 @@ if ($Exe) {
     Select-ListItem (Find-Control $main BackupsList) 0
     Click-Control $main BackupsRestore
     $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "wizard"
-    foreach ($n in 1, 2, 3) {
+    foreach ($n in 1, 2) {
       $problems += Test-AccessKeys $wiz "wizard page $n"
       $problems += Test-Overlaps $wiz "wizard page $n"
       Click-Control $wiz WizardNext
     }
-    $problems += Test-AccessKeys $wiz "wizard page 4"
-    $problems += Test-Overlaps $wiz "wizard page 4"
+    $problems += Test-AccessKeys $wiz "wizard page 3"
+    $problems += Test-Overlaps $wiz "wizard page 3"
     Click-Control $wiz WizardCancel
   } finally { Stop-Process $p -Force -ErrorAction SilentlyContinue }
   if ($problems) { $problems; exit 1 }

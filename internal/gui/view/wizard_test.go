@@ -19,22 +19,28 @@ import (
 func TestWizardSteps(t *testing.T) {
 	t.Parallel()
 	got := WizardSteps(WizardDestination)
-	if len(got) != 4 || got[0].State != StepDone || got[1].State != StepDone || got[2].State != StepCurrent || got[3].State != StepWaiting || got[2].Text != "3 Destination" {
+	if len(got) != 3 || got[0].State != StepDone || got[1].State != StepCurrent || got[2].State != StepWaiting || got[1].Text != "2 Destination" {
 		t.Fatalf("steps %+v", got)
 	}
 }
 
-func TestRestorePointsAndFolders(t *testing.T) {
+func TestRestorePointAndFolders(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.BaseMissing)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	points := RestorePointsOf(&s, sc.Now)
-	if len(points) == 0 {
-		t.Fatal("no restore points")
+	if len(s.Runs) == 0 {
+		t.Fatal("no runs")
+	}
+	run := s.Runs[0]
+	if got, want := FoldersHeading(RestorePointOf(&s, run.RunID, sc.Now)), "Which folders do you want back from "+When(run.Created, sc.Now)+"?"; got != want {
+		t.Fatalf("heading %q, want %q", got, want)
+	}
+	if got := RestorePointOf(&s, "unknown", sc.Now); got != "" {
+		t.Fatalf("unknown run named %q", got)
 	}
 	var docsDiff, pics *FolderChoice
-	for _, p := range points {
-		for _, c := range RestoreFoldersOf(&s, p.RunID, sc.Now) {
+	for _, run := range s.Runs {
+		for _, c := range RestoreFoldersOf(&s, run.RunID) {
 			c := c
 			switch {
 			case c.Folder == "Docs" && c.Set.IsDiff():
@@ -44,17 +50,26 @@ func TestRestorePointsAndFolders(t *testing.T) {
 			}
 		}
 	}
-	if docsDiff == nil || docsDiff.Enabled || docsDiff.Reason != "Its full backup is missing." {
+	if docsDiff == nil || docsDiff.Enabled {
 		t.Fatalf("a differential without its full backup: %+v", docsDiff)
 	}
-	if pics == nil || !pics.Enabled || pics.With != "" || !strings.HasPrefix(pics.About, "about ") {
+	if pics == nil || !pics.Enabled || !strings.HasPrefix(pics.About, "about ") {
 		t.Fatalf("a full backup: %+v", pics)
+	}
+	if got := UnrestorableNote([]FolderChoice{*pics, *docsDiff}); got != "Docs can't be restored: its full backup is missing." {
+		t.Fatalf("note %q", got)
+	}
+	if got := UnrestorableNote([]FolderChoice{*docsDiff, *docsDiff}); got != "Docs and Docs can't be restored: their full backups are missing." {
+		t.Fatalf("note for two %q", got)
+	}
+	if got := UnrestorableNote([]FolderChoice{*pics}); got != "" {
+		t.Fatalf("note without unrestorable folders %q", got)
 	}
 	footer := SelectionFooter([]FolderChoice{*pics, *docsDiff}, map[naming.BackupEntry]bool{pics.Set: true, docsDiff.Set: true})
 	if footer != "1 folder · about "+Size(pics.Bytes) {
 		t.Fatalf("footer %q: a disabled folder does not count", footer)
 	}
-	checkWriting(t, points)
+	checkWriting(t, []FolderChoice{*pics, *docsDiff})
 }
 
 func TestDestinationChecks(t *testing.T) {
@@ -62,7 +77,7 @@ func TestDestinationChecks(t *testing.T) {
 	sc := scenario.Build(t, scenario.Protected)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
 	var sets []naming.BackupEntry
-	for _, c := range RestoreFoldersOf(&s, s.Runs[0].RunID, sc.Now) {
+	for _, c := range RestoreFoldersOf(&s, s.Runs[0].RunID) {
 		sets = append(sets, c.Set)
 	}
 	dest := t.TempDir()
@@ -109,21 +124,30 @@ func TestRestoreCheck(t *testing.T) {
 		Destination: `D:\Restore`, NeededBytes: 92 << 30, FreeBytes: 212 << 30,
 		Unlock: interact.UnlockPlan{Methods: "password + YubiKey", RecoveryCode: true},
 	}
-	v := RestoreCheckOf(p, "Today, 09:12", now)
-	want := []string{"Today, 09:12\nDocuments: differential 3 + full backup of 1 Sep", "", "Enough space: about 92 GB needed, 212 GB free", "Password + YubiKey, or recovery code"}
-	if p := v.Lines[1].Paths; len(p) != 1 || p[0] != `D:\Restore\Documents (new)` {
-		t.Fatalf("to %q", p)
+	v := RestoreCheckOf(p, "today, 09:12", now)
+	if v.Summary != "1 folder from the backup of today, 09:12, into a new folder in" || v.Destination != `D:\Restore` {
+		t.Fatalf("summary %q, destination %q", v.Summary, v.Destination)
 	}
-	for i, l := range v.Lines {
-		if l.Text != want[i] {
-			t.Fatalf("line %d %q, want %q", i, l.Text, want[i])
-		}
+	checkTable(t, v.Folders, "Folder", "Read from")
+	if r := v.Folders.Rows; len(r) != 1 || r[0].Cells[0].Text != "Documents" || r[0].Cells[1].Text != "Differential 3 + full backup of 1 Sep" || !strings.Contains(r[0].Tip, `D:\Restore\Documents`) {
+		t.Fatalf("folders %+v", r)
+	}
+	if v.Space.Text != "Enough space: about 92 GB needed, 212 GB free" || v.Space.Tone != ToneSuccess {
+		t.Fatalf("space %+v", v.Space)
+	}
+	if v.Unlock.Text != "Unlock with password + YubiKey, or recovery code" {
+		t.Fatalf("unlock %q", v.Unlock.Text)
 	}
 	if v.Restore == nil {
 		t.Fatal("a clean plan offers Restore")
 	}
+	full := p
+	full.Sets = append([]interact.RestoreSetPlan{{SetPlan: interact.SetPlan{Set: naming.BackupEntry{DirectoryName: "Pictures", ChainID: "DEF456", Date: "2026-09-30"}}, OutputDir: `D:\Restore\Pictures`}}, p.Sets...)
+	if v := RestoreCheckOf(full, "today, 09:12", now); v.Summary != "2 folders from the backup of today, 09:12, each into a new folder in" || v.Folders.Rows[0].Cells[1].Text != "Full backup" {
+		t.Fatalf("two folders %+v", v)
+	}
 	p.Issues = []interact.Issue{{Status: interact.StatusError, Code: interact.CodeRestoreTargetExists, Text: "Restore directory already exists. Remedy: Choose another."}}
-	if v := RestoreCheckOf(p, "Today, 09:12", now); v.Restore != nil || len(v.Issues) != 1 || v.Issues[0].Text != "Restore directory already exists. Choose another." {
+	if v := RestoreCheckOf(p, "today, 09:12", now); v.Restore != nil || len(v.Issues) != 1 || v.Issues[0].Text != "Restore directory already exists. Choose another." {
 		t.Fatalf("a blocked plan %+v", v)
 	}
 	checkWriting(t, v)

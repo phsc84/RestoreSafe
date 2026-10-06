@@ -11,10 +11,10 @@ import (
 	"time"
 )
 
-// Pages of the restore wizard (GUI spec 8).
+// Pages of the restore wizard (GUI spec 8). The run to restore from is
+// chosen on the Restore backup page (BK-4).
 const (
-	WizardWhen = iota
-	WizardFolders
+	WizardFolders = iota
 	WizardDestination
 	WizardCheck
 	WizardProgress
@@ -24,7 +24,7 @@ const (
 // WizardSteps is the step indicator of page (RW-1): the pages before it
 // are done, it is current.
 func WizardSteps(page int) []Step {
-	names := []string{stepWhen, stepFolders, stepDestination, stepCheck}
+	names := []string{stepFolders, stepDestination, stepCheck}
 	steps := make([]Step, len(names))
 	for i, n := range names {
 		steps[i] = Step{Text: fmt.Sprintf(stepNumbered, i+1, n)}
@@ -38,40 +38,24 @@ func WizardSteps(page int) []Step {
 	return steps
 }
 
-// RestorePoint is a backup run of page 1 (RW-3).
-type RestorePoint struct {
-	RunID   naming.BackupID
-	When    string
-	Folders string
-	Size    string
-	// Enabled is false when none of its sets can be restored; Reason says
-	// why.
-	Enabled bool
-	Reason  string
+// RestorePointOf names when the run runID was made: "today, 09:12"; "" for
+// an unknown run.
+func RestorePointOf(s *health.Snapshot, runID naming.BackupID, now time.Time) string {
+	if s == nil {
+		return ""
+	}
+	for _, run := range s.Runs {
+		if run.RunID == runID {
+			return When(run.Created, now)
+		}
+	}
+	return ""
 }
 
-// RestorePointsOf lists the runs to restore from, newest first.
-func RestorePointsOf(s *health.Snapshot, now time.Time) []RestorePoint {
-	if s == nil {
-		return nil
-	}
-	var points []RestorePoint
-	for _, run := range s.Runs {
-		p := RestorePoint{RunID: run.RunID, When: capitalize(When(run.Created, now)), Reason: reasonNoneRestorable}
-		var names []string
-		var bytes int64
-		for _, info := range runSets(s, run.RunID) {
-			names = append(names, info.Entry.DirectoryName)
-			bytes += info.SizeBytes
-			if _, ok := baseOf(s, info); ok {
-				p.Enabled, p.Reason = true, ""
-			}
-		}
-		p.Folders = strings.Join(names, ", ")
-		p.Size = Size(bytes)
-		points = append(points, p)
-	}
-	return points
+// FoldersHeading is the heading of page 1, naming the restore point when
+// (RW-4): "Which folders do you want back from today, 09:12?".
+func FoldersHeading(when string) string {
+	return fmt.Sprintf(foldersHeading, when)
 }
 
 // runSets returns the complete sets of a run, by folder name.
@@ -106,22 +90,21 @@ func baseOf(s *health.Snapshot, info catalog.SetInfo) (*catalog.SetInfo, bool) {
 	return nil, false
 }
 
-// FolderChoice is a set of page 2 (RW-4).
+// FolderChoice is a set of page 1 (RW-4).
 type FolderChoice struct {
 	Set    naming.BackupEntry
 	Folder string
 	Badge  Badge
-	// With is the full backup read with a differential: "+ FULL of 1 Sep".
-	With  string
+	// About is the size read: for a differential with its full backup.
 	About string
 	Bytes int64
-	// Enabled is false for a set that cannot be restored; Reason says why.
+	// Enabled is false for a set that cannot be restored: its full backup
+	// is missing (UnrestorableNote).
 	Enabled bool
-	Reason  string
 }
 
 // RestoreFoldersOf lists the sets of the run runID.
-func RestoreFoldersOf(s *health.Snapshot, runID naming.BackupID, now time.Time) []FolderChoice {
+func RestoreFoldersOf(s *health.Snapshot, runID naming.BackupID) []FolderChoice {
 	if s == nil {
 		return nil
 	}
@@ -131,15 +114,32 @@ func RestoreFoldersOf(s *health.Snapshot, runID naming.BackupID, now time.Time) 
 		base, ok := baseOf(s, info)
 		switch {
 		case !ok:
-			c.Enabled, c.Reason = false, reasonBaseMissing
+			c.Enabled = false
 		case base != nil:
-			c.With = fmt.Sprintf(withFullOf, ShortDay(base.Created(), now))
 			c.Bytes += base.SizeBytes
 		}
 		c.About = fmt.Sprintf(aboutSize, Size(c.Bytes))
 		out = append(out, c)
 	}
 	return out
+}
+
+// UnrestorableNote names the folders of choices that can't be restored and
+// why (RW-4); "" when all can.
+func UnrestorableNote(choices []FolderChoice) string {
+	var names []string
+	for _, c := range choices {
+		if !c.Enabled {
+			names = append(names, c.Folder)
+		}
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return fmt.Sprintf(unrestorableOne, names[0])
+	}
+	return fmt.Sprintf(unrestorableMany, joinAnd(names))
 }
 
 // SelectionFooter words the checked folders: "2 folders · about 92 GB"
@@ -159,7 +159,7 @@ func SelectionFooter(choices []FolderChoice, checked map[naming.BackupEntry]bool
 	return fmt.Sprintf(footerSelection, folderPhrase(n), Size(bytes))
 }
 
-// DestinationView is page 3 (RW-5).
+// DestinationView is page 2 (RW-5).
 type DestinationView struct {
 	// Hint is shown instead of the checks while there is nothing to check.
 	Hint string
@@ -230,31 +230,48 @@ func hasCode(issues []interact.Issue, code interact.Code) bool {
 	return false
 }
 
-// CheckView is page 4, the restore preflight (RW-6).
+// CheckView is page 3, the restore preflight (RW-6): a sentence with the
+// run and the destination, the folders and what is read for each, then
+// space and unlocking.
 type CheckView struct {
 	Heading string
-	Lines   []PlanLine
-	Note    string
-	Issues  []IssueLine
-	Details Button
+	// Summary leads to Destination: "2 folders from the backup of today,
+	// 09:12, each into a new folder in".
+	Summary     string
+	Destination string
+	Folders     Table
+	Space       InfoLine
+	Unlock      InfoLine
+	Note        string
+	Issues      []IssueLine
+	Details     Button
 	// Restore is nil when an issue blocks the restore.
 	Restore *Button
 }
 
-// RestoreCheckOf words the workflow's plan p of the run made when.
+// RestoreCheckOf words the workflow's plan p of the run made when ("today,
+// 09:12").
 func RestoreCheckOf(p interact.RestorePlan, when string, now time.Time) CheckView {
-	v := CheckView{Heading: checkHeading, Note: checkNote, Details: Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true}}
-	from := []string{when}
-	var to []string
-	for _, s := range p.Sets {
-		from = append(from, setReadWords(s.SetPlan, now))
-		to = append(to, fmt.Sprintf(checkToNew, Path(s.OutputDir)))
+	summary := checkSummaryMany
+	if len(p.Sets) == 1 {
+		summary = checkSummaryOne
 	}
-	v.Lines = []PlanLine{
-		{Label: checkFrom, Text: strings.Join(from, "\n")},
-		{Label: checkTo, Paths: to},
-		*spaceLine2(p),
-		{Label: planUnlock, Text: unlockWords(p.Unlock)},
+	v := CheckView{
+		Heading:     checkHeading,
+		Summary:     fmt.Sprintf(summary, folderPhrase(len(p.Sets)), when),
+		Destination: Path(p.Destination),
+		Folders:     Table{Name: checkFoldersName, Columns: []Column{{Title: columnFolder, Width: 140}, {Title: columnReadFrom, Fill: true}}},
+		Space:       *restoreSpace(p),
+		Unlock:      InfoLine{Text: unlockWords(p.Unlock), Glyph: GlyphKey},
+		Note:        checkNote,
+		Details:     Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true},
+	}
+	for _, s := range p.Sets {
+		read := setReadWords(s.SetPlan, now)
+		v.Folders.Rows = append(v.Folders.Rows, TableRow{
+			Tip:   joinTip(Path(s.OutputDir), read),
+			Cells: []TableCell{{Text: s.Set.DirectoryName}, {Text: read}},
+		})
 	}
 	for _, issue := range p.Issues {
 		line := IssueLine{Text: issueText(issue.Text), Tone: ToneWarning, Glyph: GlyphWarning}
@@ -269,28 +286,23 @@ func RestoreCheckOf(p interact.RestorePlan, when string, now time.Time) CheckVie
 	return v
 }
 
-func spaceLine2(p interact.RestorePlan) *PlanLine {
-	s := restoreSpace(p)
-	return &PlanLine{Label: planSpace, Text: s.Text, Tone: s.Tone, Glyph: s.Glyph}
-}
-
-// setReadWords names what is read for a set: "Documents: differential 3 +
-// full backup of 1 Sep".
+// setReadWords names what is read for a set: "Differential 3 + full backup
+// of 1 Sep".
 func setReadWords(s interact.SetPlan, now time.Time) string {
 	if !s.Set.IsDiff() {
-		return fmt.Sprintf(readFull, s.Set.DirectoryName)
+		return readFull
 	}
 	day := s.Base.Date
 	if d, err := time.ParseInLocation("2006-01-02", s.Base.Date, time.Local); err == nil {
 		day = ShortDay(d, now)
 	}
-	return fmt.Sprintf(readDiff, s.Set.DirectoryName, s.Set.DiffNumber, day)
+	return fmt.Sprintf(readDiff, s.Set.DiffNumber, day)
 }
 
-// unlockWords names how the keys are unlocked: "Password and one YubiKey
-// touch, or recovery code".
+// unlockWords names how the keys are unlocked: "Unlock with password +
+// YubiKey, or recovery code".
 func unlockWords(u interact.UnlockPlan) string {
-	text := capitalize(u.Methods)
+	text := fmt.Sprintf(checkUnlock, u.Methods)
 	if u.RecoveryCode {
 		text += unlockOrRecovery
 	}

@@ -25,11 +25,8 @@ type PlanRow struct {
 // PlanLine is a labeled line under the plan's table (GUI spec BP-2).
 type PlanLine struct {
 	Label, Text string
-	// Paths are lines that are paths, shortened in the middle; they take
-	// the place of Text.
-	Paths []string
-	Tone  Tone
-	Glyph Glyph
+	Tone        Tone
+	Glyph       Glyph
 }
 
 // IssueLine is a preflight issue (GUI spec BP-5).

@@ -66,7 +66,8 @@ try {
   Snap $main "backups"
   Click-Control $main BackupsRestore
   $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "restore wizard"
-  Click-Control $wiz WizardNext
+  Wait-Until { Find-Control $wiz WizardNext -Enabled } 10 "folders" | Out-Null
+  Snap $wiz "wizard-folders"
   Click-Control $wiz WizardNext
   $edit = Wait-Until { Find-Control $wiz WizardDest } 10 "destination"
   Set-Text $edit $RestoreTo

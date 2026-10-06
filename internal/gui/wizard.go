@@ -40,11 +40,8 @@ const (
 	browseButton     = 100
 )
 
-// Columns of the wizard's lists, in DIPs; the last but one fills.
-var (
-	whenColumns    = []int32{150, 0, 80}
-	foldersColumns = []int32{130, 64, 0, 90}
-)
+// Columns of the wizard's folder list, in DIPs; the first fills.
+var foldersColumns = []int32{0, 72, 110}
 
 const (
 	wizardClass = "RestoreSafeWizard"
@@ -53,9 +50,9 @@ const (
 	checkDelayMs = 300
 )
 
-// restoreWizard is the restore wizard (GUI spec 8): pages 1 to 4 choose and
+// restoreWizard is the restore wizard (GUI spec 8): pages 1 to 3 choose and
 // check the restore, then it shows the progress and the result. The
-// restore workflow runs from page 4 on: it shows its plan there and waits
+// restore workflow runs from page 3 on: it shows its plan there and waits
 // for Restore… (ConfirmStart); Back answers no, as nothing is written yet.
 type restoreWizard struct {
 	a    *app
@@ -63,32 +60,40 @@ type restoreWizard struct {
 	page int
 
 	// The choices.
-	points  []view.RestorePoint
-	runID   naming.BackupID
+	when    string
 	folders []view.FolderChoice
 	checked map[naming.BackupEntry]bool
 	dest    string
 
-	// Page 3: the check of the destination.
+	// Page 2: the check of the destination.
 	destPlan  *interact.RestorePlan
 	destErr   error
 	checking  bool
 	checkSeq  int
 	results   *widget.Panel
 	resultsSt *stack
-	// destTable lists the folders the restore creates (page 3).
-	destTable *table
+	// destTable lists the folders the restore creates (page 2); the
+	// splitter below it sets its height (destHeight, in DIPs, 0 until the
+	// user drags it).
+	destTable  *table
+	destSplit  *widget.Splitter
+	destHeight int32
+	// tableItem is the index of the table in resultsSt.
+	tableItem int
 
-	// Page 4: the workflow's plan and its question.
+	// Page 3: the workflow's plan and its question.
 	plan    *interact.RestorePlan
 	planErr error
 	answer  func(bool, error)
 	checkSt *stack
+	// checkTable lists the folders and what is read for each.
+	checkTable *table
 
 	// Controls of the current page.
 	trail              *widget.Trail
 	heading, note      win32.HWND
 	noteIcon           win32.HWND
+	warn, warnIcon     win32.HWND
 	list               win32.HWND
 	destEdit, browse   win32.HWND
 	intoBackupDir      win32.HWND
@@ -110,13 +115,17 @@ func (a *app) openWizard(runID naming.BackupID) {
 		return
 	}
 	win32.SetStyle(win.hwnd, win32.Style(win.hwnd)|win32.WS_THICKFRAME)
-	w := &restoreWizard{a: a, win: win, runID: runID, checked: map[naming.BackupEntry]bool{}, dest: a.lastDestination}
+	w := &restoreWizard{a: a, win: win, checked: map[naming.BackupEntry]bool{}, dest: a.lastDestination}
 	if w.dest == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			w.dest = filepath.Join(home, "Restore")
 		}
 	}
-	w.points = view.RestorePointsOf(a.snapshot, time.Now())
+	w.when = view.RestorePointOf(a.snapshot, runID, time.Now())
+	w.folders = view.RestoreFoldersOf(a.snapshot, runID)
+	for _, f := range w.folders {
+		w.checked[f.Set] = f.Enabled
+	}
 	win.onCommand = func(id uint16) { w.command(id, win32.BN_CLICKED) }
 	win.defID = func() uint16 {
 		if w.next != 0 && win32.IsEnabled(w.next) {
@@ -133,7 +142,7 @@ func (a *app) openWizard(runID naming.BackupID) {
 	s := win.theme.Scale
 	win.resize(s.Px(wizardWidth), s.Px(wizardHeight), true)
 	win32.Enable(a.hwnd, false)
-	w.show(view.WizardWhen)
+	w.show(view.WizardFolders)
 	win32.ShowWindow(win.hwnd, win32.SW_SHOWNORMAL)
 	w.focus()
 }
@@ -153,10 +162,10 @@ func (w *restoreWizard) build() {
 	p := w.win.panel
 	win32.KillTimer(w.win.hwnd, checkTimerID)
 	p.Clear()
-	w.trail, w.bar, w.run, w.results, w.destTable = nil, nil, nil, nil, nil
-	w.heading, w.note, w.noteIcon, w.list, w.destEdit, w.browse, w.intoBackupDir, w.creates = 0, 0, 0, 0, 0, 0, 0, 0
+	w.trail, w.bar, w.run, w.results, w.destTable, w.destSplit = nil, nil, nil, nil, nil, nil
+	w.heading, w.note, w.noteIcon, w.warn, w.warnIcon, w.list, w.destEdit, w.browse, w.intoBackupDir, w.creates = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 	w.footer, w.back, w.next, w.cancel = 0, 0, 0, 0
-	w.checkSt = nil
+	w.checkSt, w.checkTable = nil, nil
 	texts := view.WizardTextsOf()
 
 	if w.page <= view.WizardCheck {
@@ -172,49 +181,24 @@ func (w *restoreWizard) build() {
 		}
 	}
 	switch w.page {
-	case view.WizardWhen:
-		w.heading = p.Label(texts.WhenHeading, widget.TextStrong, pal.Text)
-		w.list = w.newList(false, []string{view.ColumnDate, view.ColumnFolders, view.ColumnSize}, whenColumns)
-		w.filling = true
-		selected := -1
-		for i, pt := range w.points {
-			item := win32.ListAddItem(w.list, pt.When, uintptr(i+1))
-			folders := pt.Folders
-			if !pt.Enabled {
-				folders = pt.Reason
-			}
-			win32.ListSetText(w.list, item, 1, folders)
-			win32.ListSetText(w.list, item, 2, pt.Size)
-			if pt.RunID == w.runID || (selected < 0 && w.runID == "" && pt.Enabled) {
-				selected = item
-			}
-		}
-		w.filling = false
-		if selected >= 0 {
-			win32.ListSelect(w.list, selected)
-			w.runID = w.points[selected].RunID
-		}
-		w.noteIcon, w.note = w.noteRow(texts.WhenNote)
 	case view.WizardFolders:
-		w.heading = p.Label(texts.FoldersHeading, widget.TextStrong, pal.Text)
-		w.list = w.newList(true, []string{view.ColumnFolders, view.PlanColumnType, view.PlanColumnWhy, view.PlanColumnAbout}, foldersColumns)
+		w.heading = p.Label(view.FoldersHeading(w.when), widget.TextStrong, pal.Text)
+		w.list = w.newList(true, []string{view.ColumnFolders, view.PlanColumnType, view.PlanColumnAbout}, foldersColumns)
 		w.filling = true
 		for i, f := range w.folders {
 			item := win32.ListAddItem(w.list, f.Folder, uintptr(i+1))
 			win32.ListSetText(w.list, item, 1, f.Badge.Text)
-			with := f.With
-			if !f.Enabled {
-				with = f.Reason
-			}
-			win32.ListSetText(w.list, item, 2, with)
-			win32.ListSetText(w.list, item, 3, f.About)
+			win32.ListSetText(w.list, item, 2, f.About)
 			win32.ListSetChecked(w.list, item, f.Enabled && w.checked[f.Set])
 		}
 		w.filling = false
 		if len(w.folders) > 0 {
 			win32.ListSelect(w.list, 0)
 		}
-		w.noteIcon, w.note = w.noteRow(texts.FoldersNote)
+		if text := view.UnrestorableNote(w.folders); text != "" {
+			w.warnIcon, w.warn = w.noteRow(text, view.GlyphWarning, pal.Warning)
+		}
+		w.noteIcon, w.note = w.noteRow(texts.FoldersNote, view.GlyphInfo, pal.AccentText)
 	case view.WizardDestination:
 		w.heading = p.Label(texts.DestHeading, widget.TextStrong, pal.Text)
 		w.destEdit = w.child("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idWizDest)
@@ -232,6 +216,11 @@ func (w *restoreWizard) build() {
 			rp.OnNotify = func(hdr *win32.NMHdr) uintptr {
 				r, _ := w.destTable.notify(hdr)
 				return r
+			}
+			// Like the table, the splitter outlives the rebuilt checks.
+			if sp, err := widget.NewSplitter(t, rp.HWND(), pal.Surface); err == nil {
+				sp.OnMove = w.destSplitMoved
+				w.destSplit = sp
 			}
 		}
 		w.startCheck(0)
@@ -285,20 +274,25 @@ func (w *restoreWizard) child(class string, style uint32, id uintptr) win32.HWND
 	return h
 }
 
-// noteRow creates an information note: its icon and its text.
-func (w *restoreWizard) noteRow(text string) (win32.HWND, win32.HWND) {
+// noteRow creates a note: its icon, glyph in color, and its text. An
+// information note is secondary text; a warning is read.
+func (w *restoreWizard) noteRow(text string, glyph view.Glyph, color widget.Color) (win32.HWND, win32.HWND) {
 	t := w.win.theme
 	p := w.win.panel
 	var icon win32.HWND
 	if i, err := widget.NewIcon(t, p.HWND(), t.Palette.Surface, widget.TextIconSmall); err == nil {
 		p.Adopt(i.HWND())
-		i.Set(glyphOf(view.GlyphInfo), t.Palette.AccentText, widget.NoCircle, "")
+		i.Set(glyphOf(glyph), color, widget.NoCircle, "")
 		icon = i.HWND()
 	}
-	return icon, p.Paragraph(text, widget.TextSmall, t.Palette.TextSecondary)
+	textColor := t.Palette.Text
+	if glyph == view.GlyphInfo {
+		textColor = t.Palette.TextSecondary
+	}
+	return icon, p.Paragraph(text, widget.TextSmall, textColor)
 }
 
-// buildCheck creates page 4: the workflow's plan, or a marquee until it
+// buildCheck creates page 3: the workflow's plan, or a marquee until it
 // arrives.
 func (w *restoreWizard) buildCheck() {
 	t := w.win.theme
@@ -320,23 +314,21 @@ func (w *restoreWizard) buildCheck() {
 	case w.plan == nil:
 		st.para(issueOf(w.planErr), widget.TextBody, pal.Error, view.GlyphError)
 	default:
-		v := view.RestoreCheckOf(*w.plan, w.pointWhen(), time.Now())
+		v := view.RestoreCheckOf(*w.plan, w.when, time.Now())
 		st.para(v.Heading, widget.TextStrong, pal.Text, view.GlyphNone)
-		st.gap(10)
-		for _, l := range v.Lines {
-			color := pal.Text
-			if l.Tone == view.ToneError || l.Tone == view.ToneWarning {
-				color = toneColor(pal, l.Tone)
-			}
-			if len(l.Paths) > 0 {
-				st.labeledPaths(l.Label, l.Paths, color)
-			} else {
-				st.labeled(l.Label, l.Text, color, l.Glyph)
-			}
-			st.gap(4)
-		}
-		st.gap(8)
-		st.para(v.Note, widget.TextSmall, pal.TextSecondary, view.GlyphInfo)
+		st.gap(6)
+		st.para(v.Summary, widget.TextBody, pal.Text, view.GlyphNone)
+		dest := p.PathLabel(v.Destination, widget.TextBody, pal.Text)
+		st.row(stackLineHeight, cell{hwnd: dest, fill: true})
+		st.gap(14)
+		w.checkTable = newTable(t, p.HWND(), 0)
+		p.Adopt(w.checkTable.hwnd)
+		w.checkTable.set(v.Folders)
+		st.table(w.checkTable)
+		st.gap(14)
+		st.para(v.Space.Text, widget.TextBody, toneColor(pal, v.Space.Tone), v.Space.Glyph) // as on page 2
+		st.gap(4)
+		st.para(v.Unlock.Text, widget.TextBody, pal.Text, v.Unlock.Glyph)
 		for _, issue := range v.Issues {
 			st.gap(6)
 			st.para(issue.Text, widget.TextBody, toneColor(pal, issue.Tone), issue.Glyph)
@@ -345,9 +337,12 @@ func (w *restoreWizard) buildCheck() {
 			st.gap(6)
 			st.para(issueOf(w.planErr), widget.TextBody, pal.Error, view.GlyphError)
 		}
-		st.gap(8)
+		st.gap(14)
+		st.para(v.Note, widget.TextSmall, pal.TextSecondary, view.GlyphInfo)
+		st.gap(2)
 		h := p.Link(v.Details.Text, idWizDetails)
-		st.row(stackLineHeight, cell{hwnd: h, dip: 120})
+		lw, _ := t.Fonts.Measure(v.Details.Text, widget.TextSmall)
+		st.row(stackLineHeight, cell{dip: iconWidth - 8}, cell{hwnd: h, px: lw + s.Px(linkPadding)}) // under the note's text; a row puts 8 DIPs between cells
 	}
 }
 
@@ -357,16 +352,6 @@ func issueOf(err error) string {
 		return ""
 	}
 	return view.IssueText(err.Error())
-}
-
-// pointWhen names the chosen restore point.
-func (w *restoreWizard) pointWhen() string {
-	for _, p := range w.points {
-		if p.RunID == w.runID {
-			return p.When
-		}
-	}
-	return ""
 }
 
 // update shows the state of the current page: the footer and the buttons,
@@ -388,10 +373,6 @@ func (w *restoreWizard) update() {
 	if w.page <= view.WizardCheck {
 		next := false
 		switch w.page {
-		case view.WizardWhen:
-			for _, p := range w.points {
-				next = next || (p.RunID == w.runID && p.Enabled)
-			}
 		case view.WizardFolders:
 			next = view.SelectionFooter(w.folders, w.checked) != ""
 		case view.WizardDestination:
@@ -401,12 +382,8 @@ func (w *restoreWizard) update() {
 		case view.WizardCheck:
 			next = w.answer != nil && w.plan != nil && !w.plan.HasErrors()
 		}
-		footer := ""
-		if w.page >= view.WizardFolders {
-			footer = view.SelectionFooter(w.folders, w.checked)
-		}
-		win32.SetText(w.footer, footer)
-		win32.Enable(w.back, w.page > view.WizardWhen)
+		win32.SetText(w.footer, view.SelectionFooter(w.folders, w.checked))
+		win32.Enable(w.back, w.page > view.WizardFolders)
 		win32.Enable(w.next, next)
 	}
 	w.layout()
@@ -427,9 +404,17 @@ func (w *restoreWizard) showResults(v view.DestinationView) {
 		st.para(v.Hint, widget.TextBody, pal.TextSecondary, view.GlyphNone)
 	}
 	w.destTable.show(v.Hint == "")
+	w.tableItem = -1
+	if w.destSplit != nil {
+		setShown(w.destSplit.HWND(), v.Hint == "")
+	}
 	if v.Hint == "" {
 		w.destTable.set(v.Folders)
-		st.table(w.destTable)
+		w.tableItem = len(st.items)
+		st.items = append(st.items, stackItem{height: s.Px(w.destTableHeight()), place: w.destTable.place})
+		if w.destSplit != nil {
+			st.row(widget.SplitterHeight, cell{hwnd: w.destSplit.HWND(), fill: true})
+		}
 	}
 	if v.Remedy != "" {
 		st.gap(6)
@@ -440,6 +425,51 @@ func (w *restoreWizard) showResults(v view.DestinationView) {
 		st.para(v.Space.Text, widget.TextBody, toneColor(pal, v.Space.Tone), v.Space.Glyph)
 	}
 	w.resultsSt = st
+	w.fitDestTable(w.destTableHeight())
+}
+
+// destTableHeight is the height of the destination table in DIPs: as the
+// user dragged it, or as many rows as it has, up to tableMaxRows. It shows
+// at least as many rows as it has, up to tableMinRows.
+func (w *restoreWizard) destTableHeight() int32 {
+	tb := w.destTable
+	least := tb.heightOf(min(max(len(tb.v.Rows), 1), tableMinRows))
+	if w.destHeight > 0 {
+		return max(w.destHeight, least)
+	}
+	return max(tb.height(), least)
+}
+
+// destSplitMoved sets the destination table's height for the splitter's new
+// top, in the results' client coordinates.
+func (w *restoreWizard) destSplitMoved(top int32) {
+	if w.resultsSt == nil || w.tableItem < 0 {
+		return
+	}
+	s := w.win.theme.Scale
+	tr := win32.WindowRect(w.destTable.hwnd)
+	tableTop := win32.ScreenToClient(w.results.HWND(), win32.Point{X: tr.Left, Y: tr.Top}).Y
+	w.destHeight = s.Dip(top - tableTop)
+	w.fitDestTable(w.destTableHeight())
+	w.destHeight = s.Dip(w.resultsSt.items[w.tableItem].height)
+	w.resultsSt.place(0, 0)
+}
+
+// fitDestTable gives the destination table dip of height, at most what the
+// results leave it.
+func (w *restoreWizard) fitDestTable(dip int32) {
+	st := w.resultsSt
+	if st == nil || w.tableItem < 0 || w.tableItem >= len(st.items) {
+		return
+	}
+	s := w.win.theme.Scale
+	item := &st.items[w.tableItem]
+	px := s.Px(dip)
+	if avail := win32.ClientRect(w.results.HWND()).Height() - (st.height() - item.height); avail > 0 {
+		least := s.Px(w.destTable.heightOf(min(max(len(w.destTable.v.Rows), 1), tableMinRows)))
+		px = max(min(px, avail), least)
+	}
+	item.height = px
 }
 
 // layout places the controls of the current page.
@@ -463,18 +493,17 @@ func (w *restoreWizard) layout() {
 		area.Bottom(12)
 	}
 	switch w.page {
-	case view.WizardWhen, view.WizardFolders:
+	case view.WizardFolders:
 		win32.SetWindowPos(w.heading, area.Top(wizardHeading))
 		area.Top(6)
-		note := area.Bottom(wizardNote)
-		if w.noteIcon != 0 {
-			icon := note
-			icon.Right = icon.Left + s.Px(iconWidth)
-			icon.Bottom = icon.Top + s.Px(stackLineHeight)
-			win32.SetWindowPos(w.noteIcon, icon)
-			note.Left += s.Px(iconWidth)
+		w.placeNote(area.Bottom(wizardNote), w.noteIcon, w.note)
+		if w.warn != 0 {
+			text := win32.Text(w.warn)
+			width := area.Width() - s.Px(iconWidth)
+			h := max(t.Fonts.MeasureWrapped(text, widget.TextSmall, width), s.Px(stackLineHeight))
+			area.Bottom(4)
+			w.placeNote(area.BottomPx(h), w.warnIcon, w.warn)
 		}
-		win32.SetWindowPos(w.note, note)
 		area.Bottom(8)
 		list := area.Rest()
 		win32.SetWindowPos(w.list, list)
@@ -516,17 +545,26 @@ func (w *restoreWizard) layout() {
 	}
 }
 
-// fitColumns gives the filling column of the page's list the width the
+// placeNote puts a note's icon and text into r.
+func (w *restoreWizard) placeNote(r win32.Rect, icon, text win32.HWND) {
+	s := w.win.theme.Scale
+	if icon != 0 {
+		ir := r
+		ir.Right = ir.Left + s.Px(iconWidth)
+		ir.Bottom = ir.Top + s.Px(stackLineHeight)
+		win32.SetWindowPos(icon, ir)
+		r.Left += s.Px(iconWidth)
+	}
+	win32.SetWindowPos(text, r)
+}
+
+// fitColumns gives the filling column of the folder list the width the
 // others leave.
 func (w *restoreWizard) fitColumns(width int32) {
 	s := w.win.theme.Scale
-	widths := whenColumns
-	if w.page == view.WizardFolders {
-		widths = foldersColumns
-	}
 	fixed := int32(0)
 	fill := -1
-	for i, c := range widths {
+	for i, c := range foldersColumns {
 		if c == 0 {
 			fill = i
 			continue
@@ -575,7 +613,7 @@ func (w *restoreWizard) command(id, code uint16) {
 			win32.SetText(w.destEdit, path) // EN_CHANGE checks it
 		}
 	case id == idWizIntoBackupDir:
-		win32.SetText(w.destEdit, a.backupDir)
+		win32.SetText(w.destEdit, view.Path(a.backupDir)) // the configuration may use slashes
 	case id == idWizDetails:
 		if w.plan != nil {
 			a.showDetails(w.win.hwnd, view.RestoreDetailsTitle, w.plan.Details)
@@ -583,20 +621,13 @@ func (w *restoreWizard) command(id, code uint16) {
 	}
 }
 
-// forward goes to the next page; on page 4 it starts the restore.
+// forward goes to the next page; on page 3 it starts the restore.
 func (w *restoreWizard) forward() {
 	a := w.a
 	if !win32.IsEnabled(w.next) {
 		return
 	}
 	switch w.page {
-	case view.WizardWhen:
-		w.folders = view.RestoreFoldersOf(a.snapshot, w.runID, time.Now())
-		w.checked = map[naming.BackupEntry]bool{}
-		for _, f := range w.folders {
-			w.checked[f.Set] = f.Enabled
-		}
-		w.show(view.WizardFolders)
 	case view.WizardFolders:
 		w.show(view.WizardDestination)
 	case view.WizardDestination:
@@ -613,7 +644,7 @@ func (w *restoreWizard) forward() {
 	}
 }
 
-// toCheck opens page 4 and starts the restore workflow, which plans and
+// toCheck opens page 3 and starts the restore workflow, which plans and
 // asks.
 func (w *restoreWizard) toCheck() {
 	w.plan, w.planErr, w.answer = nil, nil, nil
@@ -632,19 +663,19 @@ func (w *restoreWizard) chosen() []naming.BackupEntry {
 	return sets
 }
 
-// backward goes to the previous page; leaving page 4 ends the workflow,
+// backward goes to the previous page; leaving page 3 ends the workflow,
 // which has written nothing yet.
 func (w *restoreWizard) backward() {
 	if w.page == view.WizardCheck {
 		w.a.cancelRun()
 	}
-	if w.page > view.WizardWhen && w.page <= view.WizardCheck {
+	if w.page > view.WizardFolders && w.page <= view.WizardCheck {
 		w.show(w.page - 1)
 	}
 }
 
 // cancelPressed handles Cancel, Esc and the close button: it closes on
-// pages 1 to 4 and after the result, and asks before cancelling a running
+// pages 1 to 3 and after the result, and asks before cancelling a running
 // restore.
 func (w *restoreWizard) cancelPressed() {
 	switch w.page {
@@ -746,7 +777,7 @@ func (w *restoreWizard) destChecked(c *destCheck) {
 	w.update()
 }
 
-// setPlan shows the workflow's plan on page 4.
+// setPlan shows the workflow's plan on page 3.
 func (w *restoreWizard) setPlan(p interact.RestorePlan) {
 	w.plan = &p
 	if w.page == view.WizardCheck {
@@ -776,7 +807,7 @@ func (w *restoreWizard) workerDone() bool {
 	}
 	switch {
 	case r.Started.IsZero():
-		// Back, Cancel, or the plan blocked the start: page 4 says why.
+		// Back, Cancel, or the plan blocked the start: page 3 says why.
 		a.machine.Dismiss()
 		w.answer = nil
 		if w.page == view.WizardCheck {
@@ -797,6 +828,10 @@ func (w *restoreWizard) workerDone() bool {
 }
 
 func (w *restoreWizard) notify(hdr *win32.NMHdr) uintptr {
+	if w.checkTable != nil && hdr.HwndFrom == w.checkTable.hwnd {
+		r, _ := w.checkTable.notify(hdr)
+		return r
+	}
 	if hdr.HwndFrom != w.list {
 		return 0
 	}
@@ -807,27 +842,15 @@ func (w *restoreWizard) notify(hdr *win32.NMHdr) uintptr {
 			return 0
 		}
 		i := int(win32.ListParam(w.list, int(n.Item))) - 1
-		switch w.page {
-		case view.WizardWhen:
-			if n.NewState&win32.LVIS_SELECTED != 0 && i >= 0 && i < len(w.points) {
-				w.runID = w.points[i].RunID
-				w.update()
+		if (n.NewState^n.OldState)&win32.LVIS_STATEIMAGEMASK != 0 && i >= 0 && i < len(w.folders) {
+			f := w.folders[i]
+			checked := win32.ListChecked(w.list, int(n.Item))
+			if checked && !f.Enabled {
+				win32.ListSetChecked(w.list, int(n.Item), false)
+				return 0
 			}
-		case view.WizardFolders:
-			if (n.NewState^n.OldState)&win32.LVIS_STATEIMAGEMASK != 0 && i >= 0 && i < len(w.folders) {
-				f := w.folders[i]
-				checked := win32.ListChecked(w.list, int(n.Item))
-				if checked && !f.Enabled {
-					win32.ListSetChecked(w.list, int(n.Item), false)
-					return 0
-				}
-				w.checked[f.Set] = checked
-				w.update()
-			}
-		}
-	case win32.NM_DBLCLK:
-		if w.page == view.WizardWhen {
-			w.forward()
+			w.checked[f.Set] = checked
+			w.update()
 		}
 	case win32.NM_CUSTOMDRAW:
 		return w.customDraw(win32.ListDrawOf(hdr))
@@ -842,10 +865,7 @@ func (w *restoreWizard) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 	pal := t.Palette
 	i := int(cd.ItemParam) - 1
 	enabled := true
-	switch {
-	case w.page == view.WizardWhen && i >= 0 && i < len(w.points):
-		enabled = w.points[i].Enabled
-	case w.page == view.WizardFolders && i >= 0 && i < len(w.folders):
+	if i >= 0 && i < len(w.folders) {
 		enabled = w.folders[i].Enabled
 	}
 	switch cd.DrawStage {
@@ -919,7 +939,7 @@ func (w *restoreWizard) close() {
 	a.focusPage()
 }
 
-// goTo goes back to a completed step (RW-1); leaving page 4 ends the
+// goTo goes back to a completed step (RW-1); leaving page 3 ends the
 // workflow, which has written nothing yet.
 func (w *restoreWizard) goTo(page int) {
 	if page >= w.page || w.page > view.WizardCheck {

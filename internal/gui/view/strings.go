@@ -388,13 +388,12 @@ const (
 // Restore wizard (GUI spec 8).
 const (
 	WizardTitle          = "Restore"
-	stepWhen             = "When"
-	stepFolders          = "Folders"
+	stepFolders         = "Folders"
 	stepDestination      = "Destination"
 	stepCheck            = "Check"
 	stepNumbered         = "%d %s"
-	reasonNoneRestorable = "Its full backups are missing."
-	withFullOf           = "+ FULL of %s"
+	unrestorableOne      = "%s can't be restored: its full backup is missing."
+	unrestorableMany     = "%s can't be restored: their full backups are missing."
 	aboutSize            = "about %s"
 	footerSelection      = "%s · about %s"
 	destHintEmpty        = "Enter or browse to the folder to restore into."
@@ -411,11 +410,13 @@ const (
 	spaceEnough          = "Enough space: about %s needed, %s free"
 	checkHeading         = "Ready to restore"
 	checkNote            = "Every file is checked against its checksum. Nothing in your backups changes, and no existing file is overwritten."
-	checkFrom            = "From"
-	checkTo              = "To"
-	checkToNew           = "%s (new)"
-	readFull             = "%s: full backup"
-	readDiff             = "%s: differential %d + full backup of %s"
+	checkSummaryOne      = "%s from the backup of %s, into a new folder in"
+	checkSummaryMany     = "%s from the backup of %s, each into a new folder in"
+	checkFoldersName     = "Folders to restore"
+	columnReadFrom       = "Read from"
+	readFull             = "Full backup"
+	readDiff             = "Differential %d + full backup of %s"
+	checkUnlock          = "Unlock with %s"
 	unlockOrRecovery     = ", or recovery code"
 	buttonRestoreStart   = "&Restore…"
 	WizardBack           = "< &Back"
@@ -423,15 +424,11 @@ const (
 	WizardBrowse         = "B&rowse…"
 	WizardIntoBackupDir  = "Restore into the backup directory"
 	WizardClose          = "Close"
-	whenHeading          = "Restore your folders as they were at"
-	whenNote             = "Differentials are restored together with their full backup."
-	foldersHeading       = "Which folders do you want back?"
+	foldersHeading       = "Which folders do you want back from %s?"
 	foldersNote          = "Whole folders are restored. To get a single file back, restore its folder to a new place and copy the file."
 	destHeading          = "Where should the folders go?"
 	destCreates          = "RestoreSafe creates one new folder per restored folder:"
-	ColumnDate           = "Date"
 	ColumnFolders        = "Folders"
-	ColumnSize           = "Size"
 	restoredOne          = "%s (about %s) restored to %s in %s."
 	restoreEveryFile     = "Every file matched its checksum."
 	restoreSkippedOne    = "%s: 1 file isn't in this backup. It couldn't be read when the backup was made; the log names it."
@@ -453,14 +450,13 @@ const (
 
 // WizardTexts are the fixed texts of the wizard's pages.
 type WizardTexts struct {
-	WhenHeading, WhenNote       string
-	FoldersHeading, FoldersNote string
-	DestHeading, DestCreates    string
+	FoldersNote              string
+	DestHeading, DestCreates string
 }
 
 // WizardTextsOf returns the fixed texts of the wizard.
 func WizardTextsOf() WizardTexts {
-	return WizardTexts{whenHeading, whenNote, foldersHeading, foldersNote, destHeading, destCreates}
+	return WizardTexts{foldersNote, destHeading, destCreates}
 }
 
 // Exported for the restore wizard's window.

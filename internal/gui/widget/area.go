@@ -37,8 +37,11 @@ func (a *Area) TopPx(px int32) win32.Rect {
 }
 
 // Bottom cuts a row of dip height off the bottom and returns it.
-func (a *Area) Bottom(dip int32) win32.Rect {
-	h := min(a.S.Px(dip), a.R.Height())
+func (a *Area) Bottom(dip int32) win32.Rect { return a.BottomPx(a.S.Px(dip)) }
+
+// BottomPx cuts a row of px pixels off the bottom and returns it.
+func (a *Area) BottomPx(px int32) win32.Rect {
+	h := min(px, a.R.Height())
 	r := win32.Rect{Left: a.R.Left, Top: a.R.Bottom - h, Right: a.R.Right, Bottom: a.R.Bottom}
 	a.R.Bottom -= h
 	return r
