@@ -84,6 +84,10 @@ type backupsPage struct {
 	// shownCollapsed is how each group was shown: a group whose state
 	// differs at the next rebuild was changed by the user.
 	shownCollapsed []bool
+	// highlighting is set while highlightRun changes the list's states:
+	// showing a group header selected selects one of its items, which must
+	// not count as the user's choice.
+	highlighting bool
 
 	barText, restore, verify win32.HWND
 	bar                      view.ActionBar
@@ -450,6 +454,8 @@ func (b *backupsPage) updateBar() {
 // highlightRun shows the header of the selected run selected and its sets
 // highlighted like a selected row.
 func (b *backupsPage) highlightRun() {
+	b.highlighting = true
+	defer func() { b.highlighting = false }()
 	for gi, g := range b.view.Groups {
 		on := b.selSet == "" && b.selRun != "" && g.RunID == b.selRun
 		if on != win32.ListGroupSelected(b.list, int32(gi)) {
@@ -648,6 +654,9 @@ func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
 	}
 	switch hdr.Code {
 	case win32.LVN_ITEMCHANGED:
+		if b.highlighting {
+			return 0
+		}
 		n := win32.ListChangeOf(hdr)
 		if n.Changed&win32.LVIF_STATE != 0 && n.NewState&win32.LVIS_SELECTED != 0 && n.OldState&win32.LVIS_SELECTED == 0 {
 			b.selectItem(int(n.Item))
