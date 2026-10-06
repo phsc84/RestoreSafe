@@ -509,8 +509,9 @@ func (w *restoreWizard) layout() {
 			w.checkSt.place(r.Left, r.Top)
 		}
 	case view.WizardProgress, view.WizardResult:
+		// The card fills the page (RW-1: the wizard is resizable).
 		if w.run != nil && w.run.mode != runHidden {
-			w.run.place(area.TopPx(w.run.height(area.Rest().Width())))
+			w.run.place(area.Rest())
 		}
 	}
 }

@@ -146,6 +146,21 @@ func ReportSkippedFiles(m *manifest.Manifest, directoryName string, log *logging
 	return len(skipped)
 }
 
+// ReportStaleFiles logs the files a differential could not read, which the
+// restore point holds in their older version from the full backup. It
+// returns their count.
+func ReportStaleFiles(m *manifest.Manifest, directoryName string, log *logging.Logger) int {
+	stale := archive.StaleFiles(m)
+	if len(stale) == 0 {
+		return 0
+	}
+	log.Warn("  [%s] %d file(s) are restored in the older version of the full backup, because they could not be read when this differential was created:", directoryName, len(stale))
+	for _, p := range stale {
+		log.Warn("    %s", p)
+	}
+	return len(stale)
+}
+
 // SectionSize is the Progress total of processing set: the length of its
 // data section and, for a differential, of its full backup's (base may be
 // nil).

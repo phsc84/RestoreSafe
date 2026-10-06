@@ -118,7 +118,7 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 		log.Info("  %s", info.Entry.String())
 	}
 
-	skipped, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
+	unread, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
 	if err != nil {
 		if ctx.Err() != nil {
 			log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
@@ -126,7 +126,7 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 		}
 		return err
 	}
-	if skipped > 0 {
+	if unread > 0 {
 		warningCount++
 	}
 
@@ -345,8 +345,9 @@ func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, 
 
 // restoreEntry decrypts one backup set (for a differential together with its
 // full backup base) and extracts it to destDir, checking every file against
-// its manifest hash. It returns the number of files that are not in the
-// restore point because they could not be read during backup.
+// its manifest hash. It returns the number of files that could not be read
+// during backup: missing from the restore point, or restored in an older
+// version (stale). A restore fact records both counts.
 func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir, destDir string, master []byte, log *logging.Logger) (int, error) {
 	if err := naming.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
@@ -396,10 +397,12 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 		parts += len(baseSet.Paths)
 	}
 	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
-	if n := m.Footer.Stale; n > 0 {
-		log.Warn("  [%s] %d file(s) are restored in the older version of the full backup, because they could not be read when this differential was created.", entry.DirectoryName, n)
+	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, log)
+	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log)
+	if skipped+stale > 0 {
+		log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: entry.String(), Skipped: skipped, Stale: stale})
 	}
-	return restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log), nil
+	return skipped + stale, nil
 }
 
 // restorePlan describes the restore for the user, from the values the

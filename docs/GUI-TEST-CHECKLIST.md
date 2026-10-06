@@ -15,17 +15,17 @@ Status of the last run: **pre-run** on 2026-10-02 by Claude (Claude Code): `go t
 
 ## Known differences from the spec
 
-Found while building; they are not defects of the run. Decide for each whether it is **Accepted** for 2.0.0 or needs a change.
+Found while building; they are not defects of the run. Decided on 2026-10-06 (plan section 6g): **Accepted** for 2.0.0 with the reason, the spec changed to match; or **Changed** in the code.
 
-| Spec | Difference |
-|---|---|
-| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" files (no fact records them). |
-| OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. |
-| BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written: for a differential it is much larger than the size on the Restore backup page. |
-| CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. |
-| RW-1 | The wizard is resizable; its progress page leaves empty space below the card. |
-| 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. |
-| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. |
+| Spec | Difference | Decision |
+|---|---|---|
+| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results showed stale files as "not in this backup", and only in the tests: a restore wrote no fact. | **Changed** in part: the backup records skipped and stale files apart, a restore records both per set, and the result page says "not in this backup" and "restored in an older version from <date>". **Accepted**: no "Show files"; the log names every file, and the result's Show log filters it. |
+| OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | **Accepted**: OV-1 allows one primary and one secondary action; a disabled third button adds nothing the hero doesn't say. OV-2 changed. |
+| BR-4 | During a backup, the Folders card showed "Done, <size>" with the size of the folder read, not of the set written. | **Changed**: it shows the size of the set written, as the Restore backup page does. |
+| CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which backup and the keys' date. | **Accepted**: the question carries no key set; refactoring 2.0 RF-26 (typed questions) adds it. CR-1 changed. |
+| RW-1 | The wizard is resizable; its progress page left empty space below the card. | **Changed**: the card fills the page and centres its content. |
+| 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | **Accepted**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
+| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: tested with a backup from the day before (plan decision 9). |
 
 ## 1. Status and Overview
 
@@ -36,9 +36,9 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | Protected: green hero, **Refresh** updates it | Open | Script: hero title and action ok (Check-States). Refresh: by hand. |
 | OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | Script: hero ok; key setup from Back up now… ran in the smoke test. |
 | OV-1 | `Overdue` (`reminder_days: 1`, newest backup older than a day): amber hero, **Back up now…** | Open | |
-| OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count, "Show files" lists them | Open | Script: hero names folder and count. "Show files" is not implemented (see Known differences). |
+| OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count; the run's log (Restore backup page) names the files | Open | Script: hero names folder and count. |
 | OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show backups** marks the affected rows | Open | Script: red hero, Show backups. Marked rows on Restore backup: by hand. |
-| OV-1 | `SourceMissing` (source folder renamed): red hero, **Back up now…** disabled with the reason; restore and verify still possible | Open | Script: red hero with Check again and Edit config. Back up now… is not shown (see Known differences). |
+| OV-1 | `SourceMissing` (source folder renamed): red hero naming the folder, with **Check again** and **Edit config** in place of **Back up now…** (OV-2); restore and verify still possible | Open | Script: red hero with Check again and Edit config. |
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
 | OV-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls when they no longer fit | Open | |
@@ -62,7 +62,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Open | Needs YubiKeys. |
 | CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Open | Needs a YubiKey. |
 | CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Passed (script) | "Wrong password. 2 attempts left." under the field, then the right one, 2026-10-02. |
-| BR-1 | Progress card: step trail, folder n of N, bytes, speed appear as specified, no time left; Folders card follows | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
+| BR-1 | Progress card: step trail, folder n of N, bytes, speed appear as specified, no time left; Folders card follows; a done folder shows the size of its set (for a differential the same as on the Restore backup page) | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
 | BR-5 | Taskbar button shows progress, indeterminate while unlocking, amber after warnings, red after a failure | Open | |
 | BR-7 | Result cards: finished, finished with warnings, failed (backup directory full), cancelled | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
 | BR-8 | Operation ends while another window is in front: taskbar button flashes until activated | Open | |
@@ -89,8 +89,9 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | RW-5 | Existing target folder blocks Next; renaming it in Explorer and returning unblocks | Open | Pre-checked: an existing folder blocks Next. |
 | RW-5 | "Restore into the backup directory" fills the path | Open | |
 | RW-6 | Nothing exists in the destination before **Restore…** is pressed | Open | |
+| RW-1 | Progress and result pages: the card fills the wizard, its content centred, also after resizing the wizard during a restore | Open | |
 | RW-8 | Full and differential restore; restored files compared byte for byte with the sources, including timestamps and attributes | Open | Script: restored files equal to the source by hash. Timestamps and attributes: by hand. |
-| RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | The "older version" line is not implemented (see Known differences). |
+| RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | Needs a differential made while a file was held open. |
 | RW-8 | `Damaged`: "Restore incomplete" in red, naming the folder | Open | |
 | CR-1 | Restore unlocked with the recovery code only | Open | Pre-checked for a verify through "Use your recovery code instead". |
 | CR-1 | Restore with the spare YubiKey only | Open | Needs YubiKeys. |

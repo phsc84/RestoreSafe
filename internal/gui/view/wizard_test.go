@@ -3,6 +3,7 @@ package view
 import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
@@ -166,6 +167,27 @@ func TestRestoreProgressAndResults(t *testing.T) {
 	want := `Failed to restore directory "Docs": checksum mismatch.|D:\Restore\Docs is incomplete; don't use it as a full copy.|Pics wasn't restored.|Verify this backup, or restore from an older one.`
 	if r == nil || r.Title != "Restore incomplete" || r.Tone != ToneError || strings.Join(r.Lines, "|") != want {
 		t.Fatalf("failed %+v", r)
+	}
+	checkWriting(t, r)
+}
+
+func TestRestoreResultNamesUnreadFiles(t *testing.T) {
+	t.Parallel()
+	m := restoreRun()
+	docs, pics := "Docs_ABC123_2026-09-30_DIFF002", "Pics_DEF456_2026-09-30_FULL"
+	facts := logging.RunFacts{Restored: map[string]logging.Fact{
+		docs: {Kind: logging.FactRestore, Set: docs, Skipped: 1, Stale: 3},
+		pics: {Kind: logging.FactRestore, Set: pics, Skipped: 2},
+	}}
+	m.Done(flow.End{Result: &interact.Result{Warnings: 1}, Facts: facts, LogPath: "x.log"}, planNow.Add(18*time.Minute))
+	r := ResultCardOf(m.Current())
+	want := []string{
+		"Docs: 1 file isn't in this backup. It couldn't be read when the backup was made; the log names it.",
+		"Docs: 3 files are restored in an older version from 1 Sep. They couldn't be read when the backup was made; the log names them.",
+		"Pics: 2 files aren't in this backup. They couldn't be read when the backup was made; the log names them.",
+	}
+	if r == nil || r.Tone != ToneWarning || strings.Join(r.Lines[1:], "|") != strings.Join(want, "|") {
+		t.Fatalf("lines %q\nwant  %q", r.Lines, want)
 	}
 	checkWriting(t, r)
 }

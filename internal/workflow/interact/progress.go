@@ -30,6 +30,9 @@ type Progress struct {
 	// Done and Total count bytes. Total is an estimate and 0 when unknown;
 	// Done can end slightly below or above it.
 	Done, Total int64
+	// Written is the size of the backup set a backup step wrote, in its last
+	// report; 0 before, and for other operations.
+	Written int64
 	// Phase is the part of the operation; Index and Count are the position
 	// of Item in it (1 of 3), both 0 when the phase has no items.
 	Phase        Phase

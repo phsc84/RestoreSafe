@@ -57,8 +57,8 @@ func problems(p Params, in inspection, s *Snapshot) (problems, notes []Problem) 
 		if f.Newest == nil || f.Skip {
 			continue
 		}
-		if fact := s.SetFacts[f.Newest.Entry.String()]; fact.Skipped > 0 {
-			problems = append(problems, Problem{Code: interact.CodeSkippedFiles, Status: interact.StatusWarn, Folder: f.BackupName, Set: f.Newest.Entry, Count: fact.Skipped})
+		if fact := s.SetFacts[f.Newest.Entry.String()]; fact.Unread() > 0 {
+			problems = append(problems, Problem{Code: interact.CodeSkippedFiles, Status: interact.StatusWarn, Folder: f.BackupName, Set: f.Newest.Entry, Count: fact.Unread()})
 		}
 	}
 	problems = append(problems, incompleteNewest(s.Folders, s.Sets)...)

@@ -82,6 +82,10 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	if !ok || p.Total != 2*1024*1024+5 || p.Done != p.Total {
 		t.Fatalf("backup progress must end at the source size, got %+v (found %v)", p, ok)
 	}
+	infos, _ := catalog.Inventory(cfg.BackupDirectory)
+	if len(infos) != 1 || p.Written <= 0 || p.Written != runLog(t, cfg.BackupDirectory, infos[0]).Sets[infos[0].Entry.String()].Bytes {
+		t.Fatalf("the last backup report must carry the size of the set written, got %d", p.Written)
+	}
 	if p, ok := o.last("Verifying", "Docs"); !ok || p.Done <= 0 || p.Done > p.Total {
 		t.Fatalf("unexpected post-backup verification progress %+v (found %v)", p, ok)
 	}

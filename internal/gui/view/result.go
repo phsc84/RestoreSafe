@@ -1,6 +1,7 @@
 package view
 
 import (
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
@@ -125,14 +126,17 @@ func finished(c *ResultCard, r *flow.Run, name string) {
 	explained := 0
 	var warningLines []string
 	for _, set := range sets {
-		f := facts.Sets[set]
-		if f.Skipped > 0 {
+		if f := facts.Sets[set]; f.Unread() > 0 {
 			folder := setFolder(set)
-			text := fmt.Sprintf(resultSkipped, Count(f.Skipped), folder, folder)
-			if f.Skipped == 1 {
-				text = fmt.Sprintf(resultSkippedOne, folder, folder)
+			var parts []string
+			if f.Skipped > 0 {
+				parts = append(parts, countPhrase(f.Skipped, resultSkippedOne, resultSkipped, folder))
 			}
-			warningLines = append(warningLines, text)
+			if f.Stale > 0 {
+				parts = append(parts, countPhrase(f.Stale, resultStaleOne, resultStale, folder))
+			}
+			parts = append(parts, fmt.Sprintf(resultOlderKept, folder))
+			warningLines = append(warningLines, strings.Join(parts, " "))
 			explained++
 		}
 		if v, ok := facts.Verify[set]; ok && v.Result == logging.ResultFailed {
@@ -240,6 +244,15 @@ func otherWarnings(n int) string {
 	return fmt.Sprintf(resultOtherWarnings, n)
 }
 
+// countPhrase words n files of folder: one takes the folder, many the count
+// and the folder.
+func countPhrase(n int, one, many, folder string) string {
+	if n == 1 {
+		return fmt.Sprintf(one, folder)
+	}
+	return fmt.Sprintf(many, Count(n), folder)
+}
+
 // keptLines says what a cancelled or failed backup kept: the folders backed
 // up, and the unfinished one, which the workflow removed.
 func keptLines(r *flow.Run, cancelled bool) []string {
@@ -313,27 +326,44 @@ func setFolder(set string) string {
 func restoreFinished(c *ResultCard, r *flow.Run) {
 	n, bytes, dest := len(r.Finished), int64(0), ""
 	explained := 0
-	var skipped []string
+	var unread []string
 	if p := r.Restore; p != nil {
 		n, bytes, dest = len(p.Sets), p.NeededBytes, Path(p.Destination)
 		for _, s := range p.Sets {
-			k := r.Facts.Sets[s.Set.String()].Skipped
+			f, folder := r.Facts.Restored[s.Set.String()], s.Set.DirectoryName
 			switch {
-			case k == 1:
-				skipped = append(skipped, fmt.Sprintf(restoreSkippedOne, s.Set.DirectoryName))
-			case k > 1:
-				skipped = append(skipped, fmt.Sprintf(restoreSkipped, s.Set.DirectoryName, Count(k)))
+			case f.Skipped == 1:
+				unread = append(unread, fmt.Sprintf(restoreSkippedOne, folder))
+			case f.Skipped > 1:
+				unread = append(unread, fmt.Sprintf(restoreSkipped, folder, Count(f.Skipped)))
+			}
+			full := baseDay(s.Base, r.Ended)
+			switch {
+			case f.Stale == 1:
+				unread = append(unread, fmt.Sprintf(restoreStaleOne, folder, full))
+			case f.Stale > 1:
+				unread = append(unread, fmt.Sprintf(restoreStale, folder, Count(f.Stale), full))
 			}
 		}
-		if len(skipped) > 0 {
-			explained = 1 // the workflow counts skipped files as one warning
+		if len(unread) > 0 {
+			explained = 1 // the workflow counts unread files as one warning
 		}
 	}
 	line := fmt.Sprintf(restoredOne, folderPhrase(n), Size(bytes), dest, Duration(r.Ended.Sub(r.Started))) + " " + restoreEveryFile
-	c.Lines = append([]string{line}, skipped...)
+	c.Lines = append([]string{line}, unread...)
 	if rest := r.Result.Warnings - explained; rest > 0 {
 		c.Lines = append(c.Lines, otherWarnings(rest))
 	}
+}
+
+// baseDay is the day of the full backup base, from its name ("1 Sep"); the
+// name's date as is when it does not parse.
+func baseDay(base naming.BackupEntry, now time.Time) string {
+	t, err := time.ParseInLocation("2006-01-02", base.Date, time.Local)
+	if err != nil {
+		return base.Date
+	}
+	return ShortDay(t, now)
 }
 
 // restoreKeptLines says what a cancelled or failed restore left: the

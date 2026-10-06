@@ -72,6 +72,23 @@ func TestResultCardExplainsWarnings(t *testing.T) {
 	checkWriting(t, c)
 }
 
+func TestResultCardTellsSkippedFromStaleFiles(t *testing.T) {
+	t.Parallel()
+	facts := backupFacts()
+	docs, pics := "Documents_ABC123_2026-09-30_DIFF004", "Pictures_DEF456_2026-09-30_FULL"
+	facts.Sets[docs] = logging.Fact{Set: docs, Bytes: 1, Skipped: 1, Stale: 2}
+	facts.Sets[pics] = logging.Fact{Set: pics, Bytes: 1, Stale: 1}
+	c := ResultCardOf(finishedBackup(&interact.Result{Warnings: 2}, nil, facts, 2))
+	want := []string{
+		"1 file in Documents couldn't be read and wasn't backed up. 2 files in Documents couldn't be read; this backup keeps their older version from the full backup. Older backups of Documents are kept.",
+		"1 file in Pictures couldn't be read; this backup keeps its older version from the full backup. Older backups of Pictures are kept.",
+	}
+	if strings.Join(c.Lines[1:], "|") != strings.Join(want, "|") {
+		t.Fatalf("lines %q\nwant  %q", c.Lines, want)
+	}
+	checkWriting(t, c)
+}
+
 func TestResultCardOfAnEndBeforeTheStart(t *testing.T) {
 	t.Parallel()
 	for _, err := range []error{nil, interact.ErrCancelled, fmt.Errorf("unlock: %w", interact.ErrCancelled)} {

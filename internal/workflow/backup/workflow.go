@@ -205,12 +205,12 @@ func runBackupOperation(
 			return backupFailed(ctx, log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
 		setResult := logging.ResultOK
-		if stats.Skipped > 0 {
+		if stats.Skipped+stats.Stale > 0 {
 			warningCount++
 			retentionHold[directoryName] = true
 			setResult = logging.ResultWarnings
 		}
-		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Bytes: stats.Bytes})
+		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, Bytes: stats.Bytes})
 		written = append(written, entry)
 	}
 
@@ -372,8 +372,13 @@ func backupDirectory(
 	if rep != nil {
 		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: cfg.ExcludeMatcher})
 	}
-	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}, &done)
-	defer stopReport()
+	progress := interact.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}
+	stopReport := job.TrackProgress(rep, progress, &done)
+	defer func() {
+		if stopReport != nil {
+			stopReport()
+		}
+	}()
 
 	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
 	res, err := setwriter.Write(setwriter.Params{
@@ -424,7 +429,15 @@ func backupDirectory(
 	if n := res.Stats.Stale; n > 0 {
 		log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
 	}
-	return setStats{Skipped: res.Stats.Skipped + res.Stats.Stale, Bytes: partsSize(res.Parts)}, nil
+	size := partsSize(res.Parts)
+	// The last report of the step carries the size of the set (GUI spec BR-4).
+	stopReport()
+	stopReport = nil
+	if rep != nil {
+		progress.Done, progress.Written = done.Load(), size
+		rep.Progress(progress)
+	}
+	return setStats{Skipped: res.Stats.Skipped, Stale: res.Stats.Stale, Bytes: size}, nil
 }
 
 // secondsSince returns the seconds since start, rounded up, so that a run
@@ -437,6 +450,9 @@ func secondsSince(start time.Time) int64 {
 type setStats struct {
 	// Skipped counts the files and directories that could not be read.
 	Skipped int
+	// Stale counts the files that could not be read and keep their older
+	// version from the full backup.
+	Stale int
 	// Bytes is the size of the set's part files.
 	Bytes int64
 }

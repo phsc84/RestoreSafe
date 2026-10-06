@@ -94,9 +94,12 @@ func TestRunFoldersMirrorTheBackup(t *testing.T) {
 	t.Parallel()
 	m, _ := runningBackup()
 	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 2, Item: "Documents", Done: 5, Total: 200 << 20}, planNow)
+	// The last report of a folder carries the size of the set written: a
+	// differential is much smaller than the folder read (BR-4).
+	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 1, Count: 2, Item: "Documents", Done: 200 << 20, Total: 200 << 20, Written: 3 << 20}, planNow)
 	m.Progressed(interact.Progress{Phase: interact.PhaseBackingUp, Index: 2, Count: 2, Item: "Pictures", Done: 62, Total: 100}, planNow)
 	f := RunFolders(m.Current())
-	if f["Documents"].Text != "Done, 200 MB" || f["Documents"].Glyph != GlyphCheck {
+	if f["Documents"].Text != "Done, 3.0 MB" || f["Documents"].Glyph != GlyphCheck {
 		t.Fatalf("done folder %+v", f["Documents"])
 	}
 	if f["Pictures"].Text != "Backing up, 62%" {

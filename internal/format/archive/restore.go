@@ -228,6 +228,18 @@ func SkippedFiles(m *manifest.Manifest) []string {
 	return out
 }
 
+// StaleFiles returns the paths of files a differential could not read; the
+// restore point holds their older version from the full backup.
+func StaleFiles(m *manifest.Manifest) []string {
+	var out []string
+	for _, e := range m.Entries {
+		if e.Stale {
+			out = append(out, e.Path)
+		}
+	}
+	return out
+}
+
 // DecideFromBase returns the Decide function for the full backup's data
 // section when restoring a differential: only files the target takes from the
 // full backup (origin "F", including stale files) are extracted and checked

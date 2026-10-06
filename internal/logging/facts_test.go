@@ -25,6 +25,7 @@ func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultWarnings, Warnings: 2, Seconds: 252})
 	log.Fact(logging.Fact{Kind: logging.FactSet, Result: logging.ResultOK, Set: "Pics_ABC123_2026-09-30_FULL", Bytes: 4096})
 	log.Fact(logging.Fact{Kind: logging.FactCleanup, Result: logging.ResultOK, Removed: 3, Bytes: 1 << 30})
+	log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: "My Docs_ABC123_2026-09-30_DIFF001", Skipped: 1, Stale: 2})
 	log.Close()
 
 	if strings.Contains(console.String(), "FACT") {
@@ -50,6 +51,9 @@ func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	}
 	if c := facts.Cleanup; c == nil || c.Removed != 3 || c.Bytes != 1<<30 {
 		t.Fatalf("unexpected cleanup fact: %+v", c)
+	}
+	if r := facts.Restored["My Docs_ABC123_2026-09-30_DIFF001"]; r.Skipped != 1 || r.Stale != 2 || r.Unread() != 3 {
+		t.Fatalf("unexpected restore fact: %+v", r)
 	}
 }
 

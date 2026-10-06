@@ -379,6 +379,14 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	if !strings.Contains(out, "1 file(s) are not in this backup") || !strings.Contains(out, "Mail/archive.pst") {
 		t.Fatalf("expected restore to report the skipped file: %q", out)
 	}
+	_, logPath, _ := strings.Cut(out, "Log file: ")
+	restoreFacts, err := logging.ReadFacts(strings.TrimSpace(logPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := restoreFacts.Restored[infos[0].Entry.String()]; f.Skipped != 1 || f.Stale != 0 {
+		t.Fatalf("the restore must record the skipped file: %+v", restoreFacts.Restored)
+	}
 	restored := filepath.Join(dest, "Documents")
 	if data, _ := os.ReadFile(filepath.Join(restored, "report.docx")); string(data) != "report" {
 		t.Fatal("report.docx not restored")

@@ -132,7 +132,10 @@ func (r *Run) finishStep() {
 		return
 	}
 	bytes := p.Done
-	if p.Total > 0 {
+	switch {
+	case p.Written > 0:
+		bytes = p.Written
+	case p.Total > 0:
 		bytes = p.Total
 	}
 	r.Finished = append(r.Finished, FolderDone{Name: p.Item, Bytes: bytes})
@@ -141,7 +144,8 @@ func (r *Run) finishStep() {
 // FolderDone is a folder a backup has backed up or a restore restored.
 type FolderDone struct {
 	Name string
-	// Bytes is the size of the folder read.
+	// Bytes is the size of the backup set a backup wrote, or of the folder
+	// a restore read.
 	Bytes int64
 }
 

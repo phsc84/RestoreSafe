@@ -403,10 +403,10 @@ func rowOf(s *health.Snapshot, info catalog.SetInfo, r *flow.Run, now time.Time)
 		row.Usable, row.Reason = false, reasonBaseMissing
 	case hasVerify && verified.Result == logging.ResultFailed:
 		row.Status = Status{Text: statusDamaged, Tone: ToneError, Glyph: GlyphError}
-	case s.SetFacts[set].Skipped == 1:
+	case s.SetFacts[set].Unread() == 1:
 		row.Status = Status{Text: statusSkippedOne, Tone: ToneWarning, Glyph: GlyphWarning}
-	case s.SetFacts[set].Skipped > 1:
-		row.Status = Status{Text: fmt.Sprintf(statusSkipped, Count(s.SetFacts[set].Skipped)), Tone: ToneWarning, Glyph: GlyphWarning}
+	case s.SetFacts[set].Unread() > 1:
+		row.Status = Status{Text: fmt.Sprintf(statusSkipped, Count(s.SetFacts[set].Unread())), Tone: ToneWarning, Glyph: GlyphWarning}
 	case hasVerify:
 		row.Status = Status{Text: fmt.Sprintf(statusVerified, When(verified.Time, now)), Tone: ToneSuccess, Glyph: GlyphCheck}
 	}
