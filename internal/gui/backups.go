@@ -236,7 +236,7 @@ func (b *backupsPage) update() {
 
 // opRun returns the restore or verification the page shows: running, or
 // finished with a result card; nil otherwise. A restore shows once it has
-// started (GUI spec RW-9); before, the restore wizard is its plan.
+// started (GUI spec RW-9); before, the Restore window is its plan.
 func (b *backupsPage) opRun() *flow.Run {
 	r := b.a.machine.Current()
 	if r == nil || r.Op == flow.OpBackup || (r.Op == flow.OpRestore && r.Started.IsZero()) {

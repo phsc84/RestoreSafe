@@ -11,8 +11,8 @@
 #                              control and would take its clicks
 # As a check:
 #   .\Accessibility.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\...\smoke\config.yaml
-#   walks the three pages, the backup plan dialog and the restore wizard's
-#   pages and exits 1 on a problem.
+#   walks the three pages, the backup plan dialog and the Restore window
+#   and exits 1 on a problem.
 
 param([string]$Exe = "", [string]$Config = "")
 if (-not ("U" -as [type])) { . "$PSScriptRoot\GuiDriver.ps1" }
@@ -77,17 +77,22 @@ if ($Exe) {
     Click-Control $plan PlanCancel
     Start-Sleep -Seconds 1
     Go-Page $main 1
-    Select-ListItem (Find-Control $main BackupsList) 0
+    $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
+    # The list fills after the check: select once it has a row.
+    Wait-Until { try { Select-ListItem $list 0 } catch {}; Find-Control $main BackupsVerify -Enabled } 20 "a backup selected" | Out-Null
+    Click-Control $main BackupsVerify
+    $ver = Wait-Until { Find-Window $p.Id "RestoreSafeVerify" } 10 "Verify window"
+    Wait-Until { Find-Control $ver VerifyStart -Enabled } 60 "verification plan" | Out-Null
+    $problems += Test-AccessKeys $ver "Verify window"
+    $problems += Test-Overlaps $ver "Verify window"
+    Click-Control $ver VerifyCancel
+    Start-Sleep -Seconds 1
     Click-Control $main BackupsRestore
-    $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "wizard"
-    foreach ($n in 1, 2) {
-      $problems += Test-AccessKeys $wiz "wizard page $n"
-      $problems += Test-Overlaps $wiz "wizard page $n"
-      Click-Control $wiz WizardNext
-    }
-    $problems += Test-AccessKeys $wiz "wizard page 3"
-    $problems += Test-Overlaps $wiz "wizard page 3"
-    Click-Control $wiz WizardCancel
+    $win = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore window"
+    Wait-Until { Find-Control $win RestoreStart -Enabled } 20 "choices checked" | Out-Null
+    $problems += Test-AccessKeys $win "Restore window"
+    $problems += Test-Overlaps $win "Restore window"
+    Click-Control $win RestoreCancel
   } finally { Stop-Process $p -Force -ErrorAction SilentlyContinue }
   if ($problems) { $problems; exit 1 }
   "access keys and label overlaps ok"

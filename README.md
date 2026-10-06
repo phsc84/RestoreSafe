@@ -39,9 +39,9 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
 <img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Restore backup page with runs, backup sets, and the log">
 
-Restoring is a wizard: when, which folders, where to, and a last check of what will happen:
+Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
 
-<img src="docs/images/Screenshot_v2.0.0_restore.png" alt="Restore wizard, last page before the restore starts">
+<img src="docs/images/Screenshot_v2.0.0_restore.png" alt="Restore window before the restore starts">
 
 ## Features
 
@@ -68,7 +68,7 @@ Restoring is a wizard: when, which folders, where to, and a last check of what w
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, a restore wizard and verification, and a Settings page with Reload
+- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, and a Settings page with Reload
 - Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
 - Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
@@ -166,19 +166,18 @@ Then enter your password and/or confirm the Windows Security prompt of your Yubi
 While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, and the speed; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
 
 ### Restore a backup
-On the Restore backup page, select a backup run or one of its folders and click **Restore…** (or double-click it). The restore wizard asks:
+On the Restore backup page, select a backup run or one of its folders and click **Restore…** (or double-click it). The Restore window shows that run's folders:
 
-1. **When** - the backup run to restore from.
-2. **Folders** - which of its folders. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
-3. **Destination** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet, and the page checks that and the free space while you type.
-4. **Check** - what will be read and created. Nothing is written before you click **Restore…** and enter your password and/or confirm your YubiKey.
+- **To** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet.
+- The folders, with their type, size, and whether the new folder can be created. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
+- **Space** and **Unlock** - whether it fits, and what you'll be asked for.
 
-While the restore runs, the wizard shows its progress and then the result; the top of the Restore backup page shows them too.
+The window checks your choices while you make them. Nothing is written before you click **Start** and enter your password and/or confirm your YubiKey. While the restore runs, the window shows its progress and then the result; the top of the Restore backup page shows them too.
 
-Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically and shows it in the wizard. Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
+Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically (**Show details** lists it). Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
 
 ### Verify a backup
-On the Restore backup page, select a backup run or one of its folders and click **Verify…**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The progress and then the result appear at the top of the page, and the Status column shows the result ("Verified" or "Damaged") for each backup set.
+On the Restore backup page, select a backup run or one of its folders and click **Verify…**. The Verify window shows the folders, how much is read, and how you unlock them; click **Start**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The progress and then the result appear at the top of the page, and the Status column shows the result ("Verified" or "Damaged") for each backup set.
 
 ### Excluding files and unreadable files
 Use `exclude` in `config.yaml` to leave out files and directories (case-insensitive):

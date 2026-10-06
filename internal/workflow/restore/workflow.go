@@ -431,8 +431,9 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 
 // PlanDestination is the plan of restoring sets into destination, without
 // asking anything: the same checks Run makes before it asks to start (the
-// folders to create, the space). infos is the inventory of backupDir. The
-// restore wizard checks the destination with it while the user types.
+// folders to create, the space, whether a YubiKey is connected). infos is
+// the inventory of backupDir. The Restore window checks the choices with it
+// while the user makes them.
 func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetInfo, sets []naming.BackupEntry, destination string) (interact.RestorePlan, error) {
 	if strings.TrimSpace(destination) == "" {
 		return interact.RestorePlan{}, errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
@@ -444,7 +445,6 @@ func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetIn
 	items := buildRestorePreflight(selected, infos, destination)
 	first := selected[0].Header
 	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	noCheck := func() error { return nil }
-	details := restorePreflightReport(cfg, backupDir, destination, items, usesYubiKey, yubiKeyOnly, noCheck)
+	details := restorePreflightReport(cfg, backupDir, destination, items, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected)
 	return restorePlan(items, destination, &first.KeySet, details), nil
 }

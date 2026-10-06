@@ -61,7 +61,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	owner := a.dialogOwner()
 	t := a.theme
 	if dw := dialogWindows[owner]; dw != nil {
-		t = dw.theme // the restore wizard, at its scale
+		t = dw.theme // the Restore window, at its scale
 	}
 	win, err := newDialogWindow(t, owner, credentialClass, v.Title)
 	if err != nil {
@@ -282,24 +282,11 @@ func (a *app) confirm(owner win32.HWND, c view.Confirm) bool {
 	return button == win32.IDOK
 }
 
-// confirmInfo asks c in an information task dialog owned by the main
-// window; Yes is the default. It reports whether the user chose Yes.
-func (a *app) confirmInfo(c view.Confirm) bool {
-	button, _ := a.taskDialog(a.dialogOwner(), win32.TaskDialog{
-		Instruction: c.Instruction,
-		Content:     c.Content,
-		Icon:        win32.TD_INFORMATION_ICON,
-		Buttons:     []win32.TaskButton{{ID: win32.IDCANCEL, Text: c.No}, {ID: win32.IDOK, Text: c.Yes}},
-		Default:     win32.IDOK,
-	})
-	return button == win32.IDOK
-}
-
 // dialogOwner is the window questions and confirmations are modal to: the
-// restore wizard while it is open, the main window otherwise.
+// Restore window while it is open, the main window otherwise.
 func (a *app) dialogOwner() win32.HWND {
-	if a.wizard != nil {
-		return a.wizard.win.hwnd
+	if a.restore != nil {
+		return a.restore.win.hwnd
 	}
 	return a.hwnd
 }

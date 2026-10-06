@@ -4,12 +4,10 @@ import (
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/workflow/interact"
-	"time"
 )
 
 // questions shows the questions of an operation: the backup plan dialog,
-// the verify confirmation, the restore wizard's check page and the
-// credential dialogs.
+// the Verify window, the Restore window and the credential dialogs.
 type questions struct{ a *app }
 
 var _ flow.Dialogs = questions{}
@@ -35,37 +33,41 @@ func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer f
 	q.a.plan.ask(opts, answer)
 }
 
-// RestorePlan shows the plan on the restore wizard's check page.
+// RestorePlan shows the workflow's plan in the Restore window.
 func (q questions) RestorePlan(p interact.RestorePlan, answer func()) {
 	q.a.machine.RestorePlanShown(p)
-	if q.a.wizard != nil {
-		q.a.wizard.setPlan(p)
+	if q.a.restore != nil {
+		q.a.restore.setPlan(p)
 	}
 	answer()
 }
 
-// VerifyPlan records the plan; ConfirmStart asks with it.
+// VerifyPlan records the plan and shows it in the Verify window.
 func (q questions) VerifyPlan(p interact.VerifyPlan, answer func()) {
 	q.a.machine.VerifyPlanShown(p)
+	if q.a.verify != nil {
+		q.a.verify.setPlan(p)
+	}
 	answer()
 }
 
-// ConfirmStart asks to verify (figure 7.3), or waits for Restore… in the
-// restore wizard.
+// ConfirmStart waits for Start in the Verify window (figure 7.3); for a
+// restore, the Restore window answers it itself, as its Start was the
+// confirmation.
 func (q questions) ConfirmStart(action string, answer func(bool, error)) {
-	if r := q.a.machine.Current(); r != nil && r.Op == flow.OpVerify && r.Verify != nil {
-		ok := q.a.confirmInfo(view.VerifyConfirm(*r.Verify, q.a.verifyWhat, time.Now()))
-		if ok {
-			q.a.runStarted()
+	if r := q.a.machine.Current(); r != nil && r.Op == flow.OpVerify {
+		if q.a.verify == nil {
+			answer(false, nil)
+			return
 		}
-		answer(ok, nil)
+		q.a.verify.ask(answer)
 		return
 	}
-	if q.a.wizard == nil {
+	if q.a.restore == nil {
 		answer(false, nil)
 		return
 	}
-	q.a.wizard.ask(answer)
+	q.a.restore.ask(answer)
 }
 
 // ChooseUnlockMethod shows the unlock dialog with the link to the recovery

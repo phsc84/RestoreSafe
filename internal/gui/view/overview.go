@@ -61,6 +61,7 @@ const (
 	ActionShowLog
 	ActionDismiss
 	ActionStartRestore
+	ActionStartVerify
 	ActionOpenRestored
 	ActionReload
 	ActionAddMissing

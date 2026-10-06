@@ -23,7 +23,7 @@ Found while building; they are not defects of the run. Decided on 2026-10-06 (pl
 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | **Accepted**: OV-1 allows one primary and one secondary action; a disabled third button adds nothing the hero doesn't say. OV-2 changed. |
 | BR-4 | During a backup, the Folders card showed "Done, <size>" with the size of the folder read, not of the set written. | **Changed**: it shows the size of the set written, as the Restore backup page does. |
 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which backup and the keys' date. | **Accepted**: the question carries no key set; refactoring 2.0 RF-26 (typed questions) adds it. CR-1 changed. |
-| RW-1 | The wizard is resizable; its progress page left empty space below the card. | **Changed**: the card fills the page and centres its content. |
+| RW-1 | The restore window is resizable; its progress page left empty space below the card. | **Changed**: the card fills the page and centres its content. |
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | **Accepted**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
 | 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: tested with a backup from the day before (plan decision 9). |
 
@@ -43,7 +43,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
 | OV-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls when they no longer fit | Open | |
 | OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | Open | Tooltips added in 10a. |
-| 3.4 | Tables (Create backup, backup plan, Settings, restore wizard page 2): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | Open | |
+| 3.4 | Tables (Create backup, backup plan, Settings, Restore window): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | Open | |
 | 3.4 | One-line text cut off with "…" (a long backup directory path in a narrow window) shows its full text in a tooltip; text that fits has none | Open | |
 | OV-4 | Backup directory bar: segments and tooltips plausible compared with Explorer's drive properties | Open | |
 | OV-6 | Keys card for each authentication mode; YubiKey connected and not connected; "next backup creates new keys" after changing `recovery_code` and Reload | Open | |
@@ -76,6 +76,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
 | BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs; the pane shows at least 15 lines, and dragging the splitter far down or making the window small gives the page a scroll bar | Open | Pre-checked: selected run, live during verify and restore. |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
+| BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | Open | Pre-checked by screenshot at 150 % (smoke test). |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |
 | BK-9 | Empty state with **Back up now…** | Open | |
@@ -84,14 +85,16 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| RW-3 | Restore… on a run, also with one of its folders clicked: the wizard opens on Folders, its heading names the run's date, all restorable folders are checked; page 3 names the same date in its first sentence | Open | |
-| RW-4 | Folders, Type and About columns; a folder whose full backup is missing (`BaseMissing`) is disabled and named in the warning line below the list; the single-file note is visible | Open | |
-| RW-5 | Existing target folder blocks Next; renaming it in Explorer and returning unblocks | Open | Pre-checked: an existing folder blocks Next. |
-| RW-5 | "Restore into the backup directory" fills the path with backslashes, like Browse…, and the restore into it works | Open | Pre-checked: backslashes, and the check page offers Restore…. |
-| RW-5 | The splitter below the destination table makes it taller and shorter, not past the space line and not below its rows (at most three) | Open | Pre-checked with posted mouse messages. |
-| RW-6 | Nothing exists in the destination before **Restore…** is pressed | Open | |
-| RW-6 | Page 3: one sentence with the folder count, date and destination; the table lists what is read per folder (tooltip: the new folder); space line in green as on page 2, unlock line, then the note and Show details | Open | Pre-checked by screenshot at 150 %. |
-| RW-1 | Progress and result pages: the card fills the wizard, its content centred, also after resizing the wizard during a restore | Open | |
+| RW-1 | Restore window and backup plan side by side: same width, same order (heading, table, Space, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; `Enter` starts, `Esc` and Cancel close without writing anything; the window fits its content until it is resized | Open | Pre-checked by screenshot at 150 %. |
+| RW-3 | Restore… on a run, also with one of its folders clicked: the window opens on that run, its heading names the run's date and the number of checked folders, all restorable folders are checked | Open | |
+| RW-4 | "Restore into the backup directory" fills the path with backslashes, like Browse…, and the restore into it works | Open | Pre-checked: backslashes. |
+| RW-5 | Folder, Type, About and Check columns; a folder whose full backup is missing (`BaseMissing`) is disabled and named in the warning line; an unchecked folder shows "-" | Open | Pre-checked by screenshot (`BaseMissing`). |
+| RW-5 | The splitter below the table makes it taller and shorter, not below its rows (at most three) | Open | |
+| RW-6 | Space and Unlock worded as in the backup plan; the hints ("Choose at least one folder.", "Enter a full path…", "Checking…") replace them while there is nothing to check | Open | Pre-checked: a relative path. |
+| RW-6a | Existing target folders show "Already exists" in red, are named once below with the remedy and disable Start; renaming them in Explorer and changing the path unblocks | Open | Pre-checked: two existing folders disable Start. |
+| RW-6b | Start goes straight to the password; cancelling it returns to the window with the choices kept; nothing exists in the destination before the password is entered | Open | |
+| RW-6b | A folder created in the destination after the check: Start ends before the password and the window shows it in red | Open | |
+| RW-1 | Progress and result pages: the card fills the window, its content centred, also after resizing the window during a restore | Open | |
 | RW-8 | Full and differential restore; restored files compared byte for byte with the sources, including timestamps and attributes | Open | Script: restored files equal to the source by hash. Timestamps and attributes: by hand. |
 | RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | Needs a differential made while a file was held open. |
 | RW-8 | `Damaged`: "Restore incomplete" in red, naming the folder | Open | |

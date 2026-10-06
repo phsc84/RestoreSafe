@@ -194,22 +194,44 @@ func TestBackupsShowTheRunningVerification(t *testing.T) {
 	}
 }
 
-func TestVerifyConfirm(t *testing.T) {
+func TestVerifyPlan(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.Local)
 	full := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-09-01"}
 	p := interact.VerifyPlan{
 		Sets: []interact.SetPlan{
-			{Set: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-09-30", DiffNumber: 3}, Base: full},
-			{Set: naming.BackupEntry{DirectoryName: "Pics", ChainID: "DEF456", Date: "2026-09-30"}},
+			{Set: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-09-30", DiffNumber: 3}, Base: full, Bytes: 38 << 30},
+			{Set: naming.BackupEntry{DirectoryName: "Pics", ChainID: "DEF456", Date: "2026-09-30"}, Bytes: 59 << 30},
 		},
-		Bytes: 97 << 30,
+		Bytes:  97 << 30,
+		Unlock: interact.UnlockPlan{Password: true, YubiKey: true},
 	}
-	c := VerifyConfirm(p, "today, 09:12", now)
-	want := "RestoreSafe reads 2 folders, decrypts the backups and checks every file against its checksum. For the differentials it also reads their full backup of 1 Sep. Nothing is written. About 97 GB to read."
-	if c.Instruction != "Verify today, 09:12?" || c.Content != want || c.Yes != "Verify…" {
-		t.Fatalf("confirm %+v", c)
+	v := VerifyPlanOf(p, "today, 09:12", now)
+	if v.Heading != "Verify 2 folders from the backup of today, 09:12" || v.Start == nil || v.Start.Text != "&Start" || v.Cancel.Text != "Cancel" {
+		t.Fatalf("plan %+v", v)
 	}
+	checkTable(t, v.Folders, "Folder", "Type", "About")
+	if r := v.Folders.Rows; len(r) != 2 || r[0].Cells[1].Badge == nil || r[0].Cells[1].Badge.Text != "DIFF 3" || r[1].Cells[2].Text != "59 GB" {
+		t.Fatalf("folders %+v", r)
+	}
+	if v.Read.Label != "Read" || v.Read.Text != "About 97 GB to read · nothing is written" || v.Unlock.Text != "One YubiKey touch, then your password" {
+		t.Fatalf("lines %+v %+v", v.Read, v.Unlock)
+	}
+	if v.Note != "Every file is decrypted and checked against its checksum. Differentials are read with their full backup of 1 Sep." {
+		t.Fatalf("note %q", v.Note)
+	}
+	two := p
+	two.Sets = append([]interact.SetPlan{{Set: naming.BackupEntry{DirectoryName: "Music", ChainID: "GHI789", Date: "2026-09-30", DiffNumber: 1}, Base: naming.BackupEntry{DirectoryName: "Music", ChainID: "GHI789", Date: "2026-09-01"}}}, p.Sets...)
+	if got := VerifyPlanOf(two, "today", now).Note; got != "Every file is decrypted and checked against its checksum. Differentials are read with their full backups of 1 Sep." {
+		t.Fatalf("two full backups of one day: %q", got)
+	}
+	p.Sets[0].Problem = "Full backup missing. Remedy: Restore it from your copy."
+	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing. Remedy: Restore it from your copy."}}
+	v = VerifyPlanOf(p, "today, 09:12", now)
+	if v.Start != nil || len(v.Issues) != 1 || v.Issues[0].Tone != ToneError || v.Folders.Rows[0].Cells[0].Tone != ToneError {
+		t.Fatalf("a blocked plan %+v", v)
+	}
+	checkWriting(t, v)
 }
 
 func TestLogLines(t *testing.T) {

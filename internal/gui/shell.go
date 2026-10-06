@@ -110,7 +110,7 @@ func (a *app) restyleShell() {
 // shortcut handles the keyboard shortcuts of GUI spec 3.2; it reports whether
 // it handled the key.
 func (a *app) shortcut(vk uintptr) bool {
-	if a.modal != 0 || a.plan != nil || a.wizard != nil {
+	if a.modal != 0 || a.plan != nil || a.restore != nil || a.verify != nil {
 		return false
 	}
 	ctrl := win32.KeyDown(win32.VK_CONTROL)
@@ -137,7 +137,7 @@ func (a *app) do(action view.Action) {
 	case view.ActionRestore:
 		b := a.shell.backups
 		if len(b.chosen()) > 0 {
-			a.openWizard(b.selRun)
+			a.openRestore(b.selRun)
 		}
 	case view.ActionOpenRestored:
 		if r := a.machine.Current(); r != nil && r.Restore != nil {

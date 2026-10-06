@@ -252,7 +252,7 @@ func (r *runCard) place(rect win32.Rect) {
 	s := t.Scale
 	area := widget.NewArea(s, win32.ClientRect(p.HWND()))
 	area.Inset(widget.CardPadding, widget.CardPadding, widget.CardPadding, widget.CardPadding)
-	// A card taller than its content (the restore wizard's page) centres it.
+	// A card taller than its content (the Restore window's page) centres it.
 	if extra := rect.Height() - r.height(rect.Width()); extra > 0 {
 		area.TopPx(extra / 2)
 		area.R.Bottom -= extra - extra/2

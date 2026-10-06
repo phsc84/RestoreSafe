@@ -53,7 +53,7 @@ type opRequest struct {
 
 // startOperation runs req in a worker goroutine. A backup opens its plan
 // dialog and shows its progress on Create backup; a verification shows its
-// progress on Restore backup; a restore runs in the restore wizard, which
+// progress on Restore backup; a restore runs in the Restore window, which
 // started it, and shows its progress on Restore backup too.
 func (a *app) startOperation(req opRequest) {
 	op := req.op
@@ -77,6 +77,7 @@ func (a *app) startOperation(req opRequest) {
 	case flow.OpVerify:
 		a.showPage(view.PageBackups)
 		a.refreshRun()
+		a.openVerifyDialog(a.verifyWhat)
 	}
 	a.updateTaskbar()
 
@@ -112,8 +113,8 @@ func (a *app) runStarted() {
 // taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
-	if a.wizard != nil {
-		a.wizard.update()
+	if a.restore != nil {
+		a.restore.update()
 	}
 	a.shell.backups.updateRun()
 	a.updateTaskbar()
@@ -171,6 +172,9 @@ func (a *app) cancelRun() {
 	if a.plan != nil {
 		a.plan.close()
 	}
+	if a.verify != nil {
+		a.verify.close()
+	}
 	a.refreshRun()
 }
 
@@ -198,14 +202,19 @@ func (a *app) onWorkerDone() {
 	if cfg := a.deferredConfig; cfg != nil && !a.machine.Busy() {
 		a.useConfig(cfg)
 	}
-	if run := a.machine.Current(); run.Op == flow.OpRestore && a.wizard != nil && a.wizard.workerDone() {
-		// The restore ended before it started; the wizard shows why.
+	if run := a.machine.Current(); run.Op == flow.OpRestore && a.restore != nil && a.restore.workerDone() {
+		// The restore ended before it started; the Restore window shows why.
+		a.refreshRun()
+		return
+	}
+	if run := a.machine.Current(); run.Op == flow.OpVerify && a.verify != nil && a.verify.workerDone() {
+		// The verification ended before it started; the Verify window shows why.
 		a.refreshRun()
 		return
 	}
 	a.startCheck()
 	a.refreshRun()
-	if a.wizard == nil {
+	if a.restore == nil {
 		a.focusPage()
 	}
 	a.updateTaskbar()
@@ -214,12 +223,12 @@ func (a *app) onWorkerDone() {
 	}
 }
 
-// dismiss ends the shown result, and closes the restore wizard that shows
+// dismiss ends the shown result, and closes the Restore window that shows
 // it: the Overview shows the state again.
 func (a *app) dismiss() {
 	a.machine.Dismiss()
-	if a.wizard != nil {
-		a.wizard.close()
+	if a.restore != nil {
+		a.restore.close()
 	}
 	a.refreshShell()
 	a.updateTaskbar()

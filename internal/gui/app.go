@@ -44,7 +44,7 @@ const (
 	msgWorkerDone  = win32.WM_APP + 3
 	msgLogLoaded   = win32.WM_APP + 4 // a log file for the Backups page was read
 	msgListFocus   = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
-	msgDestChecked = win32.WM_APP + 6 // the restore wizard's destination check is done
+	msgDestChecked = win32.WM_APP + 6 // the Restore window's check of the choices is done
 	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
 )
 
@@ -68,13 +68,14 @@ type app struct {
 	opts      Options
 	backupDir string
 
-	hwnd   win32.HWND
-	dpi    uint32
-	theme  *widget.Theme
-	page   int
-	modal  win32.HWND     // open credential dialog, if any
-	plan   *planDialog    // open backup plan dialog, if any
-	wizard *restoreWizard // open restore wizard, if any
+	hwnd    win32.HWND
+	dpi     uint32
+	theme   *widget.Theme
+	page    int
+	modal   win32.HWND     // open credential dialog, if any
+	plan    *planDialog    // open backup plan dialog, if any
+	restore *restoreDialog // open Restore window, if any
+	verify  *verifyDialog  // open Verify window, if any
 	// lastDestination is where the last restore of this session went.
 	lastDestination string
 	// reloading is set while the configuration file is read again;
@@ -157,7 +158,10 @@ func Run(opts Options) error {
 		if a.plan != nil && win32.IsDialogMessage(a.plan.win.hwnd, &msg) {
 			continue
 		}
-		if a.wizard != nil && win32.IsDialogMessage(a.wizard.win.hwnd, &msg) {
+		if a.restore != nil && win32.IsDialogMessage(a.restore.win.hwnd, &msg) {
+			continue
+		}
+		if a.verify != nil && win32.IsDialogMessage(a.verify.win.hwnd, &msg) {
 			continue
 		}
 		if msg.Message == win32.WM_KEYDOWN && a.shortcut(msg.WParam) {
@@ -411,8 +415,8 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		c := a.pendingDest
 		a.pendingDest = nil
 		a.mu.Unlock()
-		if a.wizard != nil {
-			a.wizard.destChecked(c)
+		if a.restore != nil {
+			a.restore.destChecked(c)
 		}
 		return 0
 	case win32.WM_CLOSE:

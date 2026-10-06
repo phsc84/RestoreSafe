@@ -82,6 +82,9 @@ type KeyPlan struct {
 type UnlockPlan struct {
 	// Methods is the regular way, e.g. "Password + YubiKey".
 	Methods string
+	// Password and YubiKey are the prompts of the regular way: a password,
+	// a YubiKey touch, or both.
+	Password, YubiKey bool
 	// RecoveryCode is set when the recovery code opens the keys too.
 	RecoveryCode bool
 }

@@ -4,8 +4,9 @@
 # Controls are found by their control ID, which is also their UI Automation
 # AutomationId (spec 15), not by their texts: see $Ids. Windows are found by
 # class: RestoreSafeMainWindow, RestoreSafePlan (backup plan),
-# RestoreSafeWizard (restore), RestoreSafeInputDialog (credentials),
-# RestoreSafeDetails (reports and logs), "#32770" (task dialogs).
+# RestoreSafeVerify (verify), RestoreSafeRestore (restore),
+# RestoreSafeInputDialog (credentials), RestoreSafeDetails (reports and
+# logs), "#32770" (task dialogs).
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing, System.Windows.Forms, Accessibility
@@ -74,6 +75,9 @@ $Ids = [ordered]@{
   PlanNewKeys      = 453
   PlanCancel       = 454
   PlanDetails      = 455
+  VerifyStart      = 461
+  VerifyCancel     = 462
+  VerifyDetails    = 463
   CredentialOK     = 1
   CredentialCancel = 470
   CredentialLink   = 471
@@ -85,14 +89,13 @@ $Ids = [ordered]@{
   LogWarnings      = 606
   LogOpen          = 607
   EmptyBackUp      = 609
-  WizardBack       = 701
-  WizardNext       = 702
-  WizardCancel     = 703
-  WizardList       = 704
-  WizardDest       = 705
-  WizardBrowse     = 706
-  WizardBackupDir  = 707
-  WizardDetails    = 708
+  RestoreStart     = 701
+  RestoreCancel    = 702
+  RestoreList      = 703
+  RestoreDest      = 704
+  RestoreBrowse    = 705
+  RestoreBackupDir = 706
+  RestoreDetails   = 707
   SettingsEdit     = 801
   SettingsReload   = 802
   SettingsOpen     = 803
@@ -172,7 +175,7 @@ function Fill-Dialog($dlg, [string[]]$values) {
 }
 
 # Click-TaskButton clicks the button with the text in the process's task
-# dialog (e.g. "Cancel backup", "Verify…").
+# dialog (e.g. "Cancel backup", "Cancel restore").
 function Click-TaskButton([int]$procId, [string]$text, [int]$seconds = 30) {
   $b = Wait-Until {
     $task = [U]::TopLevel($procId) | Where-Object { [U]::Class($_) -eq "#32770" } | Select-Object -First 1

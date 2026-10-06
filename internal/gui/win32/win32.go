@@ -179,6 +179,10 @@ const (
 	SM_CXVSCROLL = 2
 	SM_CXBORDER  = 5
 	SM_CYSMICON  = 50
+	// SM_CYFULLSCREEN is the client height of a full-screen window.
+	SM_CYFULLSCREEN = 17
+	// WM_SIZING is sent while the user drags a window's frame.
+	WM_SIZING    = 0x0214
 	MB_OK        = 0x0
 	MB_ICONERROR = 0x10
 

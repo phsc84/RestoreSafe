@@ -16,14 +16,6 @@ import (
 	"time"
 )
 
-func TestWizardSteps(t *testing.T) {
-	t.Parallel()
-	got := WizardSteps(WizardDestination)
-	if len(got) != 3 || got[0].State != StepDone || got[1].State != StepCurrent || got[2].State != StepWaiting || got[1].Text != "2 Destination" {
-		t.Fatalf("steps %+v", got)
-	}
-}
-
 func TestRestorePointAndFolders(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.BaseMissing)
@@ -31,9 +23,8 @@ func TestRestorePointAndFolders(t *testing.T) {
 	if len(s.Runs) == 0 {
 		t.Fatal("no runs")
 	}
-	run := s.Runs[0]
-	if got, want := FoldersHeading(RestorePointOf(&s, run.RunID, sc.Now)), "Which folders do you want back from "+When(run.Created, sc.Now)+"?"; got != want {
-		t.Fatalf("heading %q, want %q", got, want)
+	if got := RestorePointOf(&s, s.Runs[0].RunID, sc.Now); got != When(s.Runs[0].Created, sc.Now) {
+		t.Fatalf("restore point %q", got)
 	}
 	if got := RestorePointOf(&s, "unknown", sc.Now); got != "" {
 		t.Fatalf("unknown run named %q", got)
@@ -53,7 +44,7 @@ func TestRestorePointAndFolders(t *testing.T) {
 	if docsDiff == nil || docsDiff.Enabled {
 		t.Fatalf("a differential without its full backup: %+v", docsDiff)
 	}
-	if pics == nil || !pics.Enabled || !strings.HasPrefix(pics.About, "about ") {
+	if pics == nil || !pics.Enabled || pics.About != Size(pics.Bytes) {
 		t.Fatalf("a full backup: %+v", pics)
 	}
 	if got := UnrestorableNote([]FolderChoice{*pics, *docsDiff}); got != "Docs can't be restored: its full backup is missing." {
@@ -65,92 +56,113 @@ func TestRestorePointAndFolders(t *testing.T) {
 	if got := UnrestorableNote([]FolderChoice{*pics}); got != "" {
 		t.Fatalf("note without unrestorable folders %q", got)
 	}
-	footer := SelectionFooter([]FolderChoice{*pics, *docsDiff}, map[naming.BackupEntry]bool{pics.Set: true, docsDiff.Set: true})
-	if footer != "1 folder · about "+Size(pics.Bytes) {
-		t.Fatalf("footer %q: a disabled folder does not count", footer)
+	if got := Chosen([]FolderChoice{*pics, *docsDiff}, map[naming.BackupEntry]bool{pics.Set: true, docsDiff.Set: true}); len(got) != 1 || got[0] != pics.Set {
+		t.Fatalf("chosen %v: a disabled folder does not count", got)
+	}
+	// The folder that can't be restored is named above the other issues.
+	v := RestoreViewOf([]FolderChoice{*pics, *docsDiff}, map[naming.BackupEntry]bool{pics.Set: true}, "today, 09:12", "", nil, nil, false)
+	if len(v.Issues) != 1 || v.Issues[0].Tone != ToneWarning || !strings.Contains(v.Issues[0].Text, "Docs can't be restored") {
+		t.Fatalf("issues %+v", v.Issues)
 	}
 	checkWriting(t, []FolderChoice{*pics, *docsDiff})
 }
 
-func TestDestinationChecks(t *testing.T) {
+func TestRestoreView(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.Protected)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	var sets []naming.BackupEntry
-	for _, c := range RestoreFoldersOf(&s, s.Runs[0].RunID) {
-		sets = append(sets, c.Set)
+	choices := RestoreFoldersOf(&s, s.Runs[0].RunID)
+	checked := map[naming.BackupEntry]bool{}
+	for _, c := range choices {
+		checked[c.Set] = true
 	}
+	sets := Chosen(choices, checked)
 	dest := t.TempDir()
 	plan, err := restore.PlanDestination(sc.Config, s.BackupDir, s.Sets, sets, dest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := DestinationOf(dest, &plan, nil, false)
-	if !v.Next || len(v.Folders.Rows) != 2 || v.Folders.Rows[0].Cells[2].Tone != ToneSuccess || v.Remedy != "" || v.Space == nil || v.Space.Tone != ToneSuccess {
+	v := RestoreViewOf(choices, checked, "today, 09:12", dest, &plan, nil, false)
+	if v.Heading != "Restore 2 folders from the backup of today, 09:12" || !v.Start.Enabled || v.Start.Text != "&Start" || v.Cancel.Text != "Cancel" || v.Hint != "" || len(v.Issues) != 0 {
 		t.Fatalf("free destination %+v", v)
 	}
-	checkTable(t, v.Folders, "Folder", "Restored to", "Check")
+	for _, c := range choices {
+		if cell := v.Checks[c.Set]; cell.Text != "New folder" || cell.Tone != ToneSuccess || !strings.Contains(v.Tips[c.Set], filepath.Join(dest, c.Folder)) {
+			t.Fatalf("check of %s: %+v, tip %q", c.Folder, cell, v.Tips[c.Set])
+		}
+	}
+	if v.Space.Label != "Space" || !strings.HasPrefix(v.Space.Text, "About ") || !strings.Contains(v.Space.Text, " · ") || v.Space.Tone != ToneSuccess {
+		t.Fatalf("space %+v", v.Space)
+	}
+	if v.Unlock.Label != "Unlock" || v.Unlock.Text != "Password" {
+		t.Fatalf("unlock %+v", v.Unlock)
+	}
+
+	// An existing folder blocks Start and is named once, with the remedy.
 	if err := os.Mkdir(filepath.Join(dest, "Docs"), 0o750); err != nil {
 		t.Fatal(err)
 	}
 	plan, _ = restore.PlanDestination(sc.Config, s.BackupDir, s.Sets, sets, dest)
-	v = DestinationOf(dest, &plan, nil, false)
-	exists := false
-	for _, f := range v.Folders.Rows {
-		exists = exists || (f.Cells[2].Tone == ToneError && f.Cells[2].Text == "Already exists")
+	v = RestoreViewOf(choices, checked, "today, 09:12", dest, &plan, nil, false)
+	var docs naming.BackupEntry
+	for _, c := range choices {
+		if c.Folder == "Docs" {
+			docs = c.Set
+		}
 	}
-	if v.Next || !exists || v.Remedy == "" {
-		t.Fatalf("an existing folder blocks Next: %+v", v)
+	if v.Start.Enabled || v.Checks[docs].Text != "Already exists" || v.Checks[docs].Tone != ToneError || len(v.Issues) != 1 || v.Issues[0].Text != "Docs already exists in this folder. Choose another place, or rename or move that folder." {
+		t.Fatalf("an existing folder blocks Start: %+v", v)
+	}
+
+	// Hints while there is nothing to check.
+	none := map[naming.BackupEntry]bool{}
+	if v := RestoreViewOf(choices, none, "today, 09:12", dest, nil, nil, false); v.Heading != "Restore from the backup of today, 09:12" || v.Hint != "Choose at least one folder." || v.Start.Enabled {
+		t.Fatalf("nothing checked %+v", v)
 	}
 	for _, tc := range []struct{ dest, hint string }{{"", "Enter or browse"}, {`Restore`, "full path"}} {
-		if v := DestinationOf(tc.dest, nil, nil, false); v.Next || !strings.Contains(v.Hint, tc.hint) {
+		if v := RestoreViewOf(choices, checked, "today", tc.dest, nil, nil, false); v.Start.Enabled || !strings.Contains(v.Hint, tc.hint) {
 			t.Fatalf("%q: %+v", tc.dest, v)
 		}
 	}
-	if v := DestinationOf(dest, nil, nil, true); !v.Checking || v.Next {
+	if v := RestoreViewOf(choices, checked, "today", dest, nil, nil, true); !v.Checking || v.Start.Enabled || v.Hint != "Checking…" || v.HintTone != ToneSecondary {
 		t.Fatalf("while checking %+v", v)
+	}
+	if v := RestoreViewOf(choices, checked, "today", dest, nil, errors.New("No access. Remedy: Check the path."), false); v.HintTone != ToneError || v.Hint != "No access. Check the path." || v.Start.Enabled {
+		t.Fatalf("check failed %+v", v)
 	}
 	checkWriting(t, v)
 }
 
-func TestRestoreCheck(t *testing.T) {
+func TestRestoreSpaceAndUnlock(t *testing.T) {
 	t.Parallel()
-	now := time.Date(2026, 9, 30, 9, 0, 0, 0, time.Local)
-	p := interact.RestorePlan{
-		Sets: []interact.RestoreSetPlan{{
-			SetPlan:   interact.SetPlan{Set: naming.BackupEntry{DirectoryName: "Documents", ChainID: "ABC123", Date: "2026-09-30", DiffNumber: 3}, Base: naming.BackupEntry{DirectoryName: "Documents", ChainID: "ABC123", Date: "2026-09-01"}},
-			OutputDir: `D:\Restore\Documents`,
-		}},
-		Destination: `D:\Restore`, NeededBytes: 92 << 30, FreeBytes: 212 << 30,
-		Unlock: interact.UnlockPlan{Methods: "password + YubiKey", RecoveryCode: true},
+	p := interact.RestorePlan{NeededBytes: 92 << 30, FreeBytes: 212 << 30}
+	if l := restoreSpaceLine(p); l.Text != "About 92 GB needed · 212 GB free" || l.Tone != ToneSuccess {
+		t.Fatalf("enough %+v", l)
 	}
-	v := RestoreCheckOf(p, "today, 09:12", now)
-	if v.Summary != "1 folder from the backup of today, 09:12, into a new folder in" || v.Destination != `D:\Restore` {
-		t.Fatalf("summary %q, destination %q", v.Summary, v.Destination)
+	p.FreeBytes = 95 << 30
+	if l := restoreSpaceLine(p); l.Tone != ToneWarning {
+		t.Fatalf("tight %+v", l)
 	}
-	checkTable(t, v.Folders, "Folder", "Read from")
-	if r := v.Folders.Rows; len(r) != 1 || r[0].Cells[0].Text != "Documents" || r[0].Cells[1].Text != "Differential 3 + full backup of 1 Sep" || !strings.Contains(r[0].Tip, `D:\Restore\Documents`) {
-		t.Fatalf("folders %+v", r)
+	p.Issues = []interact.Issue{{Status: interact.StatusError, Code: interact.CodeSpaceInsufficient}}
+	if l := restoreSpaceLine(p); l.Tone != ToneError {
+		t.Fatalf("too little %+v", l)
 	}
-	if v.Space.Text != "Enough space: about 92 GB needed, 212 GB free" || v.Space.Tone != ToneSuccess {
-		t.Fatalf("space %+v", v.Space)
+	p.FreeBytes = -1
+	if l := restoreSpaceLine(p); l.Text != "About 92 GB needed · free space unknown" || l.Tone != ToneError {
+		t.Fatalf("unknown %+v", l)
 	}
-	if v.Unlock.Text != "Unlock with password + YubiKey, or recovery code" {
-		t.Fatalf("unlock %q", v.Unlock.Text)
+	for _, tc := range []struct {
+		u    interact.UnlockPlan
+		want string
+	}{
+		{interact.UnlockPlan{Password: true}, "Password"},
+		{interact.UnlockPlan{Password: true, YubiKey: true, RecoveryCode: true}, "One YubiKey touch, then your password, or recovery code"},
+		{interact.UnlockPlan{YubiKey: true}, "One YubiKey touch"},
+	} {
+		if got := restoreUnlockText(tc.u); got != tc.want {
+			t.Fatalf("unlock %+v: %q, want %q", tc.u, got, tc.want)
+		}
 	}
-	if v.Restore == nil {
-		t.Fatal("a clean plan offers Restore")
-	}
-	full := p
-	full.Sets = append([]interact.RestoreSetPlan{{SetPlan: interact.SetPlan{Set: naming.BackupEntry{DirectoryName: "Pictures", ChainID: "DEF456", Date: "2026-09-30"}}, OutputDir: `D:\Restore\Pictures`}}, p.Sets...)
-	if v := RestoreCheckOf(full, "today, 09:12", now); v.Summary != "2 folders from the backup of today, 09:12, each into a new folder in" || v.Folders.Rows[0].Cells[1].Text != "Full backup" {
-		t.Fatalf("two folders %+v", v)
-	}
-	p.Issues = []interact.Issue{{Status: interact.StatusError, Code: interact.CodeRestoreTargetExists, Text: "Restore directory already exists. Remedy: Choose another."}}
-	if v := RestoreCheckOf(p, "today, 09:12", now); v.Restore != nil || len(v.Issues) != 1 || v.Issues[0].Text != "Restore directory already exists. Choose another." {
-		t.Fatalf("a blocked plan %+v", v)
-	}
-	checkWriting(t, v)
 }
 
 // restoreRun is a restore of Docs and Pics into D:\Restore, confirmed.

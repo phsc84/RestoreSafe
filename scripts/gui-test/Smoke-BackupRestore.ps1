@@ -1,7 +1,7 @@
 ﻿# Smoke-BackupRestore.ps1 - backs up twice through the plan dialog (a full,
-# then differentials), restores one folder of the newest run through the
-# restore wizard, verifies the newest run from the Restore backup page, and
-# compares the restored folder with its source (spec 16.4).
+# then differentials), restores the folders of the newest run through the
+# Restore window, verifies the newest run from the Restore backup page, and
+# compares the restored folders with their sources (spec 16.4).
 #
 # Use a test configuration with authentication_mode 1 (password only); the
 # script cannot answer YubiKey prompts. It answers new-key setup (password
@@ -58,25 +58,19 @@ try {
     Click-Control $main RunDone
   }
 
-  # Restore of the newest run's first folder through the wizard.
+  # Restore of the newest run's folders through the Restore window.
   Go-Page $main 1
   $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
   Select-ListItem $list 0
   Wait-Until { Find-Control $main BackupsRestore -Enabled } 20 "a backup selected" | Out-Null
   Snap $main "backups"
   Click-Control $main BackupsRestore
-  $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeWizard" } 10 "restore wizard"
-  Wait-Until { Find-Control $wiz WizardNext -Enabled } 10 "folders" | Out-Null
-  Snap $wiz "wizard-folders"
-  Click-Control $wiz WizardNext
-  $edit = Wait-Until { Find-Control $wiz WizardDest } 10 "destination"
+  $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore window"
+  $edit = Wait-Until { Find-Control $wiz RestoreDest } 10 "destination"
   Set-Text $edit $RestoreTo
-  Wait-Until { Find-Control $wiz WizardNext -Enabled } 20 "destination checked" | Out-Null
-  Snap $wiz "wizard-destination"
-  Click-Control $wiz WizardNext
-  Wait-Until { (Text-Of $wiz WizardNext) -eq "&Restore…" -and (Find-Control $wiz WizardNext -Enabled) } 60 "restore plan" | Out-Null
-  Snap $wiz "wizard-check"
-  Click-Control $wiz WizardNext
+  Wait-Until { Find-Control $wiz RestoreStart -Enabled } 20 "choices checked" | Out-Null
+  Snap $wiz "restore"
+  Click-Control $wiz RestoreStart
   Answer-Credentials $p.Id $Password { Find-Control $wiz RunDone -Enabled }
   $r = Result $wiz; Snap $wiz "restore-result"; "Restore:  $r"
   $o = Test-Overlaps $wiz "restore result"; if ($o) { $o; $failed = $true }
@@ -88,7 +82,11 @@ try {
   $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
   Select-ListItem $list 0
   Click-Control $main BackupsVerify
-  Click-TaskButton $p.Id "Verify…"
+  $ver = Wait-Until { Find-Window $p.Id "RestoreSafeVerify" } 10 "Verify window"
+  Wait-Until { Find-Control $ver VerifyStart -Enabled } 60 "verification plan" | Out-Null
+  Snap $ver "verify"
+  $o = Test-Overlaps $ver "Verify window"; if ($o) { $o; $failed = $true }
+  Click-Control $ver VerifyStart
   Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
   $r = Result $main; Snap $main "verify-result"; "Verify:   $r"
   $o = Test-Overlaps $main "verify result"; if ($o) { $o; $failed = $true }

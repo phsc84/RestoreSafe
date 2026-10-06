@@ -36,7 +36,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 **Goal:** a user sees at a glance whether their folders are protected, starts a backup with one click, understands what RestoreSafe will do before it does it, and gets folders back without reading a report.
 
-**In scope:** Overview, backup plan and run, Backups (runs, sets, logs, verify), Restore wizard, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
+**In scope:** Overview, backup plan and run, Backups (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
 
 **Out of scope, permanently** (2.0 spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
@@ -48,7 +48,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 |---|---|
 | Full and differential backups, chosen automatically **per source folder** with a stated reason; override to full backups or to new keys + full backups | Backup plan (6) |
 | Chains per folder (a full backup and its differentials, same chain ID); backup runs that write one set per folder | Backups (7) |
-| Restore of one run or single sets into a new folder per set; checksum check of every file; stops and reports "incomplete" on a mismatch | Restore wizard (8) |
+| Restore of one run or single sets into a new folder per set; checksum check of every file; stops and reports "incomplete" on a mismatch | Restore window (8) |
 | Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Backups (7), Settings (10) |
 | Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Backup plan (6), Backups (7) |
 | Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Overview (5) |
@@ -129,14 +129,14 @@ The implementation may use the user's Windows accent color instead of the accent
 | Status hero, cards, progress card | Container windows that paint only their background, border and icon circle (double buffered, DPI aware). All text in them is in standard `STATIC` and `SysLink` controls, so screen readers and UI Automation get names, roles and `AutomationId` without a custom provider. Redrawn only on state change. |
 | Step trail, badges, bars | Small painted controls; each sets its accessible name to its text ("Step 2 of 4, Back up 2 of 3", "Differential 3"). |
 | Backup list | `SysListView32`, report mode, groups enabled (one group per run). Badges and status are custom-drawn cells (`NM_CUSTOMDRAW`). Column headers as for the folder lists. |
-| Folder lists (Create backup, backup plan, Settings, restore wizard pages 1 and 2) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) on restore wizard page 1. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
+| Folder lists (Create backup, backup plan, Settings, Restore window) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) in the Restore window. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
 | One-line text | `STATIC` with an ellipsis (`SS_ENDELLIPSIS`, `SS_PATHELLIPSIS` for paths). When the text is cut off, its tooltip shows it in full; when it fits, there is no such tooltip. |
 | Progress bars | `msctls_progress32` (`PBS_SMOOTH`, marquee while the total is unknown and while keys are unlocked), plus taskbar progress via `ITaskbarList3` |
 | Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
 | Password fields | Edit with `ES_PASSWORD`, read and wiped as in 13.1 |
 | Log pane | Read-only rich edit (`MSFTEDIT_CLASS`, as today) with a severity filter |
 | Health check details | The existing report view (rich edit) in a dialog |
-| Backup plan, Restore wizard | Modal dialogs with page switching, not property sheets |
+| Backup plan, Restore window | Modal dialogs; the Restore window switches to its progress and result pages, no property sheets |
 | Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` (existing) |
 
 ### 3.5 Application state
@@ -172,11 +172,11 @@ This section connects the screens. Every operation follows the same five steps; 
 
 | Step | Backup | Restore | Verify |
 |---|---|---|---|
-| 1. Choose | "Back up now…" | Selected run on Restore backup, then restore wizard page 1 (8) | Selected run or set on Restore backup |
-| 2. Plan | Backup plan dialog (6.1) | Restore wizard page 3 (8) | Verify dialog (7.3) |
+| 1. Choose | "Back up now…" | Selected run on Restore backup (7) | Selected run or set on Restore backup |
+| 2. Plan | Backup plan dialog (6.1) | Restore window (8) | Verify window (figure 7.3) |
 | 3. Unlock | Unlock or new-keys dialogs (9) | Unlock dialog (9) | Unlock dialog (9) |
-| 4. Run | Progress card on Create backup (6.2) | Wizard progress page, progress card on Restore backup | Progress card on Restore backup |
-| 5. Result | Result card on Create backup (6.3) | Wizard result page, result card on Restore backup | Result card and status on Restore backup |
+| 4. Run | Progress card on Create backup (6.2) | Progress page of the Restore window, progress card on Restore backup | Progress card on Restore backup |
+| 5. Result | Result card on Create backup (6.3) | Result page of the Restore window, result card on Restore backup | Result card and status on Restore backup |
 
 The plan comes from the workflow (`ShowBackupPlan`, `ShowRestorePlan`, `ShowVerifyPlan`, section 11.2), and the choice of step 1 goes into the workflow as a request (restore and verify, 12.3), so the UI never computes a plan of its own that could disagree with what the workflow then does.
 
@@ -353,7 +353,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 | BR-3 | The speed is computed by the UI from `Progress.Done` of the current folder over the last 5 seconds. There is no time left: an estimate would be unreliable, since network speed varies. The bytes line shows the current folder's total, which the workflow measures before it starts, so it carries no "about". |
 | BR-4 | While a backup runs, the Folders table has the columns **Folder**, **Type** (the badge the run gives the folder) and **Status**: done folders show "Done" and the size of the backup set written in green (the last progress report of the folder carries it, `Progress.Written`), the current folder its percentage, the others "Waiting"; a folder that failed or was skipped by `on_unreadable_file: fail` says so in red. A folder the run leaves out shows its problem. |
 | BR-5 | Progress is coalesced (12.2): at most one pending progress message; the workflows report four times per second. The taskbar button shows progress (`ITaskbarList3`): normal while running, indeterminate while unlocking, error on failure, paused (amber) when finished with warnings. |
-| BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.4). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
+| BR-6 | **Cancel** asks with figure 6.3 (restore: figure 8.2). On confirmation the button shows "Cancelling…" and is disabled until the worker has finished (12.4). |
 
 **Figure 6.3: Cancel a backup.** (`TaskDialog`)
 
@@ -468,20 +468,31 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 7.3: Verify.** (`TaskDialog`)
+**Figure 7.3: Verify.** Laid out and worded like the backup plan (figure 6.1).
 
 ```text
-┌────────────────────────────────────────────────────────────────┐
-│ (i)  Verify today, 09:12?                                      │
-│      RestoreSafe reads all 3 folders, decrypts them and        │
-│      checks every file against its checksum. For the           │
-│      differentials it also reads their full backup of 1 Sep.   │
-│      Nothing is written. About 97 GB to read.                  │
-│                                                                │
-│      > Show backups                                            │
-├────────────────────────────────────────────────────────────────┤
-│                                   [ Cancel ]  [ Verify... ]    │
-└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Verify                                                                 [x] │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Verify 3 folders from the backup of today, 09:12                           │
+│                                                                            │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ Folder                                       Type          About       │ │
+│ ├────────────────────────────────────────────────────────────────────────┤ │
+│ │ Documents                                    DIFF 3        38 GB       │ │
+│ │ Projects                                     DIFF 3        5 GB        │ │
+│ │ Pictures                                     DIFF 6        54 GB       │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+│                                                                            │
+│ Read         About 97 GB to read · nothing is written                      │
+│ Unlock       One YubiKey touch, then your password, or recovery code       │
+│                                                                            │
+│ (i) Every file is decrypted and checked against its checksum.              │
+│     Differentials are read with their full backups of 1 Sep.               │
+│ Show details                                                               │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                     [ Start ]  [ Cancel ]  │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Requirements
@@ -491,115 +502,70 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 | BK-1 | The list has one group per backup run (`catalog.BackupRunSummaries`), newest first. The group header shows date, number of folders, total size, duration (from the log, when available), the number of warnings (section 11.4) and "new keys" when the run created a key set. Each row is one backup set. The newest run is expanded, the others collapsed. |
 | BK-2 | Columns: Folder (backup name, tooltip path), Type (`FULL` / `DIFF n` badge), Based on (for a differential: "FULL of <date>", tooltip the full's set name; for a full: "-"), Size (the set's parts on disk), Chain (chain ID in Consolas; it's what the user sees in Explorer), Status. Status values: Complete (green), Verified <time> (green, section 11.4), n skipped files (amber), Incomplete (red), Full backup missing (red), Damaged (red, verify failed), Running with progress. |
 | BK-3 | The folder filter offers "All folders" and each source folder, plus folders that only exist in the backup directory ("Old: Music" for folders no longer in the configuration). Filtering keeps the run grouping and hides empty runs. |
-| BK-4 | The selection is a run: clicking its header or any of its sets selects the run, shows only its header selected, not its sets (the log pane shows the run's log either way). An incomplete set has no run and is selected by itself. The action bar shows the selection in words and its actions: **Restore…** (opens the wizard with that run) and **Verify…** (figure 7.3; verifies all the run's sets). A set whose full backup is missing or that is incomplete can't be restored or verified; the action bar says why. With no selection the action bar shows a hint. Double-click or `Enter` starts Restore. A context menu offers Restore…, Verify…, Copy set name, Open backup folder. |
+| BK-4 | The selection is a run: clicking its header or any of its sets selects the run, shows only its header selected, not its sets (the log pane shows the run's log either way). An incomplete set has no run and is selected by itself. The action bar shows the selection in words and its actions: **Restore…** (opens the Restore window on that run, section 8) and **Verify…** (opens the Verify window, figure 7.3; verifies all the run's sets). A set whose full backup is missing or that is incomplete can't be restored or verified; the action bar says why. With no selection the action bar shows a hint. Double-click or `Enter` starts Restore. A context menu offers Restore…, Verify…, Copy set name, Open backup folder. |
 | BK-5 | Log pane: title with the log file name, filter (All, Warnings and errors), **Open in Editor** (opens the file in the default application for log files, Notepad if there is none). It sits below a splitter that sets the list's height (by default the pane takes about 35% of the room) and is always shown; the pane fills the page below the list and shows at least 15 lines. When the list leaves less room, the page scrolls. When "Warnings and errors" finds none, the pane says "No warnings or errors in this log." in the secondary text color. The log of the selected run is loaded on demand from the backup directory; for the running operation it's appended live from `Output()`. Log lines are shown as the log file stores them, with WARN and ERROR lines colored and marked. Restore and verify append to the log of the run they read, so their entries appear in the same pane. |
 | BK-6 | Problem lines (figure 7.2) sit above the list: health check errors and warnings about the inventory (missing full backup, incomplete sets, name/header mismatch) with their remedy, and information lines for 1.x backups and leftover `.tmp` files. Affected rows are marked in the list. |
 | BK-7 | The retention line (figure 7.1) explains the rule in words (`retention_keep` chains per folder, `retention_keep_differentials` per chain, or "Keeps all backups" when both are 0) and names the chains the next backup would remove, from the same prediction as BP-2. Retention never runs from this page; it runs only after a successful backup. |
-| BK-8 | Verify: after figure 7.3, the credential dialogs follow and the progress card appears at the top of the Backups page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
+| BK-7a | The Verify window (figure 7.3) is the verification's plan, laid out and worded like the backup plan dialog (6.1): same width, sized to its content. It opens when Verify… starts the workflow, with a marquee until the plan (`ShowVerifyPlan`) arrives. Heading: "Verify 3 folders from the backup of today, 09:12". Table: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup); a set that can't be verified is red, with the reason as its tooltip. **Read** ("About 97 GB to read · nothing is written") and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code"). The note says that every file is decrypted and checked against its checksum, and which full backups the differentials are read with. Issues as in BP-5, then **Show details**. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in BP-4; Cancel answers no, and nothing is read. When the workflow finds a blocking issue, it ends before asking; the window stays open with the issues and only Cancel, as a blocked backup plan does. |
+| BK-8 | Verify: **Start** closes the Verify window, the credential dialogs follow and the progress card appears at the top of the Backups page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
 | BK-9 | Empty state: "No backups yet", "Your backups appear here after the first backup.", and a **Back up now…** button. |
 
-## 8. Restore wizard
+## 8. Restore window
 
-Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (2.0 spec 13.5); the wizard says so where users look for it.
+Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (2.0 spec 13.5); the window says so where users look for it.
 
-The wizard is one modal dialog with three pages and a progress and result page. The restore point is chosen on the Restore backup page: the wizard opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3), so it doesn't ask for the run again. Most users press Next twice and then Restore. To restore from another run, the user cancels and selects it; nothing has been written before Restore.
+The Restore window is the restore's plan, as the backup plan dialog (6.1) is the backup's: one page that shows what will happen, with **Start** and **Cancel**, then the progress and the result in the same window. The restore point is chosen on the Restore backup page: the window opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3). To restore from another run, the user cancels and selects it; nothing has been written before Start.
 
-**Figure 8.1: Page 1, folders.**
+Its layout and wording follow the backup plan dialog: a heading that says what happens, the folder table, labeled **Space** and **Unlock** lines, a note, the issues, **Show details**, and **Start** and **Cancel** at the bottom right. The folders appear once, in the table, with everything the restore needs to say about each.
+
+**Figure 8.1: Restore.**
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Restore                                                      [x] │
-├──────────────────────────────────────────────────────────────────┤
-│ [1 Folders] > 2 Destination > 3 Check                            │
-│                                                                  │
-│ Which folders do you want back from today, 09:12?                │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Folders                                 Type          About  │ │
-│ ├──────────────────────────────────────────────────────────────┤ │
-│ │ [x] Documents                           DIFF 3  about 38 GB  │ │
-│ │ [ ] Projects                            DIFF 3   about 1 GB  │ │
-│ │ [x] Pictures                            DIFF 6  about 54 GB  │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-│ (!) Projects can't be restored: its full backup is missing.      │
-│ (i) Whole folders are restored. To get a single file back,       │
-│     restore its folder to a new place and copy the file.         │
-├──────────────────────────────────────────────────────────────────┤
-│ 2 folders · about 92 GB           [ Back ]  [ Next ]  [ Cancel ] │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Restore                                                                [x] │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Restore 2 folders from the backup of today, 09:12                          │
+│                                                                            │
+│ To           [D:\Restore                                 ]  [ Browse... ]  │
+│              Restore into the backup directory                             │
+│                                                                            │
+│ ┌────────────────────────────────────────────────────────────────────────┐ │
+│ │ Folder                       Type      About      Check                │ │
+│ ├────────────────────────────────────────────────────────────────────────┤ │
+│ │ [x] Documents                DIFF 3    38 GB      New folder           │ │
+│ │ [ ] Projects                 DIFF 3    1 GB       -                    │ │
+│ │ [x] Pictures                 DIFF 6    54 GB      Already exists       │ │
+│ └────────────────────────────────────────────────────────────────────────┘ │
+│                                  ═════                                     │
+│ Space        (ok) About 92 GB needed · 212 GB free                         │
+│ Unlock       One YubiKey touch, then your password, or recovery code       │
+│                                                                            │
+│ (i) Whole folders are restored, and every file is checked against its      │
+│     checksum. To get a single file back, restore its folder to a new       │
+│     place and copy the file.                                               │
+│ (!) Projects can't be restored: its full backup is missing.                │
+│ (x) Pictures already exists in this folder. Choose another place, or       │
+│     rename or move that folder.                                            │
+│ Show details                                                               │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                     [ Start ]  [ Cancel ]  │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.2: Page 2, destination.**
+**Figure 8.2: Restore progress, and cancel.**
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Restore                                                      [x] │
-├──────────────────────────────────────────────────────────────────┤
-│ v Folders > [2 Destination] > 3 Check                            │
-│                                                                  │
-│ Where should the folders go?                                     │
-│ D:\Restore                                         [ Browse... ] │
-│ Restore into the backup directory                                │
-│                                                                  │
-│ RestoreSafe creates one new folder per restored folder:          │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Folder      Restored to                 Check                │ │
-│ ├──────────────────────────────────────────────────────────────┤ │
-│ │ Documents   D:\Restore\Documents        New folder           │ │
-│ │ Pictures    D:\Restore\Pictures         Already exists       │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-│                            ═════                                 │
-│ Choose another place, or rename or move that folder.             │
-│ (ok) Enough space: about 92 GB needed, 212 GB free               │
-├──────────────────────────────────────────────────────────────────┤
-│ 2 folders · about 92 GB           [ Back ]  [ Next ]  [ Cancel ] │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Figure 8.3: Page 3, check.**
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Restore                                                      [x] │
-├──────────────────────────────────────────────────────────────────┤
-│ v Folders > v Destination > [3 Check]                            │
-│                                                                  │
-│ Ready to restore                                                 │
-│ 2 folders from the backup of today, 09:12, each into a new       │
-│ folder in                                                        │
-│ D:\Restore                                                       │
-│                                                                  │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Folder       Read from                                       │ │
-│ ├──────────────────────────────────────────────────────────────┤ │
-│ │ Documents    Differential 3 + full backup of 1 Sep           │ │
-│ │ Pictures     Differential 6 + full backup of 3 Aug           │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│ (ok)  Enough space: about 92 GB needed, 212 GB free              │
-│ (key) Unlock with password + YubiKey, or recovery code           │
-│                                                                  │
-│ (i) Every file is checked against its checksum. Nothing in your  │
-│     backups changes, and no existing file is overwritten.        │
-│     Show details                                                 │
-├──────────────────────────────────────────────────────────────────┤
-│                              [ Back ]  [ Restore... ]  [ Cancel ]│
-└──────────────────────────────────────────────────────────────────┘
-```
-
-**Figure 8.4: Restore progress, and cancel.**
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Restore                                                      [x] │
-├──────────────────────────────────────────────────────────────────┤
-│ Restoring                                                        │
-│ v Unlock keys  >  [Restore 1 of 2]                               │
-│ Documents · differential 3, with its full backup of 1 Sep        │
-│ [#########################-------------------------------------] │
-│ 14 of about 38 GB · 92 MB/s                                      │
-├──────────────────────────────────────────────────────────────────┤
-│                                                       [ Cancel ] │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│ Restore                                                                [x] │
+├────────────────────────────────────────────────────────────────────────────┤
+│ Restoring                                                                  │
+│ v Unlock keys  >  [Restore 1 of 2]                                         │
+│ Documents · differential 3, with its full backup of 1 Sep                  │
+│ [###############################-----------------------------------------] │
+│ 14 of about 38 GB · 92 MB/s                                                │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                 [ Cancel ] │
+└────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────┐
 │ (!)  Cancel this restore?                                      │
@@ -610,7 +576,7 @@ The wizard is one modal dialog with three pages and a progress and result page. 
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.5: Restore results.**
+**Figure 8.3: Restore results.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
@@ -638,15 +604,17 @@ The wizard is one modal dialog with three pages and a progress and result page. 
 
 | ID | Requirement |
 |---|---|
-| RW-1 | Modal dialog, about 560 × 500 DIP, centered on the main window, resizable. Step indicator with numbers; completed steps show a check and can be clicked to go back. Buttons: Back, Next (**Restore…** on page 3), Cancel. `Enter` triggers the default button, `Esc` cancels. Cancel on pages 1 to 3 closes without asking; nothing has been written. |
-| RW-2 | On pages 1 to 3, the footer shows the number of folders and the size estimate of the selection, and updates as it changes. |
-| RW-3 | The wizard restores from the run selected on Restore backup (BK-4) and has no page to choose a run: Restore backup is where runs are compared, with their types, status and log. Restore… is only offered for a run with a restorable set (BK-4), so the wizard never opens on a run it can't restore. The run's date stays visible in the heading of page 1 and in the first sentence of page 3. |
-| RW-4 | Page 1 asks "Which folders do you want back from <date of the run>?" and lists the run's sets with checkboxes in three columns: **Folders**, **Type** (badge) and **About** (the size read, for a differential with its full backup). Which full backup a differential is read with is on page 3 and, as "Based on", on Restore backup; page 1 doesn't repeat it. All restorable folders are checked when the wizard opens. A set whose full backup is missing is shown disabled and unchecked, and a warning line below the list names it and says why (figure 8.1). The note about single files (figure 8.1) is always shown. Next needs at least one checked folder. |
-| RW-5 | Page 2: destination path with **Browse…** and the option **Restore into the backup directory** (today's checkbox, as a link that fills in the path with backslashes, as Browse… does, even when the configuration writes it with slashes). Below, a table of the folder each set will create: **Folder**, **Restored to** (`destination\<backup name>`) and **Check** ("New folder" in green, "Already exists" or "Can't be created: <reason>" in red); what to do about existing folders is said once below the table. A splitter below the table sets its height (as on Create backup, OV-3): at least as many rows as it has, up to three, at most the room the page leaves above the space line; the height stays while the wizard is open. A free-space estimate (the sizes of the sets and their full backups; the exact size is only known after unlocking) with (ok), a warning when it may not fit, or an error when it can't fit. Existing folders block Next; space warnings don't. Both checks run when the page opens and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the code that builds the plan `restore.Run` shows on page 3, so the two pages cannot disagree. |
-| RW-6 | Page 3 is the restore preflight (`ShowRestorePlan`), shown as a summary (figure 8.3). One sentence names the number of folders, the run's date and the destination, which follows on its own line, shortened in the middle when it doesn't fit; each folder goes into a new folder of its name there, which page 2 showed, so page 3 doesn't repeat the paths. A table lists each folder with what is read for it (**Folder**, **Read from**: "Full backup" or "Differential 3 + full backup of 1 Sep"; the row's tooltip names the new folder). Below it, the space line as on page 2 and the unlock methods the key set accepts ("Unlock with password + YubiKey, or recovery code"), each with its icon; the checksum note and **Show details** come last, in secondary text. Blocking issues from the workflow replace **Restore…** with the issue and its remedy. "Show details" opens the full report. Nothing is written before **Restore…**; **Restore…** opens the credential dialogs (section 9). |
-| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.4. |
+| RW-1 | Modal dialog, about 680 × 560 DIP (the width of the backup plan dialog), centered on the main window, resizable. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in the backup plan dialog (BP-4). `Enter` triggers Start, `Esc` cancels. Cancel before Start closes without asking; nothing has been written. |
+| RW-2 | The heading says what Start does: "Restore 2 folders from the backup of today, 09:12" (the checked folders; "Restore from the backup of …" while none is checked), as the backup plan's "Back up 3 folders to …". |
+| RW-3 | The window restores from the run selected on Restore backup (BK-4) and has no way to choose a run: Restore backup is where runs are compared, with their types, status and log. Restore… is only offered for a run with a restorable set (BK-4), so the window never opens on a run it can't restore. |
+| RW-4 | **To**, labeled like Space and Unlock: the destination path with **Browse…**, and below it the link **Restore into the backup directory**, which fills in the path with backslashes, as Browse… does, even when the configuration writes it with slashes. The last destination of the session is filled in, else `%USERPROFILE%\Restore`. |
+| RW-5 | The table lists the run's sets with checkboxes: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup) and **Check**: "New folder" in green, "Already exists" or "Can't be created" in red for a checked folder, "-" for an unchecked one; the row's tooltip names the new folder (`destination\<backup name>`). All restorable folders are checked when the window opens. A set whose full backup is missing is shown disabled and unchecked. Which full backup a differential reads is "Based on" on Restore backup and in Show details; the table doesn't repeat it. A splitter below the table sets its height (as on Create backup, OV-3): at least as many rows as it has, up to three, at most the room the lines below leave; the height stays while the window is open. |
+| RW-6 | Below the table, as in the backup plan (BP-2): **Space** ("About 92 GB needed · 212 GB free" with (ok); a warning when it may not fit; an error when it can't fit or the free space is unknown; the size is an estimate, exact only after unlocking) and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code" when the key set has one). Then the note (whole folders, checksums, single files), the issues, and **Show details** (the full preflight report, once there is one). Issues: a warning line naming the folders whose full backup is missing; one error line naming the folders that already exist ("Pictures already exists in this folder", as the path is in To), with what to do; a line per folder that can't be created, with the reason; other issues of the plan in amber or red, as BP-5. While there is nothing to check, a hint replaces Space and Unlock: "Choose at least one folder.", "Enter or browse to the folder to restore into.", "Enter a full path, such as D:\Restore.", "Checking…". |
+| RW-6a | The checks run when the window opens, when a folder is checked or unchecked, and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the plan `restore.Run` shows (including whether a YubiKey is connected), so the window and the restore cannot disagree. A checked folder that already exists or can't be created, and an error of the plan, disable Start; warnings don't. |
+| RW-6b | **Start** starts the restore with the checked folders and the destination. The workflow checks again (`ShowRestorePlan`); the window shows that plan and answers its start question (`ConfirmStart`) itself, because Start was the confirmation, and the credential dialogs (section 9) follow. If the workflow finds a blocking issue (something changed since the check), it ends before asking for anything, nothing is written, and the window shows the issue in place of the check. Cancelling a credential dialog returns to the window with the choices kept. |
+| RW-7 | Progress page: step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.2. |
 | RW-8 | Result page: success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in a dialog with the same filter as BK-5. |
-| RW-9 | While the wizard runs a restore, the main window shows the progress card too, at the top of the Backups page, then the result card, and stays usable for reading; starting another operation is disabled. |
+| RW-9 | While the Restore window runs a restore, the main window shows the progress card too, at the top of the Backups page, then the result card, and stays usable for reading; starting another operation is disabled. |
 
 ## 9. Credential dialogs
 
@@ -990,11 +958,11 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 |---|---|
 | `Output` | Live log (Backups log pane, restore "Show log"). |
 | `ShowBackupPlan` | Backup plan dialog (6.1); its `Details` for "Show details". |
-| `ShowRestorePlan` | Restore wizard page 3 (8); its `Details` for "Show details". |
-| `ShowVerifyPlan` | Verify dialog (figure 7.3); its `Details` for "Show details". |
+| `ShowRestorePlan` | Restore window (8): the check of Start (RW-6b); its `Details` for "Show details". |
+| `ShowVerifyPlan` | Verify window (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3), restore result page (8). |
 | `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (new in 2.0; the workflows call it after opening the log). |
-| `ConfirmStart` | **Restore…** on page 3, **Verify…** in figure 7.3. |
+| `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore window itself after its **Start** (RW-6b). |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
 | `NewPassword`, `ShowRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
@@ -1035,7 +1003,7 @@ As 13.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` ch
 
 ### 13.4 YubiKey and Windows Security dialogs
 
-The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start and to the restore wizard while it is open. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
+The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start and to the Restore window while it is open. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
 
 ## 14. Build and start
 
@@ -1071,7 +1039,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 
 ### 16.1 Testable structure
 
-- **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → OverviewView`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → BackupsView`, `(wizard state) → WizardPageView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
+- **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → OverviewView`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → BackupsView`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
 - **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side, as the first GUI's screen state machine was.
 - **Clock and file system.** The status model, the view models and the speed and time-left calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
 - **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the existing `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
@@ -1098,7 +1066,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Operation state machine | Every transition of section 4: cancel in the plan, in each credential dialog, during the run and during cleanup; close during a question and during a run; session end; a workflow error in each phase. After each path: exactly one worker ran, no question is left unanswered, the right result card is shown, "Back up now…" is enabled again. | 4, 6.4, 12.4, BR-6, BR-7 |
 | Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with spare and recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
 | Backups view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
-| Restore wizard | Page navigation forward and back, preselection from a run and from a set, Next enablement (no folder checked; an existing target folder; a space warning, which doesn't block), destination checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6 |
+| Restore window | Preselection from a run and from a set, Start enablement (no folder checked; an existing target folder; a space warning, which doesn't block), the heading, Check column and issue lines, checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6b |
 | Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
@@ -1114,7 +1082,7 @@ The PowerShell scripts drive the real window. They are updated for the new UI an
 |---|---|
 | `New-TestCondition.ps1` (new) | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
 | `Check-States.ps1` (new) | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
-| `Smoke-BackupRestore.ps1` | Back up through the plan dialog, restore one folder of the newest run through the wizard, verify the run; compare the restored files with the sources. |
+| `Smoke-BackupRestore.ps1` | Back up through the plan dialog, restore one folder of the newest run through the Restore window, verify the run; compare the restored files with the sources. |
 | `Screenshot.ps1` | One screenshot per page and dialog, for the visual review against 3.3 and the wireframes (16.5), and for the README. |
 | `Accessibility.ps1` | Role, name, `AutomationId` and access key of every control on every page and dialog. |
 
@@ -1131,7 +1099,7 @@ Before the release, give one person who hasn't seen the new UI a test configurat
 1. "Are your folders protected? How do you know?"
 2. "Back up now. What kind of backup will Documents get, and why?"
 3. "Get your Documents folder back as it was last Sunday, into D:\Restore."
-4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note on wizard page 1 should get them there.)
+4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note in the Restore window should get them there.)
 5. "Something is wrong with your backups (condition BaseMissing). What is it and what should you do?"
 
 A task that fails or needs help is a defect in the UI or its texts, not in the user.
@@ -1152,7 +1120,7 @@ The redesign ships with 2.0.0 only when:
 1. All wireframes in this document are implemented with the described states, texts and behaviors.
 2. The hero shows the correct state for every trigger in 3.5, and each Warning and Error variant offers its fix action.
 3. A user can back up, see the planned type and reason per folder and what retention removes, force a full backup, create new keys, watch progress, cancel, and read the result and log without opening a file.
-4. A user can restore one folder of a differential run to a new folder using only the wizard; the wizard shows the full backup it reads, nothing is written before **Restore…**, and a checksum mismatch is reported as "Restore incomplete".
+4. A user can restore one folder of a differential run to a new folder using only the Restore window; nothing is written before **Start**, and a checksum mismatch is reported as "Restore incomplete".
 5. A user can verify a run or a set and see the result in the Backups list.
 6. Every behavior of the 2.0 workflows is unchanged; the e2e tests pass and change only for the request parameters, the plan calls, the progress fields and the facts.
 7. All interactions work with keyboard only. Narrator announces the sidebar, hero, lists, buttons, progress and credential fields.
