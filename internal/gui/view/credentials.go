@@ -15,7 +15,7 @@ type Field struct {
 }
 
 // CredentialDialog is one of the dialogs that unlock or create the keys
-// (spec 9).
+// (GUI spec 9).
 type CredentialDialog struct {
 	Title string
 	Intro string
@@ -101,7 +101,7 @@ func NewPasswordDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDialo
 
 var minLengthPattern = regexp.MustCompile(`at least (\d+) characters`)
 
-// SpareYubiKeyDialogOf asks to connect the spare YubiKey (spec CR-2).
+// SpareYubiKeyDialogOf asks to connect the spare YubiKey (GUI spec CR-2).
 func SpareYubiKeyDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
 		Title: stepTitle(createKeysTitle, keys, keyStepSpare),
@@ -129,7 +129,7 @@ func RecoveryCodeDialogOf(code string, _ interact.KeyPlan) CredentialDialog {
 	}
 }
 
-// The steps of creating keys (spec CR-2).
+// The steps of creating keys (GUI spec CR-2).
 const (
 	keyStepPassword = iota
 	keyStepYubiKey

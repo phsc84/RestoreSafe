@@ -11,7 +11,7 @@ import (
 )
 
 // problems returns the errors and warnings of the snapshot, the most urgent
-// first (spec 3.5), and the notes. Findings of the health check that have
+// first (GUI spec 3.5), and the notes. Findings of the health check that have
 // their own problem keep its detail text.
 func problems(p Params, in inspection, s *Snapshot) (problems, notes []Problem) {
 	fromItems := func(status interact.Status, codes ...interact.Code) []Problem {

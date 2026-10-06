@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented on branch `v2` (phases 1-10 and GUI phases G1-G7); hardware test of the YubiKey paths pending |
+| Status | Implemented for 2.0.0 (unreleased): format and workflows on `v2`, the window on `gui-redesign` ([SPEC-gui.md](SPEC-gui.md)). Hardware test of the YubiKey paths pending. |
 | Target release | RestoreSafe 2.0.0 |
 | Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
 
@@ -13,7 +13,7 @@ Main topics:
 - Key sets: spare YubiKey and recovery code (section 4.4).
 - Restore of timestamps and attributes (section 7.6).
 - Exclude patterns, unreadable-file policy, and a password minimum (sections 6.4-6.6).
-- Graphical user interface replacing the console menu: specified separately in [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md).
+- Graphical user interface replacing the console menu: specified separately in [SPEC-gui.md](SPEC-gui.md).
 
 ## 1. Goals and non-goals
 
@@ -651,16 +651,6 @@ Allow `exclude` per source directory in addition to the global list.
 ### 15.4 Scale test
 
 Synthetic source with 50,000 files (mixed sizes) and ~5 GB: measure differential creation time with 1 % changed files, peak memory, and manifest size; assert memory stays below a defined budget.
-
-## 16. Implementation phases
-
-1. **Container format 2 with full backups**: header, key set with a single regular slot (password / password + YubiKey / YubiKey), HKDF sections, manifest (including `off`, times, attributes), trailer, atomic finalization, new naming. Restore/verify with hash checks and timestamp/attribute restore. Health check and 1.x migration warning.
-2. **Key set extensions**: spare YubiKey (including multi-credential unlock, 4.4.3), recovery code, `K` override, password minimum.
-3. **Backup options**: exclude patterns, `on_unreadable_file`.
-4. **Differential creation**: base loading, change detection, automatic type selection, preflight plan and override.
-5. **Differential restore and verify**: two-set restore algorithm, chain-aware selection list.
-6. **Retention by chain** and `retention_keep_differentials`.
-7. **Documentation**: README (naming, usage, key sets and recovery code per Appendix A, configuration, known limitations, YubiKey prompts), `config-SAMPLE.yaml`, CHANGELOG with the 2.0 breaking-change notice.
 
 ## Appendix A. README draft: "How your backups are locked"
 

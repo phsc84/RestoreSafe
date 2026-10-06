@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// PlanRow is one folder of the backup plan (spec BP-1).
+// PlanRow is one folder of the backup plan (GUI spec BP-1).
 type PlanRow struct {
 	Name, Path string
 	// Badge is the planned type; nil for a folder that is not backed up.
@@ -22,7 +22,7 @@ type PlanRow struct {
 	Glyph Glyph
 }
 
-// PlanLine is a labeled line under the plan's table (spec BP-2).
+// PlanLine is a labeled line under the plan's table (GUI spec BP-2).
 type PlanLine struct {
 	Label, Text string
 	// Paths are lines that are paths, shortened in the middle; they take
@@ -32,14 +32,14 @@ type PlanLine struct {
 	Glyph Glyph
 }
 
-// IssueLine is a preflight issue (spec BP-5).
+// IssueLine is a preflight issue (GUI spec BP-5).
 type IssueLine struct {
 	Text  string
 	Tone  Tone
 	Glyph Glyph
 }
 
-// BackupPlanView is the backup plan dialog (spec 6.1).
+// BackupPlanView is the backup plan dialog (GUI spec 6.1).
 type BackupPlanView struct {
 	Title   string
 	Heading string
@@ -215,7 +215,7 @@ func unlockText(k interact.KeyPlan) string {
 }
 
 // afterwards words what follows the backup: verification and retention
-// (spec BP-2, 11.3), and lists what retention removes.
+// (GUI spec BP-2, 11.3), and lists what retention removes.
 func afterwards(p interact.BackupPlan, cfg *config.Config, now time.Time) (PlanLine, []string) {
 	line := PlanLine{Label: planAfterwards}
 	var parts []string
@@ -379,7 +379,7 @@ func joinAnd(items []string) string {
 // IssueText shows a workflow message with its remedy as plain sentences.
 func IssueText(s string) string { return issueText(s) }
 
-// Table is the plan's folders as a table (spec BP-2): the planned type, why,
+// Table is the plan's folders as a table (GUI spec BP-2): the planned type, why,
 // and about how much the backup stores; a folder that is not backed up
 // says why instead.
 func (v BackupPlanView) Table() Table {

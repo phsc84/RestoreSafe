@@ -226,7 +226,7 @@ func (a *app) dismiss() {
 	a.focusPage()
 }
 
-// showRunLog shows the log of the operation on the Backups page (spec
+// showRunLog shows the log of the operation on the Backups page (GUI spec
 // BR-7): the run selected, its log in the pane, live while it runs.
 func (a *app) showRunLog() {
 	path := ""
@@ -259,7 +259,7 @@ func (a *app) showResultDetails() {
 	}
 }
 
-// onClose handles closing the window (spec 6.4, 12.4).
+// onClose handles closing the window (GUI spec 6.4, 12.4).
 func (a *app) onClose() {
 	switch a.machine.CloseRequested() {
 	case flow.CloseNow:
@@ -301,7 +301,7 @@ func (a *app) onEndSession() {
 	}
 }
 
-// updateTaskbar shows the operation on the taskbar button (spec BR-5):
+// updateTaskbar shows the operation on the taskbar button (GUI spec BR-5):
 // progress while it runs, red after a failure, amber after warnings.
 func (a *app) updateTaskbar() {
 	tb := a.taskbar

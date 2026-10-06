@@ -241,7 +241,7 @@ func TestLogLines(t *testing.T) {
 }
 
 // The run card sits on Restore backup above the log pane: every button that
-// can show there at once needs an access key of its own (spec 15).
+// can show there at once needs an access key of its own (GUI spec 15).
 func TestRestoreBackupAccessKeysAreUnique(t *testing.T) {
 	lp := LogPaneOf()
 	for _, card := range [][]string{

@@ -35,7 +35,7 @@ const (
 	refreshHeight     = 22
 )
 
-// overviewPage is the Overview (spec 5): the title, the hero and three
+// overviewPage is the Overview (GUI spec 5): the title, the hero and three
 // cards in one column.
 type overviewPage struct {
 	a     *app
@@ -91,7 +91,7 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 		}
 		(*c).panel.OnCommand = o.command
 	}
-	// More than five folders scroll within the table (spec OV-3).
+	// More than five folders scroll within the table (GUI spec OV-3).
 	o.folderTable = newTable(t, o.folders.panel.HWND(), 0)
 	o.folders.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
 		r, _ := o.folderTable.notify(hdr)
@@ -166,7 +166,7 @@ func (o *overviewPage) backupRun() *flow.Run {
 }
 
 // showRun shows the run card in place of the hero while a backup runs or
-// its result is shown (spec OV-7).
+// its result is shown (GUI spec OV-7).
 func (o *overviewPage) showRun() {
 	o.run.follow(o.backupRun(), o.a.machine.Busy())
 	heroShown := o.run.mode == runHidden
@@ -210,7 +210,7 @@ func (o *overviewPage) fillFolders() {
 	}
 }
 
-// runStates are the folders' states while a backup runs (spec BR-4).
+// runStates are the folders' states while a backup runs (GUI spec BR-4).
 func (o *overviewPage) runStates() map[string]view.FolderProgress {
 	if r := o.backupRun(); r != nil && o.a.machine.Busy() {
 		return view.RunFolders(r)

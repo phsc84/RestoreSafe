@@ -26,7 +26,7 @@ func codes(problems []Problem) []interact.Code {
 	return out
 }
 
-// TestSnapshotOfEveryScenario covers spec 3.5, 11.1 and 11.9.
+// TestSnapshotOfEveryScenario covers GUI spec 3.5, 11.1 and 11.9.
 func TestSnapshotOfEveryScenario(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

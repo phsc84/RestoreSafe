@@ -9,7 +9,7 @@ import (
 )
 
 // SnapshotTimeout is how long the user interface waits for a snapshot
-// before it reports the backup directory as unreachable (spec OV-8).
+// before it reports the backup directory as unreachable (GUI spec OV-8).
 const SnapshotTimeout = 5 * time.Second
 
 // Checker takes snapshots, at most one at a time. A snapshot can block for

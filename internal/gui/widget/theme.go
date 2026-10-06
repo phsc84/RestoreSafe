@@ -6,7 +6,7 @@ type Color uint32
 // RGB returns the color with the given components.
 func RGB(r, g, b uint8) Color { return Color(r) | Color(g)<<8 | Color(b)<<16 }
 
-// Palette are the colors of the interface (spec 3.3). Pages and widgets
+// Palette are the colors of the interface (GUI spec 3.3). Pages and widgets
 // use roles, never literal colors.
 type Palette struct {
 	Text, TextSecondary   Color
@@ -25,7 +25,7 @@ type Palette struct {
 	OnAccent              Color // text on Accent (the primary button)
 }
 
-// Light is the light palette of spec 3.3.
+// Light is the light palette of GUI spec 3.3.
 var Light = Palette{
 	Text:          RGB(0x1B, 0x20, 0x26),
 	TextSecondary: RGB(0x5A, 0x65, 0x72),
@@ -54,7 +54,7 @@ var Light = Palette{
 	OnAccent:      RGB(0xFF, 0xFF, 0xFF),
 }
 
-// Sizes in DIPs (spec 3.2 and 3.3).
+// Sizes in DIPs (GUI spec 3.2 and 3.3).
 const (
 	WindowWidth, WindowHeight       = 1000, 700
 	WindowMinWidth, WindowMinHeight = 820, 600

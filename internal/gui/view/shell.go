@@ -15,7 +15,7 @@ const (
 func Navigation() []string { return []string{navOverview, navBackups, navSettings} }
 
 // Title returns the window title: the version, and the configuration file
-// when it is not the default config.yaml (spec 3.2).
+// when it is not the default config.yaml (GUI spec 3.2).
 func Title(version, configName string) string {
 	if configName == "" || configName == "config.yaml" {
 		return fmt.Sprintf(titleFormat, appName, version)

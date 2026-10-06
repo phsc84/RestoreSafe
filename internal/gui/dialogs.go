@@ -30,7 +30,7 @@ const (
 	idCredentialCopy   = 472
 )
 
-// credentialDialog is the open credential dialog (spec 9); the GUI shows
+// credentialDialog is the open credential dialog (GUI spec 9); the GUI shows
 // at most one at a time.
 type credentialDialog struct {
 	win      *dialogWindow
@@ -105,7 +105,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 			d.codeFont = font
 		}
 		// A static control: the code is copied only with the Copy button
-		// (spec 13.3).
+		// (GUI spec 13.3).
 		h, _ := win32.CreateWindow(0, "STATIC", v.Code, win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|win32.SS_CENTER, 0, 0, 0, 0, panel.HWND(), 0)
 		panel.Adopt(h)
 		if font != 0 {

@@ -27,7 +27,7 @@ const (
 )
 
 // Trail draws the steps of an operation in a row: done steps with a check,
-// the current one highlighted, the waiting ones in secondary text (spec
+// the current one highlighted, the waiting ones in secondary text (GUI spec
 // BR-2).
 type Trail struct {
 	hwnd  win32.HWND
@@ -147,7 +147,7 @@ func (tr *Trail) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (u
 }
 
 // ProgressBar is the standard progress bar, smooth or as a marquee while
-// the total is unknown (spec 3.4).
+// the total is unknown (GUI spec 3.4).
 type ProgressBar struct {
 	hwnd    win32.HWND
 	marquee bool

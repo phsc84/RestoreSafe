@@ -10,7 +10,7 @@ type SidebarItem struct {
 
 // Sidebar is the navigation: one tab stop, arrow keys, Home and End move
 // the selection; a click selects. The selected item has a filled row and an
-// accent bar on its left edge (spec 3.2).
+// accent bar on its left edge (GUI spec 3.2).
 type Sidebar struct {
 	hwnd     win32.HWND
 	theme    *Theme

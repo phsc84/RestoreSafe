@@ -8,7 +8,7 @@ const headerPadding = 6
 
 // StyleListHeader draws the column header of the list view lv on the
 // secondary surface, with a line under it and between the columns, so the
-// titles stand apart from the rows (spec 3.3). Dragging a divider works as
+// titles stand apart from the rows (GUI spec 3.3). Dragging a divider works as
 // before. In high contrast the header keeps the system look.
 func StyleListHeader(t *Theme, lv win32.HWND) {
 	header := win32.ListHeader(lv)

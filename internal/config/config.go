@@ -223,7 +223,7 @@ func Load(path string) (*Config, error) {
 
 // parse decodes and validates the contents of a configuration file. Unknown
 // keys are an error; missing keys get their defaults and are listed in
-// MissingKeys (spec 11.6).
+// MissingKeys (GUI spec 11.6).
 func parse(data []byte) (*Config, error) {
 	var cfg Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))

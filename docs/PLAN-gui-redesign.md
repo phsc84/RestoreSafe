@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Agreed 2026-09-30; phases 0-9 done; phase 10 done except the manual checklist run, the usability session and the merge into `v2` |
-| Implements | [SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md) |
+| Implements | [SPEC-gui.md](SPEC-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
 
@@ -249,7 +249,21 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **10b:** `scripts/gui-test` for the new UI: controls by control ID (a Go test keeps `$Ids` equal to the code), `New-TestCondition.ps1` (13 conditions), `Check-States.ps1`, `Accessibility.ps1`, and the smoke test through the plan, the wizard and the Backups page.
 - **10c:** pre-run of `docs/GUI-TEST-CHECKLIST.md` at 150 % (scripts and scripted walks), with a list of known differences from the spec to accept or change.
 - **10d:** README (usage, screenshots from a neutral demo setup), CHANGELOG, config sample.
-- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, a decision on each known difference, then the merge into `v2`.
+- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, a decision on each known difference (6g), then the merge into `v2`.
+
+## 6g. Known differences to decide
+
+Found in the pre-run (10c); listed in `docs/GUI-TEST-CHECKLIST.md` under "Known differences from the spec". Decide each: **Accept** for 2.0.0 (write the reason into the checklist, and change the spec where the code is right) or **Change** the code. "To change" names where the work is; it is a starting point, not a design.
+
+| # | Spec | Difference | To change | Decision |
+|---|---|---|---|---|
+| D1 | OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" (stale) files. | The backup writes no fact for skipped and stale files (11.4); add one, read it in `logging/facts.go`, and offer "Show files" on the result card and in the wizard's result. | Open |
+| D2 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | Either show the disabled button with the reason next to the fix actions, or change OV-2 to what the code does. | Open |
+| D3 | BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written; for a differential it is much larger than the size on the Restore backup page. | Report the written set size (`setwriter.Result`) when a folder finishes, and show that; or label the read size as such. | Open |
+| D4 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. | The password question carries no key set; pass its creation date with the question (fits RF-26 of SPEC-refactoring.md, typed questions). | Open |
+| D5 | RW-1 | The wizard is resizable; its progress page leaves empty space below the card. | Lay out the progress page to fill the height (as the Overview's run card does), or fix the wizard's size while it runs. | Open |
+| D6 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | Forward the theme change to the open plan, credential and details dialogs and restyle them like the pages. | Open |
+| D7 | 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated (its hash is part of every chunk's AAD). | Nothing reasonable: a script that edits the date breaks the backup's authentication. Likely **Accept**; the checklist already tests it with a backup from the day before (decision 9). | Open |
 
 ## 7. Risks
 

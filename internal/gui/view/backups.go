@@ -17,7 +17,7 @@ import (
 // AllFolders is the filter value that shows every folder.
 const AllFolders = ""
 
-// FilterOption is an entry of the folder filter (spec BK-3).
+// FilterOption is an entry of the folder filter (GUI spec BK-3).
 type FilterOption struct {
 	Text string
 	// Folder is the backup name it shows, AllFolders for all.
@@ -43,7 +43,7 @@ type InfoLine struct {
 	Path bool
 }
 
-// BackupRow is one backup set in the list (spec BK-2).
+// BackupRow is one backup set in the list (GUI spec BK-2).
 type BackupRow struct {
 	// Set is the set's name, which identifies the row.
 	Set string
@@ -63,7 +63,7 @@ type BackupRow struct {
 	Reason string
 }
 
-// RunGroup is one backup run in the list (spec BK-1).
+// RunGroup is one backup run in the list (GUI spec BK-1).
 type RunGroup struct {
 	RunID  naming.BackupID
 	Header string
@@ -81,7 +81,7 @@ type RunGroup struct {
 	Placeholder string
 }
 
-// BackupsPage is everything the Backups page shows (spec 7).
+// BackupsPage is everything the Backups page shows (GUI spec 7).
 type BackupsPage struct {
 	Title     string
 	Filters   []FilterOption
@@ -90,7 +90,7 @@ type BackupsPage struct {
 	Lines     []InfoLine
 	Columns   []string
 	Groups    []RunGroup
-	// Empty is set when there is nothing to list (spec BK-9).
+	// Empty is set when there is nothing to list (GUI spec BK-9).
 	Empty *EmptyState
 }
 
@@ -155,7 +155,7 @@ func filtersOf(s *health.Snapshot, selected string) ([]FilterOption, int) {
 }
 
 // retentionLine explains the retention rule and what the next backup
-// removes (spec BK-7).
+// removes (GUI spec BK-7).
 func retentionLine(s *health.Snapshot, cfg *config.Config, now time.Time) *InfoLine {
 	text := keepAllRule
 	if cfg != nil {
@@ -190,7 +190,7 @@ func chainCount(n int) string {
 	return fmt.Sprintf(chainMany, n)
 }
 
-// problemLines are the findings about the backups (spec BK-6): errors and
+// problemLines are the findings about the backups (GUI spec BK-6): errors and
 // warnings with their remedy, and information.
 func problemLines(s *health.Snapshot, cfg *config.Config, now time.Time) []InfoLine {
 	var lines []InfoLine
@@ -360,7 +360,7 @@ func runHeader(when string, folders int, bytes int64, facts logging.RunFacts, ne
 	return strings.Join(parts, " · "), tone, glyph
 }
 
-// rowOf words one backup set (spec BK-2).
+// rowOf words one backup set (GUI spec BK-2).
 func rowOf(s *health.Snapshot, info catalog.SetInfo, r *flow.Run, now time.Time) BackupRow {
 	e := info.Entry
 	set := e.String()
@@ -447,7 +447,7 @@ func verifying(r *flow.Run, e naming.BackupEntry) (Status, bool) {
 	return Status{Text: text, Tone: ToneNeutral}, true
 }
 
-// ActionBar is the selection in words and its actions (spec BK-4).
+// ActionBar is the selection in words and its actions (GUI spec BK-4).
 type ActionBar struct {
 	Text            string
 	Restore, Verify Button
@@ -523,7 +523,7 @@ func enable(bar ActionBar, reason string) ActionBar {
 	return bar
 }
 
-// setWords names a set as spec 3.6 writes it: "Documents, differential 3
+// setWords names a set as GUI spec 3.6 writes it: "Documents, differential 3
 // of today".
 func setWords(row BackupRow, when string) string {
 	day := when
@@ -574,7 +574,7 @@ const (
 	LogWarnings
 )
 
-// LogLinesOf returns the lines of the log text to show (spec BK-5): as the
+// LogLinesOf returns the lines of the log text to show (GUI spec BK-5): as the
 // file stores them, without the machine-readable fact lines; WARN and
 // ERROR lines are marked. LogWarnings keeps only those, with the lines
 // that continue them; when there are none, a line says so.
@@ -640,7 +640,7 @@ func LogPaneOf() LogPane {
 	return LogPane{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog}
 }
 
-// Menu are the items of the list's context menu (spec BK-4).
+// Menu are the items of the list's context menu (GUI spec BK-4).
 type Menu struct {
 	Restore, Verify, CopyName, OpenFolder string
 }

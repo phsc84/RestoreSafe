@@ -21,7 +21,7 @@ const (
 	settingLabelWidth   = 190
 )
 
-// settingsPage is the Settings page (spec 10): the configuration in use,
+// settingsPage is the Settings page (GUI spec 10): the configuration in use,
 // read-only, with Edit config.yaml and Reload.
 type settingsPage struct {
 	a     *app

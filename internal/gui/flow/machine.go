@@ -61,8 +61,8 @@ type Run struct {
 }
 
 // Machine is the lifecycle of the operations: at most one runs at a time
-// (spec 3.2), and its stage decides what Cancel and closing the window do
-// (spec 6.2 and 6.4). It holds no window.
+// (GUI spec 3.2), and its stage decides what Cancel and closing the window do
+// (GUI spec 6.2 and 6.4). It holds no window.
 type Machine struct {
 	run *Run
 }
@@ -153,7 +153,7 @@ const (
 	CancelIgnore CancelAction = iota
 	// CancelNow: cancel without asking; nothing is written yet.
 	CancelNow
-	// CancelAsk: ask the user first (spec BR-6).
+	// CancelAsk: ask the user first (GUI spec BR-6).
 	CancelAsk
 )
 
@@ -182,7 +182,7 @@ type CloseAction int
 const (
 	// CloseNow: close the window.
 	CloseNow CloseAction = iota
-	// CloseAsk: ask whether to cancel and close (spec 6.4).
+	// CloseAsk: ask whether to cancel and close (GUI spec 6.4).
 	CloseAsk
 	// CloseAfterCancel: cancel (if not already) and close once the worker
 	// has finished; the caller cancels when the stage is not yet

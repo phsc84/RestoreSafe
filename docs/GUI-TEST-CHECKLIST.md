@@ -1,6 +1,6 @@
 # GUI manual test checklist
 
-The manual part of the GUI test plan ([SPEC-restoresafe-gui.md](SPEC-restoresafe-gui.md), sections 16.5 to 16.7). Run it on a real Windows 11 machine for every release candidate, after `go test ./...` and the scripts in [scripts/gui-test](../scripts/gui-test/README.md) have passed. Use test configurations and directories in `sandbox\`, never your real backups; `New-TestCondition.ps1` prepares the conditions named below.
+The manual part of the GUI test plan ([SPEC-gui.md](SPEC-gui.md), sections 16.5 to 16.7). Run it on a real Windows 11 machine for every release candidate, after `go test ./...` and the scripts in [scripts/gui-test](../scripts/gui-test/README.md) have passed. Use test configurations and directories in `sandbox\`, never your real backups; `New-TestCondition.ps1` prepares the conditions named below.
 
 Release gate (16.7): every row is **Passed**, or **Accepted** with a reason in the Notes column. No row may stay **Open**.
 
@@ -25,7 +25,7 @@ Found while building; they are not defects of the run. Decide for each whether i
 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. |
 | RW-1 | The wizard is resizable; its progress page leaves empty space below the card. |
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. |
-| 16.4 | `Overdue` has no script variant: a backup's date is in its encrypted header. |
+| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. |
 
 ## 1. Status and Overview
 
@@ -122,7 +122,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
-| 3.3 | Every figure of the mockups compared side by side with its screenshot (`Screenshot.ps1`) | Open | |
+| 3.3 | A screenshot of every page and dialog (`Screenshot.ps1`) reviewed against GUI spec 3.3 (colours, spacing, fonts) and the wireframes | Open | |
 | 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | Open | 150 % pre-checked; a simulated DPI change of the plan and password dialogs to 100 % pre-checked. |
 | 15 | Moving the window between monitors with different scaling | Open | |
 | 3.2 | Minimum window size: nothing overlaps, all buttons visible | Open | |

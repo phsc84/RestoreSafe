@@ -1,6 +1,6 @@
 # GUI test scripts
 
-PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, read control texts, and take screenshots (spec section 16.4 of [docs/SPEC-restoresafe-gui.md](../../docs/SPEC-restoresafe-gui.md)). They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
+PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, read control texts, and take screenshots (spec section 16.4 of [docs/SPEC-gui.md](../../docs/SPEC-gui.md)). They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
 
 Controls are found by their control ID, which is also their UI Automation `AutomationId` (table `$Ids` in `GuiDriver.ps1`; a Go test in `internal/gui` keeps it equal to the code). Windows are found by class: `RestoreSafeMainWindow`, `RestoreSafePlan`, `RestoreSafeWizard`, `RestoreSafeInputDialog`, `RestoreSafeDetails`, and `#32770` for task dialogs.
 

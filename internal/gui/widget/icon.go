@@ -2,7 +2,7 @@ package widget
 
 import "RestoreSafe/internal/gui/win32"
 
-// Icon draws a glyph, optionally on a filled circle (the hero, spec 3.3).
+// Icon draws a glyph, optionally on a filled circle (the hero, GUI spec 3.3).
 type Icon struct {
 	hwnd   win32.HWND
 	theme  *Theme

@@ -8,7 +8,7 @@ import (
 )
 
 // Size formats a byte count in binary units labeled like Explorer: "512 B",
-// "1.2 GB", "38 GB" (one decimal below 10, spec 3.6).
+// "1.2 GB", "38 GB" (one decimal below 10, GUI spec 3.6).
 func Size(bytes int64) string {
 	if bytes < 1024 {
 		return fmt.Sprintf("%d B", max(bytes, 0))

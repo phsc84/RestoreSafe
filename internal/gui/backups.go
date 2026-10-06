@@ -57,7 +57,7 @@ const defaultLogShare = 0.35
 // Column widths of the list, in DIPs; the status column takes the rest.
 var backupColumnWidths = []int32{150, 72, 110, 80, 76}
 
-// backupsPage is the Backups page (spec 7): the runs and their sets, the
+// backupsPage is the Backups page (GUI spec 7): the runs and their sets, the
 // selection's actions, and the log of the selected run.
 type backupsPage struct {
 	a     *app
@@ -236,7 +236,7 @@ func (b *backupsPage) update() {
 
 // opRun returns the restore or verification the page shows: running, or
 // finished with a result card; nil otherwise. A restore shows once it has
-// started (spec RW-9); before, the restore wizard is its plan.
+// started (GUI spec RW-9); before, the restore wizard is its plan.
 func (b *backupsPage) opRun() *flow.Run {
 	r := b.a.machine.Current()
 	if r == nil || r.Op == flow.OpBackup || (r.Op == flow.OpRestore && r.Started.IsZero()) {
@@ -686,7 +686,7 @@ func (b *backupsPage) focusChanged() {
 	}
 }
 
-// contextMenu offers the actions of the item under the cursor (spec BK-4).
+// contextMenu offers the actions of the item under the cursor (GUI spec BK-4).
 func (b *backupsPage) contextMenu() {
 	screen := win32.CursorPos()
 	item := win32.ListHitItem(b.list, win32.ScreenToClient(b.list, screen))

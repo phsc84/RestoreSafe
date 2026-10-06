@@ -153,7 +153,7 @@ func unknownKeysError(err error) error {
 
 // AddMissing adds the settings that the configuration file at path lacks,
 // with their default values and their explanation from config-SAMPLE.yaml
-// (spec ST-10). It first saves a copy of the file next to it and returns the
+// (GUI spec ST-10). It first saves a copy of the file next to it and returns the
 // copy's path; "" when nothing was missing. The new file is written only when
 // it loads, lacks nothing and gives the same configuration as before.
 func AddMissing(path string, now time.Time) (string, error) {

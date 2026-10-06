@@ -40,7 +40,7 @@ type SettingsCard struct {
 	MoreNote string
 }
 
-// SettingsPage is the Settings page (spec 10): read-only in 2.0.0.
+// SettingsPage is the Settings page (GUI spec 10): read-only in 2.0.0.
 type SettingsPage struct {
 	Title string
 	// The configuration file card (ST-1, ST-2).
@@ -245,7 +245,7 @@ func onOff(on bool) string {
 	return settingOff
 }
 
-// FoldersTable is the configured folders as a table (spec 10): backup
+// FoldersTable is the configured folders as a table (GUI spec 10): backup
 // name, path and whether the folder is there.
 func (v SettingsPage) FoldersTable() Table {
 	t := Table{Name: v.FoldersTitle, Columns: []Column{{Title: columnFolder, Width: 160}, {Title: columnPath, Fill: true}, {Title: columnStatus, Width: 160}}}

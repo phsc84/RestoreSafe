@@ -4,7 +4,7 @@ import "RestoreSafe/internal/gui/win32"
 
 // HighContrast is the palette of the Windows high-contrast theme in use:
 // the system colors. Status keeps its meaning through glyphs and words
-// (spec 15), so the semantic colors are the text color.
+// (GUI spec 15), so the semantic colors are the text color.
 func HighContrast() Palette {
 	c := func(index int32) Color { return Color(win32.SysColor(index)) }
 	text, back, face := c(win32.COLOR_WINDOWTEXT), c(win32.COLOR_WINDOW), c(win32.COLOR_BTNFACE)

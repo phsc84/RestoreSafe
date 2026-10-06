@@ -9,7 +9,7 @@ import (
 
 // TestScriptsKnowTheControlIDs keeps the control IDs the GUI test scripts
 // use (scripts/gui-test/GuiDriver.ps1) equal to the code's: they are the
-// AutomationIds of spec 15.
+// AutomationIds of GUI spec 15.
 func TestScriptsKnowTheControlIDs(t *testing.T) {
 	t.Parallel()
 	ids := map[string]int{

@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// ResultCard is the end of an operation (spec 6.3, BR-7).
+// ResultCard is the end of an operation (GUI spec 6.3, BR-7).
 type ResultCard struct {
 	Tone  Tone
 	Glyph Glyph
@@ -32,7 +32,7 @@ type ResultCard struct {
 
 // ResultCardOf maps the end of the finished run r to its result card. It
 // returns nil when the operation did not start (the user cancelled a
-// question): the hero returns without a card (spec BP-6).
+// question): the hero returns without a card (GUI spec BP-6).
 func ResultCardOf(r *flow.Run) *ResultCard {
 	if r == nil || r.Stage != flow.StageFinished {
 		return nil

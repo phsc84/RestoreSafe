@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Pages of the restore wizard (spec 8).
+// Pages of the restore wizard (GUI spec 8).
 const (
 	WizardWhen = iota
 	WizardFolders

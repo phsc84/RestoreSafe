@@ -1,6 +1,6 @@
 package view
 
-// Every user-visible string of the views (spec 3.6). Sentences with
+// Every user-visible string of the views (GUI spec 3.6). Sentences with
 // variable parts are format strings.
 
 // Application and shell.
@@ -12,7 +12,7 @@ const (
 	statusChecking = "Checking…"
 )
 
-// Hero titles and lines (spec 5, figure 5.3).
+// Hero titles and lines (GUI spec 5, figure 5.3).
 const (
 	heroProtected       = "Your folders are protected"
 	heroEmpty           = "Create your first backup"
@@ -64,7 +64,7 @@ const (
 	reasonBlockedCheck = "Fix the problems the check found first."
 )
 
-// Overview cards (spec 5, figure 5.1).
+// Overview cards (GUI spec 5, figure 5.1).
 const (
 	cardFolders      = "Folders to back up"
 	cardStorage      = "Backup directory"
@@ -118,7 +118,7 @@ const (
 // ButtonClose is the label of a dialog's close button.
 const ButtonClose = buttonClose
 
-// Backup plan (spec 6.1).
+// Backup plan (GUI spec 6.1).
 const (
 	planTitle              = "Back up"
 	planHeading            = "Back up %s to %s"
@@ -170,7 +170,7 @@ const (
 )
 
 // Progress card, Folders card while running, status bar and cancel
-// dialogs (spec 6.2, 6.4).
+// dialogs (GUI spec 6.2, 6.4).
 const (
 	titleBackingUp         = "Backing up"
 	titleRestoring         = "Restoring"
@@ -218,7 +218,7 @@ const (
 	buttonCancelAndClose   = "Cancel and close"
 )
 
-// Result card (spec 6.3).
+// Result card (GUI spec 6.3).
 const (
 	buttonDone            = "&Done"
 	buttonShowRunLog      = "Show &log"
@@ -255,7 +255,7 @@ const (
 	resultNoneRemoved     = "No old backups were removed."
 )
 
-// Credential dialogs (spec 9).
+// Credential dialogs (GUI spec 9).
 const (
 	unlockTitle          = "Unlock your backups"
 	unlockIntro          = "Enter the password of your backups."
@@ -305,7 +305,7 @@ const (
 	DetailsOfResult  = "Details"
 )
 
-// Backups page (spec 7).
+// Backups page (GUI spec 7).
 const (
 	backupsEmptyLine     = "Your backups appear here after the first backup."
 	columnFolder         = "Folder"
@@ -382,7 +382,7 @@ const (
 	menuOpenFolder  = "&Open backup folder"
 )
 
-// Restore wizard (spec 8).
+// Restore wizard (GUI spec 8).
 const (
 	WizardTitle          = "Restore"
 	stepWhen             = "When"
@@ -464,7 +464,7 @@ const (
 	RestoreDetailsTitle = "Restore details"
 )
 
-// Settings page (spec 10).
+// Settings page (GUI spec 10).
 const (
 	buttonReload        = "Re&load"
 	reasonReloadBusy    = "Reload waits until the running operation has finished."

@@ -53,7 +53,7 @@ const (
 	checkDelayMs = 300
 )
 
-// restoreWizard is the restore wizard (spec 8): pages 1 to 4 choose and
+// restoreWizard is the restore wizard (GUI spec 8): pages 1 to 4 choose and
 // check the restore, then it shows the progress and the result. The
 // restore workflow runs from page 4 on: it shows its plan there and waits
 // for Restore… (ConfirmStart); Back answers no, as nothing is written yet.

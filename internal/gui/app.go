@@ -1,5 +1,5 @@
 // Package gui is the graphical frontend of RestoreSafe: a native Win32 main
-// window with a sidebar, pages and dialogs (see docs/SPEC-restoresafe-gui.md).
+// window with a sidebar, pages and dialogs (see docs/SPEC-gui.md).
 // What the pages show is computed by gui/view; the pages render it with the
 // controls of gui/widget.
 package gui
@@ -33,7 +33,7 @@ type Options struct {
 }
 
 // Control IDs and application messages. The IDs are the AutomationIds of
-// the controls (spec 15).
+// the controls (GUI spec 15).
 const (
 	idSidebar = 301
 	idStatus  = 302
@@ -59,7 +59,7 @@ const (
 )
 
 // recheckAfter is how old a snapshot may get before activating the window
-// checks again (spec OV-8).
+// checks again (GUI spec OV-8).
 const recheckAfter = 5 * time.Minute
 
 // app is the main window. There is one per process; the window procedure
@@ -175,7 +175,7 @@ func ShowError(title, message string) {
 	win32.MessageBox(0, message, "RestoreSafe - "+title, win32.MB_OK|win32.MB_ICONERROR)
 }
 
-// title returns the window title (spec 3.2).
+// title returns the window title (GUI spec 3.2).
 func (a *app) title() string {
 	return view.Title(a.opts.Version, filepath.Base(a.opts.ConfigPath))
 }
@@ -369,7 +369,7 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		return 0
 	case win32.WM_COMMAND:
 		if win32.LoWord(wparam) == win32.IDOK && a.page == view.PageBackups && win32.Focus() == a.shell.backups.list {
-			// Enter in the list restores the selection (spec BK-4).
+			// Enter in the list restores the selection (GUI spec BK-4).
 			if a.shell.backups.bar.Restore.Enabled {
 				a.do(view.ActionRestore)
 			}

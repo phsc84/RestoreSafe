@@ -16,7 +16,7 @@ func overviewOf(t *testing.T, c scenario.Condition) (Overview, *health.Snapshot)
 	return OverviewOf(&s, sc.Config, sc.Now), &s
 }
 
-// TestOverviewHeroOfEveryScenario covers spec OV-1 and figure 5.3.
+// TestOverviewHeroOfEveryScenario covers GUI spec OV-1 and figure 5.3.
 func TestOverviewHeroOfEveryScenario(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -160,7 +160,7 @@ func TestEveryProblemHasWords(t *testing.T) {
 	}
 }
 
-// checkWriting checks the writing rules of spec 3.6 on every text of v.
+// checkWriting checks the writing rules of GUI spec 3.6 on every text of v.
 func checkWriting(t *testing.T, v any) {
 	t.Helper()
 	var walk func(reflect.Value)

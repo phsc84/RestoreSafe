@@ -8,7 +8,7 @@ import (
 )
 
 // shell is the new interface around the pages: the sidebar, the status bar
-// and the pages (spec 3.2).
+// and the pages (GUI spec 3.2).
 type shell struct {
 	sidebar  *widget.Sidebar
 	status   *widget.Panel
@@ -107,7 +107,7 @@ func (a *app) restyleShell() {
 	a.shell.settings.restyle()
 }
 
-// shortcut handles the keyboard shortcuts of spec 3.2; it reports whether
+// shortcut handles the keyboard shortcuts of GUI spec 3.2; it reports whether
 // it handled the key.
 func (a *app) shortcut(vk uintptr) bool {
 	if a.modal != 0 || a.plan != nil || a.wizard != nil {

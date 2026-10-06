@@ -2,7 +2,7 @@ package flow
 
 import "time"
 
-// Speed measures the rate of a folder from its progress reports (spec
+// Speed measures the rate of a folder from its progress reports (GUI spec
 // BR-3): the bytes done over the last few seconds.
 type Speed struct {
 	samples []sample

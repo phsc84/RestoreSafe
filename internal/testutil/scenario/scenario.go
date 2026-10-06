@@ -1,5 +1,5 @@
 // Package scenario builds backup directories in the conditions the user
-// interface must show (spec 3.5 and 11.8), for tests. Each scenario has
+// interface must show (GUI spec 3.5 and 11.8), for tests. Each scenario has
 // real backup sets, written with password-only keys, and a run log with
 // facts, damaged or extended on purpose for its condition.
 package scenario

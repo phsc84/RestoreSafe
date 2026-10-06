@@ -15,7 +15,7 @@ const (
 )
 
 // Bridge connects the worker goroutine running a workflow with the UI
-// thread (docs/SPEC-restoresafe-gui.md, section 12.2). Questions block the
+// thread (docs/SPEC-gui.md, section 12.2). Questions block the
 // worker until the UI thread answers them; output and progress never block
 // and are coalesced, so the window is posted at most one message of each
 // kind at a time.

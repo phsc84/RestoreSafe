@@ -59,7 +59,7 @@ func (a *app) showText(owner win32.HWND, title, text string) {
 }
 
 // showLog shows a log modal to owner, with the filter of the log pane
-// (spec BK-5, RW-8).
+// (GUI spec BK-5, RW-8).
 func (a *app) showLog(owner win32.HWND, title, text string) {
 	show := func(re win32.HWND, f view.LogFilter) {
 		win32.SetRichText(re, logRTF(view.LogLinesOf(text, f), a.fontPt))

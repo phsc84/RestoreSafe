@@ -2,10 +2,9 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); not implemented yet. Branch `v2` still has the first GUI (phases G1-G7 of 2026-09-26, linear screens), which this design replaces before the release. |
+| Status | Specified 2026-09-30 (status-first redesign); implemented on branch `gui-redesign`. Open before the release: the manual checklist run, the usability session, and the merge into `v2` ([PLAN-gui-redesign.md](PLAN-gui-redesign.md)). |
 | Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
-| Builds on | [SPEC-restoresafe-2.0.md](SPEC-restoresafe-2.0.md); formats, keys and workflow behavior are unchanged |
-| Mockups | [SPEC-restoresafe-gui-mockups.html](SPEC-restoresafe-gui-mockups.html) |
+| Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
 
@@ -15,11 +14,10 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 - **Requirement IDs** (`OV-1`, `BP-3`, `BK-5`, `RW-2`, `ST-4`) identify testable requirements. Reference them in commits, tests and questions; section 16 maps them to tests.
 - **Text wins over wireframes.** Wireframes show layout, content and states, not pixels. Colors, sizes and spacing are defined in section 3.3. If a wireframe and the text disagree, follow the text and flag the difference.
-- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-restoresafe-2.0.md](SPEC-restoresafe-2.0.md). Where the UI needs data the workflows don't expose yet, section 11 names the addition. Add it there; don't guess and don't parse text meant for people.
+- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-2.0.md](SPEC-2.0.md). Where the UI needs data the workflows don't expose yet, section 11 names the addition. Add it there; don't guess and don't parse text meant for people.
 - **Keep what already works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are reused unchanged.
 - **Ask when something is unclear.** Section 18 lists the decisions taken. Do not silently pick a different answer.
 - **Pure Win32.** No WebView2, no web technology, no third-party UI toolkit, no cgo, no new modules. Standard controls first, custom drawing only where section 3.4 says so.
-- The mockups show every screen with the colors and spacing of section 3.3. Open them in a browser as a visual reference.
 
 ### Wireframe legend
 
@@ -966,7 +964,7 @@ Carried over from the first GUI; unchanged unless noted.
 
 Imports point downward only; `internal/architecture` checks it (its package documentation lists the layers and rules). Two rules shape this layout:
 
-- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection move from `backup` into `workflow/plan`, which `backup` and `health` both import. The Overview's "next" type, the backup plan, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
+- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection live in `workflow/plan`, which `backup` and `health` both import. The Overview's "next" type, the backup plan, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
 - `gui/flow` and `gui/view` import neither `gui/widget` nor `gui/win32` nor `golang.org/x/sys/windows`; `gui/widget` imports only `gui/win32`. Everything that decides what the user sees is testable without a window (16.1).
 
 ### 12.2 Threads and the bridge
@@ -1117,8 +1115,6 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Layout | Every page and dialog at its minimum and default size at 96, 120, 144 and 192 dpi: no control overlaps another or leaves the client area, and every text fits its measured width. | 3.2, 15 |
 | Bridge and secrets | The existing bridge tests (questions answered exactly once, cancellation, output order, progress coalescing) and secret tests (buffers zeroed) stay and are extended to the plan messages. | 12.2, 13 |
 
-The first GUI's `home_test.go` and `selection_test.go` are replaced by the Overview and wizard tests; `bridge_test.go`, `layout_test.go`, `outcome_test.go` and `rtf_test.go` are kept and adapted.
-
 ### 16.4 Window automation (`scripts/gui-test`)
 
 The PowerShell scripts drive the real window. They are updated for the new UI and find controls by `AutomationId` (15), not by text.
@@ -1128,14 +1124,14 @@ The PowerShell scripts drive the real window. They are updated for the new UI an
 | `New-TestCondition.ps1` (new) | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
 | `Check-States.ps1` (new) | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
 | `Smoke-BackupRestore.ps1` | Back up through the plan dialog, restore one folder of the newest run through the wizard, verify the run; compare the restored files with the sources. |
-| `Screenshot.ps1` | One screenshot per figure of the mockups, for a side-by-side review. |
+| `Screenshot.ps1` | One screenshot per page and dialog, for the visual review against 3.3 and the wireframes (16.5), and for the README. |
 | `Accessibility.ps1` | Role, name, `AutomationId` and access key of every control on every page and dialog. |
 
 They run on every release candidate at 100% and 150% scaling.
 
 ### 16.5 Manual tests
 
-[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual comparison with the mockups, and a short usability session (16.6). It records the status of the last run.
+[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It records the status of the last run.
 
 ### 16.6 Usability session
 

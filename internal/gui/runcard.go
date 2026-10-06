@@ -38,7 +38,7 @@ const (
 )
 
 // runCard is the operation at the top of a page: a backup on Create backup
-// in place of the hero (spec OV-7), a restore or verification on Restore
+// in place of the hero (GUI spec OV-7), a restore or verification on Restore
 // backup. It shows the progress card while the operation runs (6.2), then
 // its result (6.3).
 type runCard struct {

@@ -26,7 +26,7 @@ const (
 
 const planClass = "RestoreSafePlan"
 
-// planDialog is the backup plan (spec 6.1). It opens when the backup
+// planDialog is the backup plan (GUI spec 6.1). It opens when the backup
 // starts, with a marquee while the workflow measures the folders, shows
 // each plan the workflow sends, and stays open while the user switches
 // plans. It is modal to the main window but runs in the main message

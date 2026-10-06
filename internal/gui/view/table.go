@@ -1,7 +1,7 @@
 package view
 
 // Table is a list of like items shown as a table whose columns the user
-// can widen (spec 3.4): folders, sets, destinations. Statements and single
+// can widen (GUI spec 3.4): folders, sets, destinations. Statements and single
 // facts are lines, not tables.
 type Table struct {
 	// Name is what screen readers announce for the table.

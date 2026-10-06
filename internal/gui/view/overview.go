@@ -91,7 +91,7 @@ type Badge struct {
 	Name string
 }
 
-// Hero is the status at the top of the Overview (spec OV-1).
+// Hero is the status at the top of the Overview (GUI spec OV-1).
 type Hero struct {
 	Tone  Tone
 	Glyph Glyph
@@ -103,7 +103,7 @@ type Hero struct {
 	Secondary *Button
 }
 
-// FolderRow is one folder of the Folders card (spec OV-3).
+// FolderRow is one folder of the Folders card (GUI spec OV-3).
 type FolderRow struct {
 	Name, Path string
 	// Date is the date of the newest backup.
@@ -117,7 +117,7 @@ type FolderRow struct {
 	Tone    Tone
 }
 
-// FoldersCard lists the configured folders (spec OV-3, OV-5).
+// FoldersCard lists the configured folders (GUI spec OV-3, OV-5).
 type FoldersCard struct {
 	Title string
 	Rows  []FolderRow
@@ -143,7 +143,7 @@ type Segment struct {
 	Tip      string // the exact size
 }
 
-// StorageCard is the backup directory and its space (spec OV-4).
+// StorageCard is the backup directory and its space (GUI spec OV-4).
 type StorageCard struct {
 	Title    string
 	Path     string
@@ -152,7 +152,7 @@ type StorageCard struct {
 	Estimate string
 }
 
-// KeysCard describes the keys (spec OV-6).
+// KeysCard describes the keys (GUI spec OV-6).
 type KeysCard struct {
 	Title   string
 	Methods string
@@ -459,7 +459,7 @@ func laterRunNote(s *health.Snapshot, after time.Time, now time.Time) (string, T
 	return "", ToneNeutral
 }
 
-// Table is the Folders card as a table (spec OV-3): each folder's newest
+// Table is the Folders card as a table (GUI spec OV-3): each folder's newest
 // backup and the type of the next. While a backup runs, states holds each
 // folder's progress, and the table shows the type and state instead
 // (BR-4).

@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// State is the overall state of the backups (spec 3.5). The frontend adds
+// State is the overall state of the backups (GUI spec 3.5). The frontend adds
 // Running while an operation runs.
 type State int
 

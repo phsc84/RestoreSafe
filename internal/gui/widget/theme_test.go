@@ -26,7 +26,7 @@ func contrast(a, b Color) float64 {
 	return (l1 + 0.05) / (l2 + 0.05)
 }
 
-// TestPaletteTextContrast checks spec 15: text has a contrast of at least
+// TestPaletteTextContrast checks GUI spec 15: text has a contrast of at least
 // 4.5:1 on every background it is drawn on.
 func TestPaletteTextContrast(t *testing.T) {
 	t.Parallel()

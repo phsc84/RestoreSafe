@@ -20,7 +20,7 @@ type PanelStyle struct {
 // card's border), gives its text controls their colors, draws its primary
 // buttons, and passes commands and link clicks to OnCommand. All text is in
 // standard controls, so screen readers and UI Automation see names, roles
-// and control IDs (spec 3.4).
+// and control IDs (GUI spec 3.4).
 type Panel struct {
 	hwnd     win32.HWND
 	theme    *Theme
@@ -86,7 +86,7 @@ func (p *Panel) Button(text string, id uintptr) win32.HWND {
 	return p.add(child{style: TextBody, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
 }
 
-// PrimaryButton creates the accent-filled button of the page (spec 2:
+// PrimaryButton creates the accent-filled button of the page (GUI spec 2:
 // one per window).
 func (p *Panel) PrimaryButton(text string, id uintptr) win32.HWND {
 	return p.add(child{style: TextBody, primary: true, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)

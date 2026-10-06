@@ -16,13 +16,13 @@ const (
 	StepDone
 )
 
-// Step is one step of the trail (spec BR-2).
+// Step is one step of the trail (GUI spec BR-2).
 type Step struct {
 	Text  string
 	State StepState
 }
 
-// ProgressCard is the running operation (spec 6.2, figure 5.2).
+// ProgressCard is the running operation (GUI spec 6.2, figure 5.2).
 type ProgressCard struct {
 	Title string
 	Steps []Step
@@ -103,7 +103,7 @@ func runTitle(op flow.Op) string {
 }
 
 // unlockingLine is the line while the keys are unlocked or created: the
-// Windows Security prompt comes first in the YubiKey modes (spec CR-4).
+// Windows Security prompt comes first in the YubiKey modes (GUI spec CR-4).
 func unlockingLine(r *flow.Run) string {
 	if r.Plan == nil {
 		return progressUnlocking
@@ -188,7 +188,7 @@ func folderType(f interact.FolderPlan) string {
 	return typeFullBackup
 }
 
-// FolderProgress is a folder's state in the running backup (spec BR-4).
+// FolderProgress is a folder's state in the running backup (GUI spec BR-4).
 type FolderProgress struct {
 	Text  string
 	Tone  Tone
@@ -250,7 +250,7 @@ func planBadge(f interact.FolderPlan) Badge {
 }
 
 // CancelConfirm asks before cancelling the running op (figure 6.3); when
-// closing, before closing the window (spec 6.4).
+// closing, before closing the window (GUI spec 6.4).
 func CancelConfirm(op flow.Op, closing bool) Confirm {
 	c := Confirm{Instruction: cancelBackup, Content: cancelBackupContent, Yes: buttonCancelBackup, No: buttonKeepRunning}
 	switch op {

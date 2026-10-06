@@ -16,11 +16,11 @@ type reloaded struct {
 }
 
 // reload reads and validates the configuration file again on a worker
-// goroutine (spec ST-2, 11.6): the same checks as at start.
+// goroutine (GUI spec ST-2, 11.6): the same checks as at start.
 func (a *app) reload() { a.reloadWith(false) }
 
 // addMissing adds the settings the configuration file lacks and reads it
-// again (spec ST-10).
+// again (GUI spec ST-10).
 func (a *app) addMissing() { a.reloadWith(true) }
 
 func (a *app) reloadWith(add bool) {
