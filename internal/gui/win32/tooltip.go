@@ -44,18 +44,6 @@ func NewTooltipWindow(owner HWND, maxWidth int32) (HWND, error) {
 	return h, nil
 }
 
-// AddTooltip shows text when the mouse rests on control. A static control
-// gets SS_NOTIFY, so it receives the mouse.
-func AddTooltip(tip, control HWND, text string) {
-	if Class(control) == "Static" {
-		SetStyle(control, Style(control)|SS_NOTIFY)
-	}
-	t, _ := windows.UTF16PtrFromString(text)
-	ti := toolInfo{Flags: ttfIDIsHwnd | ttfSubclass, Hwnd: Parent(control), ID: uintptr(control), Text: t}
-	ti.Size = uint32(unsafe.Sizeof(ti))
-	SendMessage(tip, ttmAddToolW, 0, uintptr(unsafe.Pointer(&ti)))
-}
-
 // RemoveTooltip removes the tip of control.
 func RemoveTooltip(tip, control HWND) {
 	ti := toolInfo{Hwnd: Parent(control), ID: uintptr(control)}

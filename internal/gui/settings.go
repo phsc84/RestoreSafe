@@ -256,7 +256,6 @@ func (sp *settingsPage) layout() {
 	}
 	t := sp.a.theme
 	s := t.Scale
-	client := win32.ClientRect(sp.panel.HWND())
 	gap := s.Px(widget.CardGap)
 	padX, padY := s.Px(widget.ContentPaddingX), s.Px(widget.ContentPaddingY)
 
@@ -269,7 +268,7 @@ func (sp *settingsPage) layout() {
 		total += gap + s.Px(max(pair[0].height(), pair[1].height()))
 	}
 	sp.panel.SetScroll(total)
-	client = win32.ClientRect(sp.panel.HWND())
+	client := win32.ClientRect(sp.panel.HWND())
 
 	y := padY - sp.panel.ScrollOffset()
 	left, right := padX, client.Width()-padX

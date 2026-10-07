@@ -16,7 +16,6 @@ const (
 	WM_GETDLGCODE    = 0x0087
 	WM_KEYDOWN       = 0x0100
 	WM_LBUTTONDOWN   = 0x0201
-	WM_DRAWITEM      = 0x002B
 	WM_CTLCOLORBTN   = 0x0135
 	WM_PRINTCLIENT   = 0x0318
 	WM_UPDATEUISTATE = 0x0128
@@ -44,10 +43,8 @@ const (
 	DT_END_ELLIPSIS = 0x8000
 	DT_HIDEPREFIX   = 0x00100000
 
-	PS_SOLID   = 0
-	NULL_BRUSH = 5
-	NULL_PEN   = 8
-	SRCCOPY    = 0x00CC0020
+	PS_SOLID = 0
+	SRCCOPY  = 0x00CC0020
 
 	// SysLink.
 	WC_LINK         = "SysLink"
@@ -66,24 +63,6 @@ type PaintStruct struct {
 	Reserved  [32]byte
 }
 
-// DrawItemStruct is a DRAWITEMSTRUCT, the lparam of WM_DRAWITEM.
-type DrawItemStruct struct {
-	CtlType    uint32
-	CtlID      uint32
-	ItemID     uint32
-	ItemAction uint32
-	ItemState  uint32
-	HwndItem   HWND
-	HDC        uintptr
-	Item       Rect
-	ItemData   uintptr
-}
-
-// DrawItemParam returns the DRAWITEMSTRUCT of a WM_DRAWITEM lparam.
-func DrawItemParam(lparam uintptr) *DrawItemStruct {
-	return *(**DrawItemStruct)(unsafe.Pointer(&lparam))
-}
-
 var (
 	procBeginPaint             = user32.NewProc("BeginPaint")
 	procEndPaint               = user32.NewProc("EndPaint")
@@ -94,7 +73,6 @@ var (
 	procGetDC                  = user32.NewProc("GetDC")
 	procReleaseDC              = user32.NewProc("ReleaseDC")
 	procGetParent              = user32.NewProc("GetParent")
-	procDrawFocusRect          = user32.NewProc("DrawFocusRect")
 	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
 	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
 	procDeleteDC               = gdi32.NewProc("DeleteDC")
@@ -102,9 +80,7 @@ var (
 	procBitBlt                 = gdi32.NewProc("BitBlt")
 	procCreateSolidBrush       = gdi32.NewProc("CreateSolidBrush")
 	procCreatePen              = gdi32.NewProc("CreatePen")
-	procGetStockObject         = gdi32.NewProc("GetStockObject")
 	procRoundRect              = gdi32.NewProc("RoundRect")
-	procEllipse                = gdi32.NewProc("Ellipse")
 	procGetPixel               = gdi32.NewProc("GetPixel")
 	procGetTextFaceW           = gdi32.NewProc("GetTextFaceW")
 )
@@ -176,12 +152,6 @@ func CreatePen(width int32, color uint32) windows.Handle {
 	return windows.Handle(r)
 }
 
-// StockObject returns a stock GDI object (NULL_PEN, NULL_BRUSH).
-func StockObject(index int32) windows.Handle {
-	r, _, _ := procGetStockObject.Call(uintptr(index))
-	return windows.Handle(r)
-}
-
 // FillRect fills r with brush.
 func FillRect(hdc uintptr, r Rect, brush windows.Handle) {
 	procFillRect.Call(hdc, uintptr(unsafe.Pointer(&r)), uintptr(brush))
@@ -193,11 +163,6 @@ func RoundRect(hdc uintptr, r Rect, diameter int32) {
 	procRoundRect.Call(hdc, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom), uintptr(diameter), uintptr(diameter))
 }
 
-// Ellipse draws the ellipse in r with the selected pen and brush.
-func Ellipse(hdc uintptr, r Rect) {
-	procEllipse.Call(hdc, uintptr(r.Left), uintptr(r.Top), uintptr(r.Right), uintptr(r.Bottom))
-}
-
 // DrawText draws text in r with DT_ flags; with DT_CALCRECT it measures
 // instead and returns the rectangle the text needs.
 func DrawText(hdc uintptr, text string, r Rect, flags uint32) Rect {
@@ -207,11 +172,6 @@ func DrawText(hdc uintptr, text string, r Rect, flags uint32) Rect {
 	}
 	procDrawTextW.Call(hdc, uintptr(unsafe.Pointer(&s[0])), uintptr(len(s)-1), uintptr(unsafe.Pointer(&r)), uintptr(flags))
 	return r
-}
-
-// DrawFocusRect draws the dotted keyboard focus rectangle.
-func DrawFocusRect(hdc uintptr, r Rect) {
-	procDrawFocusRect.Call(hdc, uintptr(unsafe.Pointer(&r)))
 }
 
 // SelectFont selects font into hdc and returns the previous one.

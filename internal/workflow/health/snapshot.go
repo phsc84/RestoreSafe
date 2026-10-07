@@ -161,10 +161,6 @@ func TakeSnapshot(p Params) Snapshot {
 	return s
 }
 
-// StateOf returns the state for problems, as TakeSnapshot does; a frontend
-// uses it after adding problems of its own session (e.g. a failed backup).
-func StateOf(problems []Problem, anyBackup bool) State { return stateOf(problems, anyBackup) }
-
 // stateOf is Empty without a backup, unless the backup directory or the
 // configuration has an error: then it is unknown whether backups exist.
 func stateOf(problems []Problem, anyBackup bool) State {

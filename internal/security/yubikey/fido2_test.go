@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"unsafe"
 )
 
 // ── CheckYubiKey* tests ───────────────────────────────────────────────────────
@@ -44,27 +43,6 @@ func TestCheckConnectedPropagatesError(t *testing.T) {
 	err := CheckConnected()
 	if err == nil {
 		t.Fatal("expected an error, got nil")
-	}
-}
-
-func TestWebAuthnGetAssertionOptionsLayout(t *testing.T) {
-	if got, want := unsafe.Sizeof(webauthnGetAssertionOptions{}), uintptr(120); got != want {
-		t.Fatalf("webauthnGetAssertionOptions size = %d, want %d", got, want)
-	}
-	if got, want := unsafe.Offsetof(webauthnGetAssertionOptions{}.pHmacSecretSaltValues), uintptr(104); got != want {
-		t.Fatalf("pHmacSecretSaltValues offset = %d, want %d", got, want)
-	}
-	if got, want := unsafe.Offsetof(webauthnGetAssertionOptions{}.bBrowserInPrivateMode), uintptr(112); got != want {
-		t.Fatalf("bBrowserInPrivateMode offset = %d, want %d", got, want)
-	}
-}
-
-func TestWebAuthnAssertionLayout(t *testing.T) {
-	if got, want := unsafe.Sizeof(webauthnAssertion{}), uintptr(120); got != want {
-		t.Fatalf("webauthnAssertion size = %d, want %d", got, want)
-	}
-	if got, want := unsafe.Offsetof(webauthnAssertion{}.pHmacSecret), uintptr(112); got != want {
-		t.Fatalf("pHmacSecret offset = %d, want %d", got, want)
 	}
 }
 

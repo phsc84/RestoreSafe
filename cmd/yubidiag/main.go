@@ -32,10 +32,6 @@ type hiddAttributes struct {
 	VersionNumber uint16
 }
 
-const (
-	yubicoVID = 0x1050
-)
-
 type yubiInterface struct {
 	rawPath     string
 	pid         uint16
