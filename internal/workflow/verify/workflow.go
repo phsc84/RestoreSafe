@@ -37,6 +37,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
+	lock, lockIssue, err := job.LockForReading(backupDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
@@ -59,9 +65,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	defer log.Close()
 
 	preflight := buildVerifyPreflight(selectedInfos, infos)
-	mode := config.AuthMode(first.KeySet.AuthMode)
-	usesYubiKey := mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey
-	details := verifyPreflightReport(cfg, backupDir, preflight, usesYubiKey, mode == config.AuthModeYubiKey, yubikey.CheckConnected)
+	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
+	if lockIssue != nil {
+		details.Issues = append(details.Issues, *lockIssue)
+		log.Warn("%s", lockIssue.Text)
+		warningCount++
+	}
 	u.ShowVerifyPlan(verifyPlan(preflight, &first.KeySet, details))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
@@ -159,7 +168,7 @@ func verifyPreflightReport(
 	cfg *config.Config,
 	backupDir string,
 	items []verifyPreflightItem,
-	usesYubiKey, yubiKeyOnly bool,
+	mode config.AuthMode,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
 	var issues []interact.Issue
@@ -176,7 +185,7 @@ func verifyPreflightReport(
 		}
 		rows = append(rows, interact.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
 	}
-	rows = append(rows, job.AuthRows(config.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "verification", checkYubiKeyConnected)...)
+	rows = append(rows, job.AuthRows(mode.Label(), mode.UsesYubiKey(), "verification", checkYubiKeyConnected)...)
 
 	size := "unknown"
 	if totalBytes := estimateVerifyBytes(items); totalBytes > 0 {

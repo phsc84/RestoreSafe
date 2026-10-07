@@ -23,7 +23,7 @@ func TestRestorePlanDescribesTheRestore(t *testing.T) {
 	noYubiKey := func() error { return nil }
 	planFor := func() interact.RestorePlan {
 		items := buildRestorePreflight(selected, infos, fx.RestoreRoot)
-		details := restorePreflightReport(cfg, fx.BackupDir, fx.RestoreRoot, items, false, false, noYubiKey)
+		details := restorePreflightReport(cfg, fx.BackupDir, fx.RestoreRoot, items, config.AuthModePassword, noYubiKey)
 		return restorePlan(items, fx.RestoreRoot, fx.KeySet, details)
 	}
 

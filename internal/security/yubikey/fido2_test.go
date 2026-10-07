@@ -158,8 +158,8 @@ func TestParseChallengeRejectsCorruptedChecksum(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for corrupted challenge checksum")
 	}
-	if !strings.Contains(err.Error(), "corrupted") {
-		t.Fatalf("expected corruption error, got: %v", err)
+	if !strings.Contains(err.Error(), "YubiKey challenge is damaged") {
+		t.Fatalf("expected a damaged challenge, got: %v", err)
 	}
 }
 
@@ -257,23 +257,23 @@ func TestCombineWithPasswordSetsNoPWFlag(t *testing.T) {
 	}
 }
 
-func TestDeriveFIDO2SecretForRestoreRejectsWrongSecretLength(t *testing.T) {
+func TestDeriveFIDO2SecretAnyRejectsWrongSecretLength(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2GetHmacFn = prevGet })
 	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, make([]byte, fido2SaltSize+1), nil }
 
-	_, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
+	_, err := deriveSecret(t)
 	if err == nil {
 		t.Fatal("expected error for wrong hmac-secret length")
 	}
 }
 
-func TestDeriveFIDO2SecretForRestoreReturnsGetHmacError(t *testing.T) {
+func TestDeriveFIDO2SecretAnyReturnsGetHmacError(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2GetHmacFn = prevGet })
 	fido2GetHmacFn = func(_ [][]byte, _ []byte) (int, []byte, error) { return 0, nil, errors.New("device error") }
 
-	_, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
+	_, err := deriveSecret(t)
 	if err == nil {
 		t.Fatal("expected error from fido2GetHmacFn, got nil")
 	}
@@ -290,7 +290,7 @@ func TestCombinePasswordWithSecret(t *testing.T) {
 	}
 }
 
-func TestDeriveFIDO2SecretForRestoreReturnsSecret(t *testing.T) {
+func TestDeriveFIDO2SecretAnyReturnsSecret(t *testing.T) {
 	prevGet := fido2GetHmacFn
 	t.Cleanup(func() { fido2GetHmacFn = prevGet })
 
@@ -302,30 +302,12 @@ func TestDeriveFIDO2SecretForRestoreReturnsSecret(t *testing.T) {
 		return 0, s, nil
 	}
 
-	secret, err := DeriveFIDO2SecretForRestore(makeValidChallengeJSON(t))
+	secret, err := deriveSecret(t)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !bytes.Equal(secret, want) {
-		t.Fatalf("DeriveFIDO2SecretForRestore = %x, want %x", secret, want)
-	}
-}
-
-func TestDeriveFIDO2SecretForRestoreRejectsBadJSON(t *testing.T) {
-	t.Parallel()
-	if _, err := DeriveFIDO2SecretForRestore("not-valid-json"); err == nil {
-		t.Fatal("expected error for invalid challenge JSON")
-	}
-}
-
-func TestDeriveFIDO2SecretForRestoreRejectsInvalidChallengeJSON(t *testing.T) {
-	t.Parallel()
-	_, err := DeriveFIDO2SecretForRestore("this-is-not-json")
-	if err == nil {
-		t.Fatal("expected decode error, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid FIDO2 challenge") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("DeriveFIDO2SecretAny = %x, want %x", secret, want)
 	}
 }
 
@@ -486,5 +468,23 @@ func TestSetParentWindowOverridesConsoleWindow(t *testing.T) {
 	SetParentWindow(0)
 	if got := dialogParent(); got == 0x1234 {
 		t.Fatal("SetParentWindow(0) must restore the console window default")
+	}
+}
+
+// deriveSecret asks for the secret of one valid challenge.
+func deriveSecret(t *testing.T) ([]byte, error) {
+	t.Helper()
+	cd, err := ParseChallengeJSON(makeValidChallengeJSON(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := DeriveFIDO2SecretAny([]ChallengeData{cd})
+	return secret, err
+}
+
+func TestDeriveFIDO2SecretAnyNeedsAChallenge(t *testing.T) {
+	t.Parallel()
+	if _, _, err := DeriveFIDO2SecretAny(nil); err == nil || !strings.Contains(err.Error(), "no YubiKey challenge") {
+		t.Fatalf("expected an error without challenges, got %v", err)
 	}
 }

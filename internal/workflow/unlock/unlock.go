@@ -3,7 +3,6 @@
 package unlock
 
 import (
-	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
@@ -39,7 +38,7 @@ type Options struct {
 // once. The caller must zero the returned key.
 func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logger) ([]byte, error) {
 	if opts.AllowRecovery && ks.HasSlotType(container.SlotRecovery) {
-		useRecovery, err := u.ChooseUnlockMethod(config.AuthMode(ks.AuthMode).Label())
+		useRecovery, err := u.ChooseUnlockMethod(ks.AuthMode.Label())
 		if err != nil {
 			return nil, err
 		}

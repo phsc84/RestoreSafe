@@ -6,6 +6,8 @@ import (
 	"RestoreSafe/internal/format/manifest"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -74,7 +76,7 @@ func statBasic(path string) (basicInfo, error) {
 }
 
 func openForAttributes(path string, access uint32) (windows.Handle, error) {
-	p, err := windows.UTF16PtrFromString(path)
+	p, err := windows.UTF16PtrFromString(extendedPath(path))
 	if err != nil {
 		return 0, err
 	}
@@ -137,4 +139,37 @@ func setAttributes(path string, attrs uint32) error {
 // regular file. Symlinks, junctions, and other reparse points are excluded.
 func isRegularOrDir(fi os.FileInfo) bool {
 	return fi.Mode().IsDir() || fi.Mode().IsRegular()
+}
+
+// openSource opens a file to back up for reading. os.Open asks for backup
+// semantics, and with them a process that holds the backup privilege (an
+// elevated administrator) passes the share-mode check: it would read files
+// that other programs hold locked, possibly while they are being written.
+// openSource asks for none, so a locked file is unreadable whether
+// RestoreSafe runs elevated or not, and on_unreadable_file decides
+// (refactoring 2.0 RF-59). The share mode is that of os.Open.
+func openSource(path string) (*os.File, error) {
+	p, err := windows.UTF16PtrFromString(extendedPath(path))
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	h, err := windows.CreateFile(p, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+	}
+	return os.NewFile(uintptr(h), path), nil
+}
+
+// extendedPath adds the \\?\ prefix to a long absolute path, as os.Open
+// does, so CreateFile opens it even where Windows' long-path support is off.
+// Paths shorter than 248 characters are left as they are.
+func extendedPath(path string) string {
+	if len(path) < 248 || !filepath.IsAbs(path) || strings.HasPrefix(path, `\\?\`) {
+		return path
+	}
+	path = filepath.Clean(path)
+	if strings.HasPrefix(path, `\\`) {
+		return `\\?\UNC\` + path[2:]
+	}
+	return `\\?\` + path
 }

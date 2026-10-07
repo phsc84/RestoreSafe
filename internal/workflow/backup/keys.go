@@ -57,7 +57,7 @@ type newSlot struct {
 // (if configured). Every slot is checked to unlock before anything is written.
 func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*container.KeySet, []byte, error) {
 	out := u.Output()
-	mode := int(cfg.AuthenticationMode)
+	mode := cfg.AuthenticationMode
 	params := cryptox.Argon2Params{
 		Time:     uint32(cfg.Argon2.Time),
 		MemoryKB: uint32(cfg.Argon2.MemoryMB) * 1024,
@@ -73,7 +73,7 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 
 	fmt.Fprintln(out, "Creating new keys for this backup directory.")
 	var password []byte
-	if mode != container.AuthModeYubiKey {
+	if mode != config.AuthModeYubiKey {
 		pw, err := readNewPassword(u, cfg.PasswordMinLength)
 		if err != nil {
 			return nil, nil, err
@@ -84,7 +84,7 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 		fmt.Fprintln(out, "YubiKey-only mode: no password required.")
 	}
 
-	if mode == container.AuthModePassword {
+	if mode == config.AuthModePassword {
 		slots = append(slots, newSlot{slotType: container.SlotPassword, label: "Password", secret: append([]byte(nil), password...)})
 	} else {
 		yubiSlots, err := registerYubiKeys(u, password, mode, cfg.YubiKeySpare)
@@ -160,7 +160,7 @@ func readNewPassword(u interact.UI, minLength int) ([]byte, error) {
 // registerYubiKeys registers YubiKey 1 and, when spare is set, the spare
 // YubiKey. It returns the slots registered so far even on error, so the
 // caller can zero their secrets.
-func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]newSlot, error) {
+func registerYubiKeys(u interact.UI, password []byte, mode config.AuthMode, spare bool) ([]newSlot, error) {
 	out := u.Output()
 	slotType := container.RegularSlotType(mode)
 	if err := checkYubiKeyConnectedFn(); err != nil {
@@ -169,7 +169,7 @@ func registerYubiKeys(u interact.UI, password []byte, mode int, spare bool) ([]n
 	fmt.Fprintln(out, "YubiKey 1:")
 	fmt.Fprintln(out, "  1. Windows first asks for your YubiKey PIN to register the backup credential.")
 	fmt.Fprintln(out, "  2. Windows asks again for your YubiKey PIN to derive the encryption key.")
-	combined, challengeJSON, err := combineWithPasswordFn(password, mode == container.AuthModeYubiKey)
+	combined, challengeJSON, err := combineWithPasswordFn(password, mode == config.AuthModeYubiKey)
 	if err != nil {
 		return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
 	}

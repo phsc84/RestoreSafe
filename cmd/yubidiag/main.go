@@ -55,6 +55,13 @@ func (yi yubiInterface) interfaceName() string {
 }
 
 func main() {
+	// Load DLLs from System32 only: RestoreSafe is a portable exe, often run
+	// from a download or USB folder, where a planted DLL must never be loaded
+	// (refactoring 2.0 RF-52). Windows 8 and later have the call.
+	windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32) //nolint:errcheck // nothing safer to fall back to
+	if os.Getenv("RESTORESAFE_FIDO2_DEBUG") == "1" {
+		yubikey.DebugOutput = os.Stdout
+	}
 	fmt.Println("================================")
 	fmt.Println("RestoreSafe YubiKey Diagnostic")
 	fmt.Println("================================")

@@ -11,6 +11,7 @@ const (
 	CodeConfigInvalid        Code = "CONFIG_INVALID"
 	CodeBackupDirUnreachable Code = "BACKUP_DIR_UNREACHABLE"
 	CodeBackupDirNotWritable Code = "BACKUP_DIR_NOT_WRITABLE"
+	CodeBackupDirNotLocked   Code = "BACKUP_DIR_NOT_LOCKED"
 	CodeSourceMissing        Code = "SOURCE_MISSING"
 	CodeSourceInvalid        Code = "SOURCE_INVALID"
 	CodeSourceDuplicate      Code = "SOURCE_DUPLICATE"

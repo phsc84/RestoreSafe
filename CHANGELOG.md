@@ -28,7 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `password_min_length` (default 12, at least 8) for new passwords.
 - `reminder_days` (default 7, 0 = off): the Create backup page reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
 - `exclude` patterns for files and directories to leave out of backups.
-- `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
+- `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept. A file that another program holds locked counts as unreadable also when RestoreSafe runs as administrator, so it is never copied while it may be changing.
 - `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).
 - The startup health check reports incomplete backups, differentials whose full backup is missing, leftovers of interrupted backups, 1.x backups, and the state of the keys.
 
@@ -42,6 +42,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backup parts are written as `.tmp` files and renamed only when the backup is complete, so an interrupted backup never looks like a valid one.
 - Verify checks every file's checksum instead of only the archive structure.
 - Restored files are written in 1 MB blocks instead of 32 KB; restoring to a network share is more than twice as fast.
+- Two RestoreSafe windows with the same backup directory no longer get in each other's way: a restore or verification does not start while a backup runs (whose cleanup could delete the files it reads), and a backup does not start while a restore or verification runs. Restores and verifications may run at the same time. A backup directory where RestoreSafe can't create its lock file can't be backed up into; a restore from it shows a warning instead.
 - Update Go to 1.27.1
 - YAML parsing uses the maintained `go.yaml.in/yaml/v3` module instead of the archived `gopkg.in/yaml.v3`.
 

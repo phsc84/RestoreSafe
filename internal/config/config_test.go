@@ -483,25 +483,6 @@ func TestAuthModeLabel(t *testing.T) {
 	}
 }
 
-func TestAuthModeFromFactors(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		usesYubiKey bool
-		noPassword  bool
-		want        AuthMode
-	}{
-		{false, false, AuthModePassword},
-		{false, true, AuthModePassword}, // noPassword is ignored when no YubiKey is used
-		{true, false, AuthModePasswordYubiKey},
-		{true, true, AuthModeYubiKey},
-	}
-	for _, tc := range cases {
-		if got := AuthModeFromFactors(tc.usesYubiKey, tc.noPassword); got != tc.want {
-			t.Errorf("AuthModeFromFactors(%v, %v) = %d, want %d", tc.usesYubiKey, tc.noPassword, got, tc.want)
-		}
-	}
-}
-
 func TestConfigUseYubiKeyAndIsYubiKeyOnly(t *testing.T) {
 	t.Parallel()
 

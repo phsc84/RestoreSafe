@@ -311,7 +311,7 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 // written, the entry is completed with zeros so the stream stays valid, and
 // the caller marks it void. buf is the copy buffer.
 func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64, buf []byte) (manifest.Entry, error) {
-	f, err := os.Open(path)
+	f, err := openSource(path)
 	if err != nil {
 		return manifest.Entry{}, &unreadableError{path: path, err: err}
 	}

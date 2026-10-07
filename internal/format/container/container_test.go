@@ -1,6 +1,7 @@
 package container
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/yubikey"
@@ -19,7 +20,7 @@ var testHash = strings.Repeat("cd", 32)
 
 func newPasswordKeySet(t *testing.T, password string) (*KeySet, []byte) {
 	t.Helper()
-	ks, master, err := NewKeySet(AuthModePassword)
+	ks, master, err := NewKeySet(config.AuthModePassword)
 	if err != nil {
 		t.Fatalf("NewKeySet: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestUnlockRejectsWrongPassword(t *testing.T) {
 func TestSlotSwapFailsAuthentication(t *testing.T) {
 	t.Parallel()
 
-	ks, master, err := NewKeySet(AuthModeYubiKey)
+	ks, master, err := NewKeySet(config.AuthModeYubiKey)
 	if err != nil {
 		t.Fatalf("NewKeySet: %v", err)
 	}
@@ -336,7 +337,7 @@ func TestHeaderValidation(t *testing.T) {
 		{"diff without base", func(h *Header) { h.SetType = manifest.SetTypeDiff; h.DiffNumber = 1 }, "base date"},
 		{"directory name", func(h *Header) { h.DirectoryName = ".." }, "relative path element"},
 		{"nonce", func(h *Header) { h.SetNonce = []byte{1} }, "set nonce"},
-		{"slot type mismatch", func(h *Header) { h.KeySet.AuthMode = AuthModeYubiKey }, "does not match authentication mode"},
+		{"slot type mismatch", func(h *Header) { h.KeySet.AuthMode = config.AuthModeYubiKey }, "does not match authentication mode"},
 		{"bad argon", func(h *Header) { h.KeySet.Slots[0].KDF.MemoryKiB = 1 }, "Argon2 memory"},
 		{"no slots", func(h *Header) { h.KeySet.Slots = nil }, "no slots"},
 	}
@@ -368,7 +369,7 @@ func TestReadHeaderRejectsUnknownFields(t *testing.T) {
 }
 
 func FuzzReadHeader(f *testing.F) {
-	ks, _, _ := NewKeySet(AuthModePassword)
+	ks, _, _ := NewKeySet(config.AuthModePassword)
 	h, _ := NewHeader(manifest.SetTypeFull, "ABC123", "ABC123", "Documents", "2026-09-26", *ks)
 	h.KeySet.Slots = []Slot{{Type: SlotPassword, Label: "Password", KDF: KDF{Alg: kdfAlgArgon2, Salt: make([]byte, 32), Time: 2, MemoryKiB: 65536, Threads: 1}, Nonce: make([]byte, 12), Wrapped: make([]byte, 48)}}
 	seed, _ := h.Encode()

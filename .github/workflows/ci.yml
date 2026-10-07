@@ -20,8 +20,8 @@ jobs:
     name: Format, vet, build, static analysis
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -49,8 +49,8 @@ jobs:
     name: Tests and coverage
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: go test
@@ -66,7 +66,7 @@ jobs:
         run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
       - name: Total coverage
         run: go tool cover -func=cover.out | tail -n 1
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: cover.out
@@ -76,8 +76,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       # -race needs cgo and a gcc; the runner image has MinGW. Release builds

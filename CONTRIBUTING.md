@@ -12,7 +12,16 @@ How changes get from an idea into a release: branches, commits, pull requests, t
 
 A refactoring round has one branch, `refactor-<release>`, and one pull request per phase of its plan ([docs/SPEC-refactoring.md](docs/SPEC-refactoring.md)).
 
-Keep your local branches current: after a merge on GitHub, `git switch v2` and `git pull`; then `git switch <work branch>` and `git merge v2`.
+GitHub enforces this for `main` and `v2` with the ruleset in [.github/rulesets/release-branches.json](.github/rulesets/release-branches.json), for everyone including the owner:
+
+- a direct push is rejected; changes arrive through a pull request only;
+- a pull request can be merged only when the three CI jobs are green;
+- the branches cannot be force-pushed or deleted;
+- no approval is required (GitHub does not let anyone approve their own pull request).
+
+The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. Work branches are not protected.
+
+After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. Switch to `v2` itself (`git switch v2`, `git pull`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
 
 ## 2. Commits
 
@@ -30,7 +39,7 @@ A pull request (PR) asks to merge a work branch into `v2`. GitHub shows its comm
 2. Open the PR, on GitHub or with `gh pr create --base v2`. Open it as a **draft** (`--draft`) while the work goes on: CI runs on every push, but the PR cannot be merged by mistake.
 3. The description says what the PR changes and, for plan work, which items it covers.
 4. Mark it ready (`gh pr ready`) when the work is done and CI is green.
-5. Merge it on GitHub with **Merge pull request**. Merge only when every check is green.
+5. Merge it on GitHub with **Merge pull request** (or `gh pr merge --merge`). The button is enabled once every check is green. Only merge commits are allowed: squashing would fold the small commits of section 2 into one, and rebasing would rewrite them.
 
 ## 4. CI (GitHub Actions)
 
@@ -101,7 +110,7 @@ The standing constraints of refactoring work are in [docs/SPEC-refactoring.md](d
 
 ## 7. Releases
 
-1. On `v2`: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, commit, push, and wait for CI to be green.
+1. On a work branch: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, and merge it into `v2` with a pull request.
 2. Run `build.bat`: it writes `dist/RestoreSafe-<version>.zip` and `dist/SHA256SUMS.txt`.
 3. Tag the commit with an annotated tag (`git tag -a v2.0.0 -m "Release version 2.0.0"`, `git push origin v2.0.0`) and publish a GitHub release for the tag, with the notes of the CHANGELOG section, the ZIP, and `SHA256SUMS.txt`.
-4. Merge `v2` into `main`, so `main` holds the latest release.
+4. Merge `v2` into `main` with a pull request (`gh pr create --base main --head v2`), so `main` holds the latest release; CI checks the release state once more before `main` changes.

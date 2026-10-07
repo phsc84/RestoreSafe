@@ -1,6 +1,7 @@
 package unlock
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
@@ -65,7 +66,7 @@ func testChallenge(noPassword bool, credID string) *yubikey.ChallengeData {
 }
 
 // yubiKeySet creates a key set with one YubiKey slot per secret.
-func yubiKeySet(t *testing.T, mode int, password []byte, yubiSecrets ...[]byte) (*container.KeySet, []byte) {
+func yubiKeySet(t *testing.T, mode config.AuthMode, password []byte, yubiSecrets ...[]byte) (*container.KeySet, []byte) {
 	t.Helper()
 	ks, master, err := container.NewKeySet(mode)
 	if err != nil {
@@ -73,11 +74,11 @@ func yubiKeySet(t *testing.T, mode int, password []byte, yubiSecrets ...[]byte) 
 	}
 	for i, ys := range yubiSecrets {
 		secret := ys
-		if mode == container.AuthModePasswordYubiKey {
+		if mode == config.AuthModePasswordYubiKey {
 			secret = yubikey.CombinePasswordWithSecret(password, ys)
 		}
 		cred := []string{"Y3JlZC1h", "Y3JlZC1i"}[i]
-		if err := ks.AddSlot(master, container.RegularSlotType(mode), []string{"YubiKey 1", "YubiKey 2 (spare)"}[i], secret, testutil.FastArgon2, testChallenge(mode == container.AuthModeYubiKey, cred), ""); err != nil {
+		if err := ks.AddSlot(master, container.RegularSlotType(mode), []string{"YubiKey 1", "YubiKey 2 (spare)"}[i], secret, testutil.FastArgon2, testChallenge(mode == config.AuthModeYubiKey, cred), ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -118,7 +119,7 @@ func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 
 func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
 	secret := bytes.Repeat([]byte{7}, 32)
-	ks, master := yubiKeySet(t, container.AuthModePasswordYubiKey, []byte("pw"), secret)
+	ks, master := yubiKeySet(t, config.AuthModePasswordYubiKey, []byte("pw"), secret)
 	stub := stubUnlockInputs(t, []string{"pw"}, 0, secret)
 
 	got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
@@ -130,7 +131,7 @@ func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
 func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 	primary := bytes.Repeat([]byte{1}, 32)
 	spare := bytes.Repeat([]byte{2}, 32)
-	for _, mode := range []int{container.AuthModePasswordYubiKey, container.AuthModeYubiKey} {
+	for _, mode := range []config.AuthMode{config.AuthModePasswordYubiKey, config.AuthModeYubiKey} {
 		ks, master := yubiKeySet(t, mode, []byte("pw"), primary, spare)
 		// The spare YubiKey (index 1) is connected.
 		stub := stubUnlockInputs(t, []string{"pw"}, 1, spare)
@@ -145,7 +146,7 @@ func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 }
 
 func TestUnlockKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
-	ks, master := yubiKeySet(t, container.AuthModeYubiKey, nil, bytes.Repeat([]byte{7}, 32))
+	ks, master := yubiKeySet(t, config.AuthModeYubiKey, nil, bytes.Repeat([]byte{7}, 32))
 
 	stub := stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{7}, 32))
 	got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})

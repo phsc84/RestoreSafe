@@ -888,6 +888,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `PART_LIMIT` | Error (preflight) | A folder is too large for the split size | Increase `split_size_mb`. |
 | `FREE_SPACE_UNKNOWN` | Error (preflight) | The free space at the destination is unknown | Check the destination. |
 | `RESTORE_TARGET_EXISTS`, `RESTORE_TARGET_INVALID` | Error (preflight) | The folder to restore into exists already, or its name isn't valid | Choose another place, or rename or move that folder. |
+| `BACKUP_DIR_NOT_LOCKED` | Warning (restore and verify preflight) | RestoreSafe can't lock the backup directory | Don't start a backup in it while this runs (e.g. on a read-only medium, where no lock file can be created). |
 
 ### 11.9 State computation
 

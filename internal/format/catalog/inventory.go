@@ -180,7 +180,7 @@ func BaseOf(infos []SetInfo, diff naming.BackupEntry) (*SetInfo, error) {
 // next backup must create new keys), or "" when it matches.
 func KeySetMismatch(cfg *config.Config, ks *container.KeySet) string {
 	switch {
-	case ks.AuthMode != int(cfg.AuthenticationMode):
+	case ks.AuthMode != cfg.AuthenticationMode:
 		return "authentication_mode changed in config.yaml"
 	case cfg.YubiKeySpare && ks.YubiKeyCount() < 2:
 		return "yubikey_spare enabled in config.yaml"
