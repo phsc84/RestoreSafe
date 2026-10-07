@@ -21,7 +21,7 @@ GitHub enforces this for `main` and `v2` with the ruleset in [.github/rulesets/r
 
 The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. Work branches are not protected.
 
-Keep your local branches current: after a merge on GitHub, `git switch v2` and `git pull`; then `git switch <work branch>` and `git merge v2`.
+After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. Switch to `v2` itself (`git switch v2`, `git pull`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
 
 ## 2. Commits
 
