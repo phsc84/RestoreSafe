@@ -36,12 +36,12 @@ const (
 
 // Sizes of the Restore backup page, in DIPs.
 const (
-	pageTitleHeight = 32
-	filterWidth        = 220
-	filterDropHeight   = 300
-	actionBarHeight    = 36
-	minListHeight      = 160
-	lineGap            = 4
+	pageTitleHeight  = 32
+	filterWidth      = 220
+	filterDropHeight = 300
+	actionBarHeight  = 36
+	minListHeight    = 160
+	lineGap          = 4
 )
 
 // Column widths of the list, in DIPs; the status column takes the rest.
