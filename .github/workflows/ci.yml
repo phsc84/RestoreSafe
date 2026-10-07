@@ -18,8 +18,8 @@ jobs:
     name: Format, vet, build, static analysis
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -47,17 +47,22 @@ jobs:
     name: Tests and coverage
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: go test
         env:
           CGO_ENABLED: "0"
-        run: go test -count=1 -coverprofile=cover.out ./...
+        run: |
+          set -o pipefail
+          go test -count=1 -coverprofile=cover.out ./... 2>&1 | tee test.log
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci/annotate-failures.sh test.log
       - name: Coverage per function
         run: go tool cover -func=cover.out | tail -n 1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: coverage
           path: cover.out
@@ -67,8 +72,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       # -race needs cgo and a gcc; the runner image has MinGW. Release builds
@@ -78,4 +83,8 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           gcc --version | head -n 1
-          go test -count=1 -race -timeout 45m ./...
+          set -o pipefail
+          go test -count=1 -race -timeout 45m ./... 2>&1 | tee test.log
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci/annotate-failures.sh test.log

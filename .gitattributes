@@ -11,6 +11,8 @@ go.sum text eol=lf
 *.bat  text eol=crlf
 # PowerShell scripts keep the Windows convention.
 *.ps1  text eol=crlf
+# Shell scripts run in bash, also on the Windows CI runners.
+*.sh   text eol=lf
 
 *.md   text
 *.yaml text
