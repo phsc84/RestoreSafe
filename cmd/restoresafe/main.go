@@ -4,7 +4,6 @@
 package main
 
 import (
-	"RestoreSafe/internal/buildinfo"
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/gui"
 	"fmt"
@@ -12,10 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// Version is injected by build.bat from build/versioninfo.json
-// (-ldflags "-X main.Version=..."); "dev" marks an un-stamped build.
-var Version = "dev"
 
 func main() {
 	exePath, err := os.Executable()
@@ -35,14 +30,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	buildinfo.Version = Version
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		gui.ShowError("Configuration error", fmt.Sprintf("Error loading configuration from %s:\n\n%v", filepath.ToSlash(configPath), err))
 		os.Exit(1)
 	}
 
-	if err := gui.Run(gui.Options{Version: Version, ExeDir: exeDir, ConfigPath: configPath, Config: cfg}); err != nil {
+	if err := gui.Run(gui.Options{ExeDir: exeDir, ConfigPath: configPath, Config: cfg}); err != nil {
 		gui.ShowError("Error", err.Error())
 		os.Exit(1)
 	}

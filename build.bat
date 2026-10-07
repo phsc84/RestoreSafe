@@ -1,8 +1,10 @@
 @echo off
 REM ============================================================
 REM  RestoreSafe build script
-REM  Builds dist\RestoreSafe-<version>.zip and moves the compiled
-REM  RestoreSafe.exe to sandbox\ for manual testing
+REM  Builds dist\RestoreSafe-<version>.zip with dist\SHA256SUMS.txt
+REM  and moves the compiled RestoreSafe.exe to sandbox\ for manual
+REM  testing. It changes no tracked file, and the same commit gives
+REM  the same RestoreSafe.exe.
 REM  The version is managed manually in build\versioninfo.json
 REM ============================================================
 
@@ -12,10 +14,16 @@ set VERSIONINFO=build\versioninfo.json
 set DIST_DIR=dist
 set SANDBOX_DIR=sandbox
 
-echo [BUILD] Load dependencies...
-go mod tidy
+echo [BUILD] Check dependencies...
+go mod verify
 if errorlevel 1 (
-    echo [ERROR] go mod tidy failed
+    echo [ERROR] go mod verify failed: the module cache does not match go.sum
+    exit /b 1
+)
+REM -diff changes nothing; it fails when go.mod or go.sum is not tidy.
+go mod tidy -diff
+if errorlevel 1 (
+    echo [ERROR] go.mod or go.sum is not tidy: run go mod tidy and commit the change
     exit /b 1
 )
 
@@ -45,7 +53,7 @@ set GOARCH=amd64
 set CGO_ENABLED=0
 
 REM -H=windowsgui: a window application; no console window opens.
-go build -trimpath -ldflags="-s -w -H=windowsgui -X main.Version=%VERSION%" -o "%DIST_DIR%\RestoreSafe.exe" ./cmd/restoresafe
+go build -trimpath -ldflags="-s -w -H=windowsgui -X RestoreSafe/internal/buildinfo.Version=%VERSION%" -o "%DIST_DIR%\RestoreSafe.exe" ./cmd/restoresafe
 if errorlevel 1 (
     echo [ERROR] Compilation failed
     exit /b 1
@@ -68,6 +76,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Write SHA256SUMS.txt...
+REM The format of sha256sum: "<hash>  <file>", one line, LF.
+powershell -NoProfile -Command "$h = (Get-FileHash -Algorithm SHA256 '%DIST_DIR%\%ZIP_NAME%').Hash.ToLower(); [IO.File]::WriteAllText('%CD%\%DIST_DIR%\SHA256SUMS.txt', $h + '  %ZIP_NAME%' + [char]10)"
+if errorlevel 1 (
+    echo [ERROR] Failed to write SHA256SUMS.txt
+    exit /b 1
+)
+
 echo [BUILD] Move RestoreSafe.exe to %SANDBOX_DIR%...
 if not exist %SANDBOX_DIR%\ (
     mkdir %SANDBOX_DIR%
@@ -80,6 +96,7 @@ if errorlevel 1 (
 
 echo.
 echo [OK] Successfully created: %CD%\%DIST_DIR%\%ZIP_NAME%
+echo [OK] Checksum: %CD%\%DIST_DIR%\SHA256SUMS.txt
 echo [OK] Successfully compiled: %CD%\%SANDBOX_DIR%\RestoreSafe.exe
 echo.
 
