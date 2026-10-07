@@ -2,6 +2,7 @@ package archive
 
 import (
 	"RestoreSafe/internal/format/manifest"
+	"RestoreSafe/internal/problem"
 	"archive/tar"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,7 +60,7 @@ func (r *Restorer) targetPath(rel string) (string, error) {
 	p := filepath.Join(r.destDir, filepath.FromSlash(rel))
 	root := filepath.Clean(r.destDir) + string(os.PathSeparator)
 	if !strings.HasPrefix(filepath.Clean(p)+string(os.PathSeparator), root) {
-		return "", fmt.Errorf("Invalid path in backup (path traversal): %q. Remedy: Do not use this backup; use only unmodified, trusted backup files.", rel)
+		return "", problem.Errorf("Invalid path in backup (path traversal): %q.", rel).WithRemedy("Do not use this backup; use only unmodified, trusted backup files.")
 	}
 	return p, nil
 }
@@ -78,7 +79,7 @@ func (r *Restorer) CreateDirectories() error {
 			return err
 		}
 		if err := os.Mkdir(p, 0o750); err != nil {
-			return fmt.Errorf("Failed to create directory %q: %w. Remedy: Check write permissions in the restore destination.", p, err)
+			return problem.Errorf("Failed to create directory %q: %w.", p, err).WithRemedy("Check write permissions in the restore destination.")
 		}
 	}
 	return nil
@@ -95,10 +96,10 @@ func (r *Restorer) ExtractSection(tarStream io.Reader, decide Decide) error {
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("Failed to read TAR entry: %w. Remedy: Use an unmodified backup created by RestoreSafe.", err)
+			return problem.Errorf("Failed to read TAR entry: %w.", err).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		if hdr.Typeflag != tar.TypeReg {
-			return fmt.Errorf("Unexpected TAR entry type %q for %q. Remedy: Use an unmodified backup created by RestoreSafe.", hdr.Typeflag, hdr.Name)
+			return problem.Errorf("Unexpected TAR entry type %q for %q.", hdr.Typeflag, hdr.Name).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		entry, action, err := decide(hdr.Name)
 		if err != nil {
@@ -114,10 +115,10 @@ func (r *Restorer) ExtractSection(tarStream io.Reader, decide Decide) error {
 			return fmt.Errorf("Internal error: no manifest entry for %q.", hdr.Name)
 		}
 		if r.done[entry.Path] {
-			return fmt.Errorf("File %q appears twice in the backup. Remedy: Use an unmodified backup created by RestoreSafe.", entry.Path)
+			return problem.Errorf("File %q appears twice in the backup.", entry.Path).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		if hdr.Size != entry.Size {
-			return fmt.Errorf("Size of %q in the backup (%d bytes) does not match the manifest (%d bytes). Remedy: Use an unmodified backup created by RestoreSafe.", entry.Path, hdr.Size, entry.Size)
+			return problem.Errorf("Size of %q in the backup (%d bytes) does not match the manifest (%d bytes).", entry.Path, hdr.Size, entry.Size).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		if err := r.extractFile(tr, entry); err != nil {
 			return err
@@ -141,7 +142,7 @@ func (r *Restorer) extractFile(content io.Reader, e *manifest.Entry) error {
 	}
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil {
-		return fmt.Errorf("Failed to create file %q: %w. Remedy: Check write permissions in the restore destination.", p, err)
+		return problem.Errorf("Failed to create file %q: %w.", p, err).WithRemedy("Check write permissions in the restore destination.")
 	}
 	_, copyErr := io.CopyBuffer(io.MultiWriter(f, hasher), content, r.buf)
 	closeErr := f.Close()
@@ -162,7 +163,7 @@ func (r *Restorer) extractFile(content io.Reader, e *manifest.Entry) error {
 
 func (r *Restorer) checkHash(e *manifest.Entry, sum []byte) error {
 	if hex.EncodeToString(sum) != e.Hash {
-		return fmt.Errorf("Content of %q does not match its checksum. Remedy: The backup is damaged; use another backup.", e.Path)
+		return problem.Errorf("Content of %q does not match its checksum.", e.Path).WithRemedy("The backup is damaged; use another backup.")
 	}
 	return nil
 }
@@ -183,7 +184,7 @@ func (r *Restorer) Finish() error {
 	}
 	if len(missing) > 0 {
 		r.failures = missing
-		return fmt.Errorf("%d file(s) listed in the manifest were not found in the backup data (first: %q). Remedy: The backup is damaged or incomplete; use another backup.", len(missing), missing[0])
+		return problem.Errorf("%d file(s) listed in the manifest were not found in the backup data (first: %q).", len(missing), missing[0]).WithRemedy("The backup is damaged or incomplete; use another backup.")
 	}
 	if r.verifyOnly {
 		return nil
@@ -275,7 +276,7 @@ func DecideOwn(m *manifest.Manifest) Decide {
 		case ok && e.Void:
 			return nil, ActionSkip, nil
 		default:
-			return nil, ActionSkip, fmt.Errorf("Backup data contains %q, which is not in the manifest. Remedy: Use an unmodified backup created by RestoreSafe.", name)
+			return nil, ActionSkip, problem.Errorf("Backup data contains %q, which is not in the manifest.", name).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 	}
 }

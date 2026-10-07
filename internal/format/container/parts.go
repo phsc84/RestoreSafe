@@ -1,6 +1,7 @@
 package container
 
 import (
+	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +23,7 @@ func newPartsReader(paths []string) (*partsReader, error) {
 	for i, p := range paths {
 		fi, err := os.Stat(p)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to inspect part file %q: %w. Remedy: Check that the part file exists and is readable.", p, err)
+			return nil, problem.Errorf("Failed to inspect part file %q: %w.", p, err).WithRemedy("Check that the part file exists and is readable.")
 		}
 		r.starts[i] = r.size
 		r.size += fi.Size()
@@ -53,11 +54,11 @@ func (r *partsReader) ReadAt(p []byte, off int64) (int, error) {
 		off += int64(n)
 		p = p[n:]
 		if err != nil && err != io.EOF {
-			return total, fmt.Errorf("Failed to read part file %q: %w. Remedy: Check drive/network availability and retry.", r.paths[idx], err)
+			return total, problem.Errorf("Failed to read part file %q: %w.", r.paths[idx], err).WithRemedy("Check drive/network availability and retry.")
 		}
 		if n == 0 && err == io.EOF {
 			// The part is shorter than when it was measured.
-			return total, fmt.Errorf("Part file %q changed while reading. Remedy: Do not modify backup files during restore or verify.", r.paths[idx])
+			return total, problem.Errorf("Part file %q changed while reading.", r.paths[idx]).WithRemedy("Do not modify backup files during restore or verify.")
 		}
 	}
 	return total, nil
@@ -73,7 +74,7 @@ func (r *partsReader) file(idx int) (*os.File, error) {
 	}
 	f, err := os.Open(r.paths[idx])
 	if err != nil {
-		return nil, fmt.Errorf("Failed to open part file %q: %w. Remedy: Check that the part file exists and is readable.", r.paths[idx], err)
+		return nil, problem.Errorf("Failed to open part file %q: %w.", r.paths[idx], err).WithRemedy("Check that the part file exists and is readable.")
 	}
 	r.open = f
 	r.openIdx = idx

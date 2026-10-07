@@ -11,6 +11,7 @@ import (
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/problem"
 	"bufio"
 	"context"
 	"errors"
@@ -206,10 +207,10 @@ func FinalizeParts(tempParts []string) ([]string, error) {
 			return nil, fmt.Errorf("Internal error: part %q has no temporary suffix.", tmp)
 		}
 		if _, err := os.Stat(dst); err == nil {
-			return nil, fmt.Errorf("Backup file %q already exists. Remedy: Remove or rename the existing file and start the backup again.", dst)
+			return nil, problem.Errorf("Backup file %q already exists.", dst).WithRemedy("Remove or rename the existing file and start the backup again.")
 		}
 		if err := os.Rename(tmp, dst); err != nil {
-			return nil, fmt.Errorf("Failed to finalize part file %q: %w. Remedy: Check write permissions in the backup directory.", tmp, err)
+			return nil, problem.Errorf("Failed to finalize part file %q: %w.", tmp, err).WithRemedy("Check write permissions in the backup directory.")
 		}
 		final[i] = dst
 	}

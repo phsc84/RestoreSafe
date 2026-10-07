@@ -2,6 +2,7 @@ package container
 
 import (
 	"RestoreSafe/internal/format/manifest"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"bufio"
 	"bytes"
@@ -187,7 +188,7 @@ func (s *Set) ReadManifest(keys *SectionKeys) (*manifest.Manifest, string, error
 	h := s.Header
 	mh := m.Header
 	if mh.SetType != h.SetType || mh.ChainID != h.ChainID || mh.DiffNumber != h.DiffNumber || mh.DirectoryName != h.DirectoryName {
-		return nil, "", fmt.Errorf("Backup manifest does not match its set header. Remedy: Use an unmodified backup created by RestoreSafe.")
+		return nil, "", problem.New("Backup manifest does not match its set header.").WithRemedy("Use an unmodified backup created by RestoreSafe.")
 	}
 	sum := sha256.Sum256(buf.Bytes())
 	return m, hex.EncodeToString(sum[:]), nil
@@ -204,7 +205,7 @@ func (s *Set) DecryptData(keys *SectionKeys, dst io.Writer) error {
 
 func sectionErr(section string, err error) error {
 	if errors.Is(err, cryptox.ErrCorrupted) {
-		return fmt.Errorf("%w in the %s section. Remedy: The backup files were damaged or modified; use another backup or a copy of these files.", cryptox.ErrCorrupted, section)
+		return problem.Errorf("%w in the %s section.", cryptox.ErrCorrupted, section).WithRemedy("The backup files were damaged or modified; use another backup or a copy of these files.")
 	}
 	return err
 }

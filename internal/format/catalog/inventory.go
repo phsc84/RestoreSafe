@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/problem"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -173,7 +174,7 @@ func BaseOf(infos []SetInfo, diff naming.BackupEntry) (*SetInfo, error) {
 		}
 		return info, nil
 	}
-	return nil, fmt.Errorf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing. Remedy: Put the FULL files of %s into the backup directory.", diff.String(), diff.DirectoryName, diff.ChainID, diff.ChainID, diff.ChainID)
+	return nil, problem.Errorf("%s cannot be restored: the full backup [%s]_%s_*_FULL-*.enc of chain %s is missing.", diff.String(), diff.DirectoryName, diff.ChainID, diff.ChainID).WithRemedy(fmt.Sprintf("Put the FULL files of %s into the backup directory.", diff.ChainID))
 }
 
 // KeySetMismatch returns why ks no longer matches the configuration (so the
@@ -209,7 +210,7 @@ func CurrentKeySet(infos []SetInfo) *container.KeySet {
 
 func checkContinuity(parts []string) error {
 	if len(parts) == 0 {
-		return fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in the backup directory.")
+		return problem.New("No part files found.").WithRemedy("Ensure the .enc files are present in the backup directory.")
 	}
 	var missing []int
 	next := 1
