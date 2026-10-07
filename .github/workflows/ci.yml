@@ -52,7 +52,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: |
-          out=$(go run ./scripts/ci/lockdiag; whoami /priv | grep -iE "Backup|Restore")
+          out=$(go run ./scripts/ci/lockdiag; whoami /priv | grep -iE "Backup|Restore" || true; whoami)
           echo "$out"
           echo "::warning title=lockdiag::$(printf "%s" "$out" | awk 'BEGIN{ORS="%0A"} {print}')"
 
