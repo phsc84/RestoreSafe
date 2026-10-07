@@ -260,7 +260,7 @@ docs/
 **RF-63 (P2) Fix documentation drift.**
 
 - README "Main configuration options" gives `retention_keep` a default of `3`; the program's default is `0` (keep all) and only `config-SAMPLE.yaml` sets 3 ([config/keys.go:30](../internal/config/keys.go#L30)). Name the column "In config-SAMPLE.yaml", or list both.
-- DEVELOPMENT.md section 10 refers to `docs\REFACTORING-PLAN.md`, which does not exist. Point it at the architecture test and SPEC-refactoring.md.
+- DEVELOPMENT.md section 10 refers to `docs\REFACTORING-PLAN.md`, which does not exist. Point it at the architecture test and SPEC-refactoring.md. Done 2026-10-07 (DEVELOPMENT.md is not tracked).
 - RF-57 (encryption wording).
 
 **RF-64 (P3) Add a CLAUDE.md / contributor note.** One page: the layer rules, the commands (`go build`, `go vet`, `go test`, `go tool staticcheck`), the standing constraints of SPEC-refactoring section 2, the error convention of RF-25, and the commit style. It replaces the parts of the private DEVELOPMENT.md that a contributor needs.
