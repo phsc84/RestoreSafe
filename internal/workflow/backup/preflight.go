@@ -10,7 +10,6 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -155,7 +154,7 @@ func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEst
 		issues = append(issues, issue)
 	}
 	if targetWarn != "" {
-		issues = append(issues, interact.IssueOf(interact.StatusWarn, interact.CodeSpaceEstimateOnly, errors.New(targetWarn)))
+		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Code: interact.CodeSpaceEstimateOnly, Text: targetWarn})
 	}
 	return issues, first
 }
@@ -175,7 +174,8 @@ func validateSourceDirectories(sources []plan.Source) error {
 	return job.ValidatePreflightItems(
 		sources,
 		func(src plan.Source) bool { return src.Err != nil },
-		"Backup preflight failed: %d source directory(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
+		"Backup preflight failed: %d source directory(s) are invalid or inaccessible.",
+		"Fix the [ERROR] entries above and start backup again.",
 	)
 }
 
@@ -195,7 +195,7 @@ func validateTargetSpaceForBackup(backupDir string, est spaceEstimate) (warning 
 		return "", nil
 	}
 	if fsx.IsSpaceInsufficient(est.likely, freeBytes) {
-		return "", fmt.Errorf("Backup preflight failed: %s", fsx.FormatInsufficientBackupSpaceMessage(uint64(est.likely), freeBytes))
+		return "", fmt.Errorf("Backup preflight failed: %w", fsx.InsufficientBackupSpace(uint64(est.likely), freeBytes))
 	}
 	if est.anyDiff && fsx.IsSpaceInsufficient(est.full, freeBytes) {
 		return spaceWarning("in the backup directory", est, freeBytes), nil

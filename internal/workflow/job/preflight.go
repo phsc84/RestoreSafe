@@ -5,13 +5,15 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 )
 
 // ValidatePreflightItems returns a formatted error when one or more items fail
-// a caller-supplied validity check.
-func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemplate string) error {
+// a caller-supplied validity check: failureTemplate (with %d for their
+// number) and what the user does about it.
+func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemplate, remedy string) error {
 	invalid := 0
 	for _, item := range items {
 		if hasError(item) {
@@ -19,7 +21,7 @@ func ValidatePreflightItems[T any](items []T, hasError func(T) bool, failureTemp
 		}
 	}
 	if invalid > 0 {
-		return fmt.Errorf(failureTemplate, invalid)
+		return problem.Errorf(failureTemplate, invalid).WithRemedy(remedy)
 	}
 	return nil
 }

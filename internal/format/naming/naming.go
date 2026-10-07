@@ -12,6 +12,7 @@
 package naming
 
 import (
+	"RestoreSafe/internal/problem"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -203,28 +204,28 @@ var reservedWindowsNames = map[string]struct{}{
 // explicitly turns those failures into a clear, early preflight error and makes
 // the invariant survive future refactors.
 func ValidateBackupEntryName(name string) error {
-	remedy := "Remedy: This backup's filename is malformed or unsafe; rename the .enc file(s) to a valid [name]_ID_DATE_FULL-SEQ.enc pattern."
+	remedy := "This backup's filename is malformed or unsafe; rename the .enc file(s) to a valid [name]_ID_DATE_FULL-SEQ.enc pattern."
 
 	if name == "" {
-		return fmt.Errorf("Backup directory name is empty. %s", remedy)
+		return problem.New("Backup directory name is empty.").WithRemedy(remedy)
 	}
 	if name == "." || name == ".." {
-		return fmt.Errorf("Backup directory name %q is a relative path element. %s", name, remedy)
+		return problem.Errorf("Backup directory name %q is a relative path element.", name).WithRemedy(remedy)
 	}
 	if strings.ContainsAny(name, `/\:`) {
-		return fmt.Errorf("Backup directory name %q contains a path separator or drive marker. %s", name, remedy)
+		return problem.Errorf("Backup directory name %q contains a path separator or drive marker.", name).WithRemedy(remedy)
 	}
 	// Windows strips trailing dots and spaces, which can cause two distinct
 	// names to collide on the filesystem.
 	if strings.HasSuffix(name, ".") || strings.HasSuffix(name, " ") {
-		return fmt.Errorf("Backup directory name %q ends with a dot or space. %s", name, remedy)
+		return problem.Errorf("Backup directory name %q ends with a dot or space.", name).WithRemedy(remedy)
 	}
 	base := name
 	if i := strings.IndexByte(base, '.'); i >= 0 {
 		base = base[:i]
 	}
 	if _, reserved := reservedWindowsNames[strings.ToUpper(base)]; reserved {
-		return fmt.Errorf("Backup directory name %q is a reserved Windows device name. %s", name, remedy)
+		return problem.Errorf("Backup directory name %q is a reserved Windows device name.", name).WithRemedy(remedy)
 	}
 	return nil
 }

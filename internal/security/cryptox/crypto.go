@@ -123,11 +123,11 @@ var ErrCorrupted = errors.New("Backup data failed authentication (corrupted or m
 func ValidateArgon2Params(time, memoryKB, threads uint32, context, remedy string) error {
 	switch {
 	case time < MinArgonTime || time > MaxArgonTime:
-		return fmt.Errorf("Invalid Argon2 time %s: %d (allowed %d-%d). %s", context, time, MinArgonTime, MaxArgonTime, remedy)
+		return problem.Errorf("Invalid Argon2 time %s: %d (allowed %d-%d).", context, time, MinArgonTime, MaxArgonTime).WithRemedy(remedy)
 	case memoryKB < MinArgonMemoryKB || memoryKB > MaxArgonMemoryKB:
-		return fmt.Errorf("Invalid Argon2 memory %s: %d KiB (allowed %d-%d). %s", context, memoryKB, MinArgonMemoryKB, MaxArgonMemoryKB, remedy)
+		return problem.Errorf("Invalid Argon2 memory %s: %d KiB (allowed %d-%d).", context, memoryKB, MinArgonMemoryKB, MaxArgonMemoryKB).WithRemedy(remedy)
 	case threads < MinArgonThreads || threads > MaxArgonThreads:
-		return fmt.Errorf("Invalid Argon2 threads %s: %d (allowed %d-%d). %s", context, threads, MinArgonThreads, MaxArgonThreads, remedy)
+		return problem.Errorf("Invalid Argon2 threads %s: %d (allowed %d-%d).", context, threads, MinArgonThreads, MaxArgonThreads).WithRemedy(remedy)
 	}
 	return nil
 }
@@ -148,7 +148,7 @@ func DeriveKEK(secret, salt []byte, params Argon2Params) ([]byte, error) {
 	if len(salt) != SaltLen {
 		return nil, fmt.Errorf("Invalid Argon2 salt length: %d (want %d).", len(salt), SaltLen)
 	}
-	if err := ValidateArgon2Params(params.Time, params.MemoryKB, uint32(params.Threads), "in key derivation parameters", "Remedy: Adjust the argon2 settings in config.yaml."); err != nil {
+	if err := ValidateArgon2Params(params.Time, params.MemoryKB, uint32(params.Threads), "in key derivation parameters", "Adjust the argon2 settings in config.yaml."); err != nil {
 		return nil, err
 	}
 	return argon2.IDKey(secret, salt, params.Time, params.MemoryKB, params.Threads, KeyLen), nil

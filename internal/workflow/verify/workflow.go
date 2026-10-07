@@ -211,7 +211,8 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 	return job.ValidatePreflightItems(
 		items,
 		func(item verifyPreflightItem) bool { return item.Err != nil },
-		"Verification preflight failed: %d selected item(s) are incomplete or invalid. Remedy: Fix the [ERROR] entries above and start verification again.",
+		"Verification preflight failed: %d selected item(s) are incomplete or invalid.",
+		"Fix the [ERROR] entries above and start verification again.",
 	)
 }
 

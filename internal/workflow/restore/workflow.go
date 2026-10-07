@@ -227,7 +227,7 @@ func restorePreflightReport(
 	} else {
 		rows = append(rows, interact.Item(interact.StatusOK, destDisplay))
 		if fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			addError(interact.CodeSpaceInsufficient, errors.New(fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes)))
+			addError(interact.CodeSpaceInsufficient, fsx.InsufficientRestoreSpace(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
@@ -268,7 +268,8 @@ func validateRestorePreflight(items []restorePreflightItem) error {
 	return job.ValidatePreflightItems(
 		items,
 		func(item restorePreflightItem) bool { return item.Err != nil || item.OutputDirErr != nil },
-		"Restore preflight failed: %d selected item(s) are invalid. Remedy: Fix the [ERROR] entries above and start restore again.",
+		"Restore preflight failed: %d selected item(s) are invalid.",
+		"Fix the [ERROR] entries above and start restore again.",
 	)
 }
 
@@ -287,7 +288,7 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 		return nil
 	}
 
-	return fmt.Errorf("Restore preflight failed: %s", fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+	return fmt.Errorf("Restore preflight failed: %w", fsx.InsufficientRestoreSpace(uint64(estimatedRestoreBytes), restoreFreeBytes))
 }
 
 func estimateRestoreBytes(items []restorePreflightItem) int64 {
