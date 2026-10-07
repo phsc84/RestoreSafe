@@ -5,7 +5,7 @@
 | Status | Proposed 2026-10-06; Phase A done 2026-10-07 (CI green), RF-20 and RF-44 of Phase B done; the rest open |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
-| Branch | Phase A on `refactor-2.0` from `v2`; phases B-E on `refactor` from `v2` after `gui-redesign` is merged and 2.0.0 is released (section 13) |
+| Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1); CI runs on each push to the pull request |
 | Scope | Structure, dead and legacy code, performance, security hardening, tests, tooling, and docs. **No change to the backup format, the keys, or what a backup, restore, or verify does for the user.** |
 
 ## 1. Purpose
@@ -212,6 +212,10 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 
 **RF-58 (P2) Release integrity.** Releases are a ZIP with no checksum or signature. Publish `SHA256SUMS.txt` with every release (RF-3) and the command to check it (`Get-FileHash`) in the README. Authenticode signing is an open question (section 14).
 
+**RF-59 (P1) Elevated, RestoreSafe reads files that other programs hold locked.** `archive.writeFile` opens a source file with `os.Open` ([build.go:314](../internal/format/archive/build.go#L314)), which asks for backup semantics (`FILE_FLAG_BACKUP_SEMANTICS`). In a process that holds the backup privilege, as an elevated administrator does, Windows then skips the share-mode check: a file another program holds without sharing, such as a PST open in Outlook, is read anyway, possibly while it is being written, and the backup holds an inconsistent copy instead of skipping the file. Found by the first CI runs (RF-11): the runner is elevated, and four tests of locked files failed until `testutil/filelock` removed the privilege from the test process (`2c0948d`). Unelevated, which is how RestoreSafe normally runs, the lock holds.
+Change: open source files for reading without backup semantics (`windows.CreateFile` with `GENERIC_READ`, `FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE`, `FILE_FLAG_SEQUENTIAL_SCAN`), so a locked file is unreadable, and `on_unreadable_file` applies, whether RestoreSafe runs elevated or not. Opening for attributes keeps backup semantics; it reads no file content and needs them for directories. Then `filelock.Hold` stops removing the privilege, so the locked-file tests run elevated on CI. User-visible only when elevated: a locked file is skipped (or fails the backup) instead of being copied; add it to CHANGELOG.
+Acceptance: the locked-file tests of `format/archive` and `e2e` pass on the elevated CI runner with the backup privilege in place.
+
 ## 11. Quality assurance (Phase B and ongoing)
 
 **RF-40 (P1) Coverage floors per package, not a global number.** A global percentage hides that the format layer is covered and the GUI is not. CI fails when a package falls below its floor:
@@ -272,7 +276,7 @@ Each phase is a series of small commits, each building and passing. Items inside
 | Phase | Items | When | Why then |
 |---|---|---|---|
 | A. Tooling | RF-1, 2, 3, 4, 10, 11, 12 | now, on its own branch; merge into `v2` | Touches no product code (RF-3 only the build); makes every later phase checkable. RF-4 first, RF-10 before RF-1's coverage step. |
-| B. Safety net and quick fixes | RF-20, 21, 22, 23, 24, 40, 41, 50, 51, 52 | before the 2.0.0 release | RF-41 must capture 2.0.0's format before anything else changes; RF-24, 50, 51, 52 are user-facing fixes worth shipping in 2.0.0. |
+| B. Safety net and quick fixes | RF-20, 21, 22, 23, 24, 40, 41, 50, 51, 52, 59 | before the 2.0.0 release | RF-41 must capture 2.0.0's format before anything else changes; RF-24, 50, 51, 52, 59 are user-facing fixes worth shipping in 2.0.0. |
 | C. Structure | RF-25, 26, 27, 30, 31, 32, 33, 34 | after 2.0.0 | Large diffs; would conflict with the release fixes. RF-26 before RF-33 (the dialogs change shape). |
 | D. Performance and hardening | RF-35 → 36, 37 → 38, 39; RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
 | E. Project and docs | RF-60, 61, 62, 63, 64 | last | RF-60 touches every file; doing it last avoids conflicts with all other work. |
