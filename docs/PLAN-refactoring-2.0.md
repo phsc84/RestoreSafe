@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; Phase A done 2026-10-07 except the first CI run (RF-1, RF-11), RF-20 and RF-44 of Phase B done; the rest open |
+| Status | Proposed 2026-10-06; Phase A done 2026-10-07 (CI green), RF-20 and RF-44 of Phase B done; the rest open |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | Phase A on `refactor-2.0` from `v2`; phases B-E on `refactor` from `v2` after `gui-redesign` is merged and 2.0.0 is released (section 13) |
@@ -45,7 +45,7 @@ Coverage by package (statements):
 
 Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `security/yubikey/fido2.go` 917, `gui/overview.go` 693, `gui/view/backups.go` 651.
 
-After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` has not run yet (RF-11).
+After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
 
 ## 3. Constraints
 
@@ -65,7 +65,7 @@ Add `.github/workflows/ci.yml` on `windows-latest`, triggered on push and pull r
 7. Upload the coverage profile as an artifact; fail when a package drops below its floor in RF-40.
 
 Acceptance: a pull request against `v2` shows all seven steps green.
-Done in `fe55e57`, as three jobs (check, test, race). Step 7's coverage floors come with RF-40; until then the profile is only uploaded. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Open until a pull request has run.
+Done in `fe55e57`, as three jobs (check, test, race). Step 7's coverage floors come with RF-40; until then the profile is only uploaded. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Failing tests and data races are reported as an annotation (`71839dd`). First green run: 37669132251.
 
 **RF-2 (P1) Pin the developer tools in `go.mod`.** `staticcheck` on this machine was built with go 1.25 and cannot analyse a go 1.27 module; `goversioninfo` is installed with `@latest` (DEVELOPMENT.md section 8), so two developers can build with different versions.
 Use the `tool` directive (`go get -tool ...`) for `staticcheck`, `govulncheck`, `deadcode`, and `goversioninfo`, and call them as `go tool <name>` in `build.bat`, CI, and DEVELOPMENT.md. Versions are then in `go.mod`/`go.sum` and update like any dependency.
@@ -95,7 +95,7 @@ Done in `56a454d`. A nil `Script.Out` and a nil logger console now discard the o
 
 **RF-11 (P1) Run the race detector.** The workflows, the health checker, the GUI bridge, and the decrypt pipeline all use goroutines, atomics, and mutexes, yet `-race` has never run because it needs cgo. Run it in CI with a MinGW gcc (preinstalled on GitHub's Windows images) and `CGO_ENABLED=1`; release builds stay `CGO_ENABLED=0`.
 Acceptance: `go test -race ./...` passes in CI. Races found are fixed under this item.
-Done in `fe55e57` (the `race` job of CI). Open until CI has run on GitHub: the development machine has no gcc, so `-race` has not run yet.
+Done in `fe55e57` (the `race` job of CI). The first runs found no data race. They found that four tests of locked files failed on the runner: an elevated process with the backup privilege opens a file held without sharing, because `os.Open` asks for backup semantics. `testutil/filelock.Hold` (`2c0948d`) removes the privilege from the test process. CI run 37669132251 is green.
 
 **RF-12 (P3) Test helper signatures.** staticcheck ST1008 in [backup/keys_test.go:87](../internal/workflow/backup/keys_test.go#L87) and [unlock/unlock_test.go:89](../internal/workflow/unlock/unlock_test.go#L89): the error is not the last result. Reorder.
 Done in `0a2f913`.
