@@ -1,9 +1,11 @@
-# Checks every push and pull request on Windows, the only platform
-# RestoreSafe supports (refactoring 2.0 RF-1).
+# Checks every pull request, and every push to the release branches, on
+# Windows, the only platform RestoreSafe supports (refactoring 2.0 RF-1).
+# A branch with a pull request runs once per push, through the pull request.
 name: CI
 
 on:
   push:
+    branches: [main, v2]
   pull_request:
 
 permissions:

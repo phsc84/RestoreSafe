@@ -65,7 +65,7 @@ Add `.github/workflows/ci.yml` on `windows-latest`, triggered on push and pull r
 7. Upload the coverage profile as an artifact; fail when a package drops below its floor in RF-40.
 
 Acceptance: a pull request against `v2` shows all seven steps green.
-Done in `fe55e57`, as three jobs (check, test, race). Step 7's coverage floors come with RF-40; until then the profile is only uploaded. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Failing tests and data races are reported as an annotation (`71839dd`). First green run: 37669132251.
+Done in `fe55e57`, as three jobs (check, test, race). Step 7 in `d21ad47`: the floors of RF-40 (`scripts/ci/coverage-floors.txt`), checked per package. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Failing tests and data races are reported as an annotation (`71839dd`). Accepted with [pull request #1](https://github.com/phsc84/RestoreSafe/pull/1): all steps green. CI runs on pull requests and on pushes to `main` and `v2`.
 
 **RF-2 (P1) Pin the developer tools in `go.mod`.** `staticcheck` on this machine was built with go 1.25 and cannot analyse a go 1.27 module; `goversioninfo` is installed with `@latest` (DEVELOPMENT.md section 8), so two developers can build with different versions.
 Use the `tool` directive (`go get -tool ...`) for `staticcheck`, `govulncheck`, `deadcode`, and `goversioninfo`, and call them as `go tool <name>` in `build.bat`, CI, and DEVELOPMENT.md. Versions are then in `go.mod`/`go.sum` and update like any dependency.
@@ -225,6 +225,8 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 | gui, gui/win32, cmd | none | measured only; covered by RF-43 |
 
 `format/container` (72 %) and `restorepoint` (69 %) are the packages that decide whether a damaged backup is detected; their error paths come first.
+
+Floors "now" enforced by CI since `d21ad47`; `cd5d90f` raised `restorepoint` from 65.3 % (it had fallen below its floor since the baseline) to 91.7 %. Open: the targets, starting with the error paths of `format/container` (72.2 %).
 
 **RF-41 (P1) Format compatibility fixtures.** Nothing stops a refactoring from changing the bytes RestoreSafe writes or what it accepts. Commit a small set of backups made by the 2.0.0 release build to `internal/format/testdata/v2.0.0/`: a full and a differential of a tree with special cases (empty file, empty folder, Unicode and long names, read-only/hidden/system attributes, a skipped file), with password, password + recovery slot (the test uses the recovery code), and Argon2 at the minimum to keep the test fast. A test restores each and compares tree, content, times, and attributes with a recorded listing. A second test checks that a set written by the current code with the fixed inputs (seeded randomness through a test hook) produces the same header structure and trailer.
 Acceptance: the fixtures exist before Phase C starts; they never change after 2.0.0 is released.
