@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/recovery"
 	"RestoreSafe/internal/security/yubikey"
@@ -50,7 +51,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 	slotType := container.RegularSlotType(ks.AuthMode)
 	indexes := ks.SlotIndexes(slotType)
 	if len(indexes) == 0 {
-		return nil, fmt.Errorf("Backup has no key slot for authentication mode %d. Remedy: Use an unmodified backup created by RestoreSafe.", ks.AuthMode)
+		return nil, problem.Errorf("Backup has no key slot for authentication mode %d.", ks.AuthMode).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 	}
 
 	var yubiSecret []byte
@@ -69,7 +70,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		master, err := ks.Unlock(slotIndex, yubiSecret)
 		if err != nil {
 			if errors.Is(err, cryptox.ErrWrongPassword) {
-				return nil, fmt.Errorf("YubiKey authentication failed: this YubiKey does not unlock the backup. Remedy: Use a YubiKey that was registered for this backup.")
+				return nil, problem.New("YubiKey authentication failed: this YubiKey does not unlock the backup.").WithRemedy("Use a YubiKey that was registered for this backup.")
 			}
 			return nil, err
 		}
@@ -120,7 +121,7 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, log *logging.Lo
 		code, err := recovery.Parse(string(input))
 		cryptox.ZeroBytes(input)
 		if err == nil && code.Check() != ks.Slots[index].Check {
-			err = fmt.Errorf("This recovery code belongs to different keys. Remedy: Use the recovery code created together with these backups.")
+			err = problem.New("This recovery code belongs to different keys.").WithRemedy("Use the recovery code created together with these backups.")
 		}
 		if err == nil {
 			secret := code.Secret()

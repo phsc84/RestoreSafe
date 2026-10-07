@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/plan"
 	"errors"
 	"fmt"
@@ -72,7 +73,7 @@ func applyRetentionPolicy(backupDir string, retentionKeep, keepDifferentials int
 			deleted, err := deleteSetFiles(info.Parts)
 			logDeleted(deleted)
 			if err != nil {
-				err = fmt.Errorf("Failed to delete old backup set %s: %w. Remedy: Check delete permissions in the backup directory.", info.Entry.String(), err)
+				err = problem.Errorf("Failed to delete old backup set %s: %w.", info.Entry.String(), err).WithRemedy("Check delete permissions in the backup directory.")
 				removed.Result, removed.Error = logging.ResultFailed, err.Error()
 				log.Fact(removed)
 				return err

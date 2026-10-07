@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
@@ -271,16 +272,7 @@ func validateBackupPartCount(cfg *config.Config, sources []plan.Source) error {
 
 		estimatedParts := estimatePartCountWithMargin(size, splitSizeBytes)
 		if estimatedParts > naming.MaxPartSequence {
-			return fmt.Errorf(
-				"Backup preflight failed: %q is approximately %s, which at a split size of %d MB would create about %d part files (incl. %d%% overhead margin) - exceeding the %d-part limit of the backup naming scheme. Remedy: Increase split_size_mb in config.yaml so the backup fits within %d parts, or split the source into smaller backups.",
-				source.Resolved,
-				fsx.FormatBytesBinary(uint64(size)),
-				cfg.SplitSizeMB,
-				estimatedParts,
-				partCountSafetyMarginPercent,
-				naming.MaxPartSequence,
-				naming.MaxPartSequence,
-			)
+			return problem.Errorf("Backup preflight failed: %q is approximately %s, which at a split size of %d MB would create about %d part files (incl. %d%% overhead margin) - exceeding the %d-part limit of the backup naming scheme.", source.Resolved, fsx.FormatBytesBinary(uint64(size)), cfg.SplitSizeMB, estimatedParts, partCountSafetyMarginPercent, naming.MaxPartSequence).WithRemedy(fmt.Sprintf("Increase split_size_mb in config.yaml so the backup fits within %d parts, or split the source into smaller backups.", naming.MaxPartSequence))
 		}
 	}
 

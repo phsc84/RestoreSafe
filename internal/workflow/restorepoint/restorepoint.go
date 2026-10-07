@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"context"
 	"fmt"
 	"io"
@@ -24,7 +25,7 @@ import (
 // nil).
 func Process(ctx context.Context, set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *logging.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
 	if set.Header.IsDiff() && base == nil {
-		return nil, fmt.Errorf("The full backup of chain %s is required to restore %s_%s. Remedy: Put the FULL files of %s into the backup directory.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date, set.Header.ChainID)
+		return nil, problem.Errorf("The full backup of chain %s is required to restore %s_%s.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date).WithRemedy(fmt.Sprintf("Put the FULL files of %s into the backup directory.", set.Header.ChainID))
 	}
 	keys, err := set.SectionKeys(master)
 	if err != nil {
@@ -92,13 +93,13 @@ func Process(ctx context.Context, set, base *container.Set, master []byte, destD
 func checkBaseLink(diff, base *container.Header, baseManifestSHA256 string) error {
 	switch {
 	case base.IsDiff():
-		return fmt.Errorf("The base of %s_%s is not a full backup. Remedy: Use unmodified backup files.", diff.DirectoryName, diff.Date)
+		return problem.Errorf("The base of %s_%s is not a full backup.", diff.DirectoryName, diff.Date).WithRemedy("Use unmodified backup files.")
 	case base.ChainID != diff.ChainID || base.DirectoryName != diff.DirectoryName || base.Date != diff.BaseDate:
-		return fmt.Errorf("The full backup %s_%s_%s does not belong to differential %03d (expected full backup of %s). Remedy: Use the FULL files that belong to this chain.", base.DirectoryName, base.ChainID, base.Date, diff.DiffNumber, diff.BaseDate)
+		return problem.Errorf("The full backup %s_%s_%s does not belong to differential %03d (expected full backup of %s).", base.DirectoryName, base.ChainID, base.Date, diff.DiffNumber, diff.BaseDate).WithRemedy("Use the FULL files that belong to this chain.")
 	case base.KeySet.ID != diff.KeySet.ID:
-		return fmt.Errorf("The full backup of chain %s uses different keys than differential %03d. Remedy: Use unmodified backup files.", diff.ChainID, diff.DiffNumber)
+		return problem.Errorf("The full backup of chain %s uses different keys than differential %03d.", diff.ChainID, diff.DiffNumber).WithRemedy("Use unmodified backup files.")
 	case baseManifestSHA256 != diff.BaseManifestSHA256:
-		return fmt.Errorf("The full backup of chain %s is not the one differential %03d was created from (manifest checksum mismatch). Remedy: Use the original FULL files of this chain.", diff.ChainID, diff.DiffNumber)
+		return problem.Errorf("The full backup of chain %s is not the one differential %03d was created from (manifest checksum mismatch).", diff.ChainID, diff.DiffNumber).WithRemedy("Use the original FULL files of this chain.")
 	}
 	return nil
 }

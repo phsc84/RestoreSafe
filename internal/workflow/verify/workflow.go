@@ -9,6 +9,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -45,7 +46,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
+		return problem.Errorf("Failed to scan backup directory %q: %w.", backupDir, err).WithRemedy("Check the backup_directory path in config.yaml and ensure the directory is readable.")
 	}
 	selectedInfos, err := job.SelectSets(infos, req.Sets)
 	if err != nil {

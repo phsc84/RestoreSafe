@@ -15,6 +15,7 @@ import (
 	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -37,7 +38,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	// Resolve backup directory (may be relative to exe dir).
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		return fmt.Errorf("Failed to create backup directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
+		return problem.Errorf("Failed to create backup directory: %w.", err).WithRemedy("Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.")
 	}
 
 	lock, err := fsx.AcquireBackupLock(backupDir)
@@ -50,7 +51,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backup directory: %w. Remedy: Check read permissions in the backup directory.", err)
+		return problem.Errorf("Failed to scan backup directory: %w.", err).WithRemedy("Check read permissions in the backup directory.")
 	}
 
 	// Determine backup run identifiers.

@@ -12,6 +12,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -42,7 +43,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if strings.TrimSpace(req.Destination) == "" {
-		return errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
+		return problem.New("No restore destination chosen.").WithRemedy("Choose the folder to restore into.")
 	}
 	restorePath := req.Destination
 
@@ -54,7 +55,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory exists and is readable.", backupDir, err)
+		return problem.Errorf("Failed to scan backup directory %q: %w.", backupDir, err).WithRemedy("Check the backup_directory path in config.yaml and ensure the directory exists and is readable.")
 	}
 	selectedInfos, err := job.SelectSets(infos, req.Sets)
 	if err != nil {
@@ -179,7 +180,7 @@ func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath st
 		if nameErr := naming.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr, item.OutputDirCode = nameErr, interact.CodeRestoreTargetInvalid
 		} else if _, err := os.Stat(item.OutputDir); err == nil {
-			item.OutputDirErr, item.OutputDirCode = fmt.Errorf("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory."), interact.CodeRestoreTargetExists
+			item.OutputDirErr, item.OutputDirCode = problem.New("Restore directory already exists.").WithRemedy("Choose a different restore destination or rename/delete the existing restore directory."), interact.CodeRestoreTargetExists
 		}
 		items = append(items, item)
 	}
@@ -380,13 +381,13 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 	// same DirectoryName. os.MkdirAll would silently merge into an existing tree.
 	outDir := filepath.Join(destDir, entry.DirectoryName)
 	if err := os.MkdirAll(destDir, 0o750); err != nil {
-		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
+		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}
 	if err := os.Mkdir(outDir, 0o750); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return 0, fmt.Errorf("Restore directory already exists: %s. Remedy: Choose a different restore destination or rename/delete the existing restore directory.", filepath.ToSlash(outDir))
+			return 0, problem.Errorf("Restore directory already exists: %s.", filepath.ToSlash(outDir)).WithRemedy("Choose a different restore destination or rename/delete the existing restore directory.")
 		}
-		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
+		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}
 
 	var done atomic.Int64
@@ -441,7 +442,7 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 // while the user makes them.
 func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetInfo, sets []naming.BackupEntry, destination string) (interact.RestorePlan, error) {
 	if strings.TrimSpace(destination) == "" {
-		return interact.RestorePlan{}, errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
+		return interact.RestorePlan{}, problem.New("No restore destination chosen.").WithRemedy("Choose the folder to restore into.")
 	}
 	selected, err := job.SelectSets(infos, sets)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/recovery"
 	"RestoreSafe/internal/security/yubikey"
@@ -191,7 +192,7 @@ func registerYubiKeys(u interact.UI, password []byte, mode config.AuthMode, spar
 			return slots, err
 		}
 		if !connected {
-			return slots, fmt.Errorf("Spare YubiKey registration cancelled. No backup was written. Remedy: Set 'yubikey_spare: false' in config.yaml to back up without a spare YubiKey.")
+			return slots, problem.New("Spare YubiKey registration cancelled. No backup was written.").WithRemedy("Set 'yubikey_spare: false' in config.yaml to back up without a spare YubiKey.")
 		}
 		if err := checkYubiKeyConnectedFn(); err != nil {
 			fmt.Fprintln(out, "No YubiKey detected. Insert the spare YubiKey.")
