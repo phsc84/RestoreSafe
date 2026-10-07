@@ -414,7 +414,9 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 ### Prerequisites
 
 - [Go](https://go.dev/dl/) 1.27 or later
-- [goversioninfo](https://github.com/josephspurrier/goversioninfo): `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`
+- Nothing else: the developer tools (`goversioninfo`, `staticcheck`, `govulncheck`, `deadcode`) are pinned in `go.mod` and run with `go tool <name>`.
+
+Branches, commits, pull requests, CI, and the rules every change keeps are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Build
 
@@ -422,7 +424,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 build.bat
 ```
 
-This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
+This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
 
 ### Project layout
 

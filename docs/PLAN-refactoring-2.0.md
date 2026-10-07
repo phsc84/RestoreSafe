@@ -264,6 +264,7 @@ docs/
 - RF-57 (encryption wording).
 
 **RF-64 (P3) Add a CLAUDE.md / contributor note.** One page: the layer rules, the commands (`go build`, `go vet`, `go test`, `go tool staticcheck`), the standing constraints of SPEC-refactoring section 2, the error convention of RF-25, and the commit style. It replaces the parts of the private DEVELOPMENT.md that a contributor needs.
+Done for the contributor note: [CONTRIBUTING.md](../CONTRIBUTING.md) describes branches, commits, pull requests, CI and its coverage floors, CHANGELOG entries, the rules of the code, and releases; the README and DEVELOPMENT.md link to it. Open: whether a CLAUDE.md is still worth having next to it, and the error convention once RF-25 is decided.
 
 ## 13. Phases
 
