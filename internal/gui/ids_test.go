@@ -22,7 +22,7 @@ func TestScriptsKnowTheControlIDs(t *testing.T) {
 		"VerifyStart": idVerifyStart, "VerifyCancel": idVerifyCancel, "VerifyDetails": idVerifyDetails,
 		"CredentialOK": idCredentialOK, "CredentialCancel": idCredentialCancel, "CredentialLink": idCredentialLink,
 		"BackupsFilter": idBackupsFilter, "BackupsList": idBackupsList, "BackupsRestore": idBackupsRestore,
-		"BackupsVerify": idBackupsVerify, "EmptyBackUp": idEmptyBackUp,
+		"BackupsVerify": idBackupsVerify,
 		"RestoreStart": idRestoreStart, "RestoreCancel": idRestoreCancel, "RestoreList": idRestoreList,
 		"RestoreDest": idRestoreDest, "RestoreBrowse": idRestoreBrowse,
 		"RestoreBackupDir": idRestoreIntoBackupDir, "RestoreDetails": idRestoreDetails,

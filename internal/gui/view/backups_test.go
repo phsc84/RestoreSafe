@@ -36,7 +36,7 @@ func rowsByFolder(p BackupsPage) map[string]BackupRow {
 func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	t.Parallel()
 	p, _, _ := backupsOf(t, scenario.Protected)
-	if p.Empty != nil || len(p.Groups) != 1 || !p.Groups[0].Expanded {
+	if len(p.Groups) != 1 || !p.Groups[0].Expanded {
 		t.Fatalf("one expanded run: %+v", p.Groups)
 	}
 	g := p.Groups[0]
@@ -101,7 +101,8 @@ func TestBackupsShowTheProblems(t *testing.T) {
 func TestBackupsEmptyAndFilter(t *testing.T) {
 	t.Parallel()
 	p, _, _ := backupsOf(t, scenario.Empty)
-	if p.Empty == nil || p.Empty.Button.Action != ActionBackUp || len(p.Groups) != 0 {
+	// Without backups the page shows the empty list, not a separate page.
+	if len(p.Groups) != 0 || len(p.Columns) == 0 {
 		t.Fatalf("empty page %+v", p)
 	}
 	// Refresh checks again, also on an empty page; not before the first check.

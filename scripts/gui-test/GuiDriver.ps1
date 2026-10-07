@@ -85,7 +85,6 @@ $Ids = [ordered]@{
   BackupsList      = 602
   BackupsRestore   = 603
   BackupsVerify    = 604
-  EmptyBackUp      = 609
   RestoreStart     = 701
   RestoreCancel    = 702
   RestoreList      = 703

@@ -20,7 +20,7 @@ const (
 	_
 	_
 	_
-	idEmptyBackUp
+	_ // was the empty page's Back up now button
 	idBackupsRefresh
 	idLineButtons = 640 // idLineButtons+i is the button of line i
 )
@@ -78,8 +78,6 @@ type backupsPage struct {
 	barText, restore, verify win32.HWND
 	bar                      view.ActionBar
 
-	emptyTitle, emptyLine, emptyButton win32.HWND
-
 	folder    string
 	selRun    naming.BackupID
 	selSet    string
@@ -121,9 +119,6 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.barText = panel.Label("", widget.TextBody, pal.Text)
 	b.restore = panel.Button(" ", idBackupsRestore)
 	b.verify = panel.Button(" ", idBackupsVerify)
-	b.emptyTitle = panel.Label("", widget.TextTitle, pal.Text)
-	b.emptyLine = panel.Label("", widget.TextBody, pal.TextSecondary)
-	b.emptyButton = panel.PrimaryButton(" ", idEmptyBackUp)
 	panel.OnCommand = b.command
 	panel.OnNotify = b.notify
 	panel.OnScroll = b.layout
@@ -171,23 +166,7 @@ func (b *backupsPage) update() {
 	}
 
 	b.showRun()
-	empty := v.Empty != nil
-	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify} {
-		setShown(h, !empty)
-	}
-	b.lines.Show(!empty && (v.Retention != nil || len(v.Lines) > 0))
-	for _, h := range []win32.HWND{b.emptyTitle, b.emptyLine, b.emptyButton} {
-		setShown(h, empty)
-	}
-	if empty {
-		win32.SetText(b.emptyTitle, v.Empty.Title)
-		win32.SetText(b.emptyLine, v.Empty.Line)
-		win32.SetText(b.emptyButton, v.Empty.Button.Text)
-		win32.Enable(b.emptyButton, v.Empty.Button.Enabled)
-		b.acts[idEmptyBackUp] = v.Empty.Button.Action
-		b.layout()
-		return
-	}
+	b.lines.Show(v.Retention != nil || len(v.Lines) > 0)
 	b.fillLines()
 	b.fillList()
 	b.updateBar()
@@ -652,23 +631,18 @@ func (b *backupsPage) layout() {
 	client := win32.ClientRect(b.panel.HWND())
 	bar := s.Px(actionBarHeight)
 	var listH, total int32
-	if b.view.Empty == nil {
-		// A scroll bar that comes or goes changes the width, and with it
-		// the run card's height.
-		for range 2 {
-			fixed := 2*s.Px(widget.ContentPaddingY) + b.headHeight(client.Width()) + bar
-			listH = max(client.Height()-fixed, s.Px(minListHeight))
-			total = fixed + listH
-			b.panel.SetScroll(total)
-			now := win32.ClientRect(b.panel.HWND())
-			if now.Width() == client.Width() {
-				break
-			}
-			client = now
+	// A scroll bar that comes or goes changes the width, and with it the
+	// run card's height.
+	for range 2 {
+		fixed := 2*s.Px(widget.ContentPaddingY) + b.headHeight(client.Width()) + bar
+		listH = max(client.Height()-fixed, s.Px(minListHeight))
+		total = fixed + listH
+		b.panel.SetScroll(total)
+		now := win32.ClientRect(b.panel.HWND())
+		if now.Width() == client.Width() {
+			break
 		}
-	} else {
-		b.panel.SetScroll(0)
-		client = win32.ClientRect(b.panel.HWND())
+		client = now
 	}
 	page := client
 	page.Top -= b.panel.ScrollOffset()
@@ -685,17 +659,6 @@ func (b *backupsPage) layout() {
 	if b.run.mode != runHidden {
 		b.run.place(area.TopPx(b.run.height(area.Rest().Width())))
 		area.Top(widget.CardGap)
-	}
-
-	if b.view.Empty != nil {
-		win32.SetWindowPos(b.emptyTitle, area.Top(30))
-		win32.SetWindowPos(b.emptyLine, area.Top(24))
-		area.Top(12)
-		row := widget.NewArea(s, area.Top(widget.ButtonHeight))
-		r := row.Rest()
-		r.Right = r.Left + buttonWidth(t, b.emptyButton)
-		win32.SetWindowPos(b.emptyButton, r)
-		return
 	}
 
 	if win32.IsWindowVisible(b.lines.HWND()) && b.linesStack != nil {
@@ -740,10 +703,6 @@ func (b *backupsPage) chosen() []naming.BackupEntry {
 func (b *backupsPage) focus() {
 	if b.run.mode != runHidden {
 		b.run.focus()
-		return
-	}
-	if b.view.Empty != nil {
-		win32.SetFocus(b.emptyButton)
 		return
 	}
 	win32.SetFocus(b.list)

@@ -90,16 +90,8 @@ type BackupsPage struct {
 	Lines     []InfoLine
 	Columns   []string
 	Groups    []RunGroup
-	// Empty is set when there is nothing to list (GUI spec BK-9).
-	Empty *EmptyState
 	// Refresh takes a new snapshot of the machine (F5), as on Create backup.
 	Refresh Button
-}
-
-// EmptyState is a page without content.
-type EmptyState struct {
-	Title, Line string
-	Button      Button
 }
 
 // BackupsOf computes the Backups page from the snapshot s, the
@@ -111,10 +103,6 @@ func BackupsOf(s *health.Snapshot, cfg *config.Config, r *flow.Run, folder strin
 	}
 	p.Refresh.Enabled = true
 	p.Filters, p.Filter = filtersOf(s, folder)
-	if len(s.Sets) == 0 && len(s.Logs) == 0 {
-		p.Empty = &EmptyState{Title: lastBackupNone, Line: backupsEmptyLine, Button: Button{Text: buttonBackUp, Action: ActionBackUp, Enabled: !s.Check.BlocksBackup()}}
-		return p
-	}
 	p.Retention = retentionLine(s, now)
 	p.Lines = problemLines(s, cfg, now)
 	p.Groups = groupsOf(s, r, folder, now)

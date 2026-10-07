@@ -96,7 +96,6 @@ const (
 	legendOther      = "Other %s"
 	legendFree       = "Free %s"
 	storageEstimate  = "A full backup of all folders needs about %s"
-	lastBackupNone   = "No backups yet"
 	laterFailed      = "The backup of %s failed; the Restore backup page has its log."
 	laterCancelled   = "The backup of %s was cancelled before it backed up a folder."
 	lastCancelled    = "The backup of %s was cancelled; not every folder was backed up."
@@ -334,7 +333,6 @@ const (
 
 // Backups page (GUI spec 7).
 const (
-	backupsEmptyLine    = "Your backups appear here after the first backup."
 	columnFolder        = "Folder"
 	columnType          = "Type"
 	columnBasedOn       = "Based on"

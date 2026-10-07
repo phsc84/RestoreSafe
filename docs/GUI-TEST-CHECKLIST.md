@@ -81,8 +81,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | Open | |
 | BK-8 | A verified differential run: "The backup of <date> can be restored", "Checked N folders …, including the full backups they're based on."; a run with a folder whose full backup is missing (`BaseMissing`): "<folders> from the backup of <date> can be restored" and "Another backup has a problem; see below." | Open | Script: the title. Pre-checked: `BaseMissing`. |
-| BK-9 | Empty state with **Back up now…** | Open | |
-| OV-8 | **Refresh** next to the title on Create backup and Restore backup, vertically centered on it, in the same place on both; it checks again (disabled meanwhile and during an operation) and the list shows a set deleted in Explorer as gone, also in the empty state | Open | Pre-checked by screenshot at 150 %. |
+| BK-9 | All backups deleted in Explorer, **Refresh**: the empty list, no "No backups yet" page; the same after a cancelled backup | Open | |
+| OV-8 | **Refresh** next to the title on Create backup and Restore backup, vertically centered on it, in the same place on both; it checks again (disabled meanwhile and during an operation) and the list shows a set deleted in Explorer as gone, also the last one | Open | Pre-checked by screenshot at 150 %. |
 
 ## 4. Restore
 
