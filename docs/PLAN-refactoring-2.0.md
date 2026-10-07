@@ -120,8 +120,10 @@ Acceptance: `go tool deadcode -test ./...` prints nothing; staticcheck reports n
 Done in `9b6b196`; the procs, types and constants that only the deleted wrappers used went with them.
 
 **RF-21 (P2) Remove the auth-mode round trip.** `restore.authFactors` turns the key set's `AuthMode` into two booleans, and `config.AuthModeFromFactors` turns them back into the same `AuthMode` ([restore/workflow.go:101](../internal/workflow/restore/workflow.go#L101), [:237](../internal/workflow/restore/workflow.go#L237); [verify/workflow.go:179](../internal/workflow/verify/workflow.go#L179)). This is left over from 1.x, which read the factors from a `.challenge` file. Pass `config.AuthMode` through, and delete `AuthModeFromFactors` and its test.
+Done in `b0751d3`; `config.AuthMode.UsesYubiKey` answers what the two booleans did.
 
 **RF-22 (P2) One set of auth-mode constants.** `container.AuthModePassword/PasswordYubiKey/YubiKey` (`int`, [keyset.go:25-29](../internal/format/container/keyset.go#L25-L29)) duplicate `config.AuthMode*` (typed). `container` already imports `config`. Make `KeySet.AuthMode` a `config.AuthMode` (JSON stays a number, so the format is unchanged) and delete the `container` constants.
+Done in `adf34f2`; the format fixtures confirm the JSON is unchanged.
 
 **RF-23 (P3) The FIDO2 debug output goes nowhere in the app.** `RESTORESAFE_FIDO2_DEBUG=1` prints with `fmt.Printf` ([fido2.go:27-33](../internal/security/yubikey/fido2.go#L27-L33)), but `RestoreSafe.exe` is linked with `-H=windowsgui` and has no console; only `yubidiag` can show it. Replace the environment switch with a package-level `io.Writer` that `yubidiag` sets and the app leaves nil. (The `GetConsoleWindow` fallback in `dialogParent` stays: `yubidiag` is a console program and needs it.)
 
