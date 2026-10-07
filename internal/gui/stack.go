@@ -118,8 +118,3 @@ func (s *stack) place(left, top int32) {
 		y += it.height
 	}
 }
-
-// table adds a table, as high as its rows need.
-func (s *stack) table(tb *table) {
-	s.items = append(s.items, stackItem{height: s.t.Scale.Px(tb.height()), place: tb.place})
-}

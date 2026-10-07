@@ -54,6 +54,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ID | Check | Status | Notes |
 |---|---|---|---|
 | BP-1 | Plan shows type, number and reason per folder; a folder with a problem shows it instead of a type | Open | Pre-checked: differential and full rows, a missing folder. |
+| BP-1 | The splitter below the table makes it taller and shorter, not below its rows (at most three); the dialog grows and shrinks with it, up to the height of the screen | Open | |
 | BP-2 | Space line: fits (ok), only the estimate fits (warning), doesn't fit (error, no **Start**) on a small USB stick | Open | |
 | BP-2 | Afterwards line names the chain retention removes; after the run exactly those files are gone from the backup directory (compare in Explorer) | Open | |
 | BP-4 | **Full backup instead**: plan switches to full for every folder and back with **Back to plan** | Passed (script) | Full backup instead and Back to plan, 2026-10-02. |
@@ -78,6 +79,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
 | BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | Open | |
 | BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | Open | Pre-checked by screenshot at 150 % (smoke test). |
+| BK-7a | The splitter below the table makes it taller and shorter, not below its rows (at most three); the window grows and shrinks with it, up to the height of the screen | Open | |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | Open | |
 | BK-8 | A verified differential run: "The backup of <date> can be restored", "Checked N folders …, including the full backups they're based on."; a run with a folder whose full backup is missing (`BaseMissing`): "<folders> from the backup of <date> can be restored" and "Another backup has a problem; see below." | Open | Script: the title. Pre-checked: `BaseMissing`. |

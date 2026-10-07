@@ -42,9 +42,14 @@ type planDialog struct {
 	showRemoves bool
 	view        view.BackupPlanView
 	start       win32.HWND
-	// table lists the folders; it outlives the rebuilds, so the widths
-	// the user gives its columns stay.
-	table *table
+	// table lists the folders, with the splitter that sets its height; it
+	// outlives the rebuilds, so the widths the user gives its columns stay.
+	table *dialogTable
+
+	// The layout of the last build: the stack and the buttons at the left
+	// and right.
+	st          *stack
+	left, right []win32.HWND
 }
 
 // openPlanDialog opens the plan dialog in its waiting state.
@@ -56,7 +61,8 @@ func (a *app) openPlanDialog() {
 	if err != nil {
 		return
 	}
-	p := &planDialog{a: a, win: win, table: newTable(win.theme, win.panel.HWND(), 0)}
+	p := &planDialog{a: a, win: win}
+	p.table = newDialogTable(win.theme, win.panel.HWND(), func() { p.layout(false) })
 	win.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
 		r, _ := p.table.notify(hdr)
 		return r
@@ -102,8 +108,8 @@ func (p *planDialog) build(place bool) {
 	panel.Clear()
 	p.start = 0
 	st := newStack(t, panel, s.Px(planWidth-2*planMargin))
-
-	p.table.show(p.plan != nil)
+	p.st = st
+	p.table.begin(st, p.plan != nil)
 	if p.plan == nil {
 		p.view = view.BackupPlanView{Cancel: view.Button{Text: view.ButtonCancel, Action: view.ActionCancel, Enabled: true}}
 		st.para(view.PlanPreparing, widget.TextBody, pal.Text, view.GlyphNone)
@@ -135,14 +141,23 @@ func (p *planDialog) build(place bool) {
 		right = append(right, p.start)
 	}
 	right = append(right, p.button(v.Cancel, idPlanCancel, false, false))
+	p.left, p.right = left, right
+	p.layout(place)
+}
 
-	contentH := st.height()
+// layout sizes the dialog to its content, at most the height of the
+// screen, and places the controls; place centers it over the main window.
+func (p *planDialog) layout(place bool) {
+	t := p.win.theme
+	s := t.Scale
+	st := p.st
 	margin := s.Px(planMargin)
 	buttonsH := s.Px(widget.ButtonHeight)
 	w := s.Px(planWidth)
-	h := margin + contentH + margin + buttonsH + margin
+	h := p.table.fit(margin + st.height() + margin + buttonsH + margin)
 	p.win.resize(w, h, place)
 	st.place(margin, margin)
+	left, right := p.left, p.right
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	for i := len(right) - 1; i >= 0; i-- {
 		win32.SetWindowPos(right[i], row.RightPx(buttonWidth(t, right[i])))
@@ -169,8 +184,7 @@ func (p *planDialog) content(st *stack) {
 	}
 	st.gap(10)
 	p.table.set(v.Table())
-	st.table(p.table)
-	st.gap(12)
+	p.table.add(st)
 	for _, line := range []view.PlanLine{v.Space, v.Unlock, v.Afterwards} {
 		color := pal.Text
 		if line.Tone != view.ToneNeutral && line.Tone != view.ToneSuccess {

@@ -37,9 +37,13 @@ type verifyDialog struct {
 	err   error
 	view   view.VerifyPlanView
 	start  win32.HWND
-	// table lists the folders; it outlives the rebuilds, so the widths the
-	// user gives its columns stay.
-	table *table
+	// table lists the folders, with the splitter that sets its height; it
+	// outlives the rebuilds, so the widths the user gives its columns stay.
+	table *dialogTable
+
+	// The layout of the last build: the stack and the buttons at the right.
+	st      *stack
+	buttons []win32.HWND
 }
 
 // openVerifyDialog opens the Verify window in its waiting state.
@@ -51,7 +55,8 @@ func (a *app) openVerifyDialog(what string) {
 	if err != nil {
 		return
 	}
-	d := &verifyDialog{a: a, win: win, what: what, table: newTable(win.theme, win.panel.HWND(), 0)}
+	d := &verifyDialog{a: a, win: win, what: what}
+	d.table = newDialogTable(win.theme, win.panel.HWND(), func() { d.layout(false) })
 	win.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
 		r, _ := d.table.notify(hdr)
 		return r
@@ -97,8 +102,8 @@ func (d *verifyDialog) build(place bool) {
 	panel.Clear()
 	d.start = 0
 	st := newStack(t, panel, s.Px(planWidth-2*planMargin))
-
-	d.table.show(d.plan != nil)
+	d.st = st
+	d.table.begin(st, d.plan != nil)
 	switch {
 	case d.plan == nil && d.ended:
 		d.view = view.VerifyPlanView{Cancel: view.Button{Text: view.ButtonCancel, Action: view.ActionCancel, Enabled: true}}
@@ -132,13 +137,23 @@ func (d *verifyDialog) build(place bool) {
 		buttons = append(buttons, d.start)
 	}
 	buttons = append(buttons, panel.Button(d.view.Cancel.Text, idVerifyCancel))
+	d.buttons = buttons
+	d.layout(place)
+}
 
+// layout sizes the window to its content, at most the height of the screen,
+// and places the controls; place centers it over the main window.
+func (d *verifyDialog) layout(place bool) {
+	t := d.win.theme
+	s := t.Scale
+	st := d.st
 	margin := s.Px(planMargin)
 	buttonsH := s.Px(widget.ButtonHeight)
 	w := s.Px(planWidth)
-	h := margin + st.height() + margin + buttonsH + margin
+	h := d.table.fit(margin + st.height() + margin + buttonsH + margin)
 	d.win.resize(w, h, place)
 	st.place(margin, margin)
+	buttons := d.buttons
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	for i := len(buttons) - 1; i >= 0; i-- {
 		win32.SetWindowPos(buttons[i], row.RightPx(buttonWidth(t, buttons[i])))
@@ -155,8 +170,7 @@ func (d *verifyDialog) content(st *stack) {
 	st.row(stackLineHeight, cell{hwnd: panel.Label(v.Heading, widget.TextStrong, pal.Text), fill: true})
 	st.gap(10)
 	d.table.set(v.Folders)
-	st.table(d.table)
-	st.gap(12)
+	d.table.add(st)
 	for _, line := range []view.PlanLine{v.Read, v.Unlock} {
 		st.labeled(line.Label, line.Text, pal.Text, line.Glyph)
 		st.gap(4)

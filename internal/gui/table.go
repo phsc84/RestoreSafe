@@ -304,3 +304,105 @@ func (z *tableSizer) moved(top int32) {
 		z.card.rows[1].height = z.rowHeight()
 	}
 }
+
+// dialogTable is the table of a dialog that sizes itself to its content,
+// with a splitter in the gap below it that sets its height, as in the
+// Restore window: the dialog grows and shrinks with the table. The table
+// and the splitter outlive the dialog's rebuilds, so a drag goes on over
+// one.
+type dialogTable struct {
+	*table
+	theme  *widget.Theme
+	split  *widget.Splitter
+	layout func()
+	// dragged is the table's height in DIPs as the user dragged the
+	// splitter, 0 until then; top is its top in pixels.
+	dragged int32
+	top     int32
+	// st is the stack of the last build and item the index of the table's
+	// item in it, -1 when the build has no table.
+	st   *stack
+	item int
+}
+
+// newDialogTable creates the table and the splitter on parent; layout lays
+// the dialog out again after a drag, without a rebuild.
+func newDialogTable(t *widget.Theme, parent win32.HWND, layout func()) *dialogTable {
+	d := &dialogTable{table: newTable(t, parent, 0), theme: t, layout: layout, item: -1}
+	if sp, err := widget.NewSplitter(t, parent, t.Palette.Surface); err == nil {
+		sp.OnMove = d.moved
+		d.split = sp
+	}
+	return d
+}
+
+// begin starts a build on st: the table and the splitter are shown when
+// shown.
+func (d *dialogTable) begin(st *stack, shown bool) {
+	d.st, d.item = st, -1
+	d.show(shown)
+	if d.split != nil {
+		setShown(d.split.HWND(), shown)
+	}
+}
+
+// add adds the table, as high as its rows or as dragged, and the splitter
+// in the 12-DIP gap below it.
+func (d *dialogTable) add(st *stack) {
+	d.item = len(st.items)
+	st.row(d.want(), cell{fill: true, place: func(r win32.Rect) {
+		d.top = r.Top
+		d.place(r)
+	}})
+	if d.split == nil {
+		st.gap(12)
+		return
+	}
+	st.gap(2)
+	st.row(widget.SplitterHeight, cell{hwnd: d.split.HWND(), fill: true})
+	st.gap(2)
+}
+
+// want returns the table's height in DIPs: as the user dragged it, or else
+// as many rows as it has, up to tableMaxRows; at least least.
+func (d *dialogTable) want() int32 {
+	want := d.table.height()
+	if d.dragged > 0 {
+		want = d.dragged
+	}
+	return max(want, d.least())
+}
+
+// least returns the least height of the table in DIPs: its rows, at most
+// tableMinRows.
+func (d *dialogTable) least() int32 {
+	return d.heightOf(min(max(len(d.v.Rows), 1), tableMinRows))
+}
+
+// fit shrinks the table so that a dialog h pixels high fits the screen and
+// returns the dialog's new height.
+func (d *dialogTable) fit(h int32) int32 {
+	if d.st == nil || d.item < 0 {
+		return h
+	}
+	s := d.theme.Scale
+	item := &d.st.items[d.item]
+	over := h - win32.SystemMetric(win32.SM_CYFULLSCREEN, uint32(s))*9/10
+	if cut := min(over, item.height-s.Px(d.least())); cut > 0 {
+		item.height -= cut
+		h -= cut
+	}
+	return h
+}
+
+// moved sets the table's height for the splitter's new top.
+func (d *dialogTable) moved(top int32) {
+	if d.st == nil || d.item < 0 {
+		return
+	}
+	s := d.theme.Scale
+	d.dragged = max(s.Dip(top-s.Px(2)-d.top), 1)
+	d.st.items[d.item].height = s.Px(d.want())
+	d.layout()
+	d.dragged = s.Dip(d.st.items[d.item].height) // as far as it got
+}
