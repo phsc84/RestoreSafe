@@ -250,7 +250,7 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **10c:** pre-run of `docs/GUI-TEST-CHECKLIST.md` at 150 % (scripts and scripted walks), with a list of known differences from the spec to accept or change.
 - **10d:** README (usage, screenshots from a neutral demo setup), CHANGELOG, config sample.
 - **10e:** the known differences decided and carried out (6g).
-- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, then the merge into `v2`.
+- Open: when the GUI refinement is finished, recreate all screenshots (README, `docs/images`) and all ASCII mockups in `docs/SPEC-gui.md` from the final UI; until then they may lag behind the code (e.g. the Overview's "Last backup" mockup still shows a duration). The manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, then the merge into `v2`.
 
 ## 6g. Known differences (decided 2026-10-06)
 

@@ -341,15 +341,11 @@ func keySetsByRun(s *health.Snapshot) map[naming.BackupID]time.Time {
 	return keys
 }
 
-// runHeader words a run: "Today, 09:12 · 3 folders · 3.4 GB · 4 min ·
-// 1 warning".
+// runHeader words a run: "Today, 09:12 · 3 folders · 3.4 GB · 1 warning".
 func runHeader(when string, folders int, bytes int64, facts logging.RunFacts, newKeys bool) (string, Tone, Glyph) {
 	parts := []string{capitalize(when), folderPhrase(folders), Size(bytes)}
 	tone, glyph := ToneNeutral, GlyphNone
 	if b := facts.Backup; b != nil {
-		if b.Seconds > 0 {
-			parts = append(parts, Duration(time.Duration(b.Seconds)*time.Second))
-		}
 		switch {
 		case b.Result == logging.ResultCancelled:
 			parts = append(parts, runPartCancelled)
