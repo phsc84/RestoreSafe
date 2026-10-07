@@ -45,6 +45,10 @@ func Errorf(format string, args ...any) *Error {
 	return e
 }
 
+// New returns an Error with the message msg, taken as it is (no format).
+// Add the remedy with WithRemedy.
+func New(msg string) *Error { return &Error{Msg: msg} }
+
 // isMulti reports whether err wraps several errors (more than one %w).
 func isMulti(err error) bool {
 	_, ok := err.(interface{ Unwrap() []error })

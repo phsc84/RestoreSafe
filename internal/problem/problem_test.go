@@ -19,6 +19,9 @@ func TestErrorTextIsMessageAndRemedy(t *testing.T) {
 	if got := Errorf("Wrong recovery code.").Error(); got != "Wrong recovery code." {
 		t.Fatalf("without remedy: %q", got)
 	}
+	if got := New("100% full.").WithRemedy("Free up space.").Error(); got != "100% full. Remedy: Free up space." {
+		t.Fatalf("New takes the message as it is: %q", got)
+	}
 	if Errorf("No cause %d.", 1).Err != nil {
 		t.Fatal("a message without %w has no cause")
 	}
