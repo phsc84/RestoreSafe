@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -24,11 +24,13 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-var fido2Debug = os.Getenv("RESTORESAFE_FIDO2_DEBUG") == "1"
+// DebugOutput receives details of the WebAuthn calls; nil (the default) turns
+// them off. yubidiag sets it; RestoreSafe.exe has no console to show them.
+var DebugOutput io.Writer
 
 func fido2Log(format string, args ...any) {
-	if fido2Debug {
-		fmt.Printf("[fido2-debug] "+format+"\n", args...)
+	if DebugOutput != nil {
+		fmt.Fprintf(DebugOutput, "[fido2-debug] "+format+"\n", args...)
 	}
 }
 

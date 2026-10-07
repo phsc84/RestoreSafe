@@ -55,6 +55,9 @@ func (yi yubiInterface) interfaceName() string {
 }
 
 func main() {
+	if os.Getenv("RESTORESAFE_FIDO2_DEBUG") == "1" {
+		yubikey.DebugOutput = os.Stdout
+	}
 	fmt.Println("================================")
 	fmt.Println("RestoreSafe YubiKey Diagnostic")
 	fmt.Println("================================")
