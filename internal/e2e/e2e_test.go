@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil"
+	"RestoreSafe/internal/testutil/filelock"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact/interacttest"
 	"RestoreSafe/internal/workflow/restore"
@@ -21,8 +22,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/sys/windows"
 )
 
 const password = "correct horse battery"
@@ -332,18 +331,14 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	s.done()
 
 	// Second backup: the mail archive is locked by another program.
-	p, _ := windows.UTF16PtrFromString(locked)
-	h, err := windows.CreateFile(p, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	release := filelock.Hold(t, locked)
 	s = useScript(t, []string{"y"}, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 2: %v", err)
 	}
 	out := s.out.String()
 	s.done()
-	windows.CloseHandle(h)
+	release()
 	for _, want := range []string{"Skipped (could not be read): Mail/archive.pst", "Excluded by pattern: 2", "Cleanup old data skipped for [Documents]", "Backup completed with warnings", "Exclude            : *.tmp, /Cache"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("expected %q in output: %q", want, out)
