@@ -22,3 +22,6 @@ go.sum text eol=lf
 *.png  binary
 *.ico  binary
 *.syso binary
+
+# Format fixtures are compared byte for byte: no line-ending conversion.
+internal/format/testdata/** -text
