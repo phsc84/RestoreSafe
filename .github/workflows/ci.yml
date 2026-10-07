@@ -43,6 +43,19 @@ jobs:
       - name: deadcode (report)
         run: go tool deadcode -test ./...
 
+  lockdiag:
+    name: Lock diagnostic (temporary)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: |
+          out=$(go run ./scripts/ci/lockdiag; whoami /priv | grep -iE "Backup|Restore")
+          echo "$out"
+          echo "::warning title=lockdiag::$(printf "%s" "$out" | awk 'BEGIN{ORS="%0A"} {print}')"
+
   test:
     name: Tests and coverage
     runs-on: windows-latest
