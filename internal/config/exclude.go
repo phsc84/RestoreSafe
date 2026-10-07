@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"RestoreSafe/internal/problem"
 	"path"
 	"strings"
 )
@@ -36,7 +36,7 @@ func NewExcludeMatcher(patterns []string) (*ExcludeMatcher, error) {
 	for _, raw := range patterns {
 		p := strings.TrimSpace(strings.ReplaceAll(raw, `\`, "/"))
 		if p == "" {
-			return nil, fmt.Errorf("Invalid exclude pattern %q: pattern is empty. Remedy: Remove the empty entry from 'exclude' in config.yaml.", raw)
+			return nil, problem.Errorf("Invalid exclude pattern %q: pattern is empty.", raw).WithRemedy("Remove the empty entry from 'exclude' in config.yaml.")
 		}
 		ep := excludePattern{raw: raw}
 		if strings.HasSuffix(p, "/") {
@@ -51,16 +51,16 @@ func NewExcludeMatcher(patterns []string) (*ExcludeMatcher, error) {
 			ep.anchored = true
 		}
 		if p == "" || p == "." || p == ".." || strings.Contains(p, "//") {
-			return nil, fmt.Errorf("Invalid exclude pattern %q. Remedy: Use a file or directory name (e.g. *.tmp) or a path from the source directory root (e.g. /Cache).", raw)
+			return nil, problem.Errorf("Invalid exclude pattern %q.", raw).WithRemedy("Use a file or directory name (e.g. *.tmp) or a path from the source directory root (e.g. /Cache).")
 		}
 		for _, seg := range strings.Split(p, "/") {
 			if seg == ".." || seg == "." {
-				return nil, fmt.Errorf("Invalid exclude pattern %q: \".\" and \"..\" are not allowed. Remedy: Use a path from the source directory root (e.g. /Cache).", raw)
+				return nil, problem.Errorf("Invalid exclude pattern %q: \".\" and \"..\" are not allowed.", raw).WithRemedy("Use a path from the source directory root (e.g. /Cache).")
 			}
 		}
 		ep.glob = strings.ToLower(p)
 		if _, err := path.Match(ep.glob, ""); err != nil {
-			return nil, fmt.Errorf("Invalid exclude pattern %q: %v. Remedy: Check the brackets and wildcards in 'exclude' in config.yaml.", raw, err)
+			return nil, problem.Errorf("Invalid exclude pattern %q: %v.", raw, err).WithRemedy("Check the brackets and wildcards in 'exclude' in config.yaml.")
 		}
 		m.patterns = append(m.patterns, ep)
 	}
