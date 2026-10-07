@@ -4,7 +4,6 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/verify"
@@ -57,11 +56,9 @@ func TestRunFactsAreLogged(t *testing.T) {
 
 	// A verify run adds its results to the log of the run it reads.
 	s := useScript(t, []string{"y"}, password)
-	testutil.CaptureStdout(t, func() {
-		if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: []naming.BackupEntry{infos[1].Entry}}); err != nil {
-			t.Fatalf("verify: %v", err)
-		}
-	})
+	if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: []naming.BackupEntry{infos[1].Entry}}); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
 	s.done()
 	after := runLog(t, backupDir, infos[1])
 	if v := after.Verify[infos[1].Entry.String()]; v.Result != logging.ResultOK || v.Time.Before(facts.Verify[infos[1].Entry.String()].Time) {
@@ -89,7 +86,7 @@ func TestCancelledBackupLogsItsFact(t *testing.T) {
 			cancel()
 		}
 	}}
-	testutil.CaptureStdout(t, func() { backup.Run(ctx, o, cfg, "") }) //nolint:errcheck
+	backup.Run(ctx, o, cfg, "") //nolint:errcheck
 	s.done()
 
 	infos, _ := catalog.Inventory(backupDir)

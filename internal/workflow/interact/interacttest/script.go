@@ -6,7 +6,6 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -14,7 +13,7 @@ import (
 // come from ReadLine and ReadPassword, and output goes to Out. It reads
 // nothing from the terminal.
 type Script struct {
-	// Out receives the output; nil means os.Stdout.
+	// Out receives the output; nil discards it.
 	Out io.Writer
 	// ReadLine and ReadPassword answer the prompts, e.g. Answers("y"). A
 	// prompt without an answer function is an error that names the prompt.
@@ -26,18 +25,12 @@ type Script struct {
 
 var _ interact.UI = (*Script)(nil)
 
-// stdout writes to the current os.Stdout, so output captured by swapping
-// os.Stdout (as tests do) includes the script output.
-type stdout struct{}
-
-func (stdout) Write(p []byte) (int, error) { return os.Stdout.Write(p) }
-
 // Output returns where the script writes its output.
 func (s *Script) Output() io.Writer {
 	if s.Out != nil {
 		return s.Out
 	}
-	return stdout{}
+	return io.Discard
 }
 
 func (s *Script) printf(format string, args ...any) {

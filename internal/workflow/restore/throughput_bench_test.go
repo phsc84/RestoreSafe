@@ -75,9 +75,7 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 		}
 		masters := unlock.MasterKeys{ks.ID: append([]byte(nil), master...)}
 		start := time.Now()
-		testutil.CaptureStdout(t, func() {
-			_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, backupDir, restoreRoot, masters, logging.NewConsoleLogger("info", nil))
-		})
+		_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, backupDir, restoreRoot, masters, logging.NewConsoleLogger("info", nil))
 		elapsed := time.Since(start)
 		if err != nil {
 			t.Fatalf("restore: %v", err)

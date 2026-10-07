@@ -219,11 +219,8 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	testutil.WriteFullSet(t, src, env.dir, full, env.ks, env.master)
 	diffs := env.writeDiffs(t, full, 3)
 
-	var err error
-	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewConsoleLogger("info", nil))
-	})
-	if err != nil {
+	var out strings.Builder
+	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewConsoleLogger("info", &out)); err != nil {
 		t.Fatal(err)
 	}
 	infos, _ := catalog.Inventory(env.dir)
@@ -234,8 +231,8 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	if !kept[full] || !kept[diffs[2]] || kept[diffs[0]] || kept[diffs[1]] || len(infos) != 2 {
 		t.Fatalf("expected full + DIFF003 to remain, got %v", kept)
 	}
-	if !strings.Contains(out, "retention: keep all chains, 1 differential(s) per chain") {
-		t.Fatalf("expected the policy in the log, got %q", out)
+	if !strings.Contains(out.String(), "retention: keep all chains, 1 differential(s) per chain") {
+		t.Fatalf("expected the policy in the log, got %q", out.String())
 	}
 
 	// The next differential continues the numbering: numbers are never reused.
@@ -272,18 +269,15 @@ func TestApplyRetentionPolicyHoldsDirectoriesWithSkippedFiles(t *testing.T) {
 	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
 	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 
-	var err error
-	out := testutil.CaptureStdout(t, func() {
-		err = applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, logging.NewConsoleLogger("info", nil))
-	})
-	if err != nil {
+	var out strings.Builder
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, logging.NewConsoleLogger("info", &out)); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
 		assertExists(t, p)
 	}
-	if !strings.Contains(out, "Cleanup old data skipped for [Docs]") {
-		t.Fatalf("expected hold message, got %q", out)
+	if !strings.Contains(out.String(), "Cleanup old data skipped for [Docs]") {
+		t.Fatalf("expected hold message, got %q", out.String())
 	}
 }
 

@@ -58,14 +58,13 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
 		t.Fatalf("differential must find its full backup: %+v", items[0])
 	}
-	out := testutil.CaptureStdout(t, func() {
-		_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", nil))
-	})
+	var out testutil.Output
+	_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", &out))
 	if err != nil {
 		t.Fatalf("verify differential: %v", err)
 	}
-	if !strings.Contains(out, "2 file(s), 1 directory(s)") || !strings.Contains(out, "Reading unchanged files from the full backup") {
-		t.Fatalf("expected the complete restore point to be verified: %q", out)
+	if output := out.String(); !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Reading unchanged files from the full backup") {
+		t.Fatalf("expected the complete restore point to be verified: %q", output)
 	}
 }
 
@@ -108,14 +107,13 @@ func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-pw"))
 	logPath := filepath.Join(t.TempDir(), "verify.log")
-	log, _ := logging.NewLogger(logPath, "info", nil)
+	var out testutil.Output
+	log, _ := logging.NewLogger(logPath, "info", &out)
 
-	var err error
-	output := testutil.CaptureStdout(t, func() {
-		infos := fixtureInfos(t, fx)
-		err = runVerifyOperation(context.Background(), &interacttest.Script{}, infos, infos, fx.BackupDir, logPath, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
-	})
+	infos := fixtureInfos(t, fx)
+	err := runVerifyOperation(context.Background(), &interacttest.Script{Out: &out}, infos, infos, fx.BackupDir, logPath, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
 	log.Close()
+	output := out.String()
 	if err != nil {
 		t.Fatalf("runVerifyOperation: %v", err)
 	}
@@ -127,10 +125,7 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("right"))
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
-	var err error
-	testutil.CaptureStdout(t, func() {
-		_, err = verifyEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, wrong, logging.NewConsoleLogger("info", nil))
-	})
+	_, err := verifyEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, wrong, logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -143,10 +138,9 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	if len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d", len(infos))
 	}
-	var err error
-	output := testutil.CaptureStdout(t, func() {
-		_, err = verifySelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", nil))
-	})
+	var out testutil.Output
+	_, err := verifySelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", &out))
+	output := out.String()
 	if err != nil || strings.Count(output, "successfully verified") != 2 {
 		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
 	}

@@ -22,6 +22,8 @@ type operationEnv struct {
 	logger    *logging.Logger
 	cfg       *config.Config
 	sources   []plan.Source
+	// out receives what the operation writes to its UI and logger.
+	out testutil.Output
 }
 
 func newOperationEnv(t *testing.T, payload string) *operationEnv {
@@ -37,7 +39,7 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	}
 	env.sources = plan.ResolveSources([]string{env.srcDir}, "")
 	env.logPath = filepath.Join(env.backupDir, "operation.log")
-	logger, err := logging.NewLogger(env.logPath, "info", nil)
+	logger, err := logging.NewLogger(env.logPath, "info", &env.out)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -49,15 +51,12 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
-	var runErr error
-	output := testutil.CaptureStdout(t, func() {
-		runErr = runBackupOperation(context.Background(), &interacttest.Script{}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, "2026-05-31", id, ks, master, nil)
-	})
+	err := runBackupOperation(context.Background(), &interacttest.Script{Out: &env.out}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, "2026-05-31", id, ks, master, nil)
 	env.logger.Close()
-	if runErr != nil {
-		t.Fatalf("runBackupOperation failed: %v", runErr)
+	if err != nil {
+		t.Fatalf("runBackupOperation failed: %v", err)
 	}
-	return output
+	return env.out.String()
 }
 
 // TestRunBackupOperationWritesCompleteSet exercises the operation half of the
@@ -131,10 +130,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var failures int
-	testutil.CaptureStdout(t, func() {
-		failures, _ = verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewConsoleLogger("info", nil))
-	})
+	failures, _ := verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewConsoleLogger("info", nil))
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)
 	}
