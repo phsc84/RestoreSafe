@@ -21,7 +21,9 @@ GitHub enforces this for `main` and `v2` with the ruleset in [.github/rulesets/r
 
 The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. Work branches are not protected.
 
-After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. Switch to `v2` itself (`git switch v2`, `git pull`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
+After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. To bring your local `v2` up to date with GitHub without leaving the work branch, run `git fetch origin v2:v2` (it only moves `v2` forward, so it cannot lose anything). Switch to `v2` itself (`git switch v2`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
+
+A pull request lives on GitHub, not in Git: its commits are those of its branch. See them with `gh pr list --state all`, `gh pr view <number>`, and `gh pr checks <number>`.
 
 ## 2. Commits
 
