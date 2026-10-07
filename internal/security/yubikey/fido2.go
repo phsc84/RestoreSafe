@@ -280,16 +280,15 @@ type webauthnAssertion struct {
 	pHmacSecret           *webauthnHmacSecretSalt // 112
 }
 
-// ── Challenge file format ─────────────────────────────────────────────────────
+// ── YubiKey challenge (in the key slots of the backup header) ─────────────────
 
-// ChallengeData is the JSON content of a FIDO2 .challenge file.
+// ChallengeData is the YubiKey challenge of a key slot in the backup header.
 // Version 1.
 //
 // Sum is a SHA-256 checksum over the other fields. It detects accidental
-// corruption or truncation of the .challenge file and lets restore report a
-// clear "corrupted challenge file" error instead of a misleading "wrong
-// password" failure when, for example, a bit-flip leaves Salt the right length
-// but with the wrong bytes. It is NOT a defense against deliberate tampering
+// corruption of the challenge and lets restore report a damaged challenge
+// instead of a misleading "wrong password" failure when, for example, a
+// bit-flip leaves Salt the right length but with the wrong bytes. It is NOT a defense against deliberate tampering
 // (an attacker can recompute it): the cryptographic binding between a backup and
 // its credential ID + salt is provided by Argon2id key derivation and AES-GCM
 // authentication — any change to those values yields the wrong key and fails
@@ -341,7 +340,7 @@ func parseChallengeData(s string) (ChallengeData, error) {
 	// always include it; tolerate its absence so externally constructed v2
 	// challenges remain valid.
 	if cd.Sum != "" && cd.Sum != challengeChecksum(cd) {
-		return ChallengeData{}, fmt.Errorf("challenge file is corrupted (integrity checksum mismatch)")
+		return ChallengeData{}, fmt.Errorf("YubiKey challenge is damaged (integrity checksum mismatch)")
 	}
 	return cd, nil
 }
@@ -458,22 +457,6 @@ func registerWithSalt(password []byte, noPassword bool, salt []byte, exclude [][
 	}
 
 	return CombinePasswordWithSecret(password, secret), string(jsonBytes), nil
-}
-
-// DeriveFIDO2SecretForRestore reproduces the 32-byte FIDO2 hmac-secret for a
-// stored challenge by performing a single GetAssertion (one user touch). The
-// secret is constant for a given challenge, so a caller that retries a password
-// can derive it once and reuse it across attempts via CombinePasswordWithSecret
-// instead of prompting for another touch each time. The caller owns the returned
-// slice and must zero it when done.
-func DeriveFIDO2SecretForRestore(challengeJSON string) ([]byte, error) {
-	cd, err := parseChallengeData(challengeJSON)
-	if err != nil {
-		return nil, fmt.Errorf("invalid FIDO2 challenge: %w. Remedy: Ensure the .challenge file is unchanged and belongs to the same backup run as the .enc files.", err)
-	}
-
-	_, secret, err := DeriveFIDO2SecretAny([]ChallengeData{cd})
-	return secret, err
 }
 
 // DeriveFIDO2SecretAny asks the connected YubiKey for the hmac-secret of any
