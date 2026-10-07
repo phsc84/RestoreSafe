@@ -25,7 +25,7 @@ func samplePlan() interact.BackupPlan {
 		Folders: []interact.FolderPlan{
 			{Name: "Documents", Path: `C:\Docs`, Differential: true, DiffNumber: 4, BaseCreated: time.Date(2026, 9, 1, 20, 0, 0, 0, time.Local), EstimatedBytes: 200 << 20, AllBytes: 9 << 30},
 			{Name: "Pictures", Path: `D:\Pics`, Reason: "last differential was 57% of the full backup (limit 50%)", EstimatedBytes: 54 << 30, AllBytes: 54 << 30},
-			{Name: "Old", Path: `E:\Old`, Problem: "Source directory does not exist. Remedy: Connect the drive."},
+			{Name: "Old", Path: `E:\Old`, Problem: "Source directory does not exist.", Remedy: "Connect the drive."},
 			{Name: "Docs2", Path: `C:\Docs`, Skipped: true},
 		},
 		NeededBytes: 55 << 30, AllBytes: 63 << 30, FreeBytes: 370 << 30,

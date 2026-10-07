@@ -119,7 +119,7 @@ func planRow(f interact.FolderPlan, now time.Time) PlanRow {
 	row := PlanRow{Name: f.Name, Path: Path(f.Path), Tone: ToneNeutral}
 	switch {
 	case f.Problem != "":
-		row.Why, row.Tone, row.Glyph = textWithRemedy(f.Problem), ToneError, GlyphError
+		row.Why, row.Tone, row.Glyph = issueText(f.Problem, f.Remedy), ToneError, GlyphError
 		return row
 	case f.Skipped:
 		row.Why, row.Tone = folderDuplicate, ToneSecondary
@@ -320,9 +320,9 @@ func issueText(text, remedy string) string {
 // errorText shows a workflow error with its remedy as plain sentences.
 func errorText(err error) string { return issueText(problem.Split(err)) }
 
-// textWithRemedy shows a workflow text that still carries its remedy as
-// "Remedy: ..." (folder problems, credential messages) until it gets a
-// field of its own (refactoring 2.0 RF-25, RF-26).
+// textWithRemedy shows a credential message, which may still carry a
+// remedy as "Remedy: ...", until the typed notices of refactoring 2.0 RF-26
+// replace the text.
 func textWithRemedy(s string) string { return errorText(errors.New(s)) }
 
 // endSentence adds a full stop to a message that does not end its

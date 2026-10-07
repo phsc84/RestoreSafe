@@ -61,7 +61,7 @@ func SetPlan(entry naming.BackupEntry, base *catalog.SetInfo, bytes int64, err e
 		p.Base = base.Entry
 	}
 	if err != nil {
-		p.Problem = err.Error()
+		p.Problem, p.Remedy = problem.Split(err)
 	}
 	return p
 }

@@ -429,7 +429,8 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 	for _, item := range items {
 		sp := interact.RestoreSetPlan{SetPlan: job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err), OutputDir: item.OutputDir}
 		if item.OutputDirErr != nil {
-			sp.OutputProblem, sp.OutputCode = item.OutputDirErr.Error(), item.OutputDirCode
+			sp.OutputProblem, sp.OutputRemedy = problem.Split(item.OutputDirErr)
+			sp.OutputCode = item.OutputDirCode
 		}
 		p.Sets = append(p.Sets, sp)
 	}

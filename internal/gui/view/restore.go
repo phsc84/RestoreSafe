@@ -194,7 +194,7 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 			exists++
 		case s.OutputProblem != "":
 			check = TableCell{Text: destInvalid, Tone: ToneError}
-			v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destInvalidLine, s.Set.DirectoryName, textWithRemedy(s.OutputProblem)), Tone: ToneError, Glyph: GlyphError})
+			v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destInvalidLine, s.Set.DirectoryName, issueText(s.OutputProblem, s.OutputRemedy)), Tone: ToneError, Glyph: GlyphError})
 		}
 		v.Checks[s.Set] = check
 		v.Tips[s.Set] = joinTip(dir, check.Text)

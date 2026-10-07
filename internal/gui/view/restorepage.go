@@ -568,7 +568,7 @@ func VerifyPlanOf(p interact.VerifyPlan, what string, now time.Time) VerifyPlanV
 		row := TableRow{Cells: []TableCell{{Text: s.Set.DirectoryName}, {Badge: &b}, {Text: Size(s.Bytes)}}}
 		if s.Problem != "" {
 			row.Cells[0].Tone, row.Cells[2] = ToneError, TableCell{Text: CheckNone}
-			row.Tip = textWithRemedy(s.Problem)
+			row.Tip = issueText(s.Problem, s.Remedy)
 		}
 		v.Folders.Rows = append(v.Folders.Rows, row)
 	}

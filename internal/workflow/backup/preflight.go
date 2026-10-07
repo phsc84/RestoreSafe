@@ -413,7 +413,7 @@ func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, key
 	for _, src := range sources {
 		fp := interact.FolderPlan{Name: src.BackupName, Path: src.Resolved, Skipped: src.Skip, Warning: src.Warning}
 		if src.Err != nil {
-			fp.Problem = src.Err.Error()
+			fp.Problem, fp.Remedy = problem.Split(src.Err)
 		} else if folder := folders[src.BackupName]; folder != nil && !src.Skip {
 			fp.Reason = folder.Reason
 			if folder.IsDiff() {
