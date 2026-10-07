@@ -28,7 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `password_min_length` (default 12, at least 8) for new passwords.
 - `reminder_days` (default 7, 0 = off): the Create backup page reminds you when the newest backup is older. RestoreSafe checks it only while it is open.
 - `exclude` patterns for files and directories to leave out of backups.
-- `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept.
+- `on_unreadable_file: skip` backs up everything else when a file cannot be read and lists the file as a warning; older backups of that directory are kept. A file that another program holds locked counts as unreadable also when RestoreSafe runs as administrator, so it is never copied while it may be changing.
 - `differential` configuration section (`enabled`, `full_backup_interval_days`, `max_size_percent`, `retention_keep_differentials`).
 - The startup health check reports incomplete backups, differentials whose full backup is missing, leftovers of interrupted backups, 1.x backups, and the state of the keys.
 
