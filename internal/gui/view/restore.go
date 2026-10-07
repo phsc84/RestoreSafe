@@ -184,14 +184,14 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 
 	v.Checks = map[naming.BackupEntry]TableCell{}
 	v.Tips = map[naming.BackupEntry]string{}
-	var exists []string
+	exists := 0
 	for _, s := range plan.Sets {
 		dir := Path(s.OutputDir)
 		check := TableCell{Text: destNew, Tone: ToneSuccess}
 		switch {
 		case s.OutputCode == interact.CodeRestoreTargetExists:
 			check = TableCell{Text: destExists, Tone: ToneError}
-			exists = append(exists, s.Set.DirectoryName)
+			exists++
 		case s.OutputProblem != "":
 			check = TableCell{Text: destInvalid, Tone: ToneError}
 			v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destInvalidLine, s.Set.DirectoryName, issueText(s.OutputProblem)), Tone: ToneError, Glyph: GlyphError})
@@ -199,12 +199,14 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 		v.Checks[s.Set] = check
 		v.Tips[s.Set] = joinTip(dir, check.Text)
 	}
-	switch len(exists) {
+	// The Check column names the folders that already exist; the line only
+	// says what to do.
+	switch exists {
 	case 0:
 	case 1:
-		v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destExistsOne, exists[0]), Tone: ToneError, Glyph: GlyphError})
+		v.Issues = append(v.Issues, IssueLine{Text: destExistsOne, Tone: ToneError, Glyph: GlyphError})
 	default:
-		v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destExistsMany, joinAnd(exists)), Tone: ToneError, Glyph: GlyphError})
+		v.Issues = append(v.Issues, IssueLine{Text: destExistsMany, Tone: ToneError, Glyph: GlyphError})
 	}
 	v.Space = restoreSpaceLine(*plan)
 	v.Unlock = PlanLine{Label: planUnlock, Text: restoreUnlockText(plan.Unlock)}

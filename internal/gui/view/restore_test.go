@@ -110,7 +110,7 @@ func TestRestoreView(t *testing.T) {
 			docs = c.Set
 		}
 	}
-	if v.Start.Enabled || v.Checks[docs].Text != "Already exists" || v.Checks[docs].Tone != ToneError || len(v.Issues) != 1 || v.Issues[0].Text != "Docs already exists in this folder. Choose another place, or rename or move that folder." {
+	if v.Start.Enabled || v.Checks[docs].Text != "Already exists" || v.Checks[docs].Tone != ToneError || len(v.Issues) != 1 || v.Issues[0].Text != "Choose another place, or rename or move the folder that already exists." {
 		t.Fatalf("an existing folder blocks Start: %+v", v)
 	}
 

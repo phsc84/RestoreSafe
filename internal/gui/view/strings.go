@@ -415,8 +415,8 @@ const (
 	destHintFullPath     = `Enter a full path, such as D:\Restore.`
 	destNew              = "New folder"
 	destExists           = "Already exists"
-	destExistsOne        = "%s already exists in this folder. Choose another place, or rename or move that folder."
-	destExistsMany       = "%s already exist in this folder. Choose another place, or rename or move those folders."
+	destExistsOne        = "Choose another place, or rename or move the folder that already exists."
+	destExistsMany       = "Choose another place, or rename or move the folders that already exist."
 	destInvalid          = "Can't be created"
 	destInvalidLine      = "%s can't be created: %s"
 	unlockOrRecovery     = ", or recovery code"
