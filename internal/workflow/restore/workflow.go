@@ -68,8 +68,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	defer log.Close()
 
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
-	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected)
+	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, config.AuthMode(first.KeySet.AuthMode), yubikey.CheckConnected)
 	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
@@ -96,11 +95,6 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	defer masters.Zero()
 
 	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, warningCount)
-}
-
-func authFactors(authMode int) (usesYubiKey, yubiKeyOnly bool) {
-	mode := config.AuthMode(authMode)
-	return mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey, mode == config.AuthModeYubiKey
 }
 
 // runRestoreOperation performs the restore using already-unlocked keys. It
@@ -188,7 +182,7 @@ func restorePreflightReport(
 	cfg *config.Config,
 	backupDir, restorePath string,
 	items []restorePreflightItem,
-	usesYubiKey, yubiKeyOnly bool,
+	mode config.AuthMode,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
 	var issues []interact.Issue
@@ -234,7 +228,7 @@ func restorePreflightReport(
 		}
 		rows = append(rows, interact.Item(status, displayRestoreOutputDir(item.OutputDir)))
 	}
-	rows = append(rows, job.AuthRows(config.AuthModeFromFactors(usesYubiKey, yubiKeyOnly).Label(), usesYubiKey, "restore", checkYubiKeyConnected)...)
+	rows = append(rows, job.AuthRows(mode.Label(), mode.UsesYubiKey(), "restore", checkYubiKeyConnected)...)
 
 	summary := []interact.Row{interact.Field("Backup size", "unknown")}
 	if estimatedRestoreBytes > 0 {
@@ -444,7 +438,6 @@ func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetIn
 	}
 	items := buildRestorePreflight(selected, infos, destination)
 	first := selected[0].Header
-	usesYubiKey, yubiKeyOnly := authFactors(first.KeySet.AuthMode)
-	details := restorePreflightReport(cfg, backupDir, destination, items, usesYubiKey, yubiKeyOnly, yubikey.CheckConnected)
+	details := restorePreflightReport(cfg, backupDir, destination, items, config.AuthMode(first.KeySet.AuthMode), yubikey.CheckConnected)
 	return restorePlan(items, destination, &first.KeySet, details), nil
 }

@@ -24,10 +24,11 @@ const (
 	AuthModeYubiKey         AuthMode = 3 // YubiKey only, no password
 )
 
+// UsesYubiKey reports whether unlocking in this mode needs a YubiKey.
+func (a AuthMode) UsesYubiKey() bool { return a == AuthModePasswordYubiKey || a == AuthModeYubiKey }
+
 // Label returns a human-readable description of the authentication mode.
-// It is the single source of truth for these labels; callers that only know the
-// authentication factors (e.g. restore/verify, which read them from a backup's
-// challenge file) build an AuthMode via AuthModeFromFactors first.
+// It is the single source of truth for these labels.
 func (a AuthMode) Label() string {
 	switch a {
 	case AuthModeYubiKey:
@@ -36,21 +37,6 @@ func (a AuthMode) Label() string {
 		return "password + YubiKey"
 	default:
 		return "password only"
-	}
-}
-
-// AuthModeFromFactors classifies the authentication factors of a backup run into
-// an AuthMode. usesYubiKey reports whether the run is protected by a YubiKey at
-// all; noPassword reports whether the YubiKey is the sole factor. noPassword is
-// only meaningful when usesYubiKey is true.
-func AuthModeFromFactors(usesYubiKey, noPassword bool) AuthMode {
-	switch {
-	case !usesYubiKey:
-		return AuthModePassword
-	case noPassword:
-		return AuthModeYubiKey
-	default:
-		return AuthModePasswordYubiKey
 	}
 }
 
@@ -143,7 +129,7 @@ func (c *Config) ReminderLimit() int {
 
 // UseYubiKey reports whether the configured authentication mode requires a YubiKey.
 func (c *Config) UseYubiKey() bool {
-	return c.AuthenticationMode == AuthModePasswordYubiKey || c.AuthenticationMode == AuthModeYubiKey
+	return c.AuthenticationMode.UsesYubiKey()
 }
 
 // IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).

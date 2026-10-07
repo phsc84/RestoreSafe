@@ -23,7 +23,7 @@ func TestVerifyPlanDescribesTheVerification(t *testing.T) {
 	noYubiKey := func() error { return nil }
 	planFor := func(inventory []catalog.SetInfo) interact.VerifyPlan {
 		items := buildVerifyPreflight(selected, inventory)
-		return verifyPlan(items, fx.KeySet, verifyPreflightReport(cfg, fx.BackupDir, items, false, false, noYubiKey))
+		return verifyPlan(items, fx.KeySet, verifyPreflightReport(cfg, fx.BackupDir, items, config.AuthModePassword, noYubiKey))
 	}
 
 	p := planFor(infos)

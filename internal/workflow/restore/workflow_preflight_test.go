@@ -52,7 +52,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], false, false, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], config.AuthModePassword, func() error { return nil }))
 	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
 		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
@@ -71,7 +71,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, false, false, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, config.AuthModePassword, func() error { return nil }))
 	output := sb.String()
 
 	selectionLine := "  [OK] " + docsEntry.String() + " (parts: 4)"
@@ -101,7 +101,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	} {
 		var sb strings.Builder
 		connected := tc.connected
-		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, true, false, func() error { return connected }))
+		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePasswordYubiKey, func() error { return connected }))
 		output := sb.String()
 		authIdx := strings.Index(output, "Authentication: password + YubiKey")
 		statusIdx := strings.Index(output, tc.want)
@@ -119,7 +119,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, false, false, func() error { return nil }))
+	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePassword, func() error { return nil }))
 	if !strings.Contains(sb.String(), "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", sb.String())
 	}
