@@ -4,6 +4,7 @@
 # fails when a package is below its floor or was not measured.
 awk '
 NR == FNR {
+	sub(/\r$/, "")  # the runner checks the floors file out with CRLF
 	if ($0 !~ /^#/ && NF == 2) floor[$1] = $2
 	next
 }
