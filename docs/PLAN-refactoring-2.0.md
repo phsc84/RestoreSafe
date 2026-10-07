@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; Phase A done 2026-10-07 (CI green), RF-20 and RF-44 of Phase B done; the rest open |
+| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52); phases C to E open |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1); CI runs on each push to the pull request |
@@ -46,6 +46,8 @@ Coverage by package (statements):
 Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `security/yubikey/fido2.go` 917, `gui/overview.go` 693, `gui/view/backups.go` 651.
 
 After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
+
+After Phase B (2026-10-07, `refactor-2.0` at `22257c0`): `gofmt -l .`, staticcheck and deadcode print nothing; all tests pass, including the 2.0.0 format fixtures; coverage 52.3 % in total, every package above its floor; 291 files, 41,924 Go lines (the fixtures add 2.4 MB of test data).
 
 ## 3. Constraints
 
@@ -126,10 +128,12 @@ Done in `b0751d3`; `config.AuthMode.UsesYubiKey` answers what the two booleans d
 Done in `adf34f2`; the format fixtures confirm the JSON is unchanged.
 
 **RF-23 (P3) The FIDO2 debug output goes nowhere in the app.** `RESTORESAFE_FIDO2_DEBUG=1` prints with `fmt.Printf` ([fido2.go:27-33](../internal/security/yubikey/fido2.go#L27-L33)), but `RestoreSafe.exe` is linked with `-H=windowsgui` and has no console; only `yubidiag` can show it. Replace the environment switch with a package-level `io.Writer` that `yubidiag` sets and the app leaves nil. (The `GetConsoleWindow` fallback in `dialogParent` stays: `yubidiag` is a console program and needs it.)
+Done in `6189d5d`. yubidiag sets `yubikey.DebugOutput` when `RESTORESAFE_FIDO2_DEBUG=1`, so the README stays correct.
 
 ## 7. Legacy code and protocol (Phase C)
 
 **RF-24 (P1) v1 wording in user-facing errors.** The YubiKey code still talks about a `.challenge` file, which 2.0 no longer has: "challenge file is corrupted" and "Ensure the .challenge file is unchanged and belongs to the same backup run as the .enc files" ([fido2.go:338](../internal/security/yubikey/fido2.go#L338), [:466](../internal/security/yubikey/fido2.go#L466)), plus the section comment "Challenge file format" ([:277](../internal/security/yubikey/fido2.go#L277)) and [config/config.go:30](../internal/config/config.go#L30). The YubiKey challenge is now part of the key set in the backup header. Reword to "the YubiKey data in the backup header is damaged", with the remedy to use another backup. This is a user-visible text change; add it to CHANGELOG.
+Done in `6179ed7`. A damaged challenge reaches the user inside the header error ("Invalid backup header: ... YubiKey challenge is damaged ... Remedy: Use an unmodified backup created by RestoreSafe."), which already gives the remedy. `DeriveFIDO2SecretForRestore`, the 1.x path with the `.challenge` remedy, had no caller left and is deleted; its tests now test `DeriveFIDO2SecretAny`. No CHANGELOG entry: the old wording was never released in a 2.x version.
 
 **RF-25 (P2) Typed user errors instead of "Remedy:" strings.** 145 production error strings embed the user message and its remedy as text ("... Remedy: ..."), capitalised and with punctuation, which is why ST1005 fires on ~100 lines. The frontend can only show them whole; tests can only compare text; the same remedy is repeated with slightly different wording.
 Introduce in the bottom layer (`fsx` or a new `internal/problem`, added to the architecture test):
@@ -197,10 +201,13 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 ## 10. Security hardening (Phase B for P1, Phase D for the rest)
 
 **RF-50 (P1) Restore and verify take the backup-directory lock.** Only `backup.Run` calls `fsx.AcquireBackupLock` ([backup/workflow.go:43](../internal/workflow/backup/workflow.go#L43)). A second RestoreSafe window (e.g. a second configuration with the same backup directory) can apply retention and delete the parts of a set that the first window is restoring. Make the lock a reader/writer lock: backup takes it exclusively (as now), restore and verify take it shared (`LockFileEx` without `LOCKFILE_EXCLUSIVE_LOCK`). Restore and verify then fail fast with "a backup is running" instead of failing halfway with a missing part.
+Done in `0282e6d`. `fsx.AcquireReadLock` takes the lock shared; restore and verify call it through `job.LockForReading` before their first question. `TestRestoreAndVerifyWaitForARunningBackup` (e2e) covers all four combinations. CHANGELOG has an entry.
 
 **RF-51 (P1) No silent no-op lock.** When the lock file cannot be created, `AcquireBackupLock` returns an empty lock and no error ([fsx/lock.go:27-33](../internal/fsx/lock.go#L27-L33)), so two backups can then run at the same time. Return a warning the workflow logs and shows in the plan ("RestoreSafe can't lock the backup folder; don't start a second backup"). A read-only backup directory can't be backed up into anyway, so for backup this is an error.
+Done in `0282e6d`. A backup fails when the lock file can't be created. A restore or verification goes on and shows the warning `BACKUP_DIR_NOT_LOCKED` (new code, GUI spec 11.8) in its plan and log. Only the exclusive holder removes the lock file, so a reader never deletes it under another reader.
 
 **RF-52 (P1) Restrict DLL search.** RestoreSafe is a portable exe that users run from a download or USB folder. The WebAuthn and Win32 procs use `NewLazySystemDLL` (good), but the process's default DLL search order still includes the exe's folder for DLLs that Windows or the runtime loads implicitly. Call `windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32)` as the first statement of `main` in both commands, before any window or WebAuthn call. Check by hand with Process Monitor that no DLL is looked up in the exe's folder.
+Done in `d11617c`. No package `init` touches the Windows API before `main`, and the window starts as before. Open: the check with Process Monitor by hand.
 
 **RF-53 (P2) Recovery code as bytes.** `recovery.Code` stores the code in `string` fields and `Secret()` converts to a new `[]byte` ([recovery.go:25-32](../internal/security/recovery/recovery.go#L25-L32)). Strings cannot be zeroed, so every recovery code generated or typed stays in memory until the GC reuses the space. The same applies to `ShowRecoveryCode(code string)` in `interact.UI` and `win32.CopySecretText(owner, text string)`. Keep the code as `[]byte` end to end, give `Code` a `Zero()` method, and zero the UTF-16 copy after `SetClipboardData` copied it. Passwords already follow this rule; this brings the recovery code in line.
 
@@ -217,6 +224,7 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 **RF-59 (P1) Elevated, RestoreSafe reads files that other programs hold locked.** `archive.writeFile` opens a source file with `os.Open` ([build.go:314](../internal/format/archive/build.go#L314)), which asks for backup semantics (`FILE_FLAG_BACKUP_SEMANTICS`). In a process that holds the backup privilege, as an elevated administrator does, Windows then skips the share-mode check: a file another program holds without sharing, such as a PST open in Outlook, is read anyway, possibly while it is being written, and the backup holds an inconsistent copy instead of skipping the file. Found by the first CI runs (RF-11): the runner is elevated, and four tests of locked files failed until `testutil/filelock` removed the privilege from the test process (`2c0948d`). Unelevated, which is how RestoreSafe normally runs, the lock holds.
 Change: open source files for reading without backup semantics (`windows.CreateFile` with `GENERIC_READ`, `FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE`, `FILE_FLAG_SEQUENTIAL_SCAN`), so a locked file is unreadable, and `on_unreadable_file` applies, whether RestoreSafe runs elevated or not. Opening for attributes keeps backup semantics; it reads no file content and needs them for directories. Then `filelock.Hold` stops removing the privilege, so the locked-file tests run elevated on CI. User-visible only when elevated: a locked file is skipped (or fails the backup) instead of being copied; add it to CHANGELOG.
 Acceptance: the locked-file tests of `format/archive` and `e2e` pass on the elevated CI runner with the backup privilege in place.
+Done in `22257c0`, with two changes from the item: the share mode is that of `os.Open` (no `FILE_SHARE_DELETE`), and no `FILE_FLAG_SEQUENTIAL_SCAN`, so nothing changes but the backup semantics (a performance flag would need a measurement first). `extendedPath` keeps the long-path handling of `os.Open` and now serves `openForAttributes` too. CI run 37684035665 passed on the elevated runner with the privilege in place.
 
 ## 11. Quality assurance (Phase B and ongoing)
 
@@ -233,6 +241,7 @@ Acceptance: the locked-file tests of `format/archive` and `e2e` pass on the elev
 `format/container` (72 %) and `restorepoint` (69 %) are the packages that decide whether a damaged backup is detected; their error paths come first.
 
 Floors "now" enforced by CI since `d21ad47`; `cd5d90f` raised `restorepoint` from 65.3 % (it had fallen below its floor since the baseline) to 91.7 %. Open: the targets, starting with the error paths of `format/container` (72.2 %).
+Phase B part done: the floors are enforced. The targets belong to the end of the round.
 
 **RF-41 (P1) Format compatibility fixtures.** Nothing stops a refactoring from changing the bytes RestoreSafe writes or what it accepts. Commit a small set of backups made by the 2.0.0 release build to `internal/format/testdata/v2.0.0/`: a full and a differential of a tree with special cases (empty file, empty folder, Unicode and long names, read-only/hidden/system attributes, a skipped file), with password, password + recovery slot (the test uses the recovery code), and Argon2 at the minimum to keep the test fast. A test restores each and compares tree, content, times, and attributes with a recorded listing. A second test checks that a set written by the current code with the fixed inputs (seeded randomness through a test hook) produces the same header structure and trailer.
 Acceptance: the fixtures exist before Phase C starts; they never change after 2.0.0 is released.
