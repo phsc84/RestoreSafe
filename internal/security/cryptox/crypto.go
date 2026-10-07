@@ -34,6 +34,7 @@
 package cryptox
 
 import (
+	"RestoreSafe/internal/problem"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -265,29 +266,29 @@ func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 				if sawFinal {
 					return nil
 				}
-				return fmt.Errorf("Missing final encrypted chunk marker. Remedy: Check backup-part completeness and file readability.")
+				return problem.New("Missing final encrypted chunk marker.").WithRemedy("Check backup-part completeness and file readability.")
 			}
-			return fmt.Errorf("Failed to read chunk flags: %w. Remedy: Check backup-part completeness and file readability.", err)
+			return problem.Errorf("Failed to read chunk flags: %w.", err).WithRemedy("Check backup-part completeness and file readability.")
 		}
 		if sawFinal {
-			return fmt.Errorf("Unexpected data after final encrypted chunk. Remedy: Use an unmodified backup created by RestoreSafe.")
+			return problem.New("Unexpected data after final encrypted chunk.").WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		flags := prefix[0]
 		if flags != 0 && flags != chunkFlagFinal {
-			return fmt.Errorf("Invalid encrypted chunk flags: %d. Remedy: Use an unmodified backup created by RestoreSafe.", flags)
+			return problem.Errorf("Invalid encrypted chunk flags: %d.", flags).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 
 		if _, err := io.ReadFull(src, prefix[1:]); err != nil {
-			return fmt.Errorf("Failed to read chunk length: %w. Remedy: Check backup-part completeness and file readability.", err)
+			return problem.Errorf("Failed to read chunk length: %w.", err).WithRemedy("Check backup-part completeness and file readability.")
 		}
 		length := binary.BigEndian.Uint32(prefix[1:])
 		if length < gcmTagLen || length > maxEncryptedChunkSize {
-			return fmt.Errorf("Invalid encrypted chunk length: %d. Remedy: Use an unmodified backup created by RestoreSafe.", length)
+			return problem.Errorf("Invalid encrypted chunk length: %d.", length).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 
 		encrypted = encrypted[:length]
 		if _, err := io.ReadFull(src, encrypted); err != nil {
-			return fmt.Errorf("Failed to read chunk data: %w. Remedy: Check backup-part completeness and file readability.", err)
+			return problem.Errorf("Failed to read chunk data: %w.", err).WithRemedy("Check backup-part completeness and file readability.")
 		}
 
 		plaintext, err := gcm.Open(encrypted[:0], chunkNonce(chunkIndex), encrypted, chunkAAD(aadPrefix, chunkIndex, flags))
@@ -295,7 +296,7 @@ func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 			return ErrCorrupted
 		}
 		if flags != chunkFlagFinal && len(plaintext) != ChunkSize {
-			return fmt.Errorf("Invalid non-final chunk size: %d. Remedy: Use an unmodified backup created by RestoreSafe.", len(plaintext))
+			return problem.Errorf("Invalid non-final chunk size: %d.", len(plaintext)).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 
 		if len(plaintext) > 0 {

@@ -4,9 +4,9 @@
 package recovery
 
 import (
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"crypto/sha256"
-	"fmt"
 	"strings"
 )
 
@@ -81,17 +81,17 @@ func Parse(input string) (Code, error) {
 			r = '0'
 		}
 		if !strings.ContainsRune(recoveryAlphabet, r) {
-			return Code{}, fmt.Errorf("The recovery code contains the invalid character %q. Remedy: Check your recovery code note.", r)
+			return Code{}, problem.Errorf("The recovery code contains the invalid character %q.", r).WithRemedy("Check your recovery code note.")
 		}
 		b.WriteRune(r)
 	}
 	all := b.String()
 	if len(all) != recoveryDataChars+recoveryCheckChars {
-		return Code{}, fmt.Errorf("The recovery code must have %d characters (6 groups of 5), got %d. Remedy: Check your recovery code note.", recoveryDataChars+recoveryCheckChars, len(all))
+		return Code{}, problem.Errorf("The recovery code must have %d characters (6 groups of 5), got %d.", recoveryDataChars+recoveryCheckChars, len(all)).WithRemedy("Check your recovery code note.")
 	}
 	code := Code{data: all[:recoveryDataChars], check: all[recoveryDataChars:]}
 	if recoveryChecksum(code.data) != code.check {
-		return Code{}, fmt.Errorf("The recovery code contains a typo (checksum mismatch). Remedy: Check your recovery code note.")
+		return Code{}, problem.New("The recovery code contains a typo (checksum mismatch).").WithRemedy("Check your recovery code note.")
 	}
 	return code, nil
 }
