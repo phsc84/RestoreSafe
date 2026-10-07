@@ -20,7 +20,7 @@ if errorlevel 1 (
 )
 
 echo [BUILD] Generate resources (icon, manifest, version information)...
-goversioninfo -64 -o cmd/restoresafe/resource.syso %VERSIONINFO%
+go tool goversioninfo -64 -o cmd/restoresafe/resource.syso %VERSIONINFO%
 if errorlevel 1 (
     echo [ERROR] goversioninfo failed
     exit /b 1
