@@ -10,7 +10,7 @@
 //	format          archive, container, manifest, catalog, naming, setwriter
 //	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo
 //	security        cryptox, recovery, yubikey (recovery and yubikey -> cryptox)
-//	fsx, buildinfo  no internal imports
+//	fsx, buildinfo, problem  no imports from higher layers (fsx -> problem)
 //
 // format imports config (exclude patterns in archive and setwriter, the
 // authentication mode in container, the configuration in catalog), so config
