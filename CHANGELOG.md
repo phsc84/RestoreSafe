@@ -42,6 +42,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Backup parts are written as `.tmp` files and renamed only when the backup is complete, so an interrupted backup never looks like a valid one.
 - Verify checks every file's checksum instead of only the archive structure.
 - Restored files are written in 1 MB blocks instead of 32 KB; restoring to a network share is more than twice as fast.
+- Two RestoreSafe windows with the same backup directory no longer get in each other's way: a restore or verification does not start while a backup runs (whose cleanup could delete the files it reads), and a backup does not start while a restore or verification runs. Restores and verifications may run at the same time. A backup directory where RestoreSafe can't create its lock file can't be backed up into; a restore from it shows a warning instead.
 - Update Go to 1.27.1
 - YAML parsing uses the maintained `go.yaml.in/yaml/v3` module instead of the archived `gopkg.in/yaml.v3`.
 

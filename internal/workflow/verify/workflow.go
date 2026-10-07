@@ -37,6 +37,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
+	lock, lockIssue, err := job.LockForReading(backupDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory is readable.", backupDir, err)
@@ -60,6 +66,11 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	preflight := buildVerifyPreflight(selectedInfos, infos)
 	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
+	if lockIssue != nil {
+		details.Issues = append(details.Issues, *lockIssue)
+		log.Warn("%s", lockIssue.Text)
+		warningCount++
+	}
 	u.ShowVerifyPlan(verifyPlan(preflight, &first.KeySet, details))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err

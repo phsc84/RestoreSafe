@@ -46,6 +46,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 	restorePath := req.Destination
 
+	lock, lockIssue, err := job.LockForReading(backupDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
 		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory exists and is readable.", backupDir, err)
@@ -69,6 +75,11 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
 	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
+	if lockIssue != nil {
+		details.Issues = append(details.Issues, *lockIssue)
+		log.Warn("%s", lockIssue.Text)
+		warningCount++
+	}
 	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
