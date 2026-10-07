@@ -84,10 +84,10 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	generateRecoveryCodeFn = func() (recovery.Code, error) { return code, nil }
 }
 
-func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, error, string) {
+func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, string, error) {
 	t.Helper()
 	ks, master, err := enrollKeySet(s.console, cfg, logging.NewConsoleLogger("info", &s.out))
-	return ks, master, err, s.out.String()
+	return ks, master, s.out.String(), err
 }
 
 func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
@@ -95,7 +95,7 @@ func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
 	stubEnrollment(t, s)
 	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
-	ks, master, err, out := enroll(t, s, cfg)
+	ks, master, out, err := enroll(t, s, cfg)
 	if err != nil {
 		t.Fatalf("enrollKeySet: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestEnrollKeySetGivesUpAfterThreeInvalidPasswords(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"a", "a"}, {"b", "b"}, {"c", "c"}}}
 	stubEnrollment(t, s)
 	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "No valid new password") {
+	if _, _, _, err := enroll(t, s, cfg); err == nil || !strings.Contains(err.Error(), "No valid new password") {
 		t.Fatalf("expected give-up error, got %v", err)
 	}
 }
@@ -121,7 +121,7 @@ func TestEnrollKeySetCountsCharactersNotBytes(t *testing.T) {
 	s := &enrollStub{passwords: [][2]string{{"äöüßäöüß", "äöüßäöüß"}}}
 	stubEnrollment(t, s)
 	cfg := &config.Config{AuthenticationMode: config.AuthModePassword, PasswordMinLength: 8, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); err != nil {
+	if _, _, _, err := enroll(t, s, cfg); err != nil {
 		t.Fatalf("8-character password must be accepted: %v", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		s.lines = []string{"", "<swap>"}
 		cfg := &config.Config{AuthenticationMode: mode, YubiKeySpare: true, RecoveryCode: true, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
 
-		ks, master, err, out := enroll(t, s, cfg)
+		ks, master, out, err := enroll(t, s, cfg)
 		if err != nil {
 			t.Fatalf("mode %d: enrollKeySet: %v\n%s", mode, err, out)
 		}
@@ -168,7 +168,7 @@ func TestEnrollKeySetRequiresConnectedYubiKey(t *testing.T) {
 	stubEnrollment(t, s)
 	checkYubiKeyConnectedFn = func() error { return errors.New("not connected") }
 	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, PasswordMinLength: 12, Argon2: testutil.FastArgon2Config}
-	if _, _, err, _ := enroll(t, s, cfg); !errors.Is(err, yubikey.ErrRequired) {
+	if _, _, _, err := enroll(t, s, cfg); !errors.Is(err, yubikey.ErrRequired) {
 		t.Fatalf("expected yubikey.ErrRequired, got %v", err)
 	}
 }

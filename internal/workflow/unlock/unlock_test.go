@@ -86,18 +86,18 @@ func yubiKeySet(t *testing.T, mode int, password []byte, yubiSecrets ...[]byte) 
 
 // unlock runs KeySet with the scripted answers and returns the output
 // of this call.
-func (s *unlockStub) unlock(t *testing.T, ks *container.KeySet, opts Options) ([]byte, error, string) {
+func (s *unlockStub) unlock(t *testing.T, ks *container.KeySet, opts Options) ([]byte, string, error) {
 	t.Helper()
 	s.out.Reset()
 	got, err := KeySet(s.console, ks, opts, nil)
-	return got, err, s.out.String()
+	return got, s.out.String(), err
 }
 
 func TestUnlockKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("right"))
 	stub := stubUnlockInputs(t, []string{"wrong", "right"}, 0, nil)
 
-	got, err, out := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+	got, out, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock failed: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 	ks, _ := testutil.NewPasswordKeySet(t, []byte("right"))
 	stub := stubUnlockInputs(t, []string{"a", "b", "c"}, 0, nil)
 
-	_, err, _ := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+	_, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 	if err == nil || !strings.Contains(err.Error(), "Too many wrong password attempts") {
 		t.Fatalf("expected give-up error, got %v", err)
 	}
@@ -121,7 +121,7 @@ func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
 	ks, master := yubiKeySet(t, container.AuthModePasswordYubiKey, []byte("pw"), secret)
 	stub := stubUnlockInputs(t, []string{"pw"}, 0, secret)
 
-	got, err, _ := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+	got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock failed: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 		ks, master := yubiKeySet(t, mode, []byte("pw"), primary, spare)
 		// The spare YubiKey (index 1) is connected.
 		stub := stubUnlockInputs(t, []string{"pw"}, 1, spare)
-		got, err, out := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+		got, out, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 		if err != nil || !bytes.Equal(got, master) {
 			t.Fatalf("mode %d: unlock with spare failed: %v", mode, err)
 		}
@@ -148,13 +148,13 @@ func TestUnlockKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
 	ks, master := yubiKeySet(t, container.AuthModeYubiKey, nil, bytes.Repeat([]byte{7}, 32))
 
 	stub := stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{7}, 32))
-	got, err, _ := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+	got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("unlock with right YubiKey failed: %v", err)
 	}
 
 	stub = stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{8}, 32))
-	_, err, _ = stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
+	_, _, err = stub.unlock(t, ks, Options{PasswordPrompt: "pw: "})
 	if err == nil || !strings.Contains(err.Error(), "does not unlock the backup") {
 		t.Fatalf("expected wrong-YubiKey error, got %v", err)
 	}
@@ -181,7 +181,7 @@ func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
 
 	// A typo and a code of other keys are rejected before the right code works.
 	stub := stubUnlockInputs(t, []string{string(typo), other.String(), strings.ToLower(code.String())}, 0, nil, "r")
-	got, err, out := stub.unlock(t, ks, Options{PasswordPrompt: "pw: ", AllowRecovery: true})
+	got, out, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: ", AllowRecovery: true})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("recovery unlock failed: %v (output %q)", err, out)
 	}
@@ -195,13 +195,13 @@ func TestUnlockKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
 
 	// Without AllowRecovery no choice is asked; the password unlocks.
 	stub := stubUnlockInputs(t, []string{"pw"}, 0, nil)
-	if got, err, _ := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "}); err != nil || !bytes.Equal(got, master) {
+	if got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: "}); err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("password unlock failed: %v", err)
 	}
 
 	// With AllowRecovery the default answer keeps the password path.
 	stub = stubUnlockInputs(t, []string{"pw"}, 0, nil, "")
-	if got, err, _ := stub.unlock(t, ks, Options{PasswordPrompt: "pw: ", AllowRecovery: true}); err != nil || !bytes.Equal(got, master) {
+	if got, _, err := stub.unlock(t, ks, Options{PasswordPrompt: "pw: ", AllowRecovery: true}); err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("password unlock with recovery offered failed: %v", err)
 	}
 }
