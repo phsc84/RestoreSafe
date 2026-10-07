@@ -1,6 +1,7 @@
 package view
 
 import (
+	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
@@ -47,8 +48,13 @@ func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	if docs.Badge.Text != "FULL" || docs.BasedOn != "-" || docs.Chain == "" || docs.Status.Text != "Complete" || !docs.Usable {
 		t.Fatalf("Docs row %+v", docs)
 	}
-	if p.Retention == nil || p.Retention.Button != nil {
-		t.Fatalf("retention %+v", p.Retention)
+	if p.Retention != nil {
+		t.Fatalf("the rule alone is not shown (it is on Settings): %+v", p.Retention)
+	}
+	// What the next backup removes is shown.
+	removed := []catalog.SetInfo{{Entry: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-07-06"}, SizeBytes: 41 << 30}}
+	if l := retentionLine(&health.Snapshot{Retention: removed}, time.Date(2026, 9, 30, 9, 0, 0, 0, time.Local)); l == nil || !strings.HasPrefix(l.Text, "If your next backup succeeds, it removes ") || l.Button != nil {
+		t.Fatalf("retention %+v", l)
 	}
 	if len(p.Filters) != 3 || p.Filters[0].Text != "All folders" || p.Filter != 0 {
 		t.Fatalf("filters %+v", p.Filters)

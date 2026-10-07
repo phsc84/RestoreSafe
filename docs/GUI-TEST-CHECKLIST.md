@@ -76,6 +76,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
 | BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs; the pane shows at least 15 lines, and dragging the splitter far down or making the window small gives the page a scroll bar | Open | Pre-checked: selected run, live during verify and restore. |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
+| BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | Open | |
 | BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | Open | Pre-checked by screenshot at 150 % (smoke test). |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
 | BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |

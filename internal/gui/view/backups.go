@@ -112,7 +112,7 @@ func BackupsOf(s *health.Snapshot, cfg *config.Config, r *flow.Run, folder strin
 		p.Empty = &EmptyState{Title: lastBackupNone, Line: backupsEmptyLine, Button: Button{Text: buttonBackUp, Action: ActionBackUp, Enabled: !s.Check.BlocksBackup()}}
 		return p
 	}
-	p.Retention = retentionLine(s, cfg, now)
+	p.Retention = retentionLine(s, now)
 	p.Lines = problemLines(s, cfg, now)
 	p.Groups = groupsOf(s, r, folder, now)
 	return p
@@ -154,32 +154,21 @@ func filtersOf(s *health.Snapshot, selected string) ([]FilterOption, int) {
 	return opts, index
 }
 
-// retentionLine explains the retention rule and what the next backup
-// removes (GUI spec BK-7).
-func retentionLine(s *health.Snapshot, cfg *config.Config, now time.Time) *InfoLine {
-	text := keepAllRule
-	if cfg != nil {
-		chains, diffs := cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials
-		switch {
-		case chains > 0 && diffs > 0:
-			text = fmt.Sprintf(keepChainsAndDiffs, chainCount(chains), diffs)
-		case chains > 0:
-			text = fmt.Sprintf(keepChainsRule, chainCount(chains))
-		case diffs > 0:
-			text = fmt.Sprintf(keepDiffsRule, diffs)
-		}
+// retentionLine names what the next backup removes (GUI spec BK-7); nil
+// when it removes nothing. The rule itself is on Settings.
+func retentionLine(s *health.Snapshot, now time.Time) *InfoLine {
+	if len(s.Retention) == 0 {
+		return nil
 	}
-	if len(s.Retention) > 0 {
-		var bytes int64
-		for _, info := range s.Retention {
-			bytes += info.SizeBytes
-		}
-		var groups []string
-		for _, g := range removalGroups(s.Retention) {
-			groups = append(groups, g.text(now))
-		}
-		text += " " + fmt.Sprintf(nextRemoves, backupCount(len(s.Retention)), Size(bytes), strings.Join(groups, "; "))
+	var bytes int64
+	for _, info := range s.Retention {
+		bytes += info.SizeBytes
 	}
+	var groups []string
+	for _, g := range removalGroups(s.Retention) {
+		groups = append(groups, g.text(now))
+	}
+	text := fmt.Sprintf(nextRemoves, backupCount(len(s.Retention)), Size(bytes), strings.Join(groups, "; "))
 	return &InfoLine{Text: text, Tone: ToneInfo, Glyph: GlyphInfo}
 }
 
