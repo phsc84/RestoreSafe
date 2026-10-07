@@ -149,6 +149,10 @@ func (o *overviewPage) update() {
 	o.fillStorage()
 	o.fillKeys()
 	o.layout()
+	// Moving a card copies its old pixels, painted before its labels were
+	// rebuilt: the run card taking the hero's place left parts of the old
+	// cards showing.
+	win32.RedrawAll(o.panel.HWND())
 }
 
 // backupRun returns the backup the page shows: running, or finished with a
