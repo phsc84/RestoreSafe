@@ -106,7 +106,7 @@ The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, 
 - **The backup format of 2.x is frozen.** Every backup written by 2.0.0 must restore with every later 2.x version.
 - **Behaviour is preserved** unless a change says otherwise and adds a CHANGELOG entry: texts, the log file format, the order of questions.
 - **No unattended operation.** RestoreSafe never schedules backups, runs in the background, or stores credentials.
-- **Error texts are sentences for the user**, with a remedy ("... Remedy: ..."), so staticcheck's ST1005 is turned off in [staticcheck.conf](staticcheck.conf).
+- **Errors the user sees are `problem.Error`s**: what happened, and what the user does about it, e.g. `problem.Errorf("Failed to read backup header: %w.", err).WithRemedy("Check that the backup file is complete.")`. Never write "Remedy:" into an error text: the GUI shows the remedy from its field, and logs get "<message> Remedy: <remedy>" from `Error()`. The texts are sentences for the user, so staticcheck's ST1005 is turned off in [staticcheck.conf](staticcheck.conf).
 
 The standing constraints of refactoring work are in [docs/SPEC-refactoring.md](docs/SPEC-refactoring.md) section 2; the specifications are listed in [docs/README.md](docs/README.md).
 
