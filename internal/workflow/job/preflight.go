@@ -41,7 +41,7 @@ func AuthRows(authLabel string, requiresYubiKey bool, action string, checkYubiKe
 // UnlockPlan describes how ks is unlocked: its regular way and whether the
 // recovery code opens it too.
 func UnlockPlan(ks *container.KeySet) interact.UnlockPlan {
-	mode := config.AuthMode(ks.AuthMode)
+	mode := ks.AuthMode
 	return interact.UnlockPlan{
 		Methods:      mode.Label(),
 		Password:     mode != config.AuthModeYubiKey,

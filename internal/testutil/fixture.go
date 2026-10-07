@@ -39,7 +39,7 @@ type BackupFixture struct {
 // NewPasswordKeySet creates a password-mode key set protected by password.
 func NewPasswordKeySet(t testing.TB, password []byte) (*container.KeySet, []byte) {
 	t.Helper()
-	ks, master, err := container.NewKeySet(container.AuthModePassword)
+	ks, master, err := container.NewKeySet(config.AuthModePassword)
 	if err != nil {
 		t.Fatalf("NewKeySet: %v", err)
 	}

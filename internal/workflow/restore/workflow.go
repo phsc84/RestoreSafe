@@ -68,7 +68,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	defer log.Close()
 
 	preflight := buildRestorePreflight(selectedInfos, infos, restorePath)
-	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, config.AuthMode(first.KeySet.AuthMode), yubikey.CheckConnected)
+	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
 	if err := validateRestorePreflight(preflight); err != nil {
 		return err
@@ -438,6 +438,6 @@ func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetIn
 	}
 	items := buildRestorePreflight(selected, infos, destination)
 	first := selected[0].Header
-	details := restorePreflightReport(cfg, backupDir, destination, items, config.AuthMode(first.KeySet.AuthMode), yubikey.CheckConnected)
+	details := restorePreflightReport(cfg, backupDir, destination, items, first.KeySet.AuthMode, yubikey.CheckConnected)
 	return restorePlan(items, destination, &first.KeySet, details), nil
 }

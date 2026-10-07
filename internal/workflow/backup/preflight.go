@@ -439,7 +439,7 @@ func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, key
 // or create them.
 func keyPlanFor(cfg *config.Config, keys plan.Keys) interact.KeyPlan {
 	if ks := keys.Existing; ks != nil {
-		mode := config.AuthMode(ks.AuthMode)
+		mode := ks.AuthMode
 		kp := interact.KeyPlan{Created: ks.Created(), Summary: ks.Summary(), Password: mode != config.AuthModeYubiKey}
 		if mode != config.AuthModePassword {
 			kp.YubiKeys = 1

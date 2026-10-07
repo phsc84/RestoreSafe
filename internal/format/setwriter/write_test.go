@@ -1,6 +1,7 @@
 package setwriter
 
 import (
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/archive"
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
@@ -18,7 +19,7 @@ var fastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryp
 
 func newKeySet(t *testing.T) (*container.KeySet, []byte) {
 	t.Helper()
-	ks, master, err := container.NewKeySet(container.AuthModePassword)
+	ks, master, err := container.NewKeySet(config.AuthModePassword)
 	if err != nil {
 		t.Fatal(err)
 	}

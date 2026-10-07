@@ -21,13 +21,6 @@ const (
 	SlotRecovery        = "recovery"
 )
 
-// Authentication modes (values of config.yaml authentication_mode).
-const (
-	AuthModePassword        = 1
-	AuthModePasswordYubiKey = 2
-	AuthModeYubiKey         = 3
-)
-
 const (
 	keySetIDLen   = 16
 	kdfAlgArgon2  = "argon2id"
@@ -76,15 +69,15 @@ func (s Slot) UsesPassword() bool {
 // of it. It is created once at enrollment and copied unchanged into the header
 // of every set written with it.
 type KeySet struct {
-	ID         string `json:"id"`
-	CreatedUTC string `json:"created_utc"`
-	AuthMode   int    `json:"auth_mode"`
-	Slots      []Slot `json:"slots"`
+	ID         string          `json:"id"`
+	CreatedUTC string          `json:"created_utc"`
+	AuthMode   config.AuthMode `json:"auth_mode"`
+	Slots      []Slot          `json:"slots"`
 }
 
 // NewKeySet creates an empty key set and its random master key. The caller
 // adds slots with AddSlot and must zero the master key after use.
-func NewKeySet(authMode int) (*KeySet, []byte, error) {
+func NewKeySet(authMode config.AuthMode) (*KeySet, []byte, error) {
 	id, err := cryptox.RandomBytes(keySetIDLen)
 	if err != nil {
 		return nil, nil, err
@@ -170,11 +163,11 @@ func (ks *KeySet) SlotIndexes(slotType string) []int {
 
 // RegularSlotType returns the slot type used for the key set's authentication
 // mode (the non-recovery slots).
-func RegularSlotType(authMode int) string {
+func RegularSlotType(authMode config.AuthMode) string {
 	switch authMode {
-	case AuthModePasswordYubiKey:
+	case config.AuthModePasswordYubiKey:
 		return SlotPasswordYubiKey
-	case AuthModeYubiKey:
+	case config.AuthModeYubiKey:
 		return SlotYubiKey
 	default:
 		return SlotPassword
@@ -214,7 +207,7 @@ func (ks *KeySet) Validate() error {
 		return headerErr("invalid key set creation time")
 	}
 	regular := RegularSlotType(ks.AuthMode)
-	if ks.AuthMode < AuthModePassword || ks.AuthMode > AuthModeYubiKey {
+	if ks.AuthMode < config.AuthModePassword || ks.AuthMode > config.AuthModeYubiKey {
 		return headerErr("invalid authentication mode %d", ks.AuthMode)
 	}
 	if len(ks.Slots) == 0 {
@@ -262,7 +255,7 @@ func (ks *KeySet) Validate() error {
 // "created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code".
 func (ks *KeySet) Summary() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), config.AuthMode(ks.AuthMode).Label())
+	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), ks.AuthMode.Label())
 	if n := ks.YubiKeyCount(); n > 0 {
 		fmt.Fprintf(&b, " (%d YubiKey", n)
 		if n > 1 {

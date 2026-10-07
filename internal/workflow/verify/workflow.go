@@ -59,7 +59,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	defer log.Close()
 
 	preflight := buildVerifyPreflight(selectedInfos, infos)
-	details := verifyPreflightReport(cfg, backupDir, preflight, config.AuthMode(first.KeySet.AuthMode), yubikey.CheckConnected)
+	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	u.ShowVerifyPlan(verifyPlan(preflight, &first.KeySet, details))
 	if err := validateVerifyPreflight(preflight); err != nil {
 		return err
