@@ -6,8 +6,6 @@ import (
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -18,10 +16,10 @@ const (
 	idBackupsList
 	idBackupsRestore
 	idBackupsVerify
-	idLogAll
-	idLogWarnings
-	idLogOpen
-	_ // 608 was the log pane's Hide log button; the IDs after it keep their values
+	_ // 605 to 608 were the log pane's buttons; the IDs after them keep their values
+	_
+	_
+	_
 	idEmptyBackUp
 	idLineButtons = 640 // idLineButtons+i is the button of line i
 )
@@ -30,6 +28,7 @@ const (
 const (
 	menuRestore = 1 + iota
 	menuVerify
+	menuShowLog
 	menuCopyName
 	menuOpenFolder
 )
@@ -40,25 +39,15 @@ const (
 	filterWidth        = 220
 	filterDropHeight   = 300
 	actionBarHeight    = 36
-	logHeaderHeight    = 30
-	minListHeight      = 80
+	minListHeight      = 160
 	lineGap            = 4
-	logButtonWidth     = 64
 )
-
-// logMinLines is how many lines the log pane shows at least; when the list
-// above it leaves less room, the page scrolls.
-const logMinLines = 15
-
-// defaultLogShare is the log pane's share of the room below the cards
-// until the user drags the splitter.
-const defaultLogShare = 0.35
 
 // Column widths of the list, in DIPs; the status column takes the rest.
 var backupColumnWidths = []int32{150, 72, 110, 80, 76}
 
 // backupsPage is the Backups page (GUI spec 7): the runs and their sets, the
-// selection's actions, and the log of the selected run.
+// selection's actions; each run's header links to its log.
 type backupsPage struct {
 	a     *app
 	panel *widget.Panel
@@ -88,24 +77,12 @@ type backupsPage struct {
 	barText, restore, verify win32.HWND
 	bar                      view.ActionBar
 
-	splitter                      *widget.Splitter
-	logTitle, logAll, logWarnings win32.HWND
-	logOpen, logEdit              win32.HWND
-	// listHeight is the list's height in DIPs as the user dragged the
-	// splitter; 0 until then.
-	listHeight int32
-	logPath    string
-	logText    string
-	logSeq     int
-	logFilter  view.LogFilter
-
 	emptyTitle, emptyLine, emptyButton win32.HWND
 
 	folder    string
 	selRun    naming.BackupID
 	selSet    string
 	collapsed map[naming.BackupID]bool
-	logWhen   string
 }
 
 type rowRef struct{ group, row int }
@@ -142,26 +119,6 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.barText = panel.Label("", widget.TextBody, pal.Text)
 	b.restore = panel.Button(" ", idBackupsRestore)
 	b.verify = panel.Button(" ", idBackupsVerify)
-	if b.splitter, err = widget.NewSplitter(t, panel.HWND(), pal.Surface); err != nil {
-		return nil, err
-	}
-	panel.Adopt(b.splitter.HWND())
-	b.splitter.OnMove = b.splitterMoved
-	b.logTitle = panel.Label("", widget.TextStrong, pal.Text)
-	lp := view.LogPaneOf()
-	b.logAll = b.child("BUTTON", win32.WS_TABSTOP|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE|win32.WS_GROUP, idLogAll)
-	b.logWarnings = b.child("BUTTON", win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, idLogWarnings)
-	b.logOpen = panel.Button(lp.Open, idLogOpen)
-	win32.SetText(b.logAll, lp.All)
-	win32.SetText(b.logWarnings, lp.Warnings)
-	win32.SetChecked(b.logAll, true)
-	for _, h := range []win32.HWND{b.logAll, b.logWarnings} {
-		widget.StyleButton(t, h, pal.Surface, false)
-	}
-	b.logEdit = b.child(win32.MSFTEDIT_CLASS, win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL, 0)
-	win32.SendMessage(b.logEdit, win32.EM_SETBKGNDCOLOR, 0, uintptr(pal.Surface))
-	win32.SendMessage(b.logEdit, win32.EM_EXLIMITTEXT, 0, 64<<20)
-	win32.SetAccessibleName(b.logEdit, view.LogPaneName)
 	b.emptyTitle = panel.Label("", widget.TextTitle, pal.Text)
 	b.emptyLine = panel.Label("", widget.TextBody, pal.TextSecondary)
 	b.emptyButton = panel.PrimaryButton(" ", idEmptyBackUp)
@@ -188,15 +145,13 @@ func (b *backupsPage) restyle() {
 	b.panel.Restyle()
 	b.run.card.panel.Restyle()
 	b.lines.Restyle()
-	for _, h := range []win32.HWND{b.filter, b.list, b.logAll, b.logWarnings} {
+	for _, h := range []win32.HWND{b.filter, b.list} {
 		win32.SetFont(h, t.Fonts.Get(widget.TextBody))
 	}
-	win32.SetFont(b.logEdit, t.Fonts.Get(widget.TextMono))
 	for i, w := range backupColumnWidths {
 		win32.ListSetColumnWidth(b.list, i, t.Scale.Px(w))
 	}
 	b.linesSig = ""
-	b.renderLog()
 }
 
 // update shows the current snapshot and operation.
@@ -215,7 +170,7 @@ func (b *backupsPage) update() {
 
 	b.showRun()
 	empty := v.Empty != nil
-	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify, b.logTitle, b.logAll, b.logWarnings, b.logOpen, b.logEdit, b.splitter.HWND()} {
+	for _, h := range []win32.HWND{b.list, b.barText, b.restore, b.verify} {
 		setShown(h, !empty)
 	}
 	b.lines.Show(!empty && (v.Retention != nil || len(v.Lines) > 0))
@@ -336,6 +291,8 @@ func (b *backupsPage) fillList() {
 		sig.WriteString(string(g.RunID))
 		sig.WriteByte('|')
 		sig.WriteString(g.Header)
+		sig.WriteByte('|')
+		sig.WriteString(g.LogPath)
 		sig.WriteByte(0)
 		for _, r := range g.Rows {
 			sig.WriteString(r.Set)
@@ -374,7 +331,11 @@ func (b *backupsPage) fillList() {
 		if !known || g.RunID == "" {
 			collapsed = !g.Expanded
 		}
-		win32.ListInsertGroup(lv, int32(gi), g.Header, collapsed)
+		link := ""
+		if g.LogPath != "" {
+			link = view.RunLogLink
+		}
+		win32.ListInsertGroup(lv, int32(gi), g.Header, link, collapsed)
 		b.shownCollapsed = append(b.shownCollapsed, collapsed)
 		b.lastGroups = append(b.lastGroups, g.RunID)
 		if len(g.Rows) == 0 {
@@ -473,7 +434,7 @@ func (b *backupsPage) selectItem(item int) {
 	} else if ref.row >= 0 {
 		b.selSet = g.Rows[ref.row].Set
 	}
-	b.selectionChanged(g)
+	b.updateBar()
 }
 
 // selectRun makes the run of group gi the selection.
@@ -484,128 +445,16 @@ func (b *backupsPage) selectRun(gi int) {
 	g := b.view.Groups[gi]
 	b.selRun, b.selSet = g.RunID, ""
 	win32.ListSelect(b.list, -1)
-	b.selectionChanged(g)
-}
-
-func (b *backupsPage) selectionChanged(g view.RunGroup) {
 	b.updateBar()
-	b.showLog(g.LogPath, g.When)
 }
 
-// showLogOf shows the Backups page with the run of the log at path
-// selected (from "Show log" of the Overview's cards).
-func (b *backupsPage) showLogOf(path string) {
-	_, runID, ok := naming.ParseLogFileName(filepath.Base(path))
-	if !ok {
+// showRunLog shows the log of group gi in the log window (GUI spec BK-5).
+func (b *backupsPage) showRunLog(gi int) {
+	if gi < 0 || gi >= len(b.view.Groups) {
 		return
 	}
-	b.selRun, b.selSet = runID, ""
-	win32.ListSelect(b.list, -1)
-	when := ""
-	for gi, g := range b.view.Groups {
-		if g.RunID == runID {
-			when = g.When
-			win32.ListSetGroupCollapsed(b.list, int32(gi), false)
-			b.collapsed[runID] = false
-		}
-	}
-	b.updateBar()
-	b.showLog(path, when)
-}
-
-// showLog loads the log at path into the log pane, in the background: the
-// backup directory may be on a slow network share.
-func (b *backupsPage) showLog(path, when string) {
-	b.logWhen = when
-	if path == "" {
-		b.logPath, b.logText = "", ""
-		b.renderLog()
-		return
-	}
-	if path == b.logPath && b.logText != "" {
-		return
-	}
-	b.logPath, b.logText = path, ""
-	b.logSeq++
-	seq := b.logSeq
-	b.renderLog()
-	a := b.a
-	go func() {
-		data, err := os.ReadFile(path)
-		text := string(data)
-		if err != nil {
-			text = ""
-		}
-		a.mu.Lock()
-		a.pendingLog = &loadedLog{seq: seq, path: path, text: text}
-		a.mu.Unlock()
-		win32.PostMessage(a.hwnd, msgLogLoaded, 0, 0) //nolint:errcheck
-	}()
-}
-
-// loadedLog is a log file read in the background.
-type loadedLog struct {
-	seq  int
-	path string
-	text string
-}
-
-// logLoaded shows the log read in the background, unless another was
-// asked for since.
-func (b *backupsPage) logLoaded(l *loadedLog) {
-	if l == nil || l.seq != b.logSeq || l.path != b.logPath {
-		return
-	}
-	b.logText = l.text
-	if b.isLive() {
-		// The running operation appends to this log; its output follows.
-		b.logText = l.text
-	}
-	b.renderLog()
-}
-
-// isLive reports whether the log pane shows the log the running operation
-// writes.
-func (b *backupsPage) isLive() bool {
-	r := b.a.run
-	return r != nil && b.logPath != "" && strings.EqualFold(r.b.LogPath(), b.logPath)
-}
-
-// appendLive adds the log lines of the running operation's output when
-// the pane shows its log; notices for the screen only (e.g. "Restore
-// cancelled.") are not in the log file and stay out.
-func (b *backupsPage) appendLive(text string) {
-	if !b.isLive() {
-		return
-	}
-	for _, line := range strings.SplitAfter(text, "\n") {
-		if strings.HasPrefix(line, "[") {
-			b.logText += line
-		}
-	}
-	b.renderLog()
-}
-
-// reloadLog reads the shown log again: after an operation, the file is
-// the exact record.
-func (b *backupsPage) reloadLog() {
-	if path := b.logPath; path != "" {
-		b.logPath = ""
-		b.showLog(path, b.logWhen)
-	}
-}
-
-// renderLog shows the log text with the filter.
-func (b *backupsPage) renderLog() {
-	win32.SetText(b.logTitle, view.LogPaneTitle(b.logWhen, filepath.Base(b.logPath)))
-	if b.logPath == "" {
-		win32.SetRichText(b.logEdit, logRTF(nil, b.a.fontPt))
-		win32.Enable(b.logOpen, false)
-		return
-	}
-	win32.Enable(b.logOpen, true)
-	win32.SetRichText(b.logEdit, logRTF(view.LogLinesOf(b.logText, b.logFilter), b.a.fontPt))
-	win32.SendMessage(b.logEdit, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
+	g := b.view.Groups[gi]
+	b.a.showLog(b.a.hwnd, g.LogPath, g.When)
 }
 
 func (b *backupsPage) command(id, code uint16) {
@@ -615,16 +464,6 @@ func (b *backupsPage) command(id, code uint16) {
 		if i := win32.ComboSelected(b.filter); i >= 0 && i < len(b.view.Filters) {
 			b.folder = b.view.Filters[i].Folder
 			b.update()
-		}
-	case id == idLogAll && code == win32.BN_CLICKED:
-		b.logFilter = view.LogAll
-		b.renderLog()
-	case id == idLogWarnings && code == win32.BN_CLICKED:
-		b.logFilter = view.LogWarnings
-		b.renderLog()
-	case id == idLogOpen && code == win32.BN_CLICKED:
-		if b.logPath != "" {
-			a.open(b.logPath, true)
 		}
 	case code == win32.BN_CLICKED || code == 0:
 		if action, ok := b.acts[id]; ok {
@@ -656,6 +495,10 @@ func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
 		}
 	case win32.NM_RCLICK:
 		b.contextMenu()
+	case win32.LVN_LINKCLICK:
+		// The log window runs its own message loop: it opens after the
+		// list has finished with the click.
+		win32.PostMessage(b.a.hwnd, msgRunLog, uintptr(win32.ListLinkGroup(hdr)), 0) //nolint:errcheck
 	case win32.LVN_GETINFOTIP:
 		n := win32.ListInfoTipOf(hdr)
 		if ref, ok := b.rowAt(int(n.Item)); ok && ref.row >= 0 {
@@ -688,6 +531,7 @@ func (b *backupsPage) contextMenu() {
 	win32.ListSelect(b.list, item)
 	b.selectItem(item)
 	ref, _ := b.rowAt(item)
+	logPath := b.view.Groups[ref.group].LogPath
 	m := view.BackupsMenu()
 	set := ""
 	if ref.row >= 0 {
@@ -697,6 +541,7 @@ func (b *backupsPage) contextMenu() {
 	switch win32.ShowMenu(b.a.hwnd, screen, []win32.MenuItem{
 		{ID: menuRestore, Text: m.Restore, Disabled: !b.bar.Restore.Enabled || busy},
 		{ID: menuVerify, Text: m.Verify, Disabled: !b.bar.Verify.Enabled || busy},
+		{ID: menuShowLog, Text: m.ShowLog, Disabled: logPath == ""},
 		{},
 		{ID: menuCopyName, Text: m.CopyName, Disabled: set == ""},
 		{ID: menuOpenFolder, Text: m.OpenFolder},
@@ -705,6 +550,8 @@ func (b *backupsPage) contextMenu() {
 		b.a.do(view.ActionRestore)
 	case menuVerify:
 		b.a.do(view.ActionVerify)
+	case menuShowLog:
+		b.showRunLog(ref.group)
 	case menuCopyName:
 		win32.CopyText(b.a.hwnd, set) //nolint:errcheck
 	case menuOpenFolder:
@@ -779,41 +626,6 @@ func (b *backupsPage) refOf(param uintptr) (rowRef, bool) {
 	return b.rows[p-1], true
 }
 
-// splitterMoved sets the list's height; the log pane takes the rest, at
-// least logMinLines lines.
-func (b *backupsPage) splitterMoved(top int32) {
-	s := b.a.theme.Scale
-	r := win32.WindowRect(b.list)
-	listTop := win32.ScreenToClient(b.panel.HWND(), win32.Point{X: r.Left, Y: r.Top}).Y
-	b.listHeight = s.Dip(max(top-listTop-s.Px(actionBarHeight), s.Px(minListHeight)))
-	b.layout()
-}
-
-// logMinHeight returns the height in pixels of the log pane showing
-// logMinLines lines.
-func (b *backupsPage) logMinHeight() int32 {
-	hdc := win32.GetDC(0)
-	old := win32.SelectFont(hdc, b.a.monoFont)
-	line := win32.DrawText(hdc, "Ag", win32.Rect{}, win32.DT_CALCRECT|win32.DT_SINGLELINE|win32.DT_NOPREFIX).Height()
-	win32.SelectFont(hdc, old)
-	win32.ReleaseDC(0, hdc)
-	// The border and the rich edit's inner margin.
-	return logMinLines*line + b.a.theme.Scale.Px(8)
-}
-
-// splitHeights divides avail pixels between the list and the log pane; the
-// two may need more than avail, and then the page scrolls.
-func (b *backupsPage) splitHeights(avail int32) (listH, logH int32) {
-	s := b.a.theme.Scale
-	logMin := b.logMinHeight()
-	if b.listHeight > 0 {
-		listH = max(s.Px(b.listHeight), s.Px(minListHeight))
-	} else {
-		listH = max(avail-max(int32(float64(avail)*defaultLogShare), logMin), s.Px(minListHeight))
-	}
-	return listH, max(avail-listH, logMin)
-}
-
 // headHeight returns the height in pixels of the title, the run card and
 // the lines above the list, with their gaps, at a page width.
 func (b *backupsPage) headHeight(width int32) int32 {
@@ -828,24 +640,22 @@ func (b *backupsPage) headHeight(width int32) int32 {
 	return h
 }
 
-// layout places the page's controls. The log pane fills the page below the
-// list; the page scrolls when the list leaves it fewer than logMinLines
-// lines.
+// layout places the page's controls. The list fills the page above its
+// action bar; the page scrolls when it leaves the list less than
+// minListHeight.
 func (b *backupsPage) layout() {
 	t := b.a.theme
 	s := t.Scale
 	client := win32.ClientRect(b.panel.HWND())
 	bar := s.Px(actionBarHeight)
-	header := s.Px(logHeaderHeight)
-	split := s.Px(widget.SplitterHeight)
-	var listH, logH, total int32
+	var listH, total int32
 	if b.view.Empty == nil {
 		// A scroll bar that comes or goes changes the width, and with it
 		// the run card's height.
 		for range 2 {
-			fixed := 2*s.Px(widget.ContentPaddingY) + b.headHeight(client.Width()) + bar + split + header
-			listH, logH = b.splitHeights(client.Height() - fixed)
-			total = fixed + listH + logH
+			fixed := 2*s.Px(widget.ContentPaddingY) + b.headHeight(client.Width()) + bar
+			listH = max(client.Height()-fixed, s.Px(minListHeight))
+			total = fixed + listH
 			b.panel.SetScroll(total)
 			now := win32.ClientRect(b.panel.HWND())
 			if now.Width() == client.Width() {
@@ -892,7 +702,7 @@ func (b *backupsPage) layout() {
 		area.Top(widget.CardGap)
 	}
 
-	// The list, its action bar, the splitter and the log pane.
+	// The list and its action bar.
 	bottom := area.Rest()
 	y := bottom.Top
 	win32.SetWindowPos(b.list, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + listH})
@@ -904,19 +714,6 @@ func (b *backupsPage) layout() {
 	win32.SetWindowPos(b.restore, barArea.RightPx(buttonWidth(t, b.restore)))
 	barArea.Right(12)
 	win32.SetWindowPos(b.barText, barArea.Rest())
-	y += bar
-	win32.SetWindowPos(b.splitter.HWND(), win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + split})
-	y += split
-	head := widget.NewArea(s, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + header})
-	head.Inset(0, 1, 0, 1)
-	for _, h := range []win32.HWND{b.logOpen, b.logWarnings, b.logAll} {
-		w, _ := t.Fonts.Measure(win32.Text(h), widget.TextBody)
-		win32.SetWindowPos(h, head.RightPx(max(w+s.Px(24), s.Px(logButtonWidth))))
-		head.Right(6)
-	}
-	win32.SetWindowPos(b.logTitle, head.Rest())
-	y += header
-	win32.SetWindowPos(b.logEdit, win32.Rect{Left: bottom.Left, Top: y, Right: bottom.Right, Bottom: y + logH})
 }
 
 // chosen returns the selected sets that can be restored or verified.

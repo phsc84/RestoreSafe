@@ -267,21 +267,25 @@ func TestLogLines(t *testing.T) {
 	if len(LogLinesOf("", LogWarnings)) != 0 {
 		t.Fatal("a log not loaded yet shows nothing")
 	}
-	if LogPaneTitle("today, 09:12", "2026-09-30_QRS321.log") != "Log of today, 09:12 (2026-09-30_QRS321.log)" {
+	if LogWindowTitle("today, 09:12", "2026-09-30_QRS321.log") != "Log of today, 09:12 (2026-09-30_QRS321.log)" {
 		t.Fatal("log title")
 	}
 }
 
-// The run card sits on Restore backup above the log pane: every button that
-// can show there at once needs an access key of its own (GUI spec 15).
+// The run card sits on Restore backup above the list, the log window has
+// its own buttons, and the list has its menu: every button that can show
+// at once needs an access key of its own (GUI spec 15).
 func TestRestoreBackupAccessKeysAreUnique(t *testing.T) {
-	lp := LogPaneOf()
-	for _, card := range [][]string{
-		{buttonCancelRun}, // progress
-		{buttonDone, buttonShowRunLog, buttonOpenFolder2}, // result
+	lp := LogViewerOf()
+	m := BackupsMenu()
+	for _, set := range [][]string{
+		{buttonRestore, buttonVerify, buttonCancelRun},                                 // progress
+		{buttonRestore, buttonVerify, buttonDone, buttonShowRunLog, buttonOpenFolder2}, // result
+		{lp.All, lp.Warnings, lp.Open},                                                 // log window
+		{m.Restore, m.Verify, m.ShowLog, m.CopyName, m.OpenFolder},                     // menu
 	} {
 		keys := map[rune]string{}
-		for _, text := range append([]string{buttonRestore, buttonVerify, lp.All, lp.Warnings, lp.Open}, card...) {
+		for _, text := range set {
 			i := strings.IndexRune(text, '&')
 			if i < 0 {
 				t.Fatalf("%q has no access key", text)

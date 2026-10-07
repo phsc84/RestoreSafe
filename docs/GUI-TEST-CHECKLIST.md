@@ -74,7 +74,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-1 | Runs newest first, the newest expanded; group header with size, duration, warnings, "new keys" | Open | Pre-checked: order, newest expanded, header with size, duration, "new keys", failed and cancelled runs. |
 | BK-2 | Types, "based on", chain IDs and sizes match the files in Explorer | Open | |
 | BK-3 | Folder filter, including a folder removed from the configuration ("Old: …") | Open | |
-| BK-5 | Log pane: log of the selected run, filter ("No warnings or errors in this log." when there are none), **Open in Editor**; live while an operation runs; the pane shows at least 15 lines, and dragging the splitter far down or making the window small gives the page a scroll bar | Open | Pre-checked: selected run, live during verify and restore. |
+| BK-5 | "Show log" at the right of each run's header, and in the context menu, opens the run's log window: title with date and file, filter ("No warnings or errors in this log." when there are none), **Open in Editor**, **Close**; no link on a group of incomplete sets; no log pane below the list, and a small window gives the page a scroll bar | Open | |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | Open | |
 | BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | Open | |
 | BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | Open | Pre-checked by screenshot at 150 % (smoke test). |

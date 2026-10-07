@@ -132,7 +132,7 @@ func rtfEscape(s string) string {
 	return b.String()
 }
 
-// logRTF renders log lines as RTF for the log pane: monospaced, warnings
+// logRTF renders log lines as RTF for the log window: monospaced, warnings
 // in amber, errors in red, a note (no warnings) muted; the text itself
 // carries WARN and ERROR.
 func logRTF(lines []view.LogLine, fontPt int) string {

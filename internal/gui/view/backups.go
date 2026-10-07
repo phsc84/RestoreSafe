@@ -685,31 +685,36 @@ func logTone(line string) (Tone, bool) {
 	return ToneNeutral, true
 }
 
-// LogPaneTitle titles the log pane: "Log of today, 09:12
-// (2026-09-30_QRS321.log)".
-func LogPaneTitle(when, file string) string {
+// LogWindowTitle titles the log window: "Log of today, 09:12
+// (2026-09-30_QRS321.log)", or "Log (2026-09-30_QRS321.log)" without the
+// run's date.
+func LogWindowTitle(when, file string) string {
 	if when == "" {
-		return logPaneTitle
+		return fmt.Sprintf(logTitleFile, file)
 	}
 	return fmt.Sprintf(logTitleOf, when, file)
 }
 
-// LogPane are the labels of the log pane's buttons.
-type LogPane struct {
+// LogViewer are the labels of the log window's buttons.
+type LogViewer struct {
 	All, Warnings, Open string
 }
 
-// LogPaneOf returns the labels of the log pane.
-func LogPaneOf() LogPane {
-	return LogPane{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog}
+// LogViewerOf returns the labels of the log window.
+func LogViewerOf() LogViewer {
+	return LogViewer{All: logFilterAll, Warnings: logFilterWarnings, Open: buttonOpenLog}
 }
+
+// RunLogLink is the link in a run's header that opens its log (GUI spec
+// BK-5).
+const RunLogLink = linkRunLog
 
 // Menu are the items of the list's context menu (GUI spec BK-4).
 type Menu struct {
-	Restore, Verify, CopyName, OpenFolder string
+	Restore, Verify, ShowLog, CopyName, OpenFolder string
 }
 
 // BackupsMenu returns the context menu of the list.
 func BackupsMenu() Menu {
-	return Menu{Restore: menuRestoreText, Verify: menuVerifyText, CopyName: menuCopyName, OpenFolder: menuOpenFolder}
+	return Menu{Restore: menuRestoreText, Verify: menuVerifyText, ShowLog: menuShowLog, CopyName: menuCopyName, OpenFolder: menuOpenFolder}
 }

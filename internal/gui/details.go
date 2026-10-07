@@ -5,6 +5,9 @@ import (
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
 	"RestoreSafe/internal/workflow/interact"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/windows"
@@ -19,12 +22,17 @@ type detailsDialog struct {
 	// log with a filter. Both are nil for a report.
 	filters  []win32.HWND
 	refilter func(re win32.HWND, f view.LogFilter)
+	// openButton opens the log file in an editor with openFile; both are
+	// nil for a report.
+	openButton win32.HWND
+	openFile   func()
 }
 
-// Control IDs of the log filter.
+// Control IDs of the log filter and Open in Editor.
 const (
 	idViewerAll = 101 + iota
 	idViewerWarnings
+	idViewerOpen
 )
 
 var (
@@ -58,24 +66,34 @@ func (a *app) showText(owner win32.HWND, title, text string) {
 	})
 }
 
-// showLog shows a log modal to owner, with the filter of the log pane
-// (GUI spec BK-5, RW-8).
-func (a *app) showLog(owner win32.HWND, title, text string) {
+// showLog shows the log file at path modal to owner, with a filter and
+// Open in Editor (GUI spec BK-5, RW-8); when names the run in the title.
+func (a *app) showLog(owner win32.HWND, path, when string) {
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		win32.MessageBox(owner, fmt.Sprintf("Cannot open %s: %v", filepath.ToSlash(path), err), "RestoreSafe", win32.MB_OK|win32.MB_ICONERROR)
+		return
+	}
+	text := string(data)
 	show := func(re win32.HWND, f view.LogFilter) {
 		win32.SetRichText(re, logRTF(view.LogLinesOf(text, f), a.fontPt))
 		win32.SendMessage(re, win32.WM_VSCROLL, win32.SB_BOTTOM, 0)
 	}
-	a.openViewer(owner, title, func(re win32.HWND) { show(re, view.LogAll) }, show)
+	a.openViewer(owner, view.LogWindowTitle(when, filepath.Base(path)), func(re win32.HWND) { show(re, view.LogAll) }, show, func() { a.open(path, true) })
 }
 
 // showViewer shows a read-only rich edit that fill fills, modal to owner,
 // with a Close button.
 func (a *app) showViewer(owner win32.HWND, title string, fill func(re win32.HWND)) {
-	a.openViewer(owner, title, fill, nil)
+	a.openViewer(owner, title, fill, nil, nil)
 }
 
-// openViewer shows the viewer; refilter, when set, adds the log filter.
-func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND), refilter func(re win32.HWND, f view.LogFilter)) {
+// openViewer shows the viewer; refilter, when set, adds the log filter, and
+// open the button that opens the file in an editor.
+func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND), refilter func(re win32.HWND, f view.LogFilter), open func()) {
 	if !detailsClassExists {
 		wc := win32.WndClassEx{
 			WndProc:    windows.NewCallback(detailsProc),
@@ -100,14 +118,14 @@ func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND
 	if err != nil {
 		return
 	}
-	d := &detailsDialog{hwnd: hwnd, open: true, refilter: refilter}
+	d := &detailsDialog{hwnd: hwnd, open: true, refilter: refilter, openFile: open}
 	d.report, _ = win32.CreateWindow(0, win32.MSFTEDIT_CLASS, title,
 		win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL,
 		0, 0, 0, 0, hwnd, 0)
 	d.close, _ = win32.CreateWindow(0, "BUTTON", view.ButtonClose, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.BS_DEFPUSHBUTTON, 0, 0, 0, 0, hwnd, win32.IDOK)
 	win32.SetFont(d.close, a.font)
 	if refilter != nil {
-		lp := view.LogPaneOf()
+		lp := view.LogViewerOf()
 		all, _ := win32.CreateWindow(0, "BUTTON", lp.All, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP|win32.WS_GROUP|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, 0, 0, 0, 0, hwnd, idViewerAll)
 		warn, _ := win32.CreateWindow(0, "BUTTON", lp.Warnings, win32.WS_CHILD|win32.WS_VISIBLE|win32.BS_AUTORADIOBUTTON|win32.BS_PUSHLIKE, 0, 0, 0, 0, hwnd, idViewerWarnings)
 		for _, b := range []win32.HWND{all, warn} {
@@ -116,7 +134,13 @@ func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND
 		win32.SetChecked(all, true)
 		d.filters = []win32.HWND{all, warn}
 	}
-	for _, h := range append([]win32.HWND{d.close}, d.filters...) {
+	buttons := append([]win32.HWND{d.close}, d.filters...)
+	if open != nil {
+		d.openButton, _ = win32.CreateWindow(0, "BUTTON", view.LogViewerOf().Open, win32.WS_CHILD|win32.WS_VISIBLE|win32.WS_TABSTOP, 0, 0, 0, 0, hwnd, idViewerOpen)
+		win32.SetFont(d.openButton, a.font)
+		buttons = append(buttons, d.openButton)
+	}
+	for _, h := range buttons {
 		widget.StyleButton(a.theme, h, widget.Color(win32.SysColor(win32.COLOR_WINDOW)), false)
 	}
 	win32.SendMessage(d.report, win32.EM_SETBKGNDCOLOR, 0, uintptr(win32.SysColor(win32.COLOR_WINDOW)))
@@ -153,6 +177,10 @@ func (d *detailsDialog) layout(s widget.Scale) {
 	area.Inset(detailsMargin, detailsMargin, detailsMargin, detailsMargin)
 	buttons := widget.NewArea(s, area.Bottom(widget.ButtonHeight))
 	win32.SetWindowPos(d.close, buttons.Right(closeWidth))
+	if d.openButton != 0 {
+		buttons.Right(6)
+		win32.SetWindowPos(d.openButton, buttons.Right(int32(1.5*closeWidth)))
+	}
 	for i, b := range d.filters {
 		w := int32(closeWidth)
 		if i == 1 {
@@ -183,6 +211,9 @@ func detailsProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 			return 0
 		case idViewerWarnings:
 			d.refilter(d.report, view.LogWarnings)
+			return 0
+		case idViewerOpen:
+			d.openFile()
 			return 0
 		}
 	case win32.WM_CLOSE:

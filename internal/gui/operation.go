@@ -134,16 +134,12 @@ func (a *app) onProgress() {
 	a.refreshRun()
 }
 
-// onOutput keeps new output for the log pane.
+// onOutput keeps new output.
 func (a *app) onOutput() {
 	if a.run == nil {
 		return
 	}
-	text := a.run.b.TakeOutput()
-	if text != "" {
-		a.logText.WriteString(text)
-		a.shell.backups.appendLive(text)
-	}
+	a.logText.WriteString(a.run.b.TakeOutput())
 }
 
 // confirmCancel handles Cancel while an operation runs: it asks first once
@@ -189,7 +185,6 @@ func (a *app) onWorkerDone() {
 	end := <-r.doneCh
 	r.cancel()
 	a.onOutput()
-	a.shell.backups.reloadLog()
 	a.run = nil
 	if a.plan != nil {
 		// The plan blocked the start: the result card says why.
@@ -236,21 +231,21 @@ func (a *app) dismiss() {
 	a.focusPage()
 }
 
-// showRunLog shows the log of the operation on the Backups page (GUI spec
-// BR-7): the run selected, its log in the pane, live while it runs.
-func (a *app) showRunLog() {
-	path := ""
+// runLogPath returns the log file of the operation, "" when none.
+func (a *app) runLogPath() string {
 	if a.run != nil {
-		path = a.run.b.LogPath()
-	} else if r := a.machine.Current(); r != nil {
-		path = r.LogPath
+		return a.run.b.LogPath()
 	}
-	if path == "" {
-		return
+	if r := a.machine.Current(); r != nil {
+		return r.LogPath
 	}
-	a.showPage(view.PageBackups)
-	a.shell.backups.showLogOf(path)
-	a.focusPage()
+	return ""
+}
+
+// showRunLog shows the log of the operation in the log window (GUI spec
+// BR-7), as it is when opened.
+func (a *app) showRunLog() {
+	a.showLog(a.hwnd, a.runLogPath(), "")
 }
 
 // showResultDetails shows the workflow's message of the result card: the

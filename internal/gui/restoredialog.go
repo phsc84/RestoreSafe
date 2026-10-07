@@ -541,20 +541,7 @@ func (w *restoreDialog) do(action view.Action) {
 
 // showLog shows the log of the restore in a viewer over the window (RW-8).
 func (w *restoreDialog) showLog() {
-	path := ""
-	if w.a.run != nil {
-		path = w.a.run.b.LogPath()
-	} else if r := w.a.machine.Current(); r != nil {
-		path = r.LogPath
-	}
-	if path == "" {
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	w.a.showLog(w.win.hwnd, view.LogPaneTitle("", filepath.Base(path)), string(data))
+	w.a.showLog(w.win.hwnd, w.a.runLogPath(), "")
 }
 
 // startCheck checks the choices after delayMs, or now.

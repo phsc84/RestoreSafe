@@ -377,8 +377,9 @@ const (
 	verifyReadsBase     = "Differentials are read with their full backup of %s."
 	verifyReadsBasesOf  = "Differentials are read with their full backups of %s."
 	verifyReadsBases    = "Differentials are read with their full backups."
-	logPaneTitle        = "Log"
+	logTitleFile        = "Log (%s)"
 	logTitleOf          = "Log of %s (%s)"
+	linkRunLog          = "Show log"
 	logFilterAll        = "&All"
 	logFilterWarnings   = "&Warnings and errors"
 	buttonOpenLog       = "Open in &Editor"
@@ -389,9 +390,9 @@ const (
 const (
 	FilterName      = "Folder filter"
 	BackupsListName = "Backups"
-	LogPaneName     = "Log"
 	menuRestoreText = "&Restore…"
 	menuVerifyText  = "&Verify…"
+	menuShowLog     = "Show &log"
 	menuCopyName    = "&Copy set name"
 	menuOpenFolder  = "&Open backup folder"
 )

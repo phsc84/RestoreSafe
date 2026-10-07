@@ -42,7 +42,7 @@ const (
 	msgSnapshot    = win32.WM_APP + 1
 	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone  = win32.WM_APP + 3
-	msgLogLoaded   = win32.WM_APP + 4 // a log file for the Backups page was read
+	msgRunLog      = win32.WM_APP + 4 // wparam: the Backups list group whose Show log was clicked
 	msgListFocus   = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
 	msgDestChecked = win32.WM_APP + 6 // the Restore window's check of the choices is done
 	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
@@ -119,7 +119,6 @@ type app struct {
 	checking      bool
 	mu            sync.Mutex
 	pendingSn     *health.Snapshot
-	pendingLog    *loadedLog
 	pendingDest   *destCheck
 	pendingReload *reloaded
 }
@@ -396,12 +395,8 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 			}
 		}
 		return 0
-	case msgLogLoaded:
-		a.mu.Lock()
-		l := a.pendingLog
-		a.pendingLog = nil
-		a.mu.Unlock()
-		a.shell.backups.logLoaded(l)
+	case msgRunLog:
+		a.shell.backups.showRunLog(int(int32(wparam)))
 		return 0
 	case msgListFocus:
 		a.shell.backups.focusChanged()

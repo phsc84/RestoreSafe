@@ -244,13 +244,21 @@ func ListClear(lv HWND) {
 	SendMessage(lv, LVM_REMOVEALLGROUPS, 0, 0)
 }
 
-// ListInsertGroup adds a collapsible group with header text.
-func ListInsertGroup(lv HWND, id int32, header string, collapsed bool) {
+// LVGF_TASK sets a group's task link, at the right of its header.
+const LVGF_TASK = 0x00000200
+
+// ListInsertGroup adds a collapsible group with header text and, unless
+// task is "", a task link that sends LVN_LINKCLICK.
+func ListInsertGroup(lv HWND, id int32, header, task string, collapsed bool) {
 	h, _ := windows.UTF16PtrFromString(header)
 	g := lvGroup{Mask: LVGF_HEADER | LVGF_GROUPID | LVGF_STATE, Header: h, GroupID: id,
 		StateMask: LVGS_COLLAPSIBLE | LVGS_COLLAPSED, State: LVGS_COLLAPSIBLE}
 	if collapsed {
 		g.State |= LVGS_COLLAPSED
+	}
+	if task != "" {
+		g.Mask |= LVGF_TASK
+		g.Task, _ = windows.UTF16PtrFromString(task)
 	}
 	g.Size = uint32(unsafe.Sizeof(g))
 	SendMessage(lv, LVM_INSERTGROUP, ^uintptr(0), uintptr(unsafe.Pointer(&g)))
@@ -388,6 +396,28 @@ func ListKeyOf(hdr *NMHdr) *NMLVKeyDown { return (*NMLVKeyDown)(unsafe.Pointer(h
 
 // ListDrawOf returns the NMLVCUSTOMDRAW behind hdr.
 func ListDrawOf(hdr *NMHdr) *NMLVCustomDraw { return (*NMLVCustomDraw)(unsafe.Pointer(hdr)) }
+
+// lItem is LITEM.
+type lItem struct {
+	Mask      uint32
+	Link      int32
+	State     uint32
+	StateMask uint32
+	ID        [48]uint16
+	URL       [2084]uint16
+}
+
+// nmLVLink is NMLVLINK.
+type nmLVLink struct {
+	Hdr     NMHdr
+	Link    lItem
+	Item    int32
+	SubItem int32
+}
+
+// ListLinkGroup returns the group whose task link sent the LVN_LINKCLICK
+// behind hdr: a group's link reports the group ID as its subitem.
+func ListLinkGroup(hdr *NMHdr) int32 { return (*nmLVLink)(unsafe.Pointer(hdr)).SubItem }
 
 // Plain lists and checkboxes.
 const (
