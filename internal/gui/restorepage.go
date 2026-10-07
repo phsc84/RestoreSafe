@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Control IDs of the Backups page.
+// Control IDs of the Restore backup page.
 const (
 	idBackupsFilter = 601 + iota
 	idBackupsList
@@ -34,9 +34,9 @@ const (
 	menuOpenFolder
 )
 
-// Sizes of the Backups page, in DIPs.
+// Sizes of the Restore backup page, in DIPs.
 const (
-	backupsTitleHeight = 32
+	pageTitleHeight = 32
 	filterWidth        = 220
 	filterDropHeight   = 300
 	actionBarHeight    = 36
@@ -47,13 +47,13 @@ const (
 // Column widths of the list, in DIPs; the status column takes the rest.
 var backupColumnWidths = []int32{150, 72, 110, 80, 76}
 
-// backupsPage is the Backups page (GUI spec 7): the runs and their sets, the
+// restorePage is the Restore backup page (GUI spec 7): the runs and their sets, the
 // selection's actions; each run's header links to its log.
-type backupsPage struct {
+type restorePage struct {
 	a     *app
 	panel *widget.Panel
 	acts  actions
-	view  view.BackupsPage
+	view  view.RestorePage
 
 	title, filter, refresh win32.HWND
 	// run is the restore or verification at the top of the page: its
@@ -86,15 +86,15 @@ type backupsPage struct {
 
 type rowRef struct{ group, row int }
 
-func newBackupsPage(a *app) (*backupsPage, error) {
+func newRestorePage(a *app) (*restorePage, error) {
 	t := a.theme
 	pal := t.Palette
-	panel, err := widget.NewPanel(t, a.hwnd, idPage+view.PageBackups, widget.PanelStyle{Back: pal.Surface})
+	panel, err := widget.NewPanel(t, a.hwnd, idPage+view.PageRestore, widget.PanelStyle{Back: pal.Surface})
 	if err != nil {
 		return nil, err
 	}
-	b := &backupsPage{a: a, panel: panel, acts: actions{}, collapsed: map[naming.BackupID]bool{}}
-	b.title = panel.Label(view.BackupsOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
+	b := &restorePage{a: a, panel: panel, acts: actions{}, collapsed: map[naming.BackupID]bool{}}
+	b.title = panel.Label(view.RestorePageOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
 	b.filter = b.child("COMBOBOX", win32.WS_TABSTOP|win32.WS_VSCROLL|win32.CBS_DROPDOWNLIST, idBackupsFilter)
 	win32.SetAccessibleName(b.filter, view.FilterName)
 	b.refresh = b.acts.button(panel, view.Button{Text: " "}, idBackupsRefresh, false)
@@ -112,7 +112,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	win32.ListSetup(b.list)
 	widget.StyleListHeader(t, b.list)
 	win32.ListEnableInfoTips(b.list)
-	for i, c := range view.BackupsOf(nil, nil, nil, "", time.Now()).Columns {
+	for i, c := range view.RestorePageOf(nil, nil, nil, "", time.Now()).Columns {
 		win32.ListInsertColumn(b.list, i, c, t.Scale.Px(150), i == 3)
 	}
 	win32.SetAccessibleName(b.list, view.BackupsListName)
@@ -127,7 +127,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 }
 
 // child creates a control on the page with the body font.
-func (b *backupsPage) child(class string, style uint32, id uintptr) win32.HWND {
+func (b *restorePage) child(class string, style uint32, id uintptr) win32.HWND {
 	h, err := win32.CreateWindow(0, class, "", win32.WS_CHILD|win32.WS_VISIBLE|style, 0, 0, 0, 0, b.panel.HWND(), id)
 	if err != nil {
 		return 0
@@ -137,7 +137,7 @@ func (b *backupsPage) child(class string, style uint32, id uintptr) win32.HWND {
 }
 
 // restyle applies the theme's fonts, after creation and DPI changes.
-func (b *backupsPage) restyle() {
+func (b *restorePage) restyle() {
 	t := b.a.theme
 	b.panel.Restyle()
 	b.run.card.panel.Restyle()
@@ -152,9 +152,9 @@ func (b *backupsPage) restyle() {
 }
 
 // update shows the current snapshot and operation.
-func (b *backupsPage) update() {
+func (b *restorePage) update() {
 	a := b.a
-	b.view = view.BackupsOf(a.snapshot, a.opts.Config, a.machine.Current(), b.folder, time.Now())
+	b.view = view.RestorePageOf(a.snapshot, a.opts.Config, a.machine.Current(), b.folder, time.Now())
 	v := b.view
 
 	var filters []string
@@ -176,7 +176,7 @@ func (b *backupsPage) update() {
 // opRun returns the restore or verification the page shows: running, or
 // finished with a result card; nil otherwise. A restore shows once it has
 // started (GUI spec RW-9); before, the Restore window is its plan.
-func (b *backupsPage) opRun() *flow.Run {
+func (b *restorePage) opRun() *flow.Run {
 	r := b.a.machine.Current()
 	if r == nil || r.Op == flow.OpBackup || (r.Op == flow.OpRestore && r.Started.IsZero()) {
 		return nil
@@ -186,15 +186,15 @@ func (b *backupsPage) opRun() *flow.Run {
 
 // showRun shows the restore or verification on the run card; it reports
 // whether the card appeared or went away.
-func (b *backupsPage) showRun() bool {
+func (b *restorePage) showRun() bool {
 	b.a.showRefresh(b.refresh, b.view.Refresh, b.acts, idBackupsRefresh)
 	return b.run.follow(b.opRun(), b.a.machine.Busy())
 }
 
 // updateRun shows a progress report: in full while the page is shown,
 // otherwise only the run card.
-func (b *backupsPage) updateRun() {
-	if b.a.page == view.PageBackups {
+func (b *restorePage) updateRun() {
+	if b.a.page == view.PageRestore {
 		b.update()
 		return
 	}
@@ -203,7 +203,7 @@ func (b *backupsPage) updateRun() {
 	}
 }
 
-func (b *backupsPage) filterSig() string {
+func (b *restorePage) filterSig() string {
 	n := int(win32.SendMessage(b.filter, 0x0146, 0, 0)) // CB_GETCOUNT
 	if n <= 0 {
 		return ""
@@ -219,7 +219,7 @@ func (b *backupsPage) filterSig() string {
 }
 
 // fillLines rebuilds the retention and problem lines when they changed.
-func (b *backupsPage) fillLines() {
+func (b *restorePage) fillLines() {
 	v := b.view
 	lines := v.Lines
 	if v.Retention != nil {
@@ -266,7 +266,7 @@ func (b *backupsPage) fillLines() {
 
 // fillList rebuilds the list when its runs or sets changed and otherwise
 // updates the texts in place, so the selection and scrolling stay.
-func (b *backupsPage) fillList() {
+func (b *restorePage) fillList() {
 	v := b.view
 	var sig strings.Builder
 	for _, g := range v.Groups {
@@ -346,7 +346,7 @@ func (b *backupsPage) fillList() {
 }
 
 // groupsShown returns the indexes of the groups in the list.
-func (b *backupsPage) groupsShown() []int {
+func (b *restorePage) groupsShown() []int {
 	out := make([]int, len(b.lastGroups))
 	for i := range out {
 		out[i] = i
@@ -355,7 +355,7 @@ func (b *backupsPage) groupsShown() []int {
 }
 
 // itemOf returns the list index of the item with param index i+1.
-func (b *backupsPage) itemOf(i int) int {
+func (b *restorePage) itemOf(i int) int {
 	n := win32.ListItemCount(b.list)
 	for item := range n {
 		if int(win32.ListParam(b.list, item)) == i+1 {
@@ -366,7 +366,7 @@ func (b *backupsPage) itemOf(i int) int {
 }
 
 // rowAt returns the group and row of list item i; ok is false for none.
-func (b *backupsPage) rowAt(item int) (rowRef, bool) {
+func (b *restorePage) rowAt(item int) (rowRef, bool) {
 	if item < 0 {
 		return rowRef{}, false
 	}
@@ -378,7 +378,7 @@ func (b *backupsPage) rowAt(item int) (rowRef, bool) {
 }
 
 // updateBar shows the selection and its actions.
-func (b *backupsPage) updateBar() {
+func (b *restorePage) updateBar() {
 	b.bar = view.SelectionOf(b.view, b.selRun, b.selSet)
 	win32.SetText(b.barText, b.bar.Text)
 	for _, x := range []struct {
@@ -396,14 +396,14 @@ func (b *backupsPage) updateBar() {
 }
 
 // runSelected reports whether group gi is the selected run.
-func (b *backupsPage) runSelected(gi int) bool {
+func (b *restorePage) runSelected(gi int) bool {
 	return gi >= 0 && gi < len(b.view.Groups) && b.selSet == "" && b.selRun != "" && b.view.Groups[gi].RunID == b.selRun
 }
 
 // selectItem makes the run of list item i the selection: a run is restored
 // and verified whole, so its sets aren't selected one by one. Incomplete
 // sets have no run; such a set is selected itself.
-func (b *backupsPage) selectItem(item int) {
+func (b *restorePage) selectItem(item int) {
 	ref, ok := b.rowAt(item)
 	if !ok {
 		return
@@ -420,7 +420,7 @@ func (b *backupsPage) selectItem(item int) {
 }
 
 // selectRun makes the run of group gi the selection.
-func (b *backupsPage) selectRun(gi int) {
+func (b *restorePage) selectRun(gi int) {
 	if gi < 0 || gi >= len(b.view.Groups) {
 		return
 	}
@@ -431,7 +431,7 @@ func (b *backupsPage) selectRun(gi int) {
 }
 
 // showRunLog shows the log of group gi in the log window (GUI spec BK-5).
-func (b *backupsPage) showRunLog(gi int) {
+func (b *restorePage) showRunLog(gi int) {
 	if gi < 0 || gi >= len(b.view.Groups) {
 		return
 	}
@@ -439,7 +439,7 @@ func (b *backupsPage) showRunLog(gi int) {
 	b.a.showLog(b.a.hwnd, g.LogPath, g.When)
 }
 
-func (b *backupsPage) command(id, code uint16) {
+func (b *restorePage) command(id, code uint16) {
 	a := b.a
 	switch {
 	case id == idBackupsFilter && code == win32.CBN_SELCHANGE:
@@ -455,7 +455,7 @@ func (b *backupsPage) command(id, code uint16) {
 }
 
 // notify handles the list's notifications.
-func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
+func (b *restorePage) notify(hdr *win32.NMHdr) uintptr {
 	if hdr.HwndFrom != b.list {
 		return 0
 	}
@@ -493,7 +493,7 @@ func (b *backupsPage) notify(hdr *win32.NMHdr) uintptr {
 }
 
 // focusChanged selects the run whose group header has the keyboard focus.
-func (b *backupsPage) focusChanged() {
+func (b *restorePage) focusChanged() {
 	g := int(win32.ListFocusedGroup(b.list))
 	if g < 0 || g >= len(b.view.Groups) {
 		return
@@ -504,7 +504,7 @@ func (b *backupsPage) focusChanged() {
 }
 
 // contextMenu offers the actions of the item under the cursor (GUI spec BK-4).
-func (b *backupsPage) contextMenu() {
+func (b *restorePage) contextMenu() {
 	screen := win32.CursorPos()
 	item := win32.ListHitItem(b.list, win32.ScreenToClient(b.list, screen))
 	if item < 0 {
@@ -514,7 +514,7 @@ func (b *backupsPage) contextMenu() {
 	b.selectItem(item)
 	ref, _ := b.rowAt(item)
 	logPath := b.view.Groups[ref.group].LogPath
-	m := view.BackupsMenu()
+	m := view.RestoreMenu()
 	set := ""
 	if ref.row >= 0 {
 		set = b.view.Groups[ref.group].Rows[ref.row].Set
@@ -543,7 +543,7 @@ func (b *backupsPage) contextMenu() {
 
 // customDraw colors the status, sets the chain in the monospaced font and
 // draws the type badges over their cells.
-func (b *backupsPage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
+func (b *restorePage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 	t := b.a.theme
 	pal := t.Palette
 	switch cd.DrawStage {
@@ -600,7 +600,7 @@ func (b *backupsPage) customDraw(cd *win32.NMLVCustomDraw) uintptr {
 	return win32.CDRF_DODEFAULT
 }
 
-func (b *backupsPage) refOf(param uintptr) (rowRef, bool) {
+func (b *restorePage) refOf(param uintptr) (rowRef, bool) {
 	p := int(param)
 	if p < 1 || p > len(b.rows) {
 		return rowRef{}, false
@@ -610,9 +610,9 @@ func (b *backupsPage) refOf(param uintptr) (rowRef, bool) {
 
 // headHeight returns the height in pixels of the title, the run card and
 // the lines above the list, with their gaps, at a page width.
-func (b *backupsPage) headHeight(width int32) int32 {
+func (b *restorePage) headHeight(width int32) int32 {
 	s := b.a.theme.Scale
-	h := s.Px(backupsTitleHeight) + s.Px(8)
+	h := s.Px(pageTitleHeight) + s.Px(8)
 	if b.run.mode != runHidden {
 		h += b.run.height(width-2*s.Px(widget.ContentPaddingX)) + s.Px(widget.CardGap)
 	}
@@ -625,7 +625,7 @@ func (b *backupsPage) headHeight(width int32) int32 {
 // layout places the page's controls. The list fills the page above its
 // action bar; the page scrolls when it leaves the list less than
 // minListHeight.
-func (b *backupsPage) layout() {
+func (b *restorePage) layout() {
 	t := b.a.theme
 	s := t.Scale
 	client := win32.ClientRect(b.panel.HWND())
@@ -649,7 +649,7 @@ func (b *backupsPage) layout() {
 	page.Bottom = page.Top + max(total, client.Height())
 	area := widget.NewArea(s, page)
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
-	top := widget.NewArea(s, area.Top(backupsTitleHeight))
+	top := widget.NewArea(s, area.Top(pageTitleHeight))
 	f := top.Right(filterWidth)
 	f.Bottom = f.Top + s.Px(filterDropHeight)
 	win32.SetWindowPos(b.filter, f)
@@ -684,7 +684,7 @@ func (b *backupsPage) layout() {
 }
 
 // chosen returns the selected sets that can be restored or verified.
-func (b *backupsPage) chosen() []naming.BackupEntry {
+func (b *restorePage) chosen() []naming.BackupEntry {
 	if b.a.snapshot == nil {
 		return nil
 	}
@@ -700,7 +700,7 @@ func (b *backupsPage) chosen() []naming.BackupEntry {
 }
 
 // focus puts the keyboard focus on the run card or the list.
-func (b *backupsPage) focus() {
+func (b *restorePage) focus() {
 	if b.run.mode != runHidden {
 		b.run.focus()
 		return

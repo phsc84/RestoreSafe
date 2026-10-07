@@ -27,7 +27,7 @@ Found while building; they are not defects of the run. Decided on 2026-10-06 (pl
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | **Accepted**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
 | 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: tested with a backup from the day before (plan decision 9). |
 
-## 1. Status and Overview
+## 1. Status and Create backup page
 
 For each condition: prepare it, start RestoreSafe, compare the hero with figure 5.3 and the requirement, and use its fix action.
 
@@ -67,7 +67,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BR-7 | Result cards: "N folders backed up", with warnings, failed (backup directory full), cancelled; "N folders restored"; with an error about other backups on Restore backup, a green card adds "Another backup has a problem…" | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
 | BR-8 | Operation ends while another window is in front: taskbar button flashes until activated | Open | |
 
-## 3. Backups page
+## 3. Restore backup page
 
 | ID | Check | Status | Notes |
 |---|---|---|---|
@@ -143,7 +143,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 |---|---|---|---|
 | 3.2 | Keyboard only: `Ctrl+1` to `Ctrl+3`, `Ctrl+B`, `F5`, Tab order on every page, `Enter` and `Esc` in every dialog, a full backup and restore without the mouse | Open | |
 | 15 | Access keys are unique per page and dialog; hidden pages don't react to them (`Accessibility.ps1`) | Passed (script) | Accessibility.ps1: pages, plan dialog, wizard pages, 2026-10-02. |
-| 15 | Narrator: sidebar, hero state, card contents, list rows with status, step trail, progress, credential fields are announced in a sensible order | Open | MSAA pre-check: the Backups list exposes a named list with its rows. |
+| 15 | Narrator: sidebar, hero state, card contents, list rows with status, step trail, progress, credential fields are announced in a sensible order | Open | MSAA pre-check: the backups list exposes a named list with its rows. |
 
 ## 9. Usability session (16.6)
 

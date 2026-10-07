@@ -71,12 +71,12 @@ func (a *app) startOperation(req opRequest) {
 
 	switch op {
 	case flow.OpBackup:
-		a.showPage(view.PageOverview)
+		a.showPage(view.PageCreate)
 		a.refreshRun()
 		a.openPlanDialog()
 	case flow.OpVerify:
 		a.machine.Current().What, a.machine.Current().Whole = a.verifyWhat, a.verifyWhole
-		a.showPage(view.PageBackups)
+		a.showPage(view.PageRestore)
 		a.refreshRun()
 		a.openVerifyDialog(a.verifyWhat)
 	}
@@ -114,8 +114,8 @@ func (a *app) runStarted() {
 // refreshRun shows the state of the operation on its page, and on the
 // taskbar button.
 func (a *app) refreshRun() {
-	a.shell.overview.updateRun()
-	a.shell.backups.updateRun()
+	a.shell.create.updateRun()
+	a.shell.restore.updateRun()
 	a.updateTaskbar()
 }
 
@@ -215,7 +215,7 @@ func (a *app) onWorkerDone() {
 	}
 }
 
-// dismiss ends the shown result: the Overview shows the state again.
+// dismiss ends the shown result: the Create backup page shows the state again.
 func (a *app) dismiss() {
 	a.machine.Dismiss()
 	a.refreshShell()

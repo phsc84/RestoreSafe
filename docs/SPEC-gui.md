@@ -36,7 +36,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 **Goal:** a user sees at a glance whether their folders are protected, starts a backup with one click, understands what RestoreSafe will do before it does it, and gets folders back without reading a report.
 
-**In scope:** Overview, backup plan and run, Backups (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
+**In scope:** Create backup page, backup plan and run, Restore backup page (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
 
 **Out of scope, permanently** (2.0 spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
@@ -47,12 +47,12 @@ This document specifies RestoreSafe's window application: a status-first interfa
 | Capability | Where it shows |
 |---|---|
 | Full and differential backups, chosen automatically **per source folder** with a stated reason; override to full backups or to new keys + full backups | Backup plan (6) |
-| Chains per folder (a full backup and its differentials, same chain ID); backup runs that write one set per folder | Backups (7) |
+| Chains per folder (a full backup and its differentials, same chain ID); backup runs that write one set per folder | Restore backup (7) |
 | Restore of one run or single sets into a new folder per set; checksum check of every file; stops and reports "incomplete" on a mismatch | Restore window (8) |
-| Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Backups (7), Settings (10) |
-| Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Backup plan (6), Backups (7) |
-| Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Overview (5) |
-| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Overview hero and Check details (5) |
+| Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Restore backup (7), Settings (10) |
+| Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Backup plan (6), Restore backup (7) |
+| Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Create backup (5) |
+| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero and Check details (5) |
 | Exclude patterns (global), `on_unreadable_file`, split size, Argon2 parameters, log level | Settings (10) |
 | One log file per run in the backup directory; restore and verify append to the log of the run they read | Log window of a run (BK-5) |
 | Several configurations via `-config` | Title bar, Settings (10) |
@@ -88,9 +88,9 @@ This document specifies RestoreSafe's window application: a status-first interfa
 - Default size 1000 × 700 DIP, minimum 820 × 600 DIP. Centered on the monitor of the cursor at start.
 - Title: `RestoreSafe <version>`. When the configuration isn't the default `config.yaml` next to the exe, the title adds the file name: `RestoreSafe 2.0.0 · home-backup.yaml`.
 - Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
-- Sidebar items: **Create backup** (the Overview page, section 5), **Restore backup** (the Backups page, section 7), **Settings**. The sidebar names the pages by their action; this document keeps the section names Overview and Backups. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
+- Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings**. The sidebar names the pages by their action. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
 - Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons, as today.
-- Status bar: current activity on the left ("Ready", "Checking…", "Backing up Documents · 62%"). On the right: the backup directory's free space on Overview and Settings; the number of runs and total size on Backups.
+- Status bar: current activity on the left ("Ready", "Checking…", "Backing up Documents · 62%"). On the right: the backup directory's free space on Create backup and Settings; the number of runs and total size on Restore backup.
 - While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
 
 ### 3.3 Visual language
@@ -151,7 +151,7 @@ The hero renders one state. Priority: Running, then Error, then Warning, then Pr
 | **Protected** (green) | None of the above, and every configured folder has a complete backup. |
 | **Empty** (neutral) | No complete backup set exists in the backup directory. |
 
-**Not a warning:** a YubiKey that isn't connected (people keep it on their key ring; it's shown on the Keys card and asked for when needed), 1.x backups and leftover `.tmp` files (shown as information lines on Backups), and "the next backup creates new keys" (shown on the Keys card and in the backup plan). Amber that can't be cleared by the user trains them to ignore amber.
+**Not a warning:** a YubiKey that isn't connected (people keep it on their key ring; it's shown on the Keys card and asked for when needed), 1.x backups and leftover `.tmp` files (shown as information lines on Restore backup), and "the next backup creates new keys" (shown on the Keys card and in the backup plan). Amber that can't be cleared by the user trains them to ignore amber.
 
 If several Error or Warning triggers apply, the hero shows the most urgent one (order as listed) with its fix action. The sub line ends with "and N more problems"; "Check details" lists all of them.
 
@@ -182,11 +182,11 @@ This section connects the screens. Every operation follows the same five steps; 
 
 The plan comes from the workflow (`ShowBackupPlan`, `ShowRestorePlan`, `ShowVerifyPlan`, section 11.2), and the choice of step 1 goes into the workflow as a request (restore and verify, 12.3), so the UI never computes a plan of its own that could disagree with what the workflow then does.
 
-## 5. Overview page
+## 5. Create backup page
 
 Purpose: answer "are my folders safe?" and start a backup.
 
-**Figure 5.1: Overview, state Protected.** The window frame shown here applies to all main-window wireframes.
+**Figure 5.1: Create backup, state Protected.** The window frame shown here applies to all main-window wireframes.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -203,7 +203,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 │              │                                                    │ A full backup of all folders    │ │
 │              │                                                    │ needs about 96 GB               │ │
 │              │                                                    └─────────────────────────────────┘ │
-│              │ ┌─ Last backup ─────────────────── Show in Backups ┐ ┌─ Keys ─────────────────────────┐ │
+│              │ ┌─ Last backup ────────────────────── Show backups ┐ ┌─ Keys ─────────────────────────┐ │
 │              │ │ (ok) Today, 09:12 · 3 folders · 3.4 GB · 4 min   │ │ Password + YubiKey             │ │
 │              │ │      Documents  DIFF 3  based on FULL of 1 Sep   │ │ 2 YubiKeys · recovery code     │ │
 │              │ │      Projects   DIFF 3  based on FULL of 1 Sep   │ │ Created 1 Sep 2026             │ │
@@ -214,7 +214,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 5.2: Overview while a backup runs.** The progress card replaces the hero; the Folders card shows each folder's progress.
+**Figure 5.2: Create backup while a backup runs.** The progress card replaces the hero; the Folders card shows each folder's progress.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -258,7 +258,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 │      · Show details                                                               │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌─ Error: full backup missing ──────────────────────────────────────────────────────┐
-│ (x)  4 backups of Documents can't be restored                [ Show in Backups ]  │
+│ (x)  4 backups of Documents can't be restored                [ Show backups ]     │
 │      Their full backup of 1 Sep (chain ABC123) is missing or incomplete.          │
 │      Restore its FULL files from your copy, or delete the DIFF files of ABC123.   │
 └───────────────────────────────────────────────────────────────────────────────────┘
@@ -282,7 +282,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 | OV-4 | The backup directory card shows the path, a segmented bar (backups, other data, free) and a legend. Backups is the size of all 2.0 set parts in the directory; Other is used space minus Backups; Free comes from the file system. Each segment's tooltip shows exact bytes. The last line estimates a new full backup of all folders as the sum of each folder's newest full backup (trailer data length). |
 | OV-5 | The page shows only what a backup needs: the type, size and base of existing sets, and the size of runs, are on Restore backup. Below the folders, the Folders card says when the newest backup failed or was cancelled ("The backup of today, 09:12 failed; the Restore backup page has its log."), which the folders' dates alone don't show. |
 | OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode`, spare YubiKey, recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys." |
-| OV-7 | The page starts with its title "Create backup", like Restore backup; the hero or the progress and result cards sit below it. While a backup runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. A restore or verification shows these cards on the Backups page instead (BK-8, RW-9); meanwhile the hero stays, with "Back up now…" disabled. |
+| OV-7 | The page starts with its title "Create backup", like Restore backup; the hero or the progress and result cards sit below it. While a backup runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. A restore or verification shows these cards on the Restore backup page instead (BK-8, RW-9); meanwhile the hero stays, with "Back up now…" disabled. |
 | OV-8 | The health check runs at start, after each operation, on **Check again**, on **Refresh** (next to the page title on Create backup and Restore backup, centered on it; disabled while a check or an operation runs), on `F5`, and when the window is activated and the last check is older than 5 minutes. It runs on a worker goroutine; the hero keeps the last state and shows "Checking…" in its sub line meanwhile. A check never blocks the UI thread, even when the backup directory is an unreachable network share. |
 
 ## 6. Backup plan and run
@@ -344,7 +344,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
 | BP-5 | Blocking issues (`Report.HasErrors`) remove **Start**; the issues are listed in red above the buttons with their remedy. Warnings are listed in amber and don't block. "Show details" shows the full preflight report (split size, exclude patterns, unreadable-file rule, Argon2, log level) in the report view. |
-| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Overview shows no result card for it. |
+| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Create backup page shows no result card for it. |
 
 ### 6.2 Progress
 
@@ -414,11 +414,11 @@ The warning count and the log file path come from `ShowResult`, which the workfl
 
 Closing the window while an operation runs shows the cancel dialog of 6.2 with the headline "Close RestoreSafe?" and the buttons **Keep running** / **Cancel and close**. On confirmation the window stays open and disabled with "Cancelling…" until the worker has finished, then closes (12.4). Closing during a question cancels the question. Log off and shutdown: 12.4.
 
-## 7. Backups page
+## 7. Restore backup page
 
 Purpose: see every backup run, understand chains, act on a run or a set, read its log.
 
-**Figure 7.1: Backups page.**
+**Figure 7.1: Restore backup page.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -504,7 +504,7 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 | BK-6 | Problem lines (figure 7.2) sit above the list: health check errors and warnings about the inventory (missing full backup, incomplete sets, sets that can't be used) with their remedy, and information lines for 1.x backups and leftover `.tmp` files. Affected rows are marked in the list. Each line is complete in itself: it names the set and says why it can't be used (missing parts, renamed files, unreadable, damaged; `catalog.FaultOf`) with the remedy for that reason, as listed in 11.8; the page has no details for these lines. A full backup that is there but can't be used is reported once, in the line of its differentials (`BASE_MISSING`), not again on its own. |
 | BK-7 | The retention line (figure 7.1) names the backups the next backup would remove, from the same prediction as BP-2. It is shown only then: the rule itself is on Settings (`retention_keep`, `retention_keep_differentials`) and in the backup plan's Afterwards line, so the page doesn't repeat it. Retention never runs from this page; it runs only after a successful backup. |
 | BK-7a | The Verify window (figure 7.3) is the verification's plan, laid out and worded like the backup plan dialog (6.1): same width, sized to its content. It opens when Verify… starts the workflow, with a marquee until the plan (`ShowVerifyPlan`) arrives. Heading: "Verify 3 folders from the backup of today, 09:12". Table: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup); a set that can't be verified is red, with the reason as its tooltip. **Read** ("About 97 GB to read · nothing is written") and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code"). The note says that every file is decrypted and checked against its checksum, and which full backups the differentials are read with. Issues as in BP-5, then **Show details**. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in BP-4; Cancel answers no, and nothing is read. When the workflow finds a blocking issue, it ends before asking; the window stays open with the issues and only Cancel, as a blocked backup plan does. |
-| BK-8 | Verify: **Start** closes the Verify window, the credential dialogs follow and the progress card appears at the top of the Backups page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
+| BK-8 | Verify: **Start** closes the Verify window, the credential dialogs follow and the progress card appears at the top of the Restore backup page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
 | BK-9 | No empty state: without backups the page shows the empty list with its columns and the action bar, as it does when a backup was cancelled or failed before it backed up a folder. |
 
 ## 8. Restore window
@@ -611,7 +611,7 @@ Its layout and wording follow the backup plan dialog: a heading that says what h
 | RW-6b | **Start** starts the restore with the checked folders and the destination. The workflow checks again (`ShowRestorePlan`); the window shows that plan and answers its start question (`ConfirmStart`) itself, because Start was the confirmation, and the credential dialogs (section 9) follow. If the workflow finds a blocking issue (something changed since the check), it ends before asking for anything, nothing is written, and the window shows the issue in place of the check. Once the workflow asks to start, the window closes and the credential dialogs follow, as after Start in the Verify window (BK-8). Cancelling a credential dialog ends the restore before anything is written; the page shows no result card for it. |
 | RW-7 | Progress card on Restore backup (RW-9): step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.2. |
 | RW-8 | Result card on Restore backup (RW-9): success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in the log window of BK-5. |
-| RW-9 | While a restore runs, the progress card is at the top of the Backups page, then the result card until it is dismissed, as for a verification (BK-8); the main window stays usable for reading; starting another operation is disabled. |
+| RW-9 | While a restore runs, the progress card is at the top of the Restore backup page, then the result card until it is dismissed, as for a verification (BK-8); the main window stays usable for reading; starting another operation is disabled. |
 
 ## 9. Credential dialogs
 
@@ -746,7 +746,7 @@ The UI keeps the `interact.UI` contract and the bridge (section 12). It never pa
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
-`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Overview, Backups and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory (shared with `health.Check`), `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
+`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Create backup, Restore backup and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory (shared with `health.Check`), `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
 
 ```go
 type State int // StateEmpty, StateProtected, StateWarning, StateError (Running is set by the UI)
@@ -819,11 +819,11 @@ The workflows fill the plan from the values they already compute (`plan.Folders`
 
 ### 11.3 Retention preview (new)
 
-`plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the Backups retention line (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
+`plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the retention line on Restore backup (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
 
 ### 11.4 Run facts from the log (new)
 
-The Backups page needs, per run, the warning count and the verification results; the result card also shows the duration. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
+The Restore backup page needs, per run, the warning count and the verification results; the result card also shows the duration. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
 
 ### 11.5 Session result
 
@@ -872,7 +872,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `VERIFY_FAILED` | Error (session or log) | A backup is damaged | Create a new backup; don't rely on the damaged one. Action: Back up now. |
 | `OVERDUE` | Warning | Your last backup is N days old | Action: Back up now. (Decision 2.) |
 | `SKIPPED_FILES` | Warning | N files in <folder> weren't backed up | Older backups are kept until a backup without skipped files succeeds. Action: Back up now. |
-| `INCOMPLETE_NEWEST` | Warning | An unfinished backup of <folder> is newer than its last complete one | Probably a crash. Look at the log of that run. Action: Show in Backups. |
+| `INCOMPLETE_NEWEST` | Warning | An unfinished backup of <folder> is newer than its last complete one | Probably a crash. Look at the log of that run. Action: Show backups. |
 | `SPACE_LOW` | Warning | The backup directory is running out of space | A full backup of all folders needs about N GB. |
 | `ARGON2_CAPPED` | Warning | A key setting was too high and was capped | Lower the value in config.yaml. |
 | `YUBIKEY_NOT_CONNECTED` | Info | YubiKey not connected | Connect it before you back up, restore or verify. |
@@ -921,7 +921,7 @@ Carried over from the first GUI; unchanged unless noted.
 
 Imports point downward only; `internal/architecture` checks it (its package documentation lists the layers and rules). Two rules shape this layout:
 
-- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection live in `workflow/plan`, which `backup` and `health` both import. The Overview's "next" type, the backup plan, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
+- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection live in `workflow/plan`, which `backup` and `health` both import. The "next" type on Create backup, the backup plan, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
 - `gui/flow` and `gui/view` import neither `gui/widget` nor `gui/win32` nor `golang.org/x/sys/windows`; `gui/widget` imports only `gui/win32`. Everything that decides what the user sees is testable without a window (16.1).
 
 ### 12.2 Threads and the bridge
@@ -1016,7 +1016,7 @@ The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set 
 | Area | Requirement |
 |---|---|
 | Threading | As 12.2: the UI thread only handles messages and painting; workflows, health checks, status and plan computation run on goroutines; results reach the UI through `PostMessage`. No file, network or workflow call on the UI thread. |
-| Responsiveness | The window opens in under 1 second with the last content shown as "Checking…" until the first status arrives. The Backups page handles 1,000 sets without noticeable lag. Progress redraws at most four times per second and never flickers. |
+| Responsiveness | The window opens in under 1 second with the last content shown as "Checking…" until the first status arrives. The Restore backup page handles 1,000 sets without noticeable lag. Progress redraws at most four times per second and never flickers. |
 | Secrets | As section 13: masked edits, buffers zeroed, no Go strings for passwords, no task dialogs for codes, nothing written to disk or to the log. |
 | Accessibility | All functions reachable by keyboard with a logical tab order and visible focus; access keys on all buttons, unique per page and dialog. Controls on hidden pages are disabled, so their access keys can't fire. Text is in standard controls; painted controls (step trail, badges, bars) set an accessible name (3.4), so the hero's title and the current step are read out. Contrast at least 4.5:1 for text. Status never conveyed by color alone. Works in high contrast; switching it on or off rebuilds the pages at once, while a dialog open at that moment keeps its colors until it closes. |
 | DPI | Verified at 100%, 125%, 150% and 200%, and when moving between monitors with different scaling. |
@@ -1037,7 +1037,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 
 ### 16.1 Testable structure
 
-- **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → OverviewView`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → BackupsView`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
+- **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → CreatePage`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → RestorePage`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
 - **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side, as the first GUI's screen state machine was.
 - **Clock and file system.** The status model, the view models and the speed and time-left calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
 - **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the existing `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
@@ -1060,10 +1060,10 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 
 | Area | Tests | Covers |
 |---|---|---|
-| Overview view | Every hero variant of figure 5.3 plus Protected and Running, from fixtures: title, sub line, icon, primary and secondary action, "Back up now…" or, when the check blocks a backup, the fix actions in its place (OV-2). The page title; the Folders card (dates, next type, the note on a failed or cancelled backup), the backup directory and Keys cards per fixture. | OV-1 to OV-7 |
+| Create backup view | Every hero variant of figure 5.3 plus Protected and Running, from fixtures: title, sub line, icon, primary and secondary action, "Back up now…" or, when the check blocks a backup, the fix actions in its place (OV-2). The page title; the Folders card (dates, next type, the note on a failed or cancelled backup), the backup directory and Keys cards per fixture. | OV-1 to OV-7 |
 | Operation state machine | Every transition of section 4: cancel in the plan, in each credential dialog, during the run and during cleanup; close during a question and during a run; session end; a workflow error in each phase. After each path: exactly one worker ran, no question is left unanswered, the right result card is shown, "Back up now…" is enabled again. | 4, 6.4, 12.4, BR-6, BR-7 |
 | Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with spare and recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
-| Backups view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
+| Restore backup view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
 | Restore window | Preselection from a run and from a set, Start enablement (no folder checked; an existing target folder; a space warning, which doesn't block), the heading, Check column and issue lines, checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6b |
 | Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
@@ -1119,7 +1119,7 @@ The redesign ships with 2.0.0 only when:
 2. The hero shows the correct state for every trigger in 3.5, and each Warning and Error variant offers its fix action.
 3. A user can back up, see the planned type and reason per folder and what retention removes, force a full backup, create new keys, watch progress, cancel, and read the result and log without opening a file.
 4. A user can restore one folder of a differential run to a new folder using only the Restore window; nothing is written before **Start**, and a checksum mismatch is reported as "Restore incomplete".
-5. A user can verify a run or a set and see the result in the Backups list.
+5. A user can verify a run or a set and see the result in the backups list.
 6. Every behavior of the 2.0 workflows is unchanged; the e2e tests pass and change only for the request parameters, the plan calls, the progress fields and the facts.
 7. All interactions work with keyboard only. Narrator announces the sidebar, hero, lists, buttons, progress and credential fields.
 8. The UI stays responsive during every operation and while the backup directory is unreachable.

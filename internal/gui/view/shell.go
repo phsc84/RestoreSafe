@@ -6,13 +6,13 @@ import (
 
 // Pages of the main window, in the order of the navigation.
 const (
-	PageOverview = iota
-	PageBackups
+	PageCreate = iota
+	PageRestore
 	PageSettings
 )
 
 // Navigation returns the names of the pages, in order.
-func Navigation() []string { return []string{navOverview, navBackups, navSettings} }
+func Navigation() []string { return []string{navCreate, navRestore, navSettings} }
 
 // Title returns the window title: the version, and the configuration file
 // when it is not the default config.yaml (GUI spec 3.2).

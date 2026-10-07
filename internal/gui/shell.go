@@ -12,8 +12,8 @@ import (
 type shell struct {
 	sidebar  *widget.Sidebar
 	status   *widget.Panel
-	overview *overviewPage
-	backups  *backupsPage
+	create   *createPage
+	restore  *restorePage
 	settings *settingsPage
 }
 
@@ -39,10 +39,10 @@ func (a *app) createShell() error {
 	}
 	a.shell.status = status
 
-	if a.shell.overview, err = newOverviewPage(a); err != nil {
+	if a.shell.create, err = newCreatePage(a); err != nil {
 		return err
 	}
-	if a.shell.backups, err = newBackupsPage(a); err != nil {
+	if a.shell.restore, err = newRestorePage(a); err != nil {
 		return err
 	}
 	if a.shell.settings, err = newSettingsPage(a); err != nil {
@@ -54,7 +54,7 @@ func (a *app) createShell() error {
 
 // pagePanels returns the panels of the navigation's pages, in order.
 func (a *app) pagePanels() []*widget.Panel {
-	return []*widget.Panel{a.shell.overview.panel, a.shell.backups.panel, a.shell.settings.panel}
+	return []*widget.Panel{a.shell.create.panel, a.shell.restore.panel, a.shell.settings.panel}
 }
 
 // showPage shows a page of the navigation.
@@ -76,8 +76,8 @@ func (a *app) layoutShell(client win32.Rect) {
 	for _, p := range a.pagePanels() {
 		win32.SetWindowPos(p.HWND(), content)
 	}
-	a.shell.overview.layout()
-	a.shell.backups.layout()
+	a.shell.create.layout()
+	a.shell.restore.layout()
 	a.shell.settings.layout()
 	for i, p := range a.pagePanels() {
 		if i == a.page {
@@ -88,11 +88,11 @@ func (a *app) layoutShell(client win32.Rect) {
 
 // refreshShell shows the current snapshot on the pages and the status bar.
 func (a *app) refreshShell() {
-	if a.shell.overview == nil {
+	if a.shell.create == nil {
 		return
 	}
-	a.shell.overview.update()
-	a.shell.backups.update()
+	a.shell.create.update()
+	a.shell.restore.update()
 	a.shell.settings.update()
 	a.layout()
 }
@@ -101,9 +101,9 @@ func (a *app) refreshShell() {
 func (a *app) restyleShell() {
 	a.shell.status.Restyle()
 	win32.Invalidate(a.shell.sidebar.HWND())
-	a.shell.overview.restyle()
-	a.shell.backups.restyle()
-	a.shell.backups.update()
+	a.shell.create.restyle()
+	a.shell.restore.restyle()
+	a.shell.restore.update()
 	a.shell.settings.restyle()
 }
 
@@ -135,7 +135,7 @@ func (a *app) do(action view.Action) {
 			a.startOperation(opRequest{op: flow.OpBackup})
 		}
 	case view.ActionRestore:
-		b := a.shell.backups
+		b := a.shell.restore
 		if len(b.chosen()) > 0 {
 			a.openRestore(b.selRun)
 		}
@@ -144,14 +144,14 @@ func (a *app) do(action view.Action) {
 			a.open(r.Restore.Destination, false)
 		}
 	case view.ActionVerify:
-		if sets := a.shell.backups.chosen(); len(sets) > 0 {
-			a.verifyWhat, a.verifyWhole = a.shell.backups.bar.What, a.shell.backups.bar.Whole
+		if sets := a.shell.restore.chosen(); len(sets) > 0 {
+			a.verifyWhat, a.verifyWhole = a.shell.restore.bar.What, a.shell.restore.bar.Whole
 			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
 		}
 	case view.ActionCheckAgain:
 		a.reload() // re-reads config.yaml, then checks again
 	case view.ActionShowInBackups:
-		a.showPage(view.PageBackups)
+		a.showPage(view.PageRestore)
 	case view.ActionOpenSettings:
 		a.showPage(view.PageSettings)
 	case view.ActionEditConfig:
@@ -176,10 +176,10 @@ func (a *app) do(action view.Action) {
 // focusPage puts the keyboard focus on the shown page's first action.
 func (a *app) focusPage() {
 	switch a.page {
-	case view.PageOverview:
-		a.shell.overview.focus()
-	case view.PageBackups:
-		a.shell.backups.focus()
+	case view.PageCreate:
+		a.shell.create.focus()
+	case view.PageRestore:
+		a.shell.restore.focus()
 	default:
 		win32.SetFocus(a.shell.sidebar.HWND())
 	}
@@ -218,7 +218,7 @@ func (a *app) paletteChanged() {
 		return
 	}
 	a.theme.Palette = p
-	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.overview.panel.HWND(), a.shell.backups.panel.HWND(), a.shell.settings.panel.HWND()} {
+	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.create.panel.HWND(), a.shell.restore.panel.HWND(), a.shell.settings.panel.HWND()} {
 		win32.DestroyWindow(h)
 	}
 	a.shell = shell{}

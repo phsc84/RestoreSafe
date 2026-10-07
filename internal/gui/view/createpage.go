@@ -93,7 +93,7 @@ type Badge struct {
 	Name string
 }
 
-// Hero is the status at the top of the Overview (GUI spec OV-1).
+// Hero is the status at the top of the Create backup page (GUI spec OV-1).
 type Hero struct {
 	Tone  Tone
 	Glyph Glyph
@@ -166,8 +166,8 @@ type KeysCard struct {
 	YubiKeyTone Tone
 }
 
-// Overview is everything the Overview page shows.
-type Overview struct {
+// CreatePage is everything the Create backup page shows.
+type CreatePage struct {
 	Title   string
 	Hero    Hero
 	Folders FoldersCard
@@ -177,14 +177,14 @@ type Overview struct {
 	Refresh Button
 }
 
-// OverviewOf computes the Overview from the snapshot s (nil while the
+// CreatePageOf computes the Create backup page from the snapshot s (nil while the
 // first check runs), the configuration and the time.
-func OverviewOf(s *health.Snapshot, cfg *config.Config, now time.Time) Overview {
+func CreatePageOf(s *health.Snapshot, cfg *config.Config, now time.Time) CreatePage {
 	if s == nil {
-		return Overview{Title: navOverview, Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
+		return CreatePage{Title: navCreate, Hero: Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroChecking, Primary: Button{Text: buttonBackUp, Action: ActionBackUp}}, Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
 	}
-	o := Overview{
-		Title:   navOverview,
+	o := CreatePage{
+		Title:   navCreate,
 		Hero:    heroOf(s, cfg, now),
 		Folders: foldersOf(s, now),
 		Storage: storageOf(s),

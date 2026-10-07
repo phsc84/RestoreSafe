@@ -12,15 +12,15 @@ import (
 	"time"
 )
 
-func overviewOf(t *testing.T, c scenario.Condition) (Overview, *health.Snapshot) {
+func createPageOf(t *testing.T, c scenario.Condition) (CreatePage, *health.Snapshot) {
 	t.Helper()
 	sc := scenario.Build(t, c)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	return OverviewOf(&s, sc.Config, sc.Now), &s
+	return CreatePageOf(&s, sc.Config, sc.Now), &s
 }
 
-// TestOverviewHeroOfEveryScenario covers GUI spec OV-1 and figure 5.3.
-func TestOverviewHeroOfEveryScenario(t *testing.T) {
+// TestCreatePageHeroOfEveryScenario covers GUI spec OV-1 and figure 5.3.
+func TestCreatePageHeroOfEveryScenario(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		condition scenario.Condition
@@ -52,7 +52,7 @@ func TestOverviewHeroOfEveryScenario(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(string(tc.condition), func(t *testing.T) {
 			t.Parallel()
-			o, _ := overviewOf(t, tc.condition)
+			o, _ := createPageOf(t, tc.condition)
 			h := o.Hero
 			if h.Tone != tc.tone || !strings.Contains(h.Title, tc.title) || h.Primary.Action != tc.primary {
 				t.Fatalf("hero %+v, want tone %d, title with %q, primary %d", h, tc.tone, tc.title, tc.primary)
@@ -68,9 +68,9 @@ func TestOverviewHeroOfEveryScenario(t *testing.T) {
 	}
 }
 
-func TestOverviewCardsWhenProtected(t *testing.T) {
+func TestCreatePageCardsWhenProtected(t *testing.T) {
 	t.Parallel()
-	o, s := overviewOf(t, scenario.Protected)
+	o, s := createPageOf(t, scenario.Protected)
 
 	if o.Title != "Create backup" || o.Folders.Title != "Folders to back up" || len(o.Folders.Rows) != 2 || o.Folders.Note != "" {
 		t.Fatalf("folders: %+v", o.Folders)
@@ -99,14 +99,14 @@ func TestOverviewCardsWhenProtected(t *testing.T) {
 	}
 }
 
-func TestOverviewCardsShowProblems(t *testing.T) {
+func TestCreatePageCardsShowProblems(t *testing.T) {
 	t.Parallel()
-	o, _ := overviewOf(t, scenario.SourceMissing)
+	o, _ := createPageOf(t, scenario.SourceMissing)
 	if row := o.Folders.Rows[1]; row.Name != "Pics" || row.Problem != "Can't be found" || row.Tone != ToneError || row.Date != "" {
 		t.Fatalf("missing folder row: %+v", row)
 	}
 
-	o, s := overviewOf(t, scenario.BaseMissing)
+	o, s := createPageOf(t, scenario.BaseMissing)
 	if h := problemHero(s.Problems[0], s, nil, s.Checked, Button{}); !strings.HasPrefix(h.Line, "Its full backup (chain ") {
 		t.Fatalf("one backup takes Its: %q", h.Line)
 	}
@@ -115,7 +115,7 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 		t.Fatalf("a folder whose newest backup is a differential: %+v", diff)
 	}
 
-	o, _ = overviewOf(t, scenario.Empty)
+	o, _ = createPageOf(t, scenario.Empty)
 	if o.Folders.Rows[0].Date != "no backup yet" || o.Folders.Rows[0].Tone != ToneWarning || o.Folders.Note != "" || o.Keys.Note != "Your first backup creates your keys." {
 		t.Fatalf("empty: %+v %+v", o.Folders, o.Keys)
 	}
@@ -123,17 +123,17 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 		t.Fatalf("empty hero: %+v", o.Hero)
 	}
 
-	o, _ = overviewOf(t, scenario.NewKeysNeeded)
+	o, _ = createPageOf(t, scenario.NewKeysNeeded)
 	if !strings.HasPrefix(o.Keys.Note, "Your next backup creates new keys: ") || o.Keys.Tone != ToneInfo {
 		t.Fatalf("new keys: %+v", o.Keys)
 	}
 
-	o, _ = overviewOf(t, scenario.FolderNotBackedUp)
+	o, _ = createPageOf(t, scenario.FolderNotBackedUp)
 	if row := o.Folders.Rows[2]; row.Date != "no backup yet" || row.Tone != ToneWarning || row.Next != "FULL" {
 		t.Fatalf("a new folder: %+v", row)
 	}
 
-	o, _ = overviewOf(t, scenario.BackupDirUnreachable)
+	o, _ = createPageOf(t, scenario.BackupDirUnreachable)
 	if o.Storage.Used != "Free space unknown" || o.Storage.Segments != nil {
 		t.Fatalf("unreachable: %+v", o.Storage)
 	}
@@ -142,9 +142,9 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 	}
 }
 
-func TestOverviewWhileChecking(t *testing.T) {
+func TestCreatePageWhileChecking(t *testing.T) {
 	t.Parallel()
-	o := OverviewOf(nil, nil, scenario.Build(t, scenario.Empty).Now)
+	o := CreatePageOf(nil, nil, scenario.Build(t, scenario.Empty).Now)
 	if o.Hero.Title != "Checking your backups…" || o.Hero.Primary.Enabled {
 		t.Fatalf("before the first snapshot: %+v", o.Hero)
 	}
@@ -202,22 +202,22 @@ func checkWriting(t *testing.T, v any) {
 	walk(reflect.ValueOf(v))
 }
 
-func TestOverviewKeysShowTheYubiKey(t *testing.T) {
+func TestCreatePageKeysShowTheYubiKey(t *testing.T) {
 	t.Parallel()
 	for _, c := range []scenario.Condition{scenario.Protected, scenario.Empty} {
 		sc := scenario.Build(t, c)
 		s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
 		connected := false
 		s.Keys.YubiKeyConnected = &connected
-		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey not connected" || k.YubiKeyTone != ToneInfo {
+		if k := CreatePageOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey not connected" || k.YubiKeyTone != ToneInfo {
 			t.Fatalf("%s: keys %+v", c, k)
 		}
 		connected = true
-		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey connected" {
+		if k := CreatePageOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "YubiKey connected" {
 			t.Fatalf("%s: keys %+v", c, k)
 		}
 		s.Keys.YubiKeyConnected = nil
-		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "" {
+		if k := CreatePageOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "" {
 			t.Fatalf("%s: without a YubiKey, no line: %+v", c, k)
 		}
 	}

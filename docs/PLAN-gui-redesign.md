@@ -39,8 +39,8 @@ internal/
 ├── gui/                        composition root and Win32 screens (package gui)
 │   ├── app.go                  Run, the app struct, message loop, page switching, WM_APP dispatch
 │   ├── shell.go                sidebar, status bar, content host, keyboard shortcuts
-│   ├── overview.go             Overview page: renders view.Overview
-│   ├── backups.go              Backups page: run list, action bar, log pane
+│   ├── createpage.go           Create backup page: renders view.CreatePage
+│   ├── restorepage.go          Restore backup page: run list, action bar, log pane
 │   ├── settings.go             Settings page
 │   ├── plandialog.go           backup plan dialog
 │   ├── verifydialog.go         verify confirmation
@@ -56,8 +56,8 @@ internal/
 │   ├── view/                   view models, strings, formatting, no Win32 (package view)
 │   │   ├── strings.go          every user-visible string
 │   │   ├── format.go           sizes, relative dates, set names
-│   │   ├── overview.go         Snapshot -> Overview (hero, cards)
-│   │   ├── backups.go          Snapshot + filter + selection -> Backups
+│   │   ├── createpage.go       Snapshot -> CreatePage (hero, cards)
+│   │   ├── restorepage.go      Snapshot + filter + selection -> RestorePage
 │   │   ├── plan.go             BackupPlan -> PlanDialog
 │   │   ├── wizard.go           wizard state -> pages, Next enablement
 │   │   ├── progress.go         Progress + speed -> progress card

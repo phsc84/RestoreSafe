@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Control IDs of the Overview page.
+// Control IDs of the Create backup page.
 const (
 	idHeroPrimary = 401 + iota
 	idHeroSecondary
@@ -18,7 +18,7 @@ const (
 	idRefresh   = 410
 )
 
-// Sizes of the Overview page, in DIPs.
+// Sizes of the Create backup page, in DIPs.
 const (
 	heroHeight        = 64
 	heroTitleHeight   = 28
@@ -35,12 +35,12 @@ const (
 	refreshHeight     = 22
 )
 
-// overviewPage is the Overview (GUI spec 5): the title, the hero and three
+// createPage is the Create backup page (GUI spec 5): the title, the hero and three
 // cards in one column.
-type overviewPage struct {
+type createPage struct {
 	a     *app
 	panel *widget.Panel
-	view  view.Overview
+	view  view.CreatePage
 	acts  actions
 
 	title                      win32.HWND
@@ -63,18 +63,18 @@ type overviewPage struct {
 	sizer *tableSizer
 }
 
-func newOverviewPage(a *app) (*overviewPage, error) {
+func newCreatePage(a *app) (*createPage, error) {
 	t := a.theme
-	panel, err := widget.NewPanel(t, a.hwnd, idPage+view.PageOverview, widget.PanelStyle{Back: t.Palette.Surface})
+	panel, err := widget.NewPanel(t, a.hwnd, idPage+view.PageCreate, widget.PanelStyle{Back: t.Palette.Surface})
 	if err != nil {
 		return nil, err
 	}
-	o := &overviewPage{a: a, panel: panel, acts: actions{}}
+	o := &createPage{a: a, panel: panel, acts: actions{}}
 	panel.OnCommand = o.command
 	if o.heroIcon, err = widget.NewIcon(t, panel.HWND(), t.Palette.Surface, widget.TextIcon); err != nil {
 		return nil, err
 	}
-	o.title = panel.Label(view.OverviewOf(nil, nil, time.Now()).Title, widget.TextTitle, t.Palette.Text)
+	o.title = panel.Label(view.CreatePageOf(nil, nil, time.Now()).Title, widget.TextTitle, t.Palette.Text)
 	// Creation order is the tab order.
 	o.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
 	win32.SetControlID(o.heroTitle, idHeroTitle)
@@ -107,15 +107,15 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	return o, nil
 }
 
-func (o *overviewPage) command(id, code uint16) {
+func (o *createPage) command(id, code uint16) {
 	if action, ok := o.acts[id]; ok && (code == win32.BN_CLICKED || code == 0) {
 		o.a.do(action)
 	}
 }
 
 // update shows the current snapshot and the operation, if any.
-func (o *overviewPage) update() {
-	o.view = view.OverviewOf(o.a.snapshot, o.a.opts.Config, time.Now())
+func (o *createPage) update() {
+	o.view = view.CreatePageOf(o.a.snapshot, o.a.opts.Config, time.Now())
 	t := o.a.theme
 	if o.a.reloadErr != nil && o.a.snapshot != nil {
 		o.view.Hero = view.ReloadErrorHero(o.a.reloadErr)
@@ -158,7 +158,7 @@ func (o *overviewPage) update() {
 // backupRun returns the backup the page shows: running, or finished with a
 // result card; nil otherwise. Restores and verifications show on Restore
 // backup.
-func (o *overviewPage) backupRun() *flow.Run {
+func (o *createPage) backupRun() *flow.Run {
 	r := o.a.machine.Current()
 	if r == nil || r.Op != flow.OpBackup {
 		return nil
@@ -168,7 +168,7 @@ func (o *overviewPage) backupRun() *flow.Run {
 
 // showRun shows the run card in place of the hero while a backup runs or
 // its result is shown (GUI spec OV-7).
-func (o *overviewPage) showRun() {
+func (o *createPage) showRun() {
 	o.run.follow(o.backupRun(), o.a.machine.Busy())
 	heroShown := o.run.mode == runHidden
 	win32.SetVisible(o.heroIcon.HWND(), heroShown)
@@ -211,7 +211,7 @@ func placeTitle(t *widget.Theme, title, refresh win32.HWND, row win32.Rect) {
 
 // updateRun shows a progress report: the run card and the Folders card
 // change in place.
-func (o *overviewPage) updateRun() {
+func (o *createPage) updateRun() {
 	if o.backupRun() == nil && o.run.mode == runHidden && o.busy == o.a.machine.Busy() {
 		return // a restore or verification still running, or none
 	}
@@ -225,7 +225,7 @@ func (o *overviewPage) updateRun() {
 
 // fillFolders shows the folders in the table and, below it, a note on a
 // failed or cancelled backup.
-func (o *overviewPage) fillFolders() {
+func (o *createPage) fillFolders() {
 	t := o.a.theme
 	v := o.view.Folders
 	c := o.folders
@@ -239,14 +239,14 @@ func (o *overviewPage) fillFolders() {
 }
 
 // runStates are the folders' states while a backup runs (GUI spec BR-4).
-func (o *overviewPage) runStates() map[string]view.FolderProgress {
+func (o *createPage) runStates() map[string]view.FolderProgress {
 	if r := o.backupRun(); r != nil && o.a.machine.Busy() {
 		return view.RunFolders(r)
 	}
 	return nil
 }
 
-func (o *overviewPage) fillStorage() {
+func (o *createPage) fillStorage() {
 	t := o.a.theme
 	v := o.view.Storage
 	c := o.storage
@@ -280,7 +280,7 @@ func (o *overviewPage) fillStorage() {
 	}
 }
 
-func (o *overviewPage) fillKeys() {
+func (o *createPage) fillKeys() {
 	t := o.a.theme
 	v := o.view.Keys
 	c := o.keys
@@ -310,7 +310,7 @@ func (o *overviewPage) fillKeys() {
 
 // layout places the title, the hero or the run card below it, like on
 // Restore backup, and the cards. The page scrolls when they don't fit.
-func (o *overviewPage) layout() {
+func (o *createPage) layout() {
 	t := o.a.theme
 	s := t.Scale
 	client := win32.ClientRect(o.panel.HWND())
@@ -331,7 +331,7 @@ func (o *overviewPage) layout() {
 	page.Bottom = page.Top + max(total, client.Height())
 	area := widget.NewArea(s, page)
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
-	placeTitle(t, o.title, o.refresh, area.Top(backupsTitleHeight))
+	placeTitle(t, o.title, o.refresh, area.Top(pageTitleHeight))
 	area.Top(8)
 
 	if o.run.mode != runHidden {
@@ -351,10 +351,10 @@ func (o *overviewPage) layout() {
 
 // contentHeight returns the height in pixels of the page's content at a
 // page width.
-func (o *overviewPage) contentHeight(width int32) int32 {
+func (o *createPage) contentHeight(width int32) int32 {
 	s := o.a.theme.Scale
 	inner := width - 2*s.Px(widget.ContentPaddingX)
-	h := 2*s.Px(widget.ContentPaddingY) + s.Px(backupsTitleHeight) + s.Px(8)
+	h := 2*s.Px(widget.ContentPaddingY) + s.Px(pageTitleHeight) + s.Px(8)
 	if o.run.mode != runHidden {
 		h += o.run.height(inner)
 	} else {
@@ -367,7 +367,7 @@ func (o *overviewPage) contentHeight(width int32) int32 {
 }
 
 // restyle applies new fonts after a DPI change.
-func (o *overviewPage) restyle() {
+func (o *createPage) restyle() {
 	o.panel.Restyle()
 	o.folderTable.restyle()
 	for _, c := range []*card{o.folders, o.storage, o.keys, o.run.card} {
@@ -378,7 +378,7 @@ func (o *overviewPage) restyle() {
 
 // focus puts the keyboard focus on the run card or the hero's primary
 // action.
-func (o *overviewPage) focus() {
+func (o *createPage) focus() {
 	if o.run.mode != runHidden {
 		o.run.focus()
 		return
@@ -615,7 +615,7 @@ func measure(t *widget.Theme, text string, style widget.TextStyle) int32 {
 }
 
 // layoutHero places the hero in r.
-func (o *overviewPage) layoutHero(r win32.Rect) {
+func (o *createPage) layoutHero(r win32.Rect) {
 	t := o.a.theme
 	s := t.Scale
 	g := o.heroGeometry(r.Width())
@@ -649,7 +649,7 @@ type heroGeometry struct {
 
 // heroGeometry lays the hero's text out at width pixels: the line wraps
 // when it does not fit, and the hero grows with it.
-func (o *overviewPage) heroGeometry(width int32) heroGeometry {
+func (o *createPage) heroGeometry(width int32) heroGeometry {
 	t := o.a.theme
 	s := t.Scale
 	g := heroGeometry{textWidth: width - s.Px(widget.HeroIconSize+heroGap+12)}
@@ -665,7 +665,7 @@ func (o *overviewPage) heroGeometry(width int32) heroGeometry {
 }
 
 // heroButtons are the hero's shown buttons, from the right.
-func (o *overviewPage) heroButtons() []win32.HWND {
+func (o *createPage) heroButtons() []win32.HWND {
 	var out []win32.HWND
 	for _, b := range []win32.HWND{o.heroSecondary, o.heroPrimary} {
 		if win32.IsWindowVisible(b) {
@@ -681,7 +681,7 @@ func heroButtonWidth(t *widget.Theme, b win32.HWND) int32 {
 }
 
 // setButton shows b on the existing control h, or hides it.
-func (o *overviewPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
+func (o *createPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
 	shown = shown && b.Text != ""
 	win32.SetText(h, b.Text)
 	win32.SetVisible(h, shown)

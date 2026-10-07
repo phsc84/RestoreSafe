@@ -36,7 +36,7 @@ func checkTable(t *testing.T, tb Table, titles ...string) {
 // OV-3, BR-4
 func TestFoldersTable(t *testing.T) {
 	t.Parallel()
-	o, _ := overviewOf(t, scenario.SourceMissing)
+	o, _ := createPageOf(t, scenario.SourceMissing)
 	tb := o.Folders.Table(nil)
 	checkTable(t, tb, "Folder", "Last backup", "Next backup")
 	docs, pics := tb.Rows[0], tb.Rows[1]

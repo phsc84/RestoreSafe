@@ -15,15 +15,15 @@ import (
 	"time"
 )
 
-func backupsOf(t *testing.T, c scenario.Condition) (BackupsPage, *health.Snapshot, scenario.Scenario) {
+func restorePageOf(t *testing.T, c scenario.Condition) (RestorePage, *health.Snapshot, scenario.Scenario) {
 	t.Helper()
 	sc := scenario.Build(t, c)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	return BackupsOf(&s, sc.Config, nil, AllFolders, sc.Now), &s, sc
+	return RestorePageOf(&s, sc.Config, nil, AllFolders, sc.Now), &s, sc
 }
 
 // rowsByFolder returns the rows of all groups by folder.
-func rowsByFolder(p BackupsPage) map[string]BackupRow {
+func rowsByFolder(p RestorePage) map[string]BackupRow {
 	rows := map[string]BackupRow{}
 	for _, g := range p.Groups {
 		for _, r := range g.Rows {
@@ -33,9 +33,9 @@ func rowsByFolder(p BackupsPage) map[string]BackupRow {
 	return rows
 }
 
-func TestBackupsOfAProtectedDirectory(t *testing.T) {
+func TestRestorePageOfAProtectedDirectory(t *testing.T) {
 	t.Parallel()
-	p, _, _ := backupsOf(t, scenario.Protected)
+	p, _, _ := restorePageOf(t, scenario.Protected)
 	if len(p.Groups) != 1 || !p.Groups[0].Expanded {
 		t.Fatalf("one expanded run: %+v", p.Groups)
 	}
@@ -62,7 +62,7 @@ func TestBackupsOfAProtectedDirectory(t *testing.T) {
 	checkWriting(t, p)
 }
 
-func TestBackupsShowTheProblems(t *testing.T) {
+func TestRestorePageShowTheProblems(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		condition scenario.Condition
@@ -81,7 +81,7 @@ func TestBackupsShowTheProblems(t *testing.T) {
 	} {
 		t.Run(string(tc.condition), func(t *testing.T) {
 			t.Parallel()
-			p, _, _ := backupsOf(t, tc.condition)
+			p, _, _ := restorePageOf(t, tc.condition)
 			row := rowsByFolder(p)[tc.folder]
 			if row.Status.Text != tc.status || row.Status.Tone != tc.tone || row.Usable != tc.usable {
 				t.Fatalf("row %+v, want %q", row, tc.status)
@@ -98,9 +98,9 @@ func TestBackupsShowTheProblems(t *testing.T) {
 	}
 }
 
-func TestBackupsEmptyAndFilter(t *testing.T) {
+func TestRestorePageEmptyAndFilter(t *testing.T) {
 	t.Parallel()
-	p, _, _ := backupsOf(t, scenario.Empty)
+	p, _, _ := restorePageOf(t, scenario.Empty)
 	// Without backups the page shows the empty list, not a separate page.
 	if len(p.Groups) != 0 || len(p.Columns) == 0 {
 		t.Fatalf("empty page %+v", p)
@@ -109,26 +109,26 @@ func TestBackupsEmptyAndFilter(t *testing.T) {
 	if r := p.Refresh; r.Action != ActionCheckAgain || !r.Enabled {
 		t.Fatalf("refresh %+v", r)
 	}
-	if r := BackupsOf(nil, nil, nil, AllFolders, time.Now()).Refresh; r.Text == "" || r.Enabled {
+	if r := RestorePageOf(nil, nil, nil, AllFolders, time.Now()).Refresh; r.Text == "" || r.Enabled {
 		t.Fatalf("refresh before the first check %+v", r)
 	}
 
 	sc := scenario.Build(t, scenario.Protected)
 	sc.Config.SourceDirectories = sc.Config.SourceDirectories[:1] // Pics is no longer configured
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	all := BackupsOf(&s, sc.Config, nil, AllFolders, sc.Now)
+	all := RestorePageOf(&s, sc.Config, nil, AllFolders, sc.Now)
 	last := all.Filters[len(all.Filters)-1]
 	if last.Text != "Old: Pics" || last.Folder != "Pics" {
 		t.Fatalf("filters %+v", all.Filters)
 	}
-	only := BackupsOf(&s, sc.Config, nil, "Pics", sc.Now)
+	only := RestorePageOf(&s, sc.Config, nil, "Pics", sc.Now)
 	rows := rowsByFolder(only)
 	if len(rows) != 1 || rows["Pics"].Folder != "Pics" || only.Filters[only.Filter].Folder != "Pics" {
 		t.Fatalf("filtered rows %+v", rows)
 	}
 }
 
-func TestBackupsListAFailedRunByItsLog(t *testing.T) {
+func TestRestorePageListAFailedRunByItsLog(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.Protected)
 	// Log times have a resolution of one second: the failed run comes later.
@@ -140,7 +140,7 @@ func TestBackupsListAFailedRunByItsLog(t *testing.T) {
 	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: "disk full"})
 	log.Close()
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
-	p := BackupsOf(&s, sc.Config, nil, AllFolders, sc.Now)
+	p := RestorePageOf(&s, sc.Config, nil, AllFolders, sc.Now)
 	if len(p.Groups) != 2 || p.Groups[0].RunID != "FAIL01" || !strings.HasSuffix(p.Groups[0].Header, "Backup failed") || p.Groups[0].Tone != ToneError {
 		t.Fatalf("the failed run comes first: %+v", p.Groups)
 	}
@@ -148,15 +148,15 @@ func TestBackupsListAFailedRunByItsLog(t *testing.T) {
 	if bar.Restore.Enabled || !strings.Contains(bar.Text, "The log says why") {
 		t.Fatalf("selection of a failed run %+v", bar)
 	}
-	o := OverviewOf(&s, sc.Config, sc.Now)
+	o := CreatePageOf(&s, sc.Config, sc.Now)
 	if !strings.Contains(o.Folders.Note, "failed") || o.Folders.NoteTone != ToneError {
 		t.Fatalf("the Folders card tells of the failed run: %+v", o.Folders)
 	}
 }
 
-func TestBackupsSelection(t *testing.T) {
+func TestRestorePageSelection(t *testing.T) {
 	t.Parallel()
-	p, _, _ := backupsOf(t, scenario.Protected)
+	p, _, _ := restorePageOf(t, scenario.Protected)
 	if bar := SelectionOf(p, "", ""); bar.Text != "Select a backup to restore or verify it." || bar.Restore.Enabled {
 		t.Fatalf("no selection %+v", bar)
 	}
@@ -171,7 +171,7 @@ func TestBackupsSelection(t *testing.T) {
 		t.Fatalf("set selection %+v", bar)
 	}
 
-	bm, _, _ := backupsOf(t, scenario.BaseMissing)
+	bm, _, _ := restorePageOf(t, scenario.BaseMissing)
 	var docs BackupRow
 	var run naming.BackupID
 	for _, gr := range bm.Groups {
@@ -191,7 +191,7 @@ func TestBackupsSelection(t *testing.T) {
 	}
 }
 
-func TestBackupsShowTheRunningVerification(t *testing.T) {
+func TestRestorePageShowTheRunningVerification(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.Protected)
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
@@ -206,7 +206,7 @@ func TestBackupsShowTheRunningVerification(t *testing.T) {
 	m.VerifyPlanShown(interact.VerifyPlan{Sets: []interact.SetPlan{{Set: docs}}})
 	m.Confirmed(sc.Now)
 	m.Progressed(interact.Progress{Phase: interact.PhaseVerifying, Index: 1, Count: 1, Item: "Docs", Done: 1, Total: 4}, sc.Now)
-	p := BackupsOf(&s, sc.Config, m.Current(), AllFolders, sc.Now)
+	p := RestorePageOf(&s, sc.Config, m.Current(), AllFolders, sc.Now)
 	if st := rowsByFolder(p)["Docs"].Status; st.Text != "Verifying, 25%" {
 		t.Fatalf("running status %+v", st)
 	}
@@ -285,7 +285,7 @@ func TestLogLines(t *testing.T) {
 // at once needs an access key of its own (GUI spec 15).
 func TestRestoreBackupAccessKeysAreUnique(t *testing.T) {
 	lp := LogViewerOf()
-	m := BackupsMenu()
+	m := RestoreMenu()
 	for _, set := range [][]string{
 		{buttonRestore, buttonVerify, buttonCancelRun},                                 // progress
 		{buttonRestore, buttonVerify, buttonDone, buttonShowRunLog, buttonOpenFolder2}, // result

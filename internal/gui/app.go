@@ -42,8 +42,8 @@ const (
 	msgSnapshot    = win32.WM_APP + 1
 	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone  = win32.WM_APP + 3
-	msgRunLog      = win32.WM_APP + 4 // wparam: the Backups list group whose Show log was clicked
-	msgListFocus   = win32.WM_APP + 5 // the Backups list may have moved the focus to a group
+	msgRunLog      = win32.WM_APP + 4 // wparam: the backups list group whose Show log was clicked
+	msgListFocus   = win32.WM_APP + 5 // the backups list may have moved the focus to a group
 	msgDestChecked = win32.WM_APP + 6 // the Restore window's check of the choices is done
 	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
 )
@@ -228,7 +228,7 @@ func (a *app) createWindow() error {
 	if err := a.createShell(); err != nil {
 		return err
 	}
-	a.showPage(view.PageOverview)
+	a.showPage(view.PageCreate)
 	win32.ShowWindow(hwnd, win32.SW_SHOWNORMAL)
 	return nil
 }
@@ -318,7 +318,7 @@ func (a *app) snapshotDone() {
 	}
 	a.refreshShell()
 	// After the first check, the keyboard starts at the hero's action.
-	if first && a.page == view.PageOverview {
+	if first && a.page == view.PageCreate {
 		a.focusPage()
 	}
 }
@@ -373,9 +373,9 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case win32.WM_COMMAND:
-		if win32.LoWord(wparam) == win32.IDOK && a.page == view.PageBackups && win32.Focus() == a.shell.backups.list {
+		if win32.LoWord(wparam) == win32.IDOK && a.page == view.PageRestore && win32.Focus() == a.shell.restore.list {
 			// Enter in the list restores the selection (GUI spec BK-4).
-			if a.shell.backups.bar.Restore.Enabled {
+			if a.shell.restore.bar.Restore.Enabled {
 				a.do(view.ActionRestore)
 			}
 			return 0
@@ -396,10 +396,10 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case msgRunLog:
-		a.shell.backups.showRunLog(int(int32(wparam)))
+		a.shell.restore.showRunLog(int(int32(wparam)))
 		return 0
 	case msgListFocus:
-		a.shell.backups.focusChanged()
+		a.shell.restore.focusChanged()
 		return 0
 	case msgWorkerDone:
 		a.onWorkerDone()

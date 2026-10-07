@@ -6,8 +6,8 @@ package view
 // Application and shell.
 const (
 	appName        = "RestoreSafe"
-	navOverview    = "Create backup"
-	navBackups     = "Restore backup"
+	navCreate    = "Create backup"
+	navRestore     = "Restore backup"
 	navSettings    = "Settings"
 	statusChecking = "Checking…"
 )
@@ -78,7 +78,7 @@ const (
 	reasonBlockedCheck = "Fix the problems the check found first."
 )
 
-// Overview cards (GUI spec 5, figure 5.1).
+// Create backup cards (GUI spec 5, figure 5.1).
 const (
 	cardFolders      = "Folders to back up"
 	cardStorage      = "Backup directory"
@@ -331,7 +331,7 @@ const (
 	DetailsOfResult  = "Details"
 )
 
-// Backups page (GUI spec 7).
+// Restore backup page (GUI spec 7).
 const (
 	columnFolder        = "Folder"
 	columnType          = "Type"

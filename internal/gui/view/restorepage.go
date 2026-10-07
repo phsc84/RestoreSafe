@@ -81,8 +81,8 @@ type RunGroup struct {
 	Placeholder string
 }
 
-// BackupsPage is everything the Backups page shows (GUI spec 7).
-type BackupsPage struct {
+// RestorePage is everything the Restore backup page shows (GUI spec 7).
+type RestorePage struct {
 	Title     string
 	Filters   []FilterOption
 	Filter    int // index of the selected filter
@@ -94,10 +94,10 @@ type BackupsPage struct {
 	Refresh Button
 }
 
-// BackupsOf computes the Backups page from the snapshot s, the
+// RestorePageOf computes the Restore backup page from the snapshot s, the
 // configuration, the operation r (nil when none) and the folder filter.
-func BackupsOf(s *health.Snapshot, cfg *config.Config, r *flow.Run, folder string, now time.Time) BackupsPage {
-	p := BackupsPage{Title: navBackups, Columns: backupColumns(), Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
+func RestorePageOf(s *health.Snapshot, cfg *config.Config, r *flow.Run, folder string, now time.Time) RestorePage {
+	p := RestorePage{Title: navRestore, Columns: backupColumns(), Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain}}
 	if s == nil {
 		return p
 	}
@@ -455,7 +455,7 @@ type ActionBar struct {
 }
 
 // SelectionOf words the selection: a set (set != "") or a whole run.
-func SelectionOf(p BackupsPage, runID naming.BackupID, set string) ActionBar {
+func SelectionOf(p RestorePage, runID naming.BackupID, set string) ActionBar {
 	bar := ActionBar{
 		Text:    selectionHint,
 		Restore: Button{Text: buttonRestore, Action: ActionRestore},
@@ -701,7 +701,7 @@ type Menu struct {
 	Restore, Verify, ShowLog, CopyName, OpenFolder string
 }
 
-// BackupsMenu returns the context menu of the list.
-func BackupsMenu() Menu {
+// RestoreMenu returns the context menu of the list.
+func RestoreMenu() Menu {
 	return Menu{Restore: menuRestoreText, Verify: menuVerifyText, ShowLog: menuShowLog, CopyName: menuCopyName, OpenFolder: menuOpenFolder}
 }
