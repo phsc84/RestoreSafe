@@ -11,15 +11,6 @@ import (
 	"time"
 )
 
-// Pages of the Restore window (GUI spec 8): the choices with their check,
-// then the progress and the result. The run to restore from is chosen on
-// the Restore backup page (BK-4).
-const (
-	RestoreChoose = iota
-	RestoreProgress
-	RestoreResult
-)
-
 // RestorePointOf names when the run runID was made: "today, 09:12"; "" for
 // an unknown run.
 func RestorePointOf(s *health.Snapshot, runID naming.BackupID, now time.Time) string {

@@ -11,7 +11,6 @@ import (
 	"RestoreSafe/internal/workflow/restore"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 )
 
@@ -60,14 +59,14 @@ const (
 )
 
 // restoreDialog is the Restore window (GUI spec 8): the restore's plan, as
-// the plan dialog is the backup's, then its progress and result. It checks
-// the choices with restore.PlanDestination while the user makes them;
-// Start runs the restore workflow, which checks again and asks to start,
-// and the window answers yes itself, because Start was the confirmation.
+// the plan dialog is the backup's. It checks the choices with
+// restore.PlanDestination while the user makes them; Start runs the restore
+// workflow, which checks again and asks to start, and the window answers
+// yes itself, because Start was the confirmation. Then it closes and the
+// progress card on Restore backup takes over, as for a verification.
 type restoreDialog struct {
-	a    *app
-	win  *dialogWindow
-	page int
+	a   *app
+	win *dialogWindow
 
 	// The choices.
 	when    string
@@ -94,7 +93,7 @@ type restoreDialog struct {
 	// its content, as the backup plan does. fitting is set while it does.
 	userSized, fitting bool
 
-	// Controls of the current page.
+	// Controls of the window.
 	heading, toLabel win32.HWND
 	destEdit, browse win32.HWND
 	intoBackupDir    win32.HWND
@@ -104,7 +103,6 @@ type restoreDialog struct {
 	linesSt          *stack
 	start, cancel    win32.HWND
 	filling          bool
-	run              *runCard
 }
 
 // openRestore opens the Restore window on the run runID.
@@ -144,22 +142,14 @@ func (a *app) openRestore(runID naming.BackupID) {
 	s := win.theme.Scale
 	win.resize(s.Px(restoreWidth), s.Px(restoreHeight), true)
 	win32.Enable(a.hwnd, false)
-	w.show(view.RestoreChoose)
+	w.build()
 	w.startCheck(0)
 	win32.ShowWindow(win.hwnd, win32.SW_SHOWNORMAL)
 	w.focus()
 }
 
-// show switches to page and builds it.
-func (w *restoreDialog) show(page int) {
-	w.page = page
-	w.build()
-	w.focus()
-}
-
-// build creates the controls of the current page.
+// build creates the controls.
 func (w *restoreDialog) build() {
-	a := w.a
 	t := w.win.theme
 	pal := t.Palette
 	p := w.win.panel
@@ -167,40 +157,31 @@ func (w *restoreDialog) build() {
 	p.Clear()
 	w.heading, w.toLabel, w.destEdit, w.browse, w.intoBackupDir, w.list = 0, 0, 0, 0, 0, 0
 	w.start, w.cancel = 0, 0
-	w.split, w.lines, w.linesSt, w.run = nil, nil, nil, nil
+	w.split, w.lines, w.linesSt = nil, nil, nil
 
-	switch w.page {
-	case view.RestoreChoose:
-		w.view = w.viewOf()
-		w.heading = p.Label(w.view.Heading, widget.TextStrong, pal.Text)
-		w.toLabel = p.Label(view.RestoreTo, widget.TextSmall, pal.TextSecondary)
-		w.destEdit = w.child("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idRestoreDest)
-		win32.SetAccessibleName(w.destEdit, view.RestoreTo)
-		w.filling = true
-		win32.SetText(w.destEdit, w.dest)
-		w.filling = false
-		w.browse = p.Button(view.RestoreBrowse, idRestoreBrowse)
-		w.intoBackupDir = p.Link(view.RestoreIntoBackupDir, idRestoreIntoBackupDir)
-		w.buildList()
-		if sp, err := widget.NewSplitter(t, p.HWND(), pal.Surface); err == nil {
-			p.Adopt(sp.HWND())
-			sp.OnMove = w.splitMoved
-			w.split = sp
-		}
-		if lp, err := widget.NewPanel(t, p.HWND(), 0, widget.PanelStyle{Back: pal.Surface}); err == nil {
-			p.Adopt(lp.HWND())
-			lp.OnCommand = w.command
-			w.lines = lp
-		}
-		w.start = p.PrimaryButton(w.view.Start.Text, idRestoreStart)
-		w.cancel = p.Button(w.view.Cancel.Text, idRestoreCancel)
-	case view.RestoreProgress, view.RestoreResult:
-		if rc, err := newRunCardWith(a, t, p.HWND()); err == nil {
-			p.Adopt(rc.card.panel.HWND())
-			rc.do = w.do
-			w.run = rc
-		}
+	w.view = w.viewOf()
+	w.heading = p.Label(w.view.Heading, widget.TextStrong, pal.Text)
+	w.toLabel = p.Label(view.RestoreTo, widget.TextSmall, pal.TextSecondary)
+	w.destEdit = w.child("EDIT", win32.WS_TABSTOP|win32.WS_BORDER|win32.ES_AUTOHSCROLL, idRestoreDest)
+	win32.SetAccessibleName(w.destEdit, view.RestoreTo)
+	w.filling = true
+	win32.SetText(w.destEdit, w.dest)
+	w.filling = false
+	w.browse = p.Button(view.RestoreBrowse, idRestoreBrowse)
+	w.intoBackupDir = p.Link(view.RestoreIntoBackupDir, idRestoreIntoBackupDir)
+	w.buildList()
+	if sp, err := widget.NewSplitter(t, p.HWND(), pal.Surface); err == nil {
+		p.Adopt(sp.HWND())
+		sp.OnMove = w.splitMoved
+		w.split = sp
 	}
+	if lp, err := widget.NewPanel(t, p.HWND(), 0, widget.PanelStyle{Back: pal.Surface}); err == nil {
+		p.Adopt(lp.HWND())
+		lp.OnCommand = w.command
+		w.lines = lp
+	}
+	w.start = p.PrimaryButton(w.view.Start.Text, idRestoreStart)
+	w.cancel = p.Button(w.view.Cancel.Text, idRestoreCancel)
 	w.update()
 }
 
@@ -247,39 +228,22 @@ func (w *restoreDialog) viewOf() view.RestoreView {
 	return v
 }
 
-// update shows the state of the current page: the heading, the checks,
-// the lines below the table and Start; or the progress, or the result.
+// update shows the state of the choices: the heading, the checks, the
+// lines below the table and Start.
 func (w *restoreDialog) update() {
-	switch w.page {
-	case view.RestoreProgress:
-		if r := w.a.machine.Current(); r != nil && w.run != nil {
-			w.run.showProgress(view.ProgressCardOf(r, time.Now()))
+	w.view = w.viewOf()
+	win32.SetText(w.heading, w.view.Heading)
+	for i, f := range w.folders {
+		text := view.CheckNone
+		if c, ok := w.view.Checks[f.Set]; ok && f.Enabled && w.checked[f.Set] {
+			text = c.Text
 		}
-	case view.RestoreResult:
-		if r := w.a.machine.Current(); r != nil && w.run != nil {
-			if c := view.ResultCardOf(r); c != nil {
-				c.Done.Text = view.RestoreClose
-				view.AddProblemHint(c, w.a.snapshot, w.a.opts.Config, time.Now(), false)
-				if w.run.mode != runResult || !slices.Equal(w.run.result.Lines, c.Lines) {
-					w.run.showResult(*c)
-				}
-			}
-		}
-	case view.RestoreChoose:
-		w.view = w.viewOf()
-		win32.SetText(w.heading, w.view.Heading)
-		for i, f := range w.folders {
-			text := view.CheckNone
-			if c, ok := w.view.Checks[f.Set]; ok && f.Enabled && w.checked[f.Set] {
-				text = c.Text
-			}
-			win32.ListSetText(w.list, i, 3, text)
-		}
-		win32.Invalidate(w.list)
-		win32.Enable(w.start, w.view.Start.Enabled && !w.starting)
-		w.buildLines()
-		w.fitHeight()
+		win32.ListSetText(w.list, i, 3, text)
 	}
+	win32.Invalidate(w.list)
+	win32.Enable(w.start, w.view.Start.Enabled && !w.starting)
+	w.buildLines()
+	w.fitHeight()
 	w.layout()
 }
 
@@ -323,21 +287,13 @@ func (w *restoreDialog) buildLines() {
 	w.linesSt = st
 }
 
-// layout places the controls of the current page.
+// layout places the controls.
 func (w *restoreDialog) layout() {
 	t := w.win.theme
 	s := t.Scale
 	p := w.win.panel
 	area := widget.NewArea(s, win32.ClientRect(p.HWND()))
 	area.Inset(restoreMargin, restoreMargin, restoreMargin, restoreMargin)
-	switch w.page {
-	case view.RestoreProgress, view.RestoreResult:
-		// The card fills the page (RW-1: the window is resizable).
-		if w.run != nil && w.run.mode != runHidden {
-			w.run.place(area.Rest())
-		}
-		return
-	}
 
 	// Start and Cancel at the bottom right, as in the backup plan.
 	row := widget.NewArea(s, area.Bottom(widget.ButtonHeight))
@@ -410,7 +366,7 @@ func (w *restoreDialog) linesHeight() int32 {
 // fitHeight sizes the window to its content, as the backup plan does,
 // until the user sizes it; at most the height of the screen.
 func (w *restoreDialog) fitHeight() {
-	if w.userSized || w.page != view.RestoreChoose || w.list == 0 {
+	if w.userSized || w.list == 0 {
 		return
 	}
 	s := w.win.theme.Scale
@@ -462,14 +418,10 @@ func (w *restoreDialog) fitColumns(width int32) {
 	}
 }
 
-// focus puts the keyboard focus on the table, or on the progress and
-// result card.
+// focus puts the keyboard focus on the table.
 func (w *restoreDialog) focus() {
-	switch {
-	case w.list != 0:
+	if w.list != 0 {
 		win32.SetFocus(w.list)
-	case w.run != nil:
-		w.run.focus()
 	}
 }
 
@@ -503,7 +455,7 @@ func (w *restoreDialog) command(id, code uint16) {
 // checks again, shows its plan and asks to start, which ask answers.
 func (w *restoreDialog) startRestore() {
 	a := w.a
-	if w.page != view.RestoreChoose || w.starting || !win32.IsEnabled(w.start) {
+	if w.starting || !win32.IsEnabled(w.start) {
 		return
 	}
 	a.lastDestination = w.dest
@@ -512,36 +464,13 @@ func (w *restoreDialog) startRestore() {
 	a.startOperation(opRequest{op: flow.OpRestore, sets: view.Chosen(w.folders, w.checked), destination: w.dest})
 }
 
-// cancelPressed handles Cancel, Esc and the close button: it closes before
-// Start and after the result, and asks before cancelling a running
-// restore.
+// cancelPressed handles Cancel, Esc and the close button: it closes
+// without writing anything, and ends the workflow when Start began it.
 func (w *restoreDialog) cancelPressed() {
-	switch w.page {
-	case view.RestoreProgress:
-		w.a.confirmCancel()
-	case view.RestoreResult:
-		w.a.dismiss()
-	default:
-		if w.starting {
-			w.a.cancelRun()
-		}
-		w.close()
+	if w.starting {
+		w.a.cancelRun()
 	}
-}
-
-// do runs the actions of the progress and result pages.
-func (w *restoreDialog) do(action view.Action) {
-	switch action {
-	case view.ActionShowLog:
-		w.showLog()
-	default:
-		w.a.do(action)
-	}
-}
-
-// showLog shows the log of the restore in a viewer over the window (RW-8).
-func (w *restoreDialog) showLog() {
-	w.a.showLog(w.win.hwnd, w.a.runLogPath(), "")
+	w.close()
 }
 
 // startCheck checks the choices after delayMs, or now.
@@ -589,7 +518,7 @@ type destCheck struct {
 // destChecked shows a check, unless the choices changed since or the
 // restore started.
 func (w *restoreDialog) destChecked(c *destCheck) {
-	if c == nil || c.seq != w.checkSeq || w.page != view.RestoreChoose || w.starting {
+	if c == nil || c.seq != w.checkSeq || w.starting {
 		return
 	}
 	w.checking = false
@@ -607,58 +536,39 @@ func (w *restoreDialog) destChecked(c *destCheck) {
 func (w *restoreDialog) setPlan(p interact.RestorePlan) {
 	w.checkSeq++ // a check still running is older
 	w.plan, w.checkErr, w.checking = &p, nil, false
-	if w.page == view.RestoreChoose {
-		w.update()
-	}
+	w.update()
 }
 
 // ask answers the workflow's start question: yes after Start, which was
-// the confirmation (RW-6b); then the credential dialogs follow.
+// the confirmation (RW-6b). The window closes, the credential dialogs
+// follow and the progress card on Restore backup takes over (RW-9), as for
+// a verification (BK-8).
 func (w *restoreDialog) ask(answer func(bool, error)) {
-	a := w.a
 	if !w.starting {
 		answer(false, nil)
 		return
 	}
 	w.starting = false
-	a.machine.Confirmed(time.Now())
-	win32.Enable(a.hwnd, true) // the main window stays usable for reading (RW-9)
-	w.show(view.RestoreProgress)
-	a.refreshRun()
+	w.close()
+	w.a.runStarted()
 	answer(true, nil)
 }
 
-// workerDone shows how the restore ended. It reports whether the window
-// took care of the end: an end before the start (Cancel, a blocked plan, a
-// cancelled password) leaves no result.
+// workerDone keeps the window open when the restore ended before it
+// started (Cancel, a blocked plan): it shows why in place of the check. It
+// reports whether it took care of the end.
 func (w *restoreDialog) workerDone() bool {
 	a := w.a
 	r := a.machine.Current()
-	if r == nil {
+	if r == nil || !r.Started.IsZero() {
+		w.close()
 		return false
 	}
-	switch {
-	case r.Started.IsZero():
-		// Cancelled, or the workflow's plan blocked the start: the page
-		// shows why.
-		a.machine.Dismiss()
-		w.starting = false
-		if w.page == view.RestoreChoose {
-			w.planErr = r.Err
-			w.update()
-		}
-		return true
-	case view.ResultCardOf(r) == nil:
-		// A credential dialog was cancelled: nothing was written. Back to
-		// the choices, which are checked again.
-		a.machine.Dismiss()
-		win32.Enable(a.hwnd, false)
-		w.show(view.RestoreChoose)
-		w.startCheck(0)
-		return true
-	}
-	w.show(view.RestoreResult)
-	return false
+	a.machine.Dismiss()
+	w.starting = false
+	w.planErr = r.Err
+	w.update()
+	return true
 }
 
 func (w *restoreDialog) notify(hdr *win32.NMHdr) uintptr {
@@ -747,7 +657,7 @@ func (w *restoreDialog) message(msg uint32, wparam, lparam uintptr) (uintptr, bo
 		return 0, false
 	case win32.WM_SIZE:
 		win32.SetWindowPos(w.win.panel.HWND(), win32.ClientRect(w.win.hwnd))
-		if w.page == view.RestoreChoose && !w.fitting {
+		if !w.fitting {
 			w.update() // the lines wrap to the new width
 		} else {
 			w.layout()

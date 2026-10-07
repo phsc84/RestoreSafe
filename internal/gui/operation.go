@@ -103,7 +103,8 @@ func (a *app) startOperation(req opRequest) {
 	}()
 }
 
-// runStarted records that the user started the backup in the plan dialog.
+// runStarted records that the user started the operation in its plan,
+// Restore or Verify window.
 func (a *app) runStarted() {
 	a.machine.Confirmed(time.Now())
 	a.refreshRun()
@@ -114,9 +115,6 @@ func (a *app) runStarted() {
 // taskbar button.
 func (a *app) refreshRun() {
 	a.shell.overview.updateRun()
-	if a.restore != nil {
-		a.restore.update()
-	}
 	a.shell.backups.updateRun()
 	a.updateTaskbar()
 }
@@ -210,22 +208,16 @@ func (a *app) onWorkerDone() {
 	}
 	a.startCheck()
 	a.refreshRun()
-	if a.restore == nil {
-		a.focusPage()
-	}
+	a.focusPage()
 	a.updateTaskbar()
 	if !win32.IsForeground(a.hwnd) {
 		win32.FlashUntilActive(a.hwnd)
 	}
 }
 
-// dismiss ends the shown result, and closes the Restore window that shows
-// it: the Overview shows the state again.
+// dismiss ends the shown result: the Overview shows the state again.
 func (a *app) dismiss() {
 	a.machine.Dismiss()
-	if a.restore != nil {
-		a.restore.close()
-	}
 	a.refreshShell()
 	a.updateTaskbar()
 	a.focusPage()

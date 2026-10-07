@@ -104,6 +104,13 @@ func TestBackupsEmptyAndFilter(t *testing.T) {
 	if p.Empty == nil || p.Empty.Button.Action != ActionBackUp || len(p.Groups) != 0 {
 		t.Fatalf("empty page %+v", p)
 	}
+	// Refresh checks again, also on an empty page; not before the first check.
+	if r := p.Refresh; r.Action != ActionCheckAgain || !r.Enabled {
+		t.Fatalf("refresh %+v", r)
+	}
+	if r := BackupsOf(nil, nil, nil, AllFolders, time.Now()).Refresh; r.Text == "" || r.Enabled {
+		t.Fatalf("refresh before the first check %+v", r)
+	}
 
 	sc := scenario.Build(t, scenario.Protected)
 	sc.Config.SourceDirectories = sc.Config.SourceDirectories[:1] // Pics is no longer configured

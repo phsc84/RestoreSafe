@@ -19,7 +19,7 @@ Found while building; they are not defects of the run. Decided on 2026-10-06 (pl
 
 | Spec | Difference | Decision |
 |---|---|---|
-| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results showed stale files as "not in this backup", and only in the tests: a restore wrote no fact. | **Changed** in part: the backup records skipped and stale files apart, a restore records both per set, and the result page says "not in this backup" and "restored in an older version from <date>". **Accepted**: no "Show files"; the log names every file, and the result's Show log filters it. |
+| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results showed stale files as "not in this backup", and only in the tests: a restore wrote no fact. | **Changed** in part: the backup records skipped and stale files apart, a restore records both per set, and the result card says "not in this backup" and "restored in an older version from <date>". **Accepted**: no "Show files"; the log names every file, and the result's Show log filters it. |
 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | **Accepted**: OV-1 allows one primary and one secondary action; a disabled third button adds nothing the hero doesn't say. OV-2 changed. |
 | BR-4 | During a backup, the Folders card showed "Done, <size>" with the size of the folder read, not of the set written. | **Changed**: it shows the size of the set written, as the Restore backup page does. |
 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which backup and the keys' date. | **Accepted**: the question carries no key set; refactoring 2.0 RF-26 (typed questions) adds it. CR-1 changed. |
@@ -82,6 +82,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | Open | |
 | BK-8 | A verified differential run: "The backup of <date> can be restored", "Checked N folders …, including the full backups they're based on."; a run with a folder whose full backup is missing (`BaseMissing`): "<folders> from the backup of <date> can be restored" and "Another backup has a problem; see below." | Open | Script: the title. Pre-checked: `BaseMissing`. |
 | BK-9 | Empty state with **Back up now…** | Open | |
+| OV-8 | **Refresh** next to the title on Create backup and Restore backup, vertically centered on it, in the same place on both; it checks again (disabled meanwhile and during an operation) and the list shows a set deleted in Explorer as gone, also in the empty state | Open | Pre-checked by screenshot at 150 %. |
 
 ## 4. Restore
 
@@ -94,9 +95,9 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | RW-5 | The splitter below the table makes it taller and shorter, not below its rows (at most three) | Open | |
 | RW-6 | Space and Unlock worded as in the backup plan; the hints ("Choose at least one folder.", "Enter a full path…", "Checking…") replace them while there is nothing to check | Open | Pre-checked: a relative path. |
 | RW-6a | Existing target folders show "Already exists" in red, are named once below with the remedy and disable Start; renaming them in Explorer and changing the path unblocks | Open | Pre-checked: two existing folders disable Start. |
-| RW-6b | Start goes straight to the password; cancelling it returns to the window with the choices kept; nothing exists in the destination before the password is entered | Open | |
+| RW-6b | Start closes the window and goes straight to the password, as Verify does; cancelling it ends the restore without a result card; nothing exists in the destination before the password is entered | Open | |
 | RW-6b | A folder created in the destination after the check: Start ends before the password and the window shows it in red | Open | |
-| RW-1 | Progress and result pages: the card fills the window, its content centred, also after resizing the window during a restore | Open | |
+| RW-9 | Progress and result show only on the card at the top of Restore backup, as for Verify; no window stays in front during the restore | Open | |
 | RW-8 | Full and differential restore; restored files compared byte for byte with the sources, including timestamps and attributes | Open | Script: restored files equal to the source by hash. Timestamps and attributes: by hand. |
 | RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Open | Needs a differential made while a file was held open. |
 | RW-8 | `Damaged`: "Restore incomplete" in red, naming the folder | Open | |

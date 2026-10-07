@@ -151,7 +151,7 @@ Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar 
 - **Restore backup** - every backup run with its backup sets, the log of the selected run, and **Restore…** and **Verify…**. Click a folder to act on that folder, or the date of a run to act on all its folders.
 - **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
 
-RestoreSafe checks your backups when it starts, after every operation, with **Refresh** or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
+RestoreSafe checks your backups when it starts, after every operation, with **Refresh** (on Create backup and Restore backup) or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
 
 ### Create a backup
 Click **Back up now…** (`Ctrl+B`). The backup plan shows, for every folder, whether it gets a full or a differential backup and why, the space needed (for a differential an estimate of the files changed since the full backup), how you will unlock, and what retention removes afterwards (see [Screenshots](#screenshots)). Then choose:
@@ -172,7 +172,7 @@ On the Restore backup page, select a backup run or one of its folders and click 
 - The folders, with their type, size, and whether the new folder can be created. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
 - **Space** and **Unlock** - whether it fits, and what you'll be asked for.
 
-The window checks your choices while you make them. Nothing is written before you click **Start** and enter your password and/or confirm your YubiKey. While the restore runs, the window shows its progress and then the result; the top of the Restore backup page shows them too.
+The window checks your choices while you make them. Nothing is written before you click **Start** and enter your password and/or confirm your YubiKey. Start closes the window; the progress and then the result appear at the top of the Restore backup page, as for a verification.
 
 Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically (**Show details** lists it). Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
 

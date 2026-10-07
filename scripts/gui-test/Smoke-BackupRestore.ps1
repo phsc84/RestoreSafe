@@ -71,11 +71,11 @@ try {
   Wait-Until { Find-Control $wiz RestoreStart -Enabled } 20 "choices checked" | Out-Null
   Snap $wiz "restore"
   Click-Control $wiz RestoreStart
-  Answer-Credentials $p.Id $Password { Find-Control $wiz RunDone -Enabled }
-  $r = Result $wiz; Snap $wiz "restore-result"; "Restore:  $r"
-  $o = Test-Overlaps $wiz "restore result"; if ($o) { $o; $failed = $true }
+  Answer-Credentials $p.Id $Password { Find-Control $main RunDone -Enabled }
+  $r = Result $main; Snap $main "restore-result"; "Restore:  $r"
+  $o = Test-Overlaps $main "restore result"; if ($o) { $o; $failed = $true }
   if ($r -notlike "* restored*") { $failed = $true }
-  Click-Control $wiz RunDone
+  Click-Control $main RunDone
 
   # Verification of the newest run.
   Go-Page $main 1

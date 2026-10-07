@@ -144,12 +144,6 @@ func (o *overviewPage) update() {
 	} else {
 		o.setButton(o.heroSecondary, view.Button{}, idHeroSecondary, false)
 	}
-	r := o.view.Refresh
-	r.Enabled = r.Enabled && !o.a.checking
-	o.acts[idRefresh] = r.Action
-	win32.SetText(o.refresh, r.Text)
-	win32.Enable(o.refresh, r.Enabled)
-	win32.SetVisible(o.refresh, r.Text != "")
 	o.showRun()
 	o.fillFolders()
 	o.fillStorage()
@@ -177,11 +171,38 @@ func (o *overviewPage) showRun() {
 	for _, h := range []win32.HWND{o.heroTitle, o.heroLine} {
 		win32.SetVisible(h, heroShown)
 	}
-	for _, h := range []win32.HWND{o.heroPrimary, o.heroSecondary, o.refresh} {
+	for _, h := range []win32.HWND{o.heroPrimary, o.heroSecondary} {
 		if !heroShown {
 			setShown(h, false)
 		}
 	}
+	o.a.showRefresh(o.refresh, o.view.Refresh, o.acts, idRefresh)
+}
+
+// showRefresh shows a page's Refresh button b on h, disabled while a check
+// or an operation runs: a reload waits for neither (OV-8).
+func (a *app) showRefresh(h win32.HWND, b view.Button, acts actions, id uint16) {
+	acts[id] = b.Action
+	win32.SetText(h, b.Text)
+	win32.Enable(h, b.Enabled && !a.checking && !a.reloading && !a.machine.Busy())
+}
+
+// placeTitle places a page's title in row and its Refresh button just after
+// the title's text, centered on it.
+func placeTitle(t *widget.Theme, title, refresh win32.HWND, row win32.Rect) {
+	s := t.Scale
+	tw, th := t.Fonts.Measure(win32.Text(title), widget.TextTitle)
+	rw, _ := t.Fonts.Measure(win32.Text(refresh), widget.TextSmall)
+	rw += s.Px(20)
+	gap := s.Px(12)
+	tr := row
+	tr.Right = max(min(row.Left+tw+s.Px(4), row.Right-gap-rw), row.Left)
+	win32.SetWindowPos(title, tr)
+	r := win32.Rect{Left: tr.Right + gap}
+	r.Right = r.Left + rw
+	r.Top = max(row.Top+(th-s.Px(refreshHeight))/2, row.Top)
+	r.Bottom = r.Top + s.Px(refreshHeight)
+	win32.SetWindowPos(refresh, r)
 }
 
 // updateRun shows a progress report: the run card and the Folders card
@@ -306,7 +327,7 @@ func (o *overviewPage) layout() {
 	page.Bottom = page.Top + max(total, client.Height())
 	area := widget.NewArea(s, page)
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
-	win32.SetWindowPos(o.title, area.Top(backupsTitleHeight))
+	placeTitle(t, o.title, o.refresh, area.Top(backupsTitleHeight))
 	area.Top(8)
 
 	if o.run.mode != runHidden {
@@ -612,31 +633,18 @@ func (o *overviewPage) layoutHero(r win32.Rect) {
 	x, y := text.Left, text.Top
 	win32.SetWindowPos(o.heroTitle, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + s.Px(heroTitleHeight)})
 	y += s.Px(heroTitleHeight)
-	win32.SetWindowPos(o.heroLine, win32.Rect{Left: x, Top: y, Right: x + g.lineWidth, Bottom: y + g.lineHeight})
-	row := win32.Rect{Left: x + g.lineWidth + s.Px(8), Top: y, Bottom: y + s.Px(heroLineHeight)}
-	if g.refreshBelow {
-		row = win32.Rect{Left: x, Top: y + g.lineHeight, Bottom: y + g.lineHeight + s.Px(heroLineHeight)}
-	}
-	// Centered on the line, but never up into the title: a label under the
-	// button would take its clicks.
-	row.Top += max((s.Px(heroLineHeight)-s.Px(refreshHeight))/2, 0)
-	row.Bottom = row.Top + s.Px(refreshHeight)
-	row.Right = row.Left + g.refreshWidth
-	win32.SetWindowPos(o.refresh, row)
+	win32.SetWindowPos(o.heroLine, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + g.lineHeight})
 }
 
 // heroGeometry is the layout of the hero's text at a width.
 type heroGeometry struct {
 	textWidth, textHeight int32
-	lineWidth, lineHeight int32
-	refreshWidth          int32
-	// refreshBelow puts the Refresh button under a line that wraps.
-	refreshBelow bool
-	height       int32
+	lineHeight            int32
+	height                int32
 }
 
 // heroGeometry lays the hero's text out at width pixels: the line wraps
-// when it does not fit beside the link, and the hero grows with it.
+// when it does not fit, and the hero grows with it.
 func (o *overviewPage) heroGeometry(width int32) heroGeometry {
 	t := o.a.theme
 	s := t.Scale
@@ -646,20 +654,8 @@ func (o *overviewPage) heroGeometry(width int32) heroGeometry {
 	}
 	g.textWidth = max(g.textWidth, s.Px(200))
 	line := win32.Text(o.heroLine)
-	lineW, _ := t.Fonts.Measure(line, widget.TextSmall)
-	lineW += s.Px(4)
-	rw, _ := t.Fonts.Measure(win32.Text(o.refresh), widget.TextSmall)
-	g.refreshWidth = rw + s.Px(20)
-	g.lineWidth, g.lineHeight = lineW, s.Px(heroLineHeight)
-	if lineW+s.Px(8)+g.refreshWidth > g.textWidth {
-		g.refreshBelow = true
-		g.lineWidth = g.textWidth
-		g.lineHeight = max(t.Fonts.MeasureWrapped(line, widget.TextSmall, g.textWidth), s.Px(heroLineHeight))
-	}
+	g.lineHeight = max(t.Fonts.MeasureWrapped(line, widget.TextSmall, g.textWidth), s.Px(heroLineHeight))
 	g.textHeight = s.Px(heroTitleHeight) + g.lineHeight
-	if g.refreshBelow {
-		g.textHeight += s.Px(heroLineHeight)
-	}
 	g.height = max(s.Px(heroHeight), g.textHeight+s.Px(8))
 	return g
 }

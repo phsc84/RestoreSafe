@@ -403,7 +403,6 @@ const (
 	RestoreTo            = "To"
 	RestoreBrowse        = "B&rowse…"
 	RestoreIntoBackupDir = "Restore into the backup directory"
-	RestoreClose         = "Close"
 	RestoreDetailsTitle  = "Restore details"
 	ColumnCheck          = "Check"
 	restoreHeading       = "Restore %s from the backup of %s"

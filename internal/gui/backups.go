@@ -21,6 +21,7 @@ const (
 	_
 	_
 	idEmptyBackUp
+	idBackupsRefresh
 	idLineButtons = 640 // idLineButtons+i is the button of line i
 )
 
@@ -54,7 +55,7 @@ type backupsPage struct {
 	acts  actions
 	view  view.BackupsPage
 
-	title, filter win32.HWND
+	title, filter, refresh win32.HWND
 	// run is the restore or verification at the top of the page: its
 	// progress, then its result.
 	run         *runCard
@@ -98,6 +99,7 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	b.title = panel.Label(view.BackupsOf(nil, nil, nil, "", time.Now()).Title, widget.TextTitle, pal.Text)
 	b.filter = b.child("COMBOBOX", win32.WS_TABSTOP|win32.WS_VSCROLL|win32.CBS_DROPDOWNLIST, idBackupsFilter)
 	win32.SetAccessibleName(b.filter, view.FilterName)
+	b.refresh = b.acts.button(panel, view.Button{Text: " "}, idBackupsRefresh, false)
 	if b.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
 	}
@@ -206,6 +208,7 @@ func (b *backupsPage) opRun() *flow.Run {
 // showRun shows the restore or verification on the run card; it reports
 // whether the card appeared or went away.
 func (b *backupsPage) showRun() bool {
+	b.a.showRefresh(b.refresh, b.view.Refresh, b.acts, idBackupsRefresh)
 	return b.run.follow(b.opRun(), b.a.machine.Busy())
 }
 
@@ -676,7 +679,8 @@ func (b *backupsPage) layout() {
 	f := top.Right(filterWidth)
 	f.Bottom = f.Top + s.Px(filterDropHeight)
 	win32.SetWindowPos(b.filter, f)
-	win32.SetWindowPos(b.title, top.Rest())
+	top.Right(12)
+	placeTitle(t, b.title, b.refresh, top.Rest())
 	area.Top(8)
 	if b.run.mode != runHidden {
 		b.run.place(area.TopPx(b.run.height(area.Rest().Width())))
