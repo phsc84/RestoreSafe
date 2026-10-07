@@ -5,11 +5,13 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/interact/interacttest"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +86,7 @@ func TestBackupPlanButtons(t *testing.T) {
 	}
 
 	p.Issues = []interact.Issue{
-		{Status: interact.StatusError, Code: interact.CodeSpaceInsufficient, Text: "Not enough free space. Remedy: Free up space."},
+		{Status: interact.StatusError, Code: interact.CodeSpaceInsufficient, Text: "Not enough free space.", Remedy: "Free up space."},
 		{Status: interact.StatusWarn, Text: "A warning."},
 	}
 	v = BackupPlanOf(p, &interact.BackupStartOptions{Blocked: true, OfferFull: true}, nil, planNow)
@@ -195,10 +197,10 @@ func TestIssueTextEndsTheMessageBeforeTheRemedy(t *testing.T) {
 		{"yaml: line 3: bad escape Remedy: Check YAML syntax.", "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
 		{"No remedy here", "No remedy here", "No remedy here"},
 	} {
-		if got := issueText(tc.in); got != tc.issue {
-			t.Errorf("issueText(%q) = %q, want %q", tc.in, got, tc.issue)
+		if got := errorText(errors.New(tc.in)); got != tc.issue {
+			t.Errorf("errorText(%q) = %q, want %q", tc.in, got, tc.issue)
 		}
-		if got := firstSentences(tc.in); got != tc.first {
+		if got := firstSentences(problem.Split(errors.New(tc.in))); got != tc.first {
 			t.Errorf("firstSentences(%q) = %q, want %q", tc.in, got, tc.first)
 		}
 	}

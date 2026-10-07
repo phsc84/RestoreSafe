@@ -68,7 +68,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	if lockIssue != nil {
 		details.Issues = append(details.Issues, *lockIssue)
-		log.Warn("%s", lockIssue.Text)
+		log.Warn("%s", lockIssue.Full())
 		warningCount++
 	}
 	u.ShowVerifyPlan(verifyPlan(preflight, &first.KeySet, details))
@@ -177,7 +177,7 @@ func verifyPreflightReport(
 		status := interact.StatusOK
 		if item.Err != nil {
 			status = interact.StatusError
-			issues = append(issues, interact.Issue{Status: interact.StatusError, Code: interact.CodeBaseMissing, Text: item.Err.Error()})
+			issues = append(issues, interact.IssueOf(interact.StatusError, interact.CodeBaseMissing, item.Err))
 		}
 		var details []string
 		if item.Base != nil {

@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
@@ -66,18 +67,18 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 		c.Tone, c.Glyph, c.Title = ToneError, GlyphError, fmt.Sprintf(resultNotStarted, name)
 		c.Lines = blockingIssues(r)
 		if len(c.Lines) == 0 {
-			c.Lines = []string{firstSentences(err.Error())}
+			c.Lines = []string{firstSentences(problem.Split(err))}
 		}
 		c.Detail = err.Error()
 		c.Details = &Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true}
 	default:
 		c.Tone, c.Glyph, c.Title = ToneError, GlyphError, fmt.Sprintf(resultFailed, name)
-		c.Lines = append([]string{firstSentences(err.Error())}, keptLines(r, false)...)
+		c.Lines = append([]string{firstSentences(problem.Split(err))}, keptLines(r, false)...)
 		if r.Op == flow.OpRestore {
 			// A failed restore leaves a folder incomplete: red, never amber
 			// (RW-8).
 			c.Title = resultIncomplete
-			c.Lines = append([]string{firstSentences(err.Error())}, restoreKeptLines(r)...)
+			c.Lines = append([]string{firstSentences(problem.Split(err))}, restoreKeptLines(r)...)
 			c.Lines = append(c.Lines, restoreVerifyHint)
 		}
 		if r.Op == flow.OpVerify && r.What != "" && verifyFoundDamage(r) {
@@ -366,7 +367,7 @@ func blockingIssues(r *flow.Run) []string {
 	var lines []string
 	for _, issue := range r.Plan.Issues {
 		if issue.Status == interact.StatusError {
-			lines = append(lines, firstSentences(issue.Text))
+			lines = append(lines, firstSentences(issue.Text, issue.Remedy))
 		}
 	}
 	return lines
@@ -374,11 +375,11 @@ func blockingIssues(r *flow.Run) []string {
 
 // firstSentences is a workflow message without its remedy, which "Show
 // details" shows.
-func firstSentences(s string) string {
-	if i := strings.Index(s, " Remedy: "); i >= 0 {
-		s = endSentence(s[:i])
+func firstSentences(text, remedy string) string {
+	if remedy == "" {
+		return text
 	}
-	return s
+	return endSentence(text)
 }
 
 // setFolder returns the folder of a backup set name

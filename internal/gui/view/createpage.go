@@ -196,7 +196,7 @@ func CreatePageOf(s *health.Snapshot, cfg *config.Config, now time.Time) CreateP
 
 // ReloadErrorHero is the hero while config.yaml could not be read again.
 func ReloadErrorHero(err error) Hero {
-	reason := issueText(strings.ReplaceAll(err.Error(), "\nRemedy: ", " Remedy: "))
+	reason := errorText(err)
 	return Hero{
 		Tone: ToneError, Glyph: GlyphError,
 		Title:   heroReloadTitle,

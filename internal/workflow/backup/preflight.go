@@ -9,6 +9,7 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -148,10 +149,12 @@ func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEst
 		if first == nil {
 			first = check.err
 		}
-		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: check.code, Text: strings.TrimPrefix(check.err.Error(), "Backup preflight failed: ")})
+		issue := interact.IssueOf(interact.StatusError, check.code, check.err)
+		issue.Text = strings.TrimPrefix(issue.Text, "Backup preflight failed: ")
+		issues = append(issues, issue)
 	}
 	if targetWarn != "" {
-		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Code: interact.CodeSpaceEstimateOnly, Text: targetWarn})
+		issues = append(issues, interact.IssueOf(interact.StatusWarn, interact.CodeSpaceEstimateOnly, errors.New(targetWarn)))
 	}
 	return issues, first
 }

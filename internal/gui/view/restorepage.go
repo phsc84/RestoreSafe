@@ -568,12 +568,12 @@ func VerifyPlanOf(p interact.VerifyPlan, what string, now time.Time) VerifyPlanV
 		row := TableRow{Cells: []TableCell{{Text: s.Set.DirectoryName}, {Badge: &b}, {Text: Size(s.Bytes)}}}
 		if s.Problem != "" {
 			row.Cells[0].Tone, row.Cells[2] = ToneError, TableCell{Text: CheckNone}
-			row.Tip = issueText(s.Problem)
+			row.Tip = textWithRemedy(s.Problem)
 		}
 		v.Folders.Rows = append(v.Folders.Rows, row)
 	}
 	for _, issue := range p.Issues {
-		line := IssueLine{Text: issueText(issue.Text), Tone: ToneWarning, Glyph: GlyphWarning}
+		line := IssueLine{Text: issueText(issue.Text, issue.Remedy), Tone: ToneWarning, Glyph: GlyphWarning}
 		if issue.Status == interact.StatusError {
 			line.Tone, line.Glyph = ToneError, GlyphError
 		}

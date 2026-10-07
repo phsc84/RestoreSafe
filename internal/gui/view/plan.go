@@ -3,7 +3,9 @@ package view
 import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -87,7 +89,7 @@ func BackupPlanOf(p interact.BackupPlan, opts *interact.BackupStartOptions, cfg 
 		v.RemovesLink = linkShowRemoved
 	}
 	for _, issue := range p.Issues {
-		line := IssueLine{Text: issueText(issue.Text), Tone: ToneWarning, Glyph: GlyphWarning}
+		line := IssueLine{Text: issueText(issue.Text, issue.Remedy), Tone: ToneWarning, Glyph: GlyphWarning}
 		if issue.Status == interact.StatusError {
 			line.Tone, line.Glyph = ToneError, GlyphError
 		}
@@ -117,7 +119,7 @@ func planRow(f interact.FolderPlan, now time.Time) PlanRow {
 	row := PlanRow{Name: f.Name, Path: Path(f.Path), Tone: ToneNeutral}
 	switch {
 	case f.Problem != "":
-		row.Why, row.Tone, row.Glyph = issueText(f.Problem), ToneError, GlyphError
+		row.Why, row.Tone, row.Glyph = textWithRemedy(f.Problem), ToneError, GlyphError
 		return row
 	case f.Skipped:
 		row.Why, row.Tone = folderDuplicate, ToneSecondary
@@ -308,13 +310,20 @@ func (g *removal) text(now time.Time) string {
 // issueText shows a workflow message with its remedy as plain sentences.
 // A message that does not end its sentence, such as a wrapped YAML
 // error, gets a full stop before the remedy.
-func issueText(s string) string {
-	msg, remedy, ok := strings.Cut(s, " Remedy: ")
-	if !ok {
-		return s
+func issueText(text, remedy string) string {
+	if remedy == "" {
+		return text
 	}
-	return endSentence(msg) + " " + remedy
+	return endSentence(text) + " " + remedy
 }
+
+// errorText shows a workflow error with its remedy as plain sentences.
+func errorText(err error) string { return issueText(problem.Split(err)) }
+
+// textWithRemedy shows a workflow text that still carries its remedy as
+// "Remedy: ..." (folder problems, credential messages) until it gets a
+// field of its own (refactoring 2.0 RF-25, RF-26).
+func textWithRemedy(s string) string { return errorText(errors.New(s)) }
 
 // endSentence adds a full stop to a message that does not end its
 // sentence.
@@ -373,8 +382,8 @@ func joinAnd(items []string) string {
 	return strings.Join(items[:len(items)-1], ", ") + " and " + items[len(items)-1]
 }
 
-// IssueText shows a workflow message with its remedy as plain sentences.
-func IssueText(s string) string { return issueText(s) }
+// ErrorText shows a workflow error with its remedy as plain sentences.
+func ErrorText(err error) string { return errorText(err) }
 
 // Table is the plan's folders as a table (GUI spec BP-2): the planned type, why,
 // and about how much the backup stores; a folder that is not backed up

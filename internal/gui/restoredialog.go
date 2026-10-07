@@ -223,7 +223,7 @@ func (w *restoreDialog) child(class string, style uint32, id uintptr) win32.HWND
 func (w *restoreDialog) viewOf() view.RestoreView {
 	v := view.RestoreViewOf(w.folders, w.checked, w.when, w.dest, w.plan, w.checkErr, w.checking)
 	if w.planErr != nil && (w.plan == nil || !w.plan.HasErrors()) {
-		v.Issues = append(v.Issues, view.IssueLine{Text: view.IssueText(w.planErr.Error()), Tone: view.ToneError, Glyph: view.GlyphError})
+		v.Issues = append(v.Issues, view.IssueLine{Text: view.ErrorText(w.planErr), Tone: view.ToneError, Glyph: view.GlyphError})
 	}
 	return v
 }

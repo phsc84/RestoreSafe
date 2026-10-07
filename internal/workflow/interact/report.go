@@ -1,6 +1,7 @@
 package interact
 
 import (
+	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"strings"
@@ -79,7 +80,22 @@ type Row struct {
 type Issue struct {
 	Status Status // StatusWarn or StatusError
 	Code   Code
+	// Text says what is wrong, Remedy what the user does about it (may be
+	// empty).
 	Text   string
+	Remedy string
+}
+
+// IssueOf returns the issue of err, with its text and remedy.
+func IssueOf(status Status, code Code, err error) Issue {
+	text, remedy := problem.Split(err)
+	return Issue{Status: status, Code: code, Text: text, Remedy: remedy}
+}
+
+// Full returns the issue as the console and the log show it: the text and
+// its remedy.
+func (i Issue) Full() string {
+	return (&problem.Error{Msg: i.Text, Remedy: i.Remedy}).Error()
 }
 
 // hasErrors reports whether an issue blocks the operation.
@@ -137,7 +153,7 @@ func WriteReport(w io.Writer, r Report) {
 	if len(r.Issues) > 0 {
 		fmt.Fprintln(w)
 		for _, issue := range r.Issues {
-			fmt.Fprintf(w, "[%s] %s\n", issue.Status, issue.Text)
+			fmt.Fprintf(w, "[%s] %s\n", issue.Status, issue.Full())
 		}
 	}
 }

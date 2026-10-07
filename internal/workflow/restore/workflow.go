@@ -77,7 +77,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	if lockIssue != nil {
 		details.Issues = append(details.Issues, *lockIssue)
-		log.Warn("%s", lockIssue.Text)
+		log.Warn("%s", lockIssue.Full())
 		warningCount++
 	}
 	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
@@ -197,8 +197,8 @@ func restorePreflightReport(
 	checkYubiKeyConnected func() error,
 ) interact.Report {
 	var issues []interact.Issue
-	addError := func(code interact.Code, text string) {
-		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: code, Text: text})
+	addError := func(code interact.Code, err error) {
+		issues = append(issues, interact.IssueOf(interact.StatusError, code, err))
 	}
 
 	estimatedRestoreBytes := estimateRestoreBytes(items)
@@ -210,7 +210,7 @@ func restorePreflightReport(
 		status := interact.StatusOK
 		if item.Err != nil {
 			status = interact.StatusError
-			addError(interact.CodeBaseMissing, item.Err.Error())
+			addError(interact.CodeBaseMissing, item.Err)
 		}
 		var details []string
 		if item.Base != nil {
@@ -222,11 +222,11 @@ func restorePreflightReport(
 	rows = append(rows, interact.Heading("Restore destination"))
 	if restoreFreeErr != nil {
 		rows = append(rows, interact.Item(interact.StatusError, destDisplay))
-		addError(interact.CodeFreeSpaceUnknown, fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
+		addError(interact.CodeFreeSpaceUnknown, fmt.Errorf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
 		rows = append(rows, interact.Item(interact.StatusOK, destDisplay))
 		if fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			addError(interact.CodeSpaceInsufficient, fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+			addError(interact.CodeSpaceInsufficient, errors.New(fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes)))
 		}
 	}
 
@@ -235,7 +235,7 @@ func restorePreflightReport(
 		status := interact.StatusOK
 		if item.OutputDirErr != nil {
 			status = interact.StatusError
-			addError(item.OutputDirCode, item.OutputDirErr.Error())
+			addError(item.OutputDirCode, item.OutputDirErr)
 		}
 		rows = append(rows, interact.Item(status, displayRestoreOutputDir(item.OutputDir)))
 	}

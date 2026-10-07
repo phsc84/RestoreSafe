@@ -113,7 +113,7 @@ func TestResultCardOfABlockedPlan(t *testing.T) {
 	m := &flow.Machine{}
 	m.Start(flow.OpBackup)
 	p := samplePlan()
-	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "There isn't enough space. Remedy: Free up space."}}
+	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "There isn't enough space.", Remedy: "Free up space."}}
 	m.PlanShown(p)
 	m.Done(flow.End{Err: errors.New("Backup preflight failed: not enough space. Remedy: Free up space.")}, planNow)
 	c := ResultCardOf(m.Current())

@@ -244,7 +244,7 @@ func TestVerifyPlan(t *testing.T) {
 		t.Fatalf("two full backups of one day: %q", got)
 	}
 	p.Sets[0].Problem = "Full backup missing. Remedy: Restore it from your copy."
-	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing. Remedy: Restore it from your copy."}}
+	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing.", Remedy: "Restore it from your copy."}}
 	v = VerifyPlanOf(p, "today, 09:12", now)
 	if v.Start != nil || len(v.Issues) != 1 || v.Issues[0].Tone != ToneError || v.Folders.Rows[0].Cells[0].Tone != ToneError {
 		t.Fatalf("a blocked plan %+v", v)

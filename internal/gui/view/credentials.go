@@ -78,7 +78,7 @@ func noticeOf(q flow.Question) string {
 	if q.Retry {
 		return ""
 	}
-	return issueText(q.Message)
+	return textWithRemedy(q.Message)
 }
 
 // NewPasswordDialogOf words the first step of creating keys (figure 9.2).
@@ -209,7 +209,7 @@ func retryError(q flow.Question) string {
 	if !q.Retry || q.Message == "" {
 		return ""
 	}
-	msg := issueText(q.Message)
+	msg := textWithRemedy(q.Message)
 	msg = strings.TrimSuffix(msg, " Please try again.")
 	if m := attemptsPattern.FindStringSubmatch(msg); m != nil {
 		left := fmt.Sprintf(attemptsLeft, m[1])
