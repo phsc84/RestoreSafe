@@ -1,8 +1,11 @@
 package view
 
 import (
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/testutil/scenario"
+	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"errors"
@@ -36,10 +39,10 @@ func backupFacts() logging.RunFacts {
 func TestResultCardOfASuccessfulBackup(t *testing.T) {
 	t.Parallel()
 	c := ResultCardOf(finishedBackup(&interact.Result{LogPath: "x.log"}, nil, backupFacts(), 2))
-	if c == nil || c.Tone != ToneSuccess || c.Title != "Backup finished" {
+	if c == nil || c.Tone != ToneSuccess || c.Title != "2 folders backed up" {
 		t.Fatalf("card %+v", c)
 	}
-	want := "2 folders, 3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB)."
+	want := "3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB)."
 	if len(c.Lines) != 1 || c.Lines[0] != want {
 		t.Fatalf("lines %q, want %q", c.Lines, want)
 	}
@@ -57,11 +60,11 @@ func TestResultCardExplainsWarnings(t *testing.T) {
 	facts.Verify["Pictures_DEF456_2026-09-30_FULL"] = logging.Fact{Result: logging.ResultFailed}
 	facts.Cleanup = nil
 	c := ResultCardOf(finishedBackup(&interact.Result{Warnings: 3}, nil, facts, 2))
-	if c.Tone != ToneWarning || c.Title != "Backup finished with 3 warnings" {
+	if c.Tone != ToneWarning || c.Title != "2 folders backed up with 3 warnings" {
 		t.Fatalf("card %+v", c)
 	}
 	want := []string{
-		"2 folders, 3.0 GB in 4 min.",
+		"3.0 GB in 4 min.",
 		"2 files in Documents couldn't be read and weren't backed up. Older backups of Documents are kept.",
 		"The verification of Pictures found an error. No old backups were removed.",
 		"1 other warning is in the log.",
@@ -156,8 +159,78 @@ func TestResultCardOfAVerification(t *testing.T) {
 	facts := logging.RunFacts{Verify: map[string]logging.Fact{"a": {}, "b": {}}}
 	m.Done(flow.End{Result: &interact.Result{LogPath: "v.log"}, Facts: facts, LogPath: "v.log"}, planNow.Add(90*time.Second))
 	c := ResultCardOf(m.Current())
-	if c == nil || c.Title != "Verification finished" || c.Lines[0] != "Verified 2 backups in 2 min. Every file matched its checksum." {
+	if c == nil || c.Title != "2 folders can be restored" || c.Lines[0] != "Checked 2 folders in 2 min. Every file matched its checksum." {
 		t.Fatalf("card %+v", c)
+	}
+
+	// The title names the restore point; the line says the full backups
+	// were checked too.
+	m = &flow.Machine{}
+	m.Start(flow.OpVerify)
+	m.Current().What, m.Current().Whole = "today, 09:12", true
+	docs := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-09-30", DiffNumber: 2}
+	m.VerifyPlanShown(interact.VerifyPlan{Sets: []interact.SetPlan{
+		{Set: docs, Base: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-09-01"}},
+		{Set: naming.BackupEntry{DirectoryName: "Pics", ChainID: "DEF456", Date: "2026-09-30"}},
+	}})
+	m.Confirmed(planNow)
+	m.Done(flow.End{Result: &interact.Result{LogPath: "v.log"}, Facts: facts, LogPath: "v.log"}, planNow.Add(90*time.Second))
+	c = ResultCardOf(m.Current())
+	if c == nil || c.Tone != ToneSuccess || c.Title != "The backup of today, 09:12 can be restored" ||
+		c.Lines[0] != "Checked 2 folders in 2 min, including the full backups they're based on. Every file matched its checksum." {
+		t.Fatalf("card %+v", c)
+	}
+
+	// Only some folders of the backup could be verified: the title names
+	// them, never the whole backup.
+	m = &flow.Machine{}
+	m.Start(flow.OpVerify)
+	m.Current().What = "today, 09:12"
+	m.VerifyPlanShown(interact.VerifyPlan{Sets: []interact.SetPlan{{Set: naming.BackupEntry{DirectoryName: "Pics", ChainID: "DEF456", Date: "2026-09-30"}}}})
+	m.Confirmed(planNow)
+	m.Done(flow.End{Result: &interact.Result{LogPath: "v.log"}, Facts: facts, LogPath: "v.log"}, planNow.Add(time.Minute))
+	if c := ResultCardOf(m.Current()); c == nil || c.Title != "Pics from the backup of today, 09:12 can be restored" {
+		t.Fatalf("part of a backup %+v", c)
+	}
+
+	// Damage found: the title says so.
+	m = &flow.Machine{}
+	m.Start(flow.OpVerify)
+	m.Current().What = "today, 09:12"
+	m.VerifyPlanShown(interact.VerifyPlan{Sets: []interact.SetPlan{{Set: docs}}})
+	m.Confirmed(planNow)
+	damaged := logging.RunFacts{Verify: map[string]logging.Fact{docs.String(): {Result: logging.ResultFailed}}}
+	m.Done(flow.End{Err: errors.New("Verification failed: a checksum didn't match."), Facts: damaged}, planNow.Add(time.Minute))
+	if c := ResultCardOf(m.Current()); c == nil || c.Tone != ToneError || c.Title != "Damage found in the backup of today, 09:12" {
+		t.Fatalf("damaged %+v", c)
+	}
+}
+
+func TestResultCardPointsToOtherProblems(t *testing.T) {
+	t.Parallel()
+	sc := scenario.Build(t, scenario.BaseMissing)
+	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
+	ok := ResultCard{Tone: ToneSuccess, Lines: []string{"Checked 2 folders in 2 min."}}
+	c := ok
+	AddProblemHint(&c, &s, sc.Config, sc.Now, true)
+	if len(c.Lines) != 2 || c.Lines[1] != "Another backup has a problem; see below." {
+		t.Fatalf("below %+v", c.Lines)
+	}
+	c = ResultCard{Tone: ToneSuccess, Lines: []string{"x"}}
+	AddProblemHint(&c, &s, sc.Config, sc.Now, false)
+	if c.Lines[1] != "Another backup has a problem; the Restore backup page shows it." {
+		t.Fatalf("elsewhere %+v", c.Lines)
+	}
+	// A warning or an error card says enough itself; without a problem
+	// nothing is added.
+	c = ResultCard{Tone: ToneWarning, Lines: []string{"x"}}
+	AddProblemHint(&c, &s, sc.Config, sc.Now, true)
+	clean := scenario.Build(t, scenario.Protected)
+	cs := health.TakeSnapshot(health.Params{Config: clean.Config, ConfigPath: clean.ConfigPath, Now: clean.Now})
+	d := ResultCard{Tone: ToneSuccess, Lines: []string{"x"}}
+	AddProblemHint(&d, &cs, clean.Config, clean.Now, true)
+	if len(c.Lines) != 1 || len(d.Lines) != 1 {
+		t.Fatalf("added to %+v / %+v", c.Lines, d.Lines)
 	}
 }
 

@@ -80,6 +80,9 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 			c.Lines = append([]string{firstSentences(err.Error())}, restoreKeptLines(r)...)
 			c.Lines = append(c.Lines, restoreVerifyHint)
 		}
+		if r.Op == flow.OpVerify && r.What != "" && verifyFoundDamage(r) {
+			c.Title = fmt.Sprintf(resultDamaged, r.What)
+		}
 		c.Detail = err.Error()
 		c.Details = &Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true}
 	}
@@ -96,14 +99,36 @@ func opNoun(op flow.Op) string {
 	return nounBackup
 }
 
-// finished words a run that ended without error.
+// finished words a run that ended without error. The title says what the
+// user has now: "4 folders backed up", "2 folders restored", "The backup of
+// today, 09:12 can be restored" (BR-7).
 func finished(c *ResultCard, r *flow.Run, name string) {
 	warnings := r.Result.Warnings
-	c.Tone, c.Glyph, c.Title = ToneSuccess, GlyphCheck, fmt.Sprintf(resultFinished, name)
-	if warnings == 1 {
-		c.Tone, c.Glyph, c.Title = ToneWarning, GlyphWarning, fmt.Sprintf(resultWarningOne, name)
-	} else if warnings > 1 {
-		c.Tone, c.Glyph, c.Title = ToneWarning, GlyphWarning, fmt.Sprintf(resultWarnings, name, warnings)
+	c.Tone, c.Glyph = ToneSuccess, GlyphCheck
+	if warnings > 0 {
+		c.Tone, c.Glyph = ToneWarning, GlyphWarning
+	}
+	sets := orderedSets(r)
+	c.Title = fmt.Sprintf(resultFinished, name)
+	switch n := doneCount(r, sets); {
+	case r.Op == flow.OpVerify && r.What != "" && r.Whole:
+		c.Title = fmt.Sprintf(resultCanRestore, r.What)
+	case r.Op == flow.OpVerify && r.What != "" && n > 0:
+		// Only some folders of the backup were verifiable: the title names
+		// them, not the whole backup.
+		c.Title = fmt.Sprintf(resultCanRestoreSome, verifiedFolders(r, n), r.What)
+	case r.Op == flow.OpVerify && n > 0:
+		c.Title = fmt.Sprintf(resultCanRestoreFolders, folderPhrase(n))
+	case r.Op == flow.OpRestore && n > 0:
+		c.Title = fmt.Sprintf(resultRestored, folderPhrase(n))
+	case r.Op == flow.OpBackup && n > 0:
+		c.Title = fmt.Sprintf(resultBackedUp, folderPhrase(n))
+	}
+	switch {
+	case warnings == 1:
+		c.Title += resultWithWarningOne
+	case warnings > 1:
+		c.Title += fmt.Sprintf(resultWithWarnings, warnings)
 	}
 	if r.Op == flow.OpRestore {
 		restoreFinished(c, r)
@@ -121,7 +146,6 @@ func finished(c *ResultCard, r *flow.Run, name string) {
 	}
 
 	facts := r.Facts
-	sets := orderedSets(r)
 	summary := backupSummary(r, sets)
 	explained := 0
 	var warningLines []string
@@ -177,12 +201,50 @@ func orderedSets(r *flow.Run) []string {
 	return sets
 }
 
-// backupSummary is "3 folders, 3.4 GB in 4 min."
-func backupSummary(r *flow.Run, sets []string) string {
-	n := len(sets)
-	if n == 0 {
-		n = len(r.Finished)
+// verifiedFolders names the n folders a verification read: "Pictures",
+// "Documents and Pictures", or "4 folders".
+func verifiedFolders(r *flow.Run, n int) string {
+	if r.Verify == nil || n > 3 {
+		return folderPhrase(n)
 	}
+	var names []string
+	for _, s := range r.Verify.Sets {
+		names = append(names, s.Set.DirectoryName)
+	}
+	return joinAnd(names)
+}
+
+// verifyFoundDamage reports whether the verification found a set damaged,
+// rather than failing for another reason (a password, a drive).
+func verifyFoundDamage(r *flow.Run) bool {
+	if r.Verify == nil {
+		return false
+	}
+	for _, s := range r.Verify.Sets {
+		if v, ok := r.Facts.Verify[s.Set.String()]; ok && v.Result == logging.ResultFailed {
+			return true
+		}
+	}
+	return false
+}
+
+// doneCount is how many folders the run backed up, restored or verified.
+func doneCount(r *flow.Run, sets []string) int {
+	switch {
+	case r.Op == flow.OpVerify && r.Verify != nil:
+		return len(r.Verify.Sets)
+	case r.Op == flow.OpVerify:
+		return len(r.Facts.Verify)
+	case r.Op == flow.OpRestore && r.Restore != nil:
+		return len(r.Restore.Sets)
+	case r.Op == flow.OpBackup && len(sets) > 0:
+		return len(sets)
+	}
+	return len(r.Finished)
+}
+
+// backupSummary is "3.4 GB in 4 min."; the title has the folders.
+func backupSummary(r *flow.Run, sets []string) string {
 	var bytes int64
 	for _, set := range sets {
 		bytes += r.Facts.Sets[set].Bytes
@@ -192,9 +254,9 @@ func backupSummary(r *flow.Run, sets []string) string {
 		d = time.Duration(b.Seconds) * time.Second
 	}
 	if bytes > 0 {
-		return fmt.Sprintf(resultSummarySize, folderPhrase(n), Size(bytes), Duration(d))
+		return fmt.Sprintf(resultSummarySize, Size(bytes), Duration(d))
 	}
-	return fmt.Sprintf(resultSummary, folderPhrase(n), Duration(d))
+	return fmt.Sprintf(resultSummary, Duration(d))
 }
 
 func allVerified(facts logging.RunFacts, sets []string) bool {
@@ -230,11 +292,22 @@ func verifiedLine(r *flow.Run) string {
 	if r.Verify != nil {
 		n = len(r.Verify.Sets)
 	}
-	d := Duration(r.Ended.Sub(r.Started))
-	if n == 1 {
-		return fmt.Sprintf(resultVerifiedOne, d)
+	bases := false
+	if r.Verify != nil {
+		for _, s := range r.Verify.Sets {
+			bases = bases || s.Base.DirectoryName != ""
+		}
 	}
-	return fmt.Sprintf(resultVerifiedMany, n, d)
+	d := Duration(r.Ended.Sub(r.Started))
+	switch {
+	case n == 1 && bases:
+		return fmt.Sprintf(resultCheckedBaseOne, d)
+	case n == 1:
+		return fmt.Sprintf(resultCheckedOne, d)
+	case bases:
+		return fmt.Sprintf(resultCheckedBases, folderPhrase(n), d)
+	}
+	return fmt.Sprintf(resultChecked, folderPhrase(n), d)
 }
 
 func otherWarnings(n int) string {
@@ -324,11 +397,11 @@ func setFolder(set string) string {
 
 // restoreFinished words a restore that ended without error (RW-8).
 func restoreFinished(c *ResultCard, r *flow.Run) {
-	n, bytes, dest := len(r.Finished), int64(0), ""
+	bytes, dest := int64(0), ""
 	explained := 0
 	var unread []string
 	if p := r.Restore; p != nil {
-		n, bytes, dest = len(p.Sets), p.NeededBytes, Path(p.Destination)
+		bytes, dest = p.NeededBytes, Path(p.Destination)
 		for _, s := range p.Sets {
 			f, folder := r.Facts.Restored[s.Set.String()], s.Set.DirectoryName
 			switch {
@@ -349,7 +422,7 @@ func restoreFinished(c *ResultCard, r *flow.Run) {
 			explained = 1 // the workflow counts unread files as one warning
 		}
 	}
-	line := fmt.Sprintf(restoredOne, folderPhrase(n), Size(bytes), dest, Duration(r.Ended.Sub(r.Started))) + " " + restoreEveryFile
+	line := fmt.Sprintf(restoredLine, Size(bytes), dest, Duration(r.Ended.Sub(r.Started))) + " " + restoreEveryFile
 	c.Lines = append([]string{line}, unread...)
 	if rest := r.Result.Warnings - explained; rest > 0 {
 		c.Lines = append(c.Lines, otherWarnings(rest))

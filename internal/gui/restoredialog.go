@@ -11,6 +11,7 @@ import (
 	"RestoreSafe/internal/workflow/restore"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -255,10 +256,13 @@ func (w *restoreDialog) update() {
 			w.run.showProgress(view.ProgressCardOf(r, time.Now()))
 		}
 	case view.RestoreResult:
-		if r := w.a.machine.Current(); r != nil && w.run != nil && w.run.mode != runResult {
+		if r := w.a.machine.Current(); r != nil && w.run != nil {
 			if c := view.ResultCardOf(r); c != nil {
 				c.Done.Text = view.RestoreClose
-				w.run.showResult(*c)
+				view.AddProblemHint(c, w.a.snapshot, w.a.opts.Config, time.Now(), false)
+				if w.run.mode != runResult || !slices.Equal(w.run.result.Lines, c.Lines) {
+					w.run.showResult(*c)
+				}
 			}
 		}
 	case view.RestoreChoose:

@@ -37,7 +37,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | Empty (no backups): neutral hero, "Create your first backup", **Back up now…** leads to key setup | Open | Script: hero ok; key setup from Back up now… ran in the smoke test. |
 | OV-1 | `Overdue` (`reminder_days: 1`, newest backup older than a day): amber hero, **Back up now…** | Open | |
 | OV-1 | `SkippedFiles` (a file held open, `on_unreadable_file: skip`): amber hero names the folder and count; the run's log (Restore backup page) names the files | Open | Script: hero names folder and count. |
-| OV-1 | `BaseMissing` (FULL files of a chain moved away): red hero, **Show backups** marks the affected rows | Open | Script: red hero, Show backups. Marked rows on Restore backup: by hand. |
+| OV-1 | `BaseMissing` (FULL files of a chain moved away): neutral hero "Ready to back up" with **Back up now…** on Create backup; Restore backup names the problem and marks the affected rows | Open | Script: neutral hero, Back up now. Problem line and marked rows on Restore backup: by hand. |
 | OV-1 | `SourceMissing` (source folder renamed): red hero naming the folder, with **Check again** and **Edit config** in place of **Back up now…** (OV-2); restore and verify still possible | Open | Script: red hero with Check again and Edit config. |
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | Open | Script: missing drive letter, red hero. Pulling a real USB drive or NAS: by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | Open | |
@@ -64,7 +64,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Passed (script) | "Wrong password. 2 attempts left." under the field, then the right one, 2026-10-02. |
 | BR-1 | Progress card: step trail, folder n of N, bytes, speed appear as specified, no time left; Folders card follows; a done folder shows the size of its set (for a differential the same as on the Restore backup page) | Open | Pre-checked with 800 MB: trail, folder, bytes, speed, Folders card states. |
 | BR-5 | Taskbar button shows progress, indeterminate while unlocking, amber after warnings, red after a failure | Open | |
-| BR-7 | Result cards: finished, finished with warnings, failed (backup directory full), cancelled | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
+| BR-7 | Result cards: "N folders backed up", with warnings, failed (backup directory full), cancelled; "N folders restored"; with an error about other backups on Restore backup, a green card adds "Another backup has a problem…" | Open | Pre-checked: finished, cancelled. Warnings and a full backup directory: by hand. |
 | BR-8 | Operation ends while another window is in front: taskbar button flashes until activated | Open | |
 
 ## 3. Backups page
@@ -79,7 +79,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | Open | |
 | BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | Open | Pre-checked by screenshot at 150 % (smoke test). |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | Open | Script: verify of a set from the Restore backup page; its progress and result card at the top of that page. |
-| BK-8 | `Damaged` (one byte changed in a part file): verify reports it, the set shows "Damaged", the hero turns red | Open | |
+| BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | Open | |
+| BK-8 | A verified differential run: "The backup of <date> can be restored", "Checked N folders …, including the full backups they're based on."; a run with a folder whose full backup is missing (`BaseMissing`): "<folders> from the backup of <date> can be restored" and "Another backup has a problem; see below." | Open | Script: the title. Pre-checked: `BaseMissing`. |
 | BK-9 | Empty state with **Back up now…** | Open | |
 
 ## 4. Restore

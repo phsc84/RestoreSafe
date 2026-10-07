@@ -179,6 +179,25 @@ func chainCount(n int) string {
 	return fmt.Sprintf(chainMany, n)
 }
 
+// AddProblemHint adds a line to a successful result card when other backups
+// have a problem (BR-7): the green check vouches only for what the run
+// did. below is set on the page that lists the problems under the card.
+func AddProblemHint(c *ResultCard, s *health.Snapshot, cfg *config.Config, now time.Time, below bool) {
+	if c == nil || c.Tone != ToneSuccess || s == nil {
+		return
+	}
+	for _, l := range problemLines(s, cfg, now) {
+		if l.Tone == ToneError {
+			hint := resultOtherProblem
+			if below {
+				hint = resultOtherProblemBelow
+			}
+			c.Lines = append(c.Lines, hint)
+			return
+		}
+	}
+}
+
 // problemLines are the findings about the backups (GUI spec BK-6): errors and
 // warnings with their remedy, and information.
 func problemLines(s *health.Snapshot, cfg *config.Config, now time.Time) []InfoLine {
@@ -442,8 +461,10 @@ type ActionBar struct {
 	Restore, Verify Button
 	// Sets are the selected sets that can be restored or verified.
 	Sets []string
-	// What names the selection in a question: "today, 09:12".
-	What string
+	// What names the selection in a question: "today, 09:12"; Whole is set
+	// when Sets are every folder of that backup.
+	What  string
+	Whole bool
 }
 
 // SelectionOf words the selection: a set (set != "") or a whole run.
@@ -472,6 +493,7 @@ func SelectionOf(p BackupsPage, runID naming.BackupID, set string) ActionBar {
 					unusable = row.Reason
 				}
 			}
+			bar.Whole = unusable == ""
 			return enable(bar, unusable)
 		}
 		for _, row := range g.Rows {

@@ -42,6 +42,10 @@ type Run struct {
 	Plan    *interact.BackupPlan
 	Verify  *interact.VerifyPlan
 	Restore *interact.RestorePlan
+	// What names the backup a verification reads: "today, 09:12"; Whole is
+	// set when it reads every folder of it.
+	What  string
+	Whole bool
 	// Progress is the latest report, Speed the rate of its folder.
 	Progress interact.Progress
 	Speed    Speed

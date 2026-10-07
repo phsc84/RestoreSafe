@@ -124,6 +124,9 @@ func newBackupsPage(a *app) (*backupsPage, error) {
 	if b.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
 	}
+	b.run.decorate = func(c *view.ResultCard) {
+		view.AddProblemHint(c, a.snapshot, a.opts.Config, time.Now(), true)
+	}
 	if b.lines, err = widget.NewPanel(t, panel.HWND(), 0, widget.PanelStyle{Back: pal.Surface, Outer: pal.Surface, Card: true}); err != nil {
 		return nil, err
 	}

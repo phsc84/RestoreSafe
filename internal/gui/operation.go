@@ -75,6 +75,7 @@ func (a *app) startOperation(req opRequest) {
 		a.refreshRun()
 		a.openPlanDialog()
 	case flow.OpVerify:
+		a.machine.Current().What, a.machine.Current().Whole = a.verifyWhat, a.verifyWhole
 		a.showPage(view.PageBackups)
 		a.refreshRun()
 		a.openVerifyDialog(a.verifyWhat)

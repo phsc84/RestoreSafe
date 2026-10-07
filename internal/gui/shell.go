@@ -145,7 +145,7 @@ func (a *app) do(action view.Action) {
 		}
 	case view.ActionVerify:
 		if sets := a.shell.backups.chosen(); len(sets) > 0 {
-			a.verifyWhat = a.shell.backups.bar.What
+			a.verifyWhat, a.verifyWhole = a.shell.backups.bar.What, a.shell.backups.bar.Whole
 			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
 		}
 	case view.ActionCheckAgain:

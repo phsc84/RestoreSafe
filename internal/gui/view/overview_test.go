@@ -30,10 +30,12 @@ func TestOverviewHeroOfEveryScenario(t *testing.T) {
 		{scenario.Empty, ToneNeutral, "Create your first backup", ActionBackUp, ActionNone},
 		{scenario.Overdue, ToneWarning, "days old", ActionBackUp, ActionNone},
 		{scenario.SkippedFiles, ToneWarning, "2 files in Docs weren't backed up", ActionBackUp, ActionNone},
-		{scenario.BaseMissing, ToneError, "A backup of Docs can't be restored", ActionShowInBackups, ActionNone},
+		// Restore backup lists the problems of existing backups; they don't
+		// keep a new backup from running.
+		{scenario.BaseMissing, ToneNeutral, "Ready to back up", ActionBackUp, ActionNone},
 		{scenario.SourceMissing, ToneError, "can't be found", ActionCheckAgain, ActionEditConfig},
 		{scenario.BackupDirUnreachable, ToneError, "isn't reachable", ActionCheckAgain, ActionNone},
-		{scenario.IncompleteNewest, ToneWarning, "unfinished backup of Docs", ActionShowInBackups, ActionNone},
+		{scenario.IncompleteNewest, ToneNeutral, "Ready to back up", ActionBackUp, ActionNone},
 		{scenario.VerifyFailed, ToneError, "A backup of Docs is damaged", ActionBackUp, ActionNone},
 		{scenario.Argon2Capped, ToneWarning, "capped", ActionEditConfig, ActionNone},
 		{scenario.NewKeysNeeded, ToneSuccess, "Your folders are protected", ActionBackUp, ActionNone},
@@ -101,7 +103,10 @@ func TestOverviewCardsShowProblems(t *testing.T) {
 		t.Fatalf("missing folder row: %+v", row)
 	}
 
-	o, _ = overviewOf(t, scenario.BaseMissing)
+	o, s := overviewOf(t, scenario.BaseMissing)
+	if h := problemHero(s.Problems[0], s, nil, s.Checked, Button{}); !strings.HasPrefix(h.Line, "Its full backup (chain ") {
+		t.Fatalf("one backup takes Its: %q", h.Line)
+	}
 	diff := o.Folders.Rows[0]
 	if diff.Date == "" || diff.Next != "FULL" {
 		t.Fatalf("a folder whose newest backup is a differential: %+v", diff)

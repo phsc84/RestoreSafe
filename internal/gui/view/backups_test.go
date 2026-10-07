@@ -154,7 +154,7 @@ func TestBackupsSelection(t *testing.T) {
 	}
 	g := p.Groups[0]
 	bar := SelectionOf(p, g.RunID, "")
-	if !bar.Restore.Enabled || !bar.Verify.Enabled || len(bar.Sets) != 2 || !strings.HasPrefix(bar.Text, "Backup of ") {
+	if !bar.Restore.Enabled || !bar.Verify.Enabled || len(bar.Sets) != 2 || !bar.Whole || !strings.HasPrefix(bar.Text, "Backup of ") {
 		t.Fatalf("run selection %+v", bar)
 	}
 	set := g.Rows[0].Set
@@ -176,6 +176,10 @@ func TestBackupsSelection(t *testing.T) {
 	bar = SelectionOf(bm, run, docs.Set)
 	if bar.Restore.Enabled || bar.Restore.Reason != "Its full backup is missing." {
 		t.Fatalf("a set without its full backup %+v", bar)
+	}
+	// Its run is not whole: a verification of it would not read Docs.
+	if bar = SelectionOf(bm, run, ""); bar.Whole {
+		t.Fatalf("a run with a folder that can't be verified %+v", bar)
 	}
 }
 

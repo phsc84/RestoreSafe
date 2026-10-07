@@ -192,7 +192,7 @@ func TestRestoreProgressAndResults(t *testing.T) {
 	facts := m.Current().Facts
 	m.Done(flow.End{Result: &interact.Result{Warnings: 1}, Facts: facts, LogPath: "x.log"}, planNow.Add(18*time.Minute))
 	r := ResultCardOf(m.Current())
-	if r == nil || r.Title != "Restore finished with 1 warning" || r.Open == nil || !strings.HasPrefix(r.Lines[0], `2 folders (about 3.0 GB) restored to D:\Restore in 18 min. Every file matched`) {
+	if r == nil || r.Title != "2 folders restored with 1 warning" || r.Open == nil || !strings.HasPrefix(r.Lines[0], `About 3.0 GB to D:\Restore in 18 min. Every file matched`) {
 		t.Fatalf("finished %+v", r)
 	}
 

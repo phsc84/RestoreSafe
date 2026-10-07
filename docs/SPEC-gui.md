@@ -155,6 +155,8 @@ The hero renders one state. Priority: Running, then Error, then Warning, then Pr
 
 If several Error or Warning triggers apply, the hero shows the most urgent one (order as listed) with its fix action. The sub line ends with "and N more problems"; "Check details" lists all of them.
 
+The hero on Create backup leaves out the problems of existing backups: a missing or incomplete full backup, an incomplete set, and an incomplete set newer than the newest complete one. They don't keep a backup from running, and the Restore backup page lists them (BK-6). Without other problems, the hero is neutral: "Ready to back up" with the facts of Protected and **Back up now…**. It isn't Protected, since a backup can't be restored.
+
 ### 3.6 Writing
 
 - Sentence case everywhere. Buttons start with a verb. A button that opens another dialog ends with "…".
@@ -374,11 +376,11 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (ok)  Backup finished                                       [ Show log ] [ Done ] │
-│       3 folders, 3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).        │
+│ (ok)  3 folders backed up                                   [ Show log ] [ Done ] │
+│       3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).                   │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (!)  Backup finished with 2 warnings                        [ Show log ] [ Done ] │
+│ (!)  3 folders backed up with 2 warnings                    [ Show log ] [ Done ] │
 │      2 files in Documents were in use and weren't backed up. Old backups of       │
 │      Documents are kept.                                                          │
 └───────────────────────────────────────────────────────────────────────────────────┘
@@ -395,13 +397,13 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 | ID | Requirement |
 |---|---|
-| BR-7 | The result card maps the workflow result as in the table below: the first line is the outcome, the second what happened per folder and whether retention ran. "Show details" shows the workflow's message with its remedy. "Show log" opens Backups with the run selected and the log pane showing. The same mapping applies to verify ("Verification finished", …) and to the restore result page (RW-8). |
+| BR-7 | The result card maps the workflow result as in the table below: the first line is the outcome, the second what happened per folder and whether retention ran. "Show details" shows the workflow's message with its remedy. "Show log" opens Backups with the run selected and the log pane showing. The same mapping applies to the restore result page (RW-8: "2 folders restored", then "About 92 GB to D:\Restore in 18 min. Every file matched its checksum.") and to verify, whose title answers what a verification is for: "The backup of today, 09:12 can be restored", then "Checked 3 folders in 1 min, including the full backups they're based on. Every file matched its checksum." (a differential is only checked together with its full backup, BK-7a). The title claims the whole backup only when every folder of it was verified; when some of its folders can't be verified (their full backup is missing), it names the folders that were: "Pictures from the backup of today, 09:12 can be restored". A verification that found damage: "Damage found in the backup of today, 09:12". The problem line ("Another backup has a problem…") is added only to a green card: the check vouches for what the run did, not for the other backups. |
 | BR-8 | If the window isn't in the foreground when an operation ends, the taskbar button flashes (`FlashWindowEx`, until the window is activated). No other notification is shown. |
 
 | Workflow result | Icon | First line |
 |---|---|---|
-| `nil`, `ShowResult` reports no warnings | (ok) | "Backup finished" |
-| `nil`, `ShowResult` reports warnings | (!) | "Backup finished with N warnings" |
+| `nil`, `ShowResult` reports no warnings | (ok) | "3 folders backed up" (the title says what the user has now); when the page then shows an error about other backups, a last line says so: "Another backup has a problem; see below." on Restore backup, "…; the Restore backup page shows it." elsewhere |
+| `nil`, `ShowResult` reports warnings | (!) | "3 folders backed up with N warnings" |
 | matches `context.Canceled` | neutral | "Backup cancelled", with what was kept |
 | preflight error | (x) | "Backup didn't start", with the issues from the plan |
 | other error | (x) | "Backup failed", with the message and its remedy under "Show details" |
@@ -580,8 +582,8 @@ Its layout and wording follow the backup plan dialog: a heading that says what h
 
 ```text
 ┌──────────────────────────────────────────────────────────────────┐
-│ (ok)  Restore finished                                           │
-│       2 folders (92 GB) restored to D:\Restore in 18 min.        │
+│ (ok)  2 folders restored                                         │
+│       About 92 GB to D:\Restore in 18 min.                       │
 │       Every file matched its checksum.                           │
 │                                                                  │
 │ (!)   Documents: 2 files aren't in this backup. They couldn't be │

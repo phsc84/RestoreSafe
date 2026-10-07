@@ -204,3 +204,13 @@ func TestIssueTextEndsTheMessageBeforeTheRemedy(t *testing.T) {
 		}
 	}
 }
+
+func TestSetDayWithoutHeader(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 7, 9, 0, 0, 0, time.Local)
+	// An incomplete set has no header: its name gives the day, not 1 Jan 0001.
+	info := catalog.SetInfo{Entry: naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-10-06"}}
+	if got := setDay(info, now); got != ShortDay(time.Date(2026, 10, 6, 0, 0, 0, 0, time.Local), now) {
+		t.Fatalf("day %q", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"RestoreSafe/internal/gui/view"
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
+	"slices"
 	"time"
 )
 
@@ -47,8 +48,10 @@ type runCard struct {
 	card  *card
 	mode  runMode
 	acts  actions
-	// resultOf is the run whose result the card shows.
+	// resultOf is the run whose result the card shows; decorate adds what
+	// the page knows to it.
 	resultOf *flow.Run
+	decorate func(*view.ResultCard)
 
 	// Progress mode.
 	title, line, bytes win32.HWND
@@ -162,13 +165,17 @@ func (r *runCard) follow(run *flow.Run, busy bool) bool {
 		r.resultOf = nil
 		r.showProgress(view.ProgressCardOf(run, time.Now()))
 	case run != nil && run.Stage == flow.StageFinished:
-		if r.resultOf != run {
-			if c := view.ResultCardOf(run); c != nil {
-				r.showResult(*c)
-				r.resultOf = run
-			} else {
-				r.hide()
-			}
+		c := view.ResultCardOf(run)
+		if c != nil && r.decorate != nil {
+			r.decorate(c)
+		}
+		switch {
+		case c == nil:
+			r.hide()
+		case r.resultOf != run || !slices.Equal(r.result.Lines, c.Lines):
+			// A new result, or the check after it found a problem (BR-7).
+			r.showResult(*c)
+			r.resultOf = run
 		}
 	default:
 		r.resultOf = nil

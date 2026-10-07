@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -211,28 +212,49 @@ func heroOf(s *health.Snapshot, cfg *config.Config, now time.Time) Hero {
 	}
 	folders := folderCount(s)
 
-	switch s.State {
-	case health.StateEmpty:
+	problems := backupProblems(s.Problems)
+	switch {
+	case s.State == health.StateEmpty:
 		return Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroEmpty, Primary: backUp}
-	case health.StateProtected:
+	case len(problems) == 0:
 		line := folders
 		if newest := newestRun(s); newest != nil {
 			line = fmt.Sprintf(heroFacts, folders, When(newest.Created, now))
 		}
+		if len(s.Problems) > 0 {
+			// Existing backups have a problem: not protected, but nothing to
+			// fix here.
+			return Hero{Tone: ToneNeutral, Glyph: GlyphShield, Title: heroReady, Line: line, Primary: backUp}
+		}
 		return Hero{Tone: ToneSuccess, Glyph: GlyphCheck, Title: heroProtected, Line: line, Primary: backUp}
 	}
 
-	p := s.Problems[0]
+	p := problems[0]
 	h := problemHero(p, s, cfg, now, backUp)
-	if n := len(s.Problems) - 1; n > 0 {
+	if n := len(problems) - 1; n > 0 {
 		h.Line += more(n)
 	}
-	if s.State == health.StateError {
+	if slices.ContainsFunc(problems, func(p health.Problem) bool { return p.Status == interact.StatusError }) {
 		h.Tone, h.Glyph = ToneError, GlyphError
 	} else {
 		h.Tone, h.Glyph = ToneWarning, GlyphWarning
 	}
 	return h
+}
+
+// backupProblems leaves out the problems of existing backups that a new
+// backup doesn't fix by itself and that don't keep it from running: Restore
+// backup lists them (BK-6).
+func backupProblems(problems []health.Problem) []health.Problem {
+	var out []health.Problem
+	for _, p := range problems {
+		switch p.Code {
+		case interact.CodeBaseMissing, interact.CodeSetIncomplete, interact.CodeIncompleteNewest:
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // problemHero words the most urgent problem with its fix action.
@@ -252,11 +274,11 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 	case interact.CodeSourceInvalid:
 		return Hero{Title: fmt.Sprintf(heroSourceInvalid, Path(p.Path)), Line: heroSourceInvLine, Primary: checkAgain, Secondary: editConfig}
 	case interact.CodeBaseMissing:
-		title := fmt.Sprintf(heroBaseMissing, p.Count, p.Folder)
+		title, line := fmt.Sprintf(heroBaseMissing, p.Count, p.Folder), heroBaseMissingLine
 		if p.Count == 1 {
-			title = fmt.Sprintf(heroBaseMissingOne, p.Folder)
+			title, line = fmt.Sprintf(heroBaseMissingOne, p.Folder), heroBaseMissingLineOne
 		}
-		return Hero{Title: title, Line: fmt.Sprintf(heroBaseMissingLine, p.ChainID, p.ChainID), Primary: showBackups}
+		return Hero{Title: title, Line: fmt.Sprintf(line, p.ChainID, p.ChainID), Primary: showBackups}
 	case interact.CodeSetIncomplete:
 		return Hero{Title: fmt.Sprintf(heroSetDamaged, p.Folder), Line: heroSetDamagedLine, Primary: showBackups}
 	case interact.CodeVerifyFailed:

@@ -298,9 +298,9 @@ func (g *removal) text(now time.Time) string {
 	}
 	switch {
 	case g.full != nil && g.diffs > 0:
-		return fmt.Sprintf(removeFullAndDiffs, g.folder, ShortDay(g.full.Created(), now), diffs, Size(g.bytes))
+		return fmt.Sprintf(removeFullAndDiffs, g.folder, setDay(*g.full, now), diffs, Size(g.bytes))
 	case g.full != nil:
-		return fmt.Sprintf(removeFull, g.folder, ShortDay(g.full.Created(), now), Size(g.bytes))
+		return fmt.Sprintf(removeFull, g.folder, setDay(*g.full, now), Size(g.bytes))
 	}
 	return fmt.Sprintf(removeOnlyDiffs, g.folder, diffs, Size(g.bytes))
 }
@@ -395,4 +395,13 @@ func (v BackupPlanView) Table() Table {
 		})
 	}
 	return t
+}
+
+// setDay is the day a set was made: from its header, or from its name when
+// the header can't be read (an incomplete set).
+func setDay(info catalog.SetInfo, now time.Time) string {
+	if t := info.Created(); !t.IsZero() {
+		return ShortDay(t, now)
+	}
+	return baseDay(info.Entry, now)
 }

@@ -95,8 +95,10 @@ type app struct {
 	taskbarCreated uint32
 	// logText is what the operation wrote, for "Show log".
 	logText strings.Builder
-	// verifyWhat names the verified selection in the confirmation.
-	verifyWhat string
+	// verifyWhat names the verified selection; verifyWhole is set when it is
+	// every folder of that backup.
+	verifyWhat  string
+	verifyWhole bool
 
 	// The shell of the new interface.
 	shell shell

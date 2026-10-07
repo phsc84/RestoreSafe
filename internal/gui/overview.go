@@ -85,6 +85,9 @@ func newOverviewPage(a *app) (*overviewPage, error) {
 	if o.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
 	}
+	o.run.decorate = func(c *view.ResultCard) {
+		view.AddProblemHint(c, a.snapshot, a.opts.Config, time.Now(), false)
+	}
 	for i, c := range []**card{&o.folders, &o.storage, &o.keys} {
 		if *c, err = newCard(t, panel.HWND(), uint16(idCardLinks+i), o.acts); err != nil {
 			return nil, err
