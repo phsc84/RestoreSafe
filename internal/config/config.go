@@ -201,8 +201,8 @@ const (
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Config file not found: %w\n"+
-			"Remedy: Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.", err)
+		return nil, problem.Errorf("Config file not found: %w", err).
+			WithRemedyOnOwnLine("Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.")
 	}
 
 	return parse(data)
@@ -219,13 +219,13 @@ func parse(data []byte) (*Config, error) {
 		if unknown := unknownKeysError(err); unknown != nil {
 			return nil, unknown
 		}
-		hint := "\nRemedy: Check YAML syntax (space indentation, correct colons, no tabs)."
+		remedy := "Check YAML syntax (space indentation, correct colons, no tabs)."
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
-			hint += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
+			remedy += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
 		}
 
-		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
+		return nil, problem.Errorf("Config file is invalid: %w", err).WithRemedyOnOwnLine(remedy)
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err == nil {

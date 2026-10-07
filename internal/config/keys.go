@@ -145,11 +145,11 @@ func unknownKeysError(err error) error {
 		}
 		found = append(found, fmt.Sprintf("'%s' (line %s)", key, m[1]))
 	}
-	const remedy = "\nRemedy: Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
+	const remedy = "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
 	if len(found) == 1 {
-		return fmt.Errorf("Config file has an unknown setting: %s.%s", found[0], remedy)
+		return problem.Errorf("Config file has an unknown setting: %s.", found[0]).WithRemedyOnOwnLine(remedy)
 	}
-	return fmt.Errorf("Config file has unknown settings: %s.%s", strings.Join(found, ", "), remedy)
+	return problem.Errorf("Config file has unknown settings: %s.", strings.Join(found, ", ")).WithRemedyOnOwnLine(remedy)
 }
 
 // AddMissing adds the settings that the configuration file at path lacks,
