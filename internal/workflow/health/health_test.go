@@ -439,17 +439,10 @@ Review the reported errors before running backup, restore, or verify.
 	}
 }
 
-func TestCheckDoesNotPrint(t *testing.T) {
+func TestCheckReportsStartupHealth(t *testing.T) {
 	exeDir := t.TempDir()
 	cfg := &config.Config{BackupDirectory: filepath.Join(exeDir, "Backups"), LogLevel: "info"}
-	var result Result
-	output := testutil.CaptureStdout(t, func() {
-		result = Check(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
-	})
-	if output != "" {
-		t.Fatalf("Check must not print, got %q", output)
-	}
-	if r := result.Report(); r.Title != "Startup health check" || len(r.Sections) < 2 {
+	if r := Check(cfg, exeDir, filepath.Join(exeDir, "config.yaml")).Report(); r.Title != "Startup health check" || len(r.Sections) < 2 {
 		t.Fatalf("unexpected report %+v", r)
 	}
 }

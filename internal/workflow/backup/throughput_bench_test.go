@@ -46,10 +46,7 @@ func TestThroughputBenchmarkBackup(t *testing.T) {
 			t.Fatal(err)
 		}
 		start := time.Now()
-		var runErr error
-		testutil.CaptureStdout(t, func() {
-			runErr = runBackupOperation(context.Background(), &interacttest.Script{}, cfg, log, logPath, backupDir, sources, "2026-09-28", "BENCH1", ks, master, nil)
-		})
+		runErr := runBackupOperation(context.Background(), &interacttest.Script{}, cfg, log, logPath, backupDir, sources, "2026-09-28", "BENCH1", ks, master, nil)
 		elapsed := time.Since(start)
 		log.Close()
 		if runErr != nil {

@@ -27,7 +27,7 @@ type Logger struct {
 	file         *os.File
 	originalPath string    // The path the user wanted (may be on network drive)
 	actualPath   string    // The path we actually write to (may be temp fallback)
-	console      io.Writer // The user's output (nil: stdout, problems with the log file on stderr)
+	console      io.Writer // The user's output, also for problems with the log file (nil: discarded)
 	consoleOnly  bool
 	mu           sync.Mutex
 }
@@ -39,27 +39,21 @@ func parseLogLevel(levelStr string) Level {
 	return LevelInfo
 }
 
-func (l *Logger) output() io.Writer {
-	if l.console != nil {
-		return l.console
+// orDiscard returns w, or io.Discard for nil.
+func orDiscard(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
 	}
-	return os.Stdout
-}
-
-// errorOutput is where problems with the log file itself are reported.
-func errorOutput(console io.Writer) io.Writer {
-	if console != nil {
-		return console
-	}
-	return os.Stderr
+	return w
 }
 
 // NewLogger creates a Logger writing to logPath and mirroring messages to
-// console (nil: stdout).
+// console (nil: discarded).
 // Strategy: Always write to a temp file to avoid network write issues.
 // If a log for this backup ID already exists, copy it to temp first (for appending).
 // On Close(), copy the complete temp log back to the original path.
 func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, error) {
+	console = orDiscard(console)
 	lvl := parseLogLevel(levelStr)
 
 	// Determine temp path for actual writes.
@@ -74,11 +68,11 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 		data, err := os.ReadFile(logPath)
 		if err != nil {
 			// Warn but continue; we'll create a new log in temp.
-			fmt.Fprintf(errorOutput(console), "Warning: Existing log file could not be read: %v. Remedy: Check read permissions for the target log file.\n", err)
+			fmt.Fprintf(console, "Warning: Existing log file could not be read: %v. Remedy: Check read permissions for the target log file.\n", err)
 		} else {
 			// Write the existing content to the temp file.
 			if err := os.WriteFile(tempPath, data, 0o600); err != nil {
-				fmt.Fprintf(errorOutput(console), "Warning: Existing log file could not be copied to the temp directory: %v. Remedy: Check write permissions for TEMP/TMP.\n", err)
+				fmt.Fprintf(console, "Warning: Existing log file could not be copied to the temp directory: %v. Remedy: Check write permissions for TEMP/TMP.\n", err)
 			}
 		}
 	}
@@ -92,7 +86,7 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: tempPath, console: console}
 
 	// Record the RestoreSafe version as the first line of a freshly created log
-	// (file only, so it does not duplicate the startup banner on stdout). Later
+	// (file only, so it does not duplicate the startup banner on the console). Later
 	// restore/verify runs reuse and append to the same log, leaving this first
 	// line intact, so a backup's log identifies the version that created it.
 	if !logExists {
@@ -102,9 +96,9 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 	return logger, nil
 }
 
-// NewConsoleLogger creates a logger that writes to console (nil: stdout) only.
+// NewConsoleLogger creates a logger that writes to console (nil: discarded) only.
 func NewConsoleLogger(levelStr string, console io.Writer) *Logger {
-	return &Logger{level: parseLogLevel(levelStr), consoleOnly: true, console: console}
+	return &Logger{level: parseLogLevel(levelStr), consoleOnly: true, console: orDiscard(console)}
 }
 
 // IsConsoleOnly reports whether the logger writes only to the console.
@@ -127,7 +121,7 @@ func (l *Logger) Close() {
 
 	if l.file != nil {
 		if err := l.file.Sync(); err != nil {
-			fmt.Fprintf(errorOutput(l.console), "Warning: Syncing log file before close failed: %v\n", err)
+			fmt.Fprintf(l.console, "Warning: Syncing log file before close failed: %v\n", err)
 		}
 		l.file.Close()
 		l.file = nil
@@ -137,13 +131,13 @@ func (l *Logger) Close() {
 	if l.actualPath != "" && l.originalPath != "" && l.actualPath != l.originalPath {
 		data, err := os.ReadFile(l.actualPath)
 		if err != nil {
-			fmt.Fprintf(errorOutput(l.console), "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
+			fmt.Fprintf(l.console, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
 			return
 		}
 		// Overwrite the original file with the complete temp log content.
 		if err := os.WriteFile(l.originalPath, data, 0o600); err != nil {
-			fmt.Fprintf(errorOutput(l.console), "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
-			fmt.Fprintf(errorOutput(l.console), "Log file is located in temp directory: %s\n", l.actualPath)
+			fmt.Fprintf(l.console, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
+			fmt.Fprintf(l.console, "Log file is located in temp directory: %s\n", l.actualPath)
 			// Intentionally do not remove the temp file — it is the user's only copy.
 			return
 		}
@@ -172,12 +166,12 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write("WARN ", format, args...)
 }
 
-// InfoLogOnly logs an informational message without mirroring it to stdout.
+// InfoLogOnly logs an informational message without mirroring it to the console.
 func (l *Logger) InfoLogOnly(format string, args ...any) {
 	l.writeLogOnly("INFO ", format, args...)
 }
 
-// WarnLogOnly logs a warning without mirroring it to stdout.
+// WarnLogOnly logs a warning without mirroring it to the console.
 func (l *Logger) WarnLogOnly(format string, args ...any) {
 	l.writeLogOnly("WARN ", format, args...)
 }
@@ -190,7 +184,7 @@ func (l *Logger) writeLogOnly(severity, format string, args ...any) {
 	l.writeLine(severity, false, format, args...)
 }
 
-func (l *Logger) writeLine(severity string, stdout bool, format string, args ...any) {
+func (l *Logger) writeLine(severity string, mirror bool, format string, args ...any) {
 	if l == nil {
 		return
 	}
@@ -201,14 +195,14 @@ func (l *Logger) writeLine(severity string, stdout bool, format string, args ...
 	ts := time.Now().Format(timestampLayout)
 	msg := fmt.Sprintf(format, args...)
 	line := fmt.Sprintf("[%s] %s - %s\n", ts, severity, msg)
-	if stdout {
-		// Write to stdout first so interactive users see messages immediately.
-		fmt.Fprint(l.output(), line)
+	if mirror {
+		// Write to the console first so interactive users see messages immediately.
+		fmt.Fprint(l.console, line)
 	}
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil {
-			fmt.Fprintf(errorOutput(l.console), "Warning: Writing to log file failed: %v\n", err)
+			fmt.Fprintf(l.console, "Warning: Writing to log file failed: %v\n", err)
 			return
 		}
 	}

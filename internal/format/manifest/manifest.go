@@ -161,11 +161,6 @@ func (b *Builder) SkipLastDirectory(p, reason string) bool {
 // Footer returns the totals of the entries collected so far.
 func (b *Builder) Footer() Footer { return computeFooter(b.entries) }
 
-// Entries returns the entries collected so far.
-func (b *Builder) Entries() []Entry {
-	return b.entries
-}
-
 // Bytes computes the footer, validates the manifest, and returns its
 // serialized form. Validation here guarantees RestoreSafe never writes a
 // manifest it would refuse to read.

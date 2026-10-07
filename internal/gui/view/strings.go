@@ -6,7 +6,7 @@ package view
 // Application and shell.
 const (
 	appName        = "RestoreSafe"
-	navCreate    = "Create backup"
+	navCreate      = "Create backup"
 	navRestore     = "Restore backup"
 	navSettings    = "Settings"
 	statusChecking = "Checking…"

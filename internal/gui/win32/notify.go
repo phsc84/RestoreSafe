@@ -11,7 +11,6 @@ const (
 	NM_RETURN = ^uint32(3) // -4
 
 	BS_AUTOCHECKBOX = 0x0003
-	BM_GETCHECK     = 0x00F0
 	BM_SETCHECK     = 0x00F1
 	BST_CHECKED     = 1
 	EN_CHANGE       = 0x0300
@@ -31,9 +30,6 @@ type NMHdr struct {
 func NMHdrParam(lparam uintptr) *NMHdr {
 	return *(**NMHdr)(unsafe.Pointer(&lparam))
 }
-
-// Checked reports whether a checkbox is checked.
-func Checked(hwnd HWND) bool { return SendMessage(hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED }
 
 // SetChecked checks or unchecks a checkbox.
 func SetChecked(hwnd HWND, checked bool) {

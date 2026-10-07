@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; nothing implemented |
+| Status | Proposed 2026-10-06; Phase A done 2026-10-07 (CI green), RF-20 and RF-44 of Phase B done; the rest open |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
-| Branch | Phase A on its own branch now; phases B-E on `refactor` from `v2` after `gui-redesign` is merged and 2.0.0 is released (section 13) |
+| Branch | Phase A on `refactor-2.0` from `v2`; phases B-E on `refactor` from `v2` after `gui-redesign` is merged and 2.0.0 is released (section 13) |
 | Scope | Structure, dead and legacy code, performance, security hardening, tests, tooling, and docs. **No change to the backup format, the keys, or what a backup, restore, or verify does for the user.** |
 
 ## 1. Purpose
@@ -45,6 +45,8 @@ Coverage by package (statements):
 
 Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `security/yubikey/fido2.go` 917, `gui/overview.go` 693, `gui/view/backups.go` 651.
 
+After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
+
 ## 3. Constraints
 
 The standing constraints of SPEC-refactoring section 2 apply. This round adds none; RF-41 creates the format fixtures that constraint 1 relies on.
@@ -63,10 +65,12 @@ Add `.github/workflows/ci.yml` on `windows-latest`, triggered on push and pull r
 7. Upload the coverage profile as an artifact; fail when a package drops below its floor in RF-40.
 
 Acceptance: a pull request against `v2` shows all seven steps green.
+Done in `fe55e57`, as three jobs (check, test, race). Step 7 in `d21ad47`: the floors of RF-40 (`scripts/ci/coverage-floors.txt`), checked per package. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Failing tests and data races are reported as an annotation (`71839dd`). Accepted with [pull request #1](https://github.com/phsc84/RestoreSafe/pull/1): all steps green. CI runs on pull requests and on pushes to `main` and `v2`.
 
 **RF-2 (P1) Pin the developer tools in `go.mod`.** `staticcheck` on this machine was built with go 1.25 and cannot analyse a go 1.27 module; `goversioninfo` is installed with `@latest` (DEVELOPMENT.md section 8), so two developers can build with different versions.
 Use the `tool` directive (`go get -tool ...`) for `staticcheck`, `govulncheck`, `deadcode`, and `goversioninfo`, and call them as `go tool <name>` in `build.bat`, CI, and DEVELOPMENT.md. Versions are then in `go.mod`/`go.sum` and update like any dependency.
 Acceptance: a fresh clone runs `go tool staticcheck ./...` without a separate install.
+Done in `789f734`.
 
 **RF-3 (P2) Make `build.bat` side-effect free and reproducible.**
 
@@ -75,21 +79,26 @@ Acceptance: a fresh clone runs `go tool staticcheck ./...` without a separate in
 - Write a `SHA256SUMS.txt` next to the ZIP (RF-58).
 
 Acceptance: two builds of the same commit produce identical `RestoreSafe.exe` hashes; the build leaves `git status` clean.
+Done in `d7b800c`. `go mod tidy -diff` checks `go.mod` and `go.sum` without changing them; `SHA256SUMS.txt` is in sha256sum format. Two builds gave the same exe hash.
 
 **RF-4 (P1) Fix line endings.** The index holds LF, but 18 Go files have CRLF in the working tree (`git ls-files --eol` shows `i/lf w/crlf`), so `gofmt -l` lists them and any formatting check fails on Windows. `.gitattributes` only covers `*.bat`.
 Add `* text=auto` and `*.go text eol=lf` (plus `*.ps1 text eol=crlf`, `*.md text`), then renormalise once (`git add --renormalize .`) in a commit of its own.
 Acceptance: `gofmt -l .` prints nothing on a fresh Windows checkout with `core.autocrlf=true`.
+Done in `8981fd5`; `25bb563` formats the four files that were not gofmt-clean apart from their line endings.
 
 ## 5. Test-tooling defects (Phase A)
 
 **RF-10 (P1) `testutil.CaptureStdout` is not safe for parallel tests.** It swaps the process-global `os.Stdout` ([internal/testutil/stdout.go](../internal/testutil/stdout.go)). `TestBackupPlanOfARealPlan` calls it from parallel subtests ([internal/gui/view/plan_test.go:163-168](../internal/gui/view/plan_test.go#L163-L168)); one subtest restores another's closed pipe as `os.Stdout`, and the coverage writer then fails with `file already closed`. 14 test files use the helper, many of them with `t.Parallel()`. The helper can also deadlock: it reads the pipe only after `fn` returns, so output larger than the pipe buffer blocks `fn`.
 Change: tests stop capturing `os.Stdout`. `interacttest.Script` already has an `Out io.Writer` field; tests pass a `bytes.Buffer` there. Delete `CaptureStdout` and the `stdout` fallback writer in [interacttest/script.go:29-33](../internal/workflow/interact/interacttest/script.go#L29-L33), so nothing in tests writes to the real `os.Stdout`.
 Acceptance: `go test -cover -count=3 ./...` passes; `grep -r "os.Stdout" internal` finds no test code.
+Done in `56a454d`. A nil `Script.Out` and a nil logger console now discard the output (the program always passes the UI's writer); tests that check the output pass a `testutil.Output`, which takes concurrent writes. `internal` no longer mentions `os.Stdout` at all.
 
 **RF-11 (P1) Run the race detector.** The workflows, the health checker, the GUI bridge, and the decrypt pipeline all use goroutines, atomics, and mutexes, yet `-race` has never run because it needs cgo. Run it in CI with a MinGW gcc (preinstalled on GitHub's Windows images) and `CGO_ENABLED=1`; release builds stay `CGO_ENABLED=0`.
 Acceptance: `go test -race ./...` passes in CI. Races found are fixed under this item.
+Done in `fe55e57` (the `race` job of CI). The first runs found no data race. They found that four tests of locked files failed on the runner: an elevated process with the backup privilege opens a file held without sharing, because `os.Open` asks for backup semantics. `testutil/filelock.Hold` (`2c0948d`) removes the privilege from the test process. CI run 37669132251 is green.
 
 **RF-12 (P3) Test helper signatures.** staticcheck ST1008 in [backup/keys_test.go:87](../internal/workflow/backup/keys_test.go#L87) and [unlock/unlock_test.go:89](../internal/workflow/unlock/unlock_test.go#L89): the error is not the last result. Reorder.
+Done in `0a2f913`.
 
 ## 6. Dead code (Phase B)
 
@@ -108,6 +117,7 @@ Acceptance: `go test -race ./...` passes in CI. Races found are fixed under this
 Not dead: the unused fields `cbSecond`, `pbSecond`, `cCredWithHmacSecretSaltList`, `pCredWithHmacSecretSaltList` in [yubikey/fido2.go:220-230](../internal/security/yubikey/fido2.go#L220-L230) keep the struct layout of `winwebauthn.h`. Keep them and add `//lint:ignore U1000 ABI layout of WEBAUTHN_*`, and add a test that checks `unsafe.Sizeof` and `unsafe.Offsetof` against the sizes in the comments, for every WebAuthn struct.
 
 Acceptance: `go tool deadcode -test ./...` prints nothing; staticcheck reports no U1000 or SA4006. CI runs `deadcode` as a report (not failing), because a wrapper function added in one commit may get its caller in the next.
+Done in `9b6b196`; the procs, types and constants that only the deleted wrappers used went with them.
 
 **RF-21 (P2) Remove the auth-mode round trip.** `restore.authFactors` turns the key set's `AuthMode` into two booleans, and `config.AuthModeFromFactors` turns them back into the same `AuthMode` ([restore/workflow.go:101](../internal/workflow/restore/workflow.go#L101), [:237](../internal/workflow/restore/workflow.go#L237); [verify/workflow.go:179](../internal/workflow/verify/workflow.go#L179)). This is left over from 1.x, which read the factors from a `.challenge` file. Pass `config.AuthMode` through, and delete `AuthModeFromFactors` and its test.
 
@@ -216,6 +226,8 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 
 `format/container` (72 %) and `restorepoint` (69 %) are the packages that decide whether a damaged backup is detected; their error paths come first.
 
+Floors "now" enforced by CI since `d21ad47`; `cd5d90f` raised `restorepoint` from 65.3 % (it had fallen below its floor since the baseline) to 91.7 %. Open: the targets, starting with the error paths of `format/container` (72.2 %).
+
 **RF-41 (P1) Format compatibility fixtures.** Nothing stops a refactoring from changing the bytes RestoreSafe writes or what it accepts. Commit a small set of backups made by the 2.0.0 release build to `internal/format/testdata/v2.0.0/`: a full and a differential of a tree with special cases (empty file, empty folder, Unicode and long names, read-only/hidden/system attributes, a skipped file), with password, password + recovery slot (the test uses the recovery code), and Argon2 at the minimum to keep the test fast. A test restores each and compares tree, content, times, and attributes with a recorded listing. A second test checks that a set written by the current code with the fixed inputs (seeded randomness through a test hook) produces the same header structure and trailer.
 Acceptance: the fixtures exist before Phase C starts; they never change after 2.0.0 is released.
 
@@ -224,6 +236,7 @@ Acceptance: the fixtures exist before Phase C starts; they never change after 2.
 **RF-43 (P2) GUI smoke test in CI.** `scripts/gui-test` drives the real window through UI Automation, but only by hand. Run `Smoke-BackupRestore.ps1` and `Check-States.ps1` in CI on a Windows runner with an interactive session, with password-only keys. If no interactive session is available, they stay in the release checklist (GUI-TEST-CHECKLIST.md) and that is stated there.
 
 **RF-44 (P3) WebAuthn struct layout test.** See RF-20: a test compares `unsafe.Sizeof`/`Offsetof` of every `webauthn*` struct with the sizes and offsets in its comment. A wrong offset there makes the YubiKey fail only on real hardware, which CI does not have.
+Done in `9b6b196`: `TestWebAuthnStructLayout` reads the sizes and offsets from the comments in `fido2.go`, so a struct and its comment cannot drift apart.
 
 ## 12. Project structure and documentation (Phase E)
 

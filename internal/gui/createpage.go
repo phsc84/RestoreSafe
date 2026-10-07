@@ -443,17 +443,6 @@ func (c *card) label(text string, style widget.TextStyle, color widget.Color) wi
 	return c.panel.Label(text, style, color)
 }
 
-func (c *card) badge(b view.Badge) *widget.Badge {
-	badge, err := widget.NewBadge(c.theme, c.panel.HWND(), c.theme.Palette.Surface)
-	if err != nil {
-		return &widget.Badge{}
-	}
-	c.panel.Adopt(badge.HWND())
-	fore, back := badgeColors(c.theme.Palette, b.Kind)
-	badge.Set(b.Text, fore, back, b.Name)
-	return badge
-}
-
 // heading adds the card's title and, with link, its link at the right.
 func (c *card) heading(title string, link *view.Button) {
 	cells := []cell{{hwnd: c.label(title, widget.TextStrong, c.theme.Palette.Text), fill: true}}

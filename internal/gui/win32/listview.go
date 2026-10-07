@@ -66,8 +66,7 @@ const (
 	LVGS_COLLAPSIBLE = 0x00000008
 	LVGS_FOCUSED     = 0x00000010
 
-	LVHT_EX_GROUP_HEADER = 0x10000000
-	LVHT_ONITEM          = 0x0000000E
+	LVHT_ONITEM = 0x0000000E
 
 	lvnFirst        = ^uint32(100 - 1) // -100
 	LVN_ITEMCHANGED = lvnFirst - 1
@@ -174,13 +173,6 @@ type NMListView struct {
 	Param    uintptr
 }
 
-// NMLVKeyDown is NMLVKEYDOWN.
-type NMLVKeyDown struct {
-	Hdr   NMHdr
-	VKey  uint16
-	Flags uint32
-}
-
 // NMLVCustomDraw is NMLVCUSTOMDRAW.
 type NMLVCustomDraw struct {
 	Hdr        NMHdr
@@ -201,17 +193,6 @@ type NMLVCustomDraw struct {
 	StateID    int32
 	RcText     Rect
 	Align      uint32
-}
-
-// NMListViewParam returns the NMLISTVIEW of a notification.
-func NMListViewParam(lparam uintptr) *NMListView { return *(**NMListView)(unsafe.Pointer(&lparam)) }
-
-// NMLVKeyDownParam returns the NMLVKEYDOWN of a notification.
-func NMLVKeyDownParam(lparam uintptr) *NMLVKeyDown { return *(**NMLVKeyDown)(unsafe.Pointer(&lparam)) }
-
-// NMLVCustomDrawParam returns the NMLVCUSTOMDRAW of a notification.
-func NMLVCustomDrawParam(lparam uintptr) *NMLVCustomDraw {
-	return *(**NMLVCustomDraw)(unsafe.Pointer(&lparam))
 }
 
 // ListSetup prepares a report-mode list: full-row selection, double
@@ -331,17 +312,6 @@ func ListParam(lv HWND, i int) uintptr {
 	return it.Param
 }
 
-// ListHitGroup returns the group whose header is at pt (client
-// coordinates), or -1.
-func ListHitGroup(lv HWND, pt Point) int32 {
-	h := lvHitTestInfo{Pt: pt, Item: -1, Group: -1}
-	r := int32(SendMessage(lv, LVM_HITTEST, ^uintptr(0), uintptr(unsafe.Pointer(&h))))
-	if h.Flags&LVHT_EX_GROUP_HEADER != 0 {
-		return r
-	}
-	return -1
-}
-
 // ListHitItem returns the item at pt (client coordinates), or -1.
 func ListHitItem(lv HWND, pt Point) int {
 	h := lvHitTestInfo{Pt: pt, Item: -1}
@@ -390,9 +360,6 @@ const (
 
 // ListChangeOf returns the NMLISTVIEW behind hdr.
 func ListChangeOf(hdr *NMHdr) *NMListView { return (*NMListView)(unsafe.Pointer(hdr)) }
-
-// ListKeyOf returns the NMLVKEYDOWN behind hdr.
-func ListKeyOf(hdr *NMHdr) *NMLVKeyDown { return (*NMLVKeyDown)(unsafe.Pointer(hdr)) }
 
 // ListDrawOf returns the NMLVCUSTOMDRAW behind hdr.
 func ListDrawOf(hdr *NMHdr) *NMLVCustomDraw { return (*NMLVCustomDraw)(unsafe.Pointer(hdr)) }

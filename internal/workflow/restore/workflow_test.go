@@ -64,13 +64,12 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
 	infos := fixtureInfos(t, fx.BackupFixture)
 	logPath := filepath.Join(t.TempDir(), "restore.log")
-	log, _ := logging.NewLogger(logPath, "info", nil)
+	var out testutil.Output
+	log, _ := logging.NewLogger(logPath, "info", &out)
 
-	var err error
-	output := testutil.CaptureStdout(t, func() {
-		err = runRestoreOperation(context.Background(), &interacttest.Script{}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, 0)
-	})
+	err := runRestoreOperation(context.Background(), &interacttest.Script{Out: &out}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, 0)
 	log.Close()
+	output := out.String()
 	if err != nil {
 		t.Fatalf("runRestoreOperation: %v", err)
 	}
@@ -92,9 +91,7 @@ func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutil.CaptureStdout(t, func() {
-		_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil))
-	})
+	_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil))
 	if err != nil {
 		t.Fatalf("restore differential: %v", err)
 	}
@@ -105,10 +102,7 @@ func TestRestoreEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("right"))
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 
-	var err error
-	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, logging.NewConsoleLogger("info", nil))
-	})
+	_, err := restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -119,10 +113,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	var err error
-	testutil.CaptureStdout(t, func() {
-		_, err = restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, logging.NewConsoleLogger("info", nil))
-	})
+	_, err := restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, logging.NewConsoleLogger("info", nil))
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("expected existing-destination error, got %v", err)
 	}

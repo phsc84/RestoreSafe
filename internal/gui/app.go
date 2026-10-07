@@ -5,6 +5,7 @@
 package gui
 
 import (
+	"RestoreSafe/internal/buildinfo"
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/gui/flow"
@@ -26,7 +27,6 @@ import (
 
 // Options configure the GUI.
 type Options struct {
-	Version    string
 	ExeDir     string
 	ConfigPath string
 	Config     *config.Config
@@ -182,7 +182,7 @@ func ShowError(title, message string) {
 
 // title returns the window title (GUI spec 3.2).
 func (a *app) title() string {
-	return view.Title(a.opts.Version, filepath.Base(a.opts.ConfigPath))
+	return view.Title(buildinfo.Version, filepath.Base(a.opts.ConfigPath))
 }
 
 func (a *app) createWindow() error {

@@ -214,20 +214,24 @@ type webauthnCredAttestation struct {
 
 // webauthnHmacSecretSalt matches WEBAUTHN_HMAC_SECRET_SALT. Size: 32 bytes.
 type webauthnHmacSecretSalt struct {
-	cbFirst  uint32 // 0
-	_        uint32 // 4  padding
-	pbFirst  *byte  // 8
+	cbFirst uint32 // 0
+	_       uint32 // 4  padding
+	pbFirst *byte  // 8
+	//lint:ignore U1000 ABI layout of winwebauthn.h; RestoreSafe sends only the first salt
 	cbSecond uint32 // 16
 	_        uint32 // 20 padding
-	pbSecond *byte  // 24
+	//lint:ignore U1000 ABI layout of winwebauthn.h; RestoreSafe sends only the first salt
+	pbSecond *byte // 24
 }
 
 // webauthnHmacSecretSaltValues matches WEBAUTHN_HMAC_SECRET_SALT_VALUES. Size: 24 bytes.
 type webauthnHmacSecretSaltValues struct {
-	pGlobalHmacSalt             *webauthnHmacSecretSalt // 0
-	cCredWithHmacSecretSaltList uint32                  // 8
-	_                           uint32                  // 12 padding
-	pCredWithHmacSecretSaltList unsafe.Pointer          // 16
+	pGlobalHmacSalt *webauthnHmacSecretSalt // 0
+	//lint:ignore U1000 ABI layout of winwebauthn.h; RestoreSafe sends only the global salt
+	cCredWithHmacSecretSaltList uint32 // 8
+	_                           uint32 // 12 padding
+	//lint:ignore U1000 ABI layout of winwebauthn.h; RestoreSafe sends only the global salt
+	pCredWithHmacSecretSaltList unsafe.Pointer // 16
 }
 
 // webauthnGetAssertionOptions matches WEBAUTHN_AUTHENTICATOR_GET_ASSERTION_OPTIONS v6.

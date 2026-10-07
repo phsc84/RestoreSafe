@@ -98,10 +98,8 @@ func (e *previewEnv) previewAndRun(t *testing.T, answer string) (previewed, dele
 		ReadLine:     interacttest.Answers(startAnswers(answer)...),
 		ReadPassword: func(string) ([]byte, error) { return []byte("pw"), nil },
 	}
-	var runErr error
-	testutil.CaptureStdout(t, func() { runErr = Run(context.Background(), ui, &cfg, "") })
-	if runErr != nil {
-		t.Fatalf("backup failed: %v", runErr)
+	if err := Run(context.Background(), ui, &cfg, ""); err != nil {
+		t.Fatalf("backup failed: %v", err)
 	}
 	if ui.LogPath == "" || !strings.HasPrefix(filepath.Base(ui.LogPath), time.Now().Format("2006-01-02")) {
 		t.Fatalf("the backup reports its log file, got %q", ui.LogPath)

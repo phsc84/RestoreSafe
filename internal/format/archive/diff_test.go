@@ -2,6 +2,7 @@ package archive
 
 import (
 	"RestoreSafe/internal/format/manifest"
+	"RestoreSafe/internal/testutil/filelock"
 	"bytes"
 	"os"
 	"path/filepath"
@@ -112,8 +113,8 @@ func TestDifferentialKeepsOlderVersionOfLockedChangedFile(t *testing.T) {
 
 	mustWrite(t, db, []byte("version 2 longer"))
 	mustWrite(t, filepath.Join(src, "new.db"), []byte("new"))
-	lockExclusively(t, db)
-	lockExclusively(t, filepath.Join(src, "new.db"))
+	filelock.Hold(t, db)
+	filelock.Hold(t, filepath.Join(src, "new.db"))
 
 	var stale []string
 	var stats BuildStats

@@ -31,7 +31,6 @@ const (
 	WM_SETTEXT         = 0x000C
 	EM_SETSEL          = 0x00B1
 	EM_REPLACESEL      = 0x00C2
-	EM_SCROLLCARET     = 0x00B7
 	EM_EXLIMITTEXT     = 0x0435
 	EM_SETTEXTMODE     = 0x0459
 	TM_PLAINTEXT       = 1
@@ -159,15 +158,6 @@ func encodeRune(p []byte, r rune) int {
 		p[3] = 0x80 | byte(r)&0x3F
 		return 4
 	}
-}
-
-// AppendText appends text at the end of an edit or rich edit control.
-func AppendText(hwnd HWND, text string) {
-	// A position past the end is clamped to the end.
-	end, _, _ := procGetWindowTextLengthW.Call(uintptr(hwnd))
-	SendMessage(hwnd, EM_SETSEL, end, end)
-	SendMessage(hwnd, EM_REPLACESEL, 0, uintptr(unsafe.Pointer(UTF16(text))))
-	SendMessage(hwnd, EM_SCROLLCARET, 0, 0)
 }
 
 // Style returns the window style of hwnd.

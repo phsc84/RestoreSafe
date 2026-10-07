@@ -72,11 +72,9 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 
 	s := useScript(t, []string{"y"}, password, password)
 	o := &observedUI{Script: s.ui}
-	testutil.CaptureStdout(t, func() {
-		if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
-			t.Fatalf("backup: %v", err)
-		}
-	})
+	if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
 	s.done()
 	p, ok := o.last("Backing up", "Docs")
 	if !ok || p.Total != 2*1024*1024+5 || p.Done != p.Total {
@@ -93,11 +91,9 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	dest := filepath.Join(root, "Restore")
 	s = useScript(t, []string{"y"}, password)
 	o = &observedUI{Script: s.ui}
-	testutil.CaptureStdout(t, func() {
-		if err := restore.Run(context.Background(), o, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
-			t.Fatalf("restore: %v", err)
-		}
-	})
+	if err := restore.Run(context.Background(), o, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
 	s.done()
 	// Done counts decrypted bytes, Total the encrypted section.
 	if p, ok := o.last("Restoring", "Docs"); !ok || p.Done < 2*1024*1024 || p.Done > p.Total {
@@ -125,8 +121,7 @@ func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
 			cancel()
 		}
 	}}
-	var err error
-	testutil.CaptureStdout(t, func() { err = backup.Run(ctx, o, cfg, "") })
+	err := backup.Run(ctx, o, cfg, "")
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Backup cancelled." {
 		t.Fatalf("expected the cancellation, got %v", err)
@@ -155,28 +150,23 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 	cfg := progressConfig([]string{docs}, filepath.Join(root, "Backups"))
 
 	s := useScript(t, []string{"y"}, password, password)
-	testutil.CaptureStdout(t, func() {
-		if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
-			t.Fatalf("backup: %v", err)
-		}
-	})
+	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
 	s.done()
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	s = useScript(t, []string{"y"}, password)
-	var err error
-	testutil.CaptureStdout(t, func() {
-		err = restore.Run(cancelled, s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")})
-	})
+	err := restore.Run(cancelled, s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")})
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Restore cancelled." {
 		t.Fatalf("restore: expected the cancellation, got %v", err)
 	}
 
 	s = useScript(t, []string{"y"}, password)
-	testutil.CaptureStdout(t, func() { err = verify.Run(cancelled, s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)}) })
+	err = verify.Run(cancelled, s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)})
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Verification cancelled." {
 		t.Fatalf("verify: expected the cancellation, got %v", err)
@@ -230,11 +220,9 @@ func TestProgressPhasesFollowTheRun(t *testing.T) {
 
 	s := useScript(t, []string{"y"}, password, password)
 	o := &observedUI{Script: s.ui}
-	testutil.CaptureStdout(t, func() {
-		if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
-			t.Fatalf("backup: %v", err)
-		}
-	})
+	if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
 	s.done()
 	check("backup", o,
 		step(interact.PhaseUnlocking, 0, 0),
@@ -244,22 +232,18 @@ func TestProgressPhasesFollowTheRun(t *testing.T) {
 
 	s = useScript(t, []string{"y"}, password)
 	o = &observedUI{Script: s.ui}
-	testutil.CaptureStdout(t, func() {
-		req := restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")}
-		if err := restore.Run(context.Background(), o, cfg, "", req); err != nil {
-			t.Fatalf("restore: %v", err)
-		}
-	})
+	req := restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")}
+	if err := restore.Run(context.Background(), o, cfg, "", req); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
 	s.done()
 	check("restore", o, step(interact.PhaseUnlocking, 0, 0), step(interact.PhaseRestoring, 1, 2), step(interact.PhaseRestoring, 2, 2))
 
 	s = useScript(t, []string{"y"}, password)
 	o = &observedUI{Script: s.ui}
-	testutil.CaptureStdout(t, func() {
-		if err := verify.Run(context.Background(), o, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
-			t.Fatalf("verify: %v", err)
-		}
-	})
+	if err := verify.Run(context.Background(), o, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
 	s.done()
 	check("verify", o, step(interact.PhaseUnlocking, 0, 0), step(interact.PhaseVerifying, 1, 2), step(interact.PhaseVerifying, 2, 2))
 }

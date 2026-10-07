@@ -35,8 +35,8 @@ type verifyDialog struct {
 	// ended is set when the verification ended before it started, err why.
 	ended bool
 	err   error
-	view   view.VerifyPlanView
-	start  win32.HWND
+	view  view.VerifyPlanView
+	start win32.HWND
 	// table lists the folders, with the splitter that sets its height; it
 	// outlives the rebuilds, so the widths the user gives its columns stay.
 	table *dialogTable

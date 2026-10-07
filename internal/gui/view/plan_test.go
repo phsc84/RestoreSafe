@@ -5,7 +5,6 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/testutil"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
@@ -165,7 +164,7 @@ func TestBackupPlanOfARealPlan(t *testing.T) {
 			t.Parallel()
 			sc := scenario.Build(t, c)
 			ui := &planCapture{Script: &interacttest.Script{ReadLine: interacttest.Answers("n")}}
-			testutil.CaptureStdout(t, func() { backup.Run(context.Background(), ui, sc.Config, "") }) //nolint:errcheck
+			backup.Run(context.Background(), ui, sc.Config, "") //nolint:errcheck
 			if len(ui.plans) == 0 {
 				t.Fatal("no plan shown")
 			}

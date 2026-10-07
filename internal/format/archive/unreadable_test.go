@@ -3,6 +3,7 @@ package archive
 import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/manifest"
+	"RestoreSafe/internal/testutil/filelock"
 	"archive/tar"
 	"bytes"
 	"crypto/sha256"
@@ -11,21 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"golang.org/x/sys/windows"
 )
-
-// lockExclusively opens path without sharing, so other opens fail with a
-// sharing violation (like a PST file open in Outlook).
-func lockExclusively(t *testing.T, path string) {
-	t.Helper()
-	p, _ := windows.UTF16PtrFromString(path)
-	h, err := windows.CreateFile(p, windows.GENERIC_READ, 0, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
-	if err != nil {
-		t.Fatalf("lock %s: %v", path, err)
-	}
-	t.Cleanup(func() { windows.CloseHandle(h) })
-}
 
 func buildWith(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte, error) {
 	t.Helper()
@@ -89,7 +76,7 @@ func TestBuildTarFailsOnLockedFileByDefault(t *testing.T) {
 	src := t.TempDir()
 	locked := filepath.Join(src, "mail.pst")
 	mustWrite(t, locked, []byte("mail"))
-	lockExclusively(t, locked)
+	filelock.Hold(t, locked)
 
 	_, _, err := buildWith(t, BuildOptions{SourceDir: src})
 	if err == nil || !strings.Contains(err.Error(), "mail.pst") || !strings.Contains(err.Error(), "on_unreadable_file: skip") {
@@ -105,7 +92,7 @@ func TestBuildTarSkipsLockedFileWhenConfigured(t *testing.T) {
 	locked := filepath.Join(src, "box", "mail.pst")
 	mustWrite(t, locked, []byte("mail"))
 	mustWrite(t, filepath.Join(src, "z.txt"), []byte("zulu"))
-	lockExclusively(t, locked)
+	filelock.Hold(t, locked)
 
 	var skipped []string
 	var stats BuildStats
