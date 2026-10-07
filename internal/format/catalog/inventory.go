@@ -222,7 +222,7 @@ func checkContinuity(parts []string) error {
 		next = seq + 1
 	}
 	if len(missing) > 0 {
-		return &ErrMissingParts{Parts: missing}
+		return missingPartsErr(missing)
 	}
 	return nil
 }
@@ -236,9 +236,19 @@ type ErrMissingParts struct {
 
 func (e *ErrMissingParts) Error() string {
 	if len(e.Parts) == 1 {
-		return fmt.Sprintf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", e.Parts[0])
+		return fmt.Sprintf("Missing part file %03d", e.Parts[0])
 	}
-	return fmt.Sprintf("Missing %d part files (%03d to %03d). Remedy: Restore the missing .enc parts or create a new backup.", len(e.Parts), e.Parts[0], e.Parts[len(e.Parts)-1])
+	return fmt.Sprintf("Missing %d part files (%03d to %03d)", len(e.Parts), e.Parts[0], e.Parts[len(e.Parts)-1])
+}
+
+// missingPartsErr returns the error of a set with missing parts, with what
+// the user does about it; errors.As finds the *ErrMissingParts in it.
+func missingPartsErr(parts []int) error {
+	remedy := "Restore the missing .enc parts or create a new backup."
+	if len(parts) == 1 {
+		remedy = "Restore the missing .enc part or create a new backup."
+	}
+	return problem.Errorf("%w.", &ErrMissingParts{Parts: parts}).WithRemedy(remedy)
 }
 
 // ErrNameMismatch marks a set whose file names don't match its header: the
@@ -297,7 +307,7 @@ func MissingParts(err error) []int {
 
 func checkNameMatchesHeader(entry naming.BackupEntry, h *container.Header) error {
 	if h.DirectoryName != entry.DirectoryName || h.ChainID != string(entry.ChainID) || h.Date != entry.Date || h.DiffNumber != entry.DiffNumber || h.IsDiff() != entry.IsDiff() {
-		return &ErrNameMismatch{msg: fmt.Sprintf("File name does not match the backup header (header: %s_%s_%s, type %s). Remedy: Do not rename backup files; restore the original file names.", h.DirectoryName, h.ChainID, h.Date, h.SetType)}
+		return problem.Errorf("%w.", &ErrNameMismatch{msg: fmt.Sprintf("File name does not match the backup header (header: %s_%s_%s, type %s)", h.DirectoryName, h.ChainID, h.Date, h.SetType)}).WithRemedy("Do not rename backup files; restore the original file names.")
 	}
 	return nil
 }

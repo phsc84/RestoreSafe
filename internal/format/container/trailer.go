@@ -1,6 +1,7 @@
 package container
 
 import (
+	"RestoreSafe/internal/problem"
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
@@ -88,8 +89,11 @@ func (t Trailer) check(headerLen, totalSize int64, partsPresent int) error {
 // backup was interrupted, or part files are missing or damaged.
 type ErrIncomplete struct{ Reason string }
 
-func (e *ErrIncomplete) Error() string {
-	return fmt.Sprintf("Backup set is incomplete: %s. Remedy: Make sure all .enc part files of this backup are present and unmodified, or create a new backup.", e.Reason)
-}
+func (e *ErrIncomplete) Error() string { return "Backup set is incomplete: " + e.Reason }
 
-func incompleteErr(reason string) error { return &ErrIncomplete{Reason: reason} }
+// incompleteErr returns the error of an incomplete set, with what the user
+// does about it; errors.As finds the *ErrIncomplete in it.
+func incompleteErr(reason string) error {
+	return problem.Errorf("%w.", &ErrIncomplete{Reason: reason}).
+		WithRemedy("Make sure all .enc part files of this backup are present and unmodified, or create a new backup.")
+}

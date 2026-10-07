@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/problem"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
@@ -82,11 +83,17 @@ type unreadableError struct {
 	headerWritten bool
 }
 
-func (e *unreadableError) Error() string {
-	return fmt.Sprintf("Cannot read %q: %v. Remedy: Close programs that lock or modify the file and start the backup again, or set 'on_unreadable_file: skip' in config.yaml to back up everything else and list such files as warnings.", e.path, e.err)
-}
+func (e *unreadableError) Error() string { return fmt.Sprintf("Cannot read %q: %v", e.path, e.err) }
 
 func (e *unreadableError) Unwrap() error { return e.err }
+
+// newUnreadable returns the error of a source file or directory that can't
+// be read, with what the user does about it; errors.As finds the
+// *unreadableError in it.
+func newUnreadable(path string, err error, headerWritten bool) error {
+	return problem.Errorf("%w.", &unreadableError{path: path, err: err, headerWritten: headerWritten}).
+		WithRemedy("Close programs that lock or modify the file and start the backup again, or set 'on_unreadable_file: skip' in config.yaml to back up everything else and list such files as warnings.")
+}
 
 // BuildTar walks opts.SourceDir, writes the content of every regular file as a
 // TAR stream to w, and adds one manifest entry per directory and file to mb.
@@ -162,7 +169,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 				return skipDirOrNil(d)
 			}
 			if !opts.SkipUnreadable {
-				return &unreadableError{path: path, err: err}
+				return newUnreadable(path, err, false)
 			}
 			// WalkDir reports a directory it cannot list after it was
 			// recorded; turn that record into a skipped entry.
@@ -188,7 +195,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 				return skipDirOrNil(d)
 			}
 			if !opts.SkipUnreadable {
-				return &unreadableError{path: path, err: err}
+				return newUnreadable(path, err, false)
 			}
 			if d.IsDir() {
 				mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
@@ -209,7 +216,7 @@ func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 			meta, err := statBasic(path)
 			if err != nil {
 				if !opts.SkipUnreadable {
-					return &unreadableError{path: path, err: err}
+					return newUnreadable(path, err, false)
 				}
 				mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
 				skip(rel, err)
@@ -313,17 +320,17 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64, buf []byte) (manifest.Entry, error) {
 	f, err := openSource(path)
 	if err != nil {
-		return manifest.Entry{}, &unreadableError{path: path, err: err}
+		return manifest.Entry{}, newUnreadable(path, err, false)
 	}
 	defer f.Close()
 
 	meta, err := basicInfoFromHandle(windows.Handle(f.Fd()))
 	if err != nil {
-		return manifest.Entry{}, &unreadableError{path: path, err: err}
+		return manifest.Entry{}, newUnreadable(path, err, false)
 	}
 	fi, err := f.Stat()
 	if err != nil {
-		return manifest.Entry{}, &unreadableError{path: path, err: err}
+		return manifest.Entry{}, newUnreadable(path, err, false)
 	}
 	size := fi.Size()
 
@@ -356,11 +363,11 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, pro
 		if cause == nil {
 			cause = fmt.Errorf("the file became smaller during backup (%d of %d bytes)", copied, size)
 		}
-		return manifest.Entry{}, &unreadableError{path: path, err: cause, headerWritten: true}
+		return manifest.Entry{}, newUnreadable(path, cause, true)
 	}
 	var probe [1]byte
 	if n, _ := f.Read(probe[:]); n > 0 {
-		return manifest.Entry{}, &unreadableError{path: path, err: errors.New("the file grew during backup"), headerWritten: true}
+		return manifest.Entry{}, newUnreadable(path, errors.New("the file grew during backup"), true)
 	}
 
 	return manifest.Entry{
