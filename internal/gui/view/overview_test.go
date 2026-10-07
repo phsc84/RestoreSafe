@@ -1,12 +1,15 @@
 package view
 
 import (
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func overviewOf(t *testing.T, c scenario.Condition) (Overview, *health.Snapshot) {
@@ -216,6 +219,45 @@ func TestOverviewKeysShowTheYubiKey(t *testing.T) {
 		s.Keys.YubiKeyConnected = nil
 		if k := OverviewOf(&s, sc.Config, sc.Now).Keys; k.YubiKey != "" {
 			t.Fatalf("%s: without a YubiKey, no line: %+v", c, k)
+		}
+	}
+}
+
+// TestSetProblemsSayWhy: the problem line says which set can't be used, why,
+// and the remedy for that reason (GUI spec 11.8).
+func TestSetProblemsSayWhy(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.Local)
+	full := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-10-05"}
+	diff := full
+	diff.DiffNumber = 2
+	cases := []struct {
+		p           health.Problem
+		title, line string
+	}{
+		{health.Problem{Code: interact.CodeBaseMissing, Folder: "Docs", ChainID: "ABC123", Count: 1},
+			"A backup of Docs can't be restored",
+			"Its full backup (chain ABC123) is missing. Restore its FULL files from your copy, or delete the DIFF files of ABC123."},
+		{health.Problem{Code: interact.CodeBaseMissing, Folder: "Docs", ChainID: "ABC123", Count: 1, Set: full, Fault: catalog.FaultMissingParts, Parts: []int{1, 2, 3}},
+			"A backup of Docs can't be restored",
+			"Its full backup (chain ABC123) is missing 3 parts (001 to 003). Restore its FULL files from your copy, or delete the DIFF files of ABC123."},
+		{health.Problem{Code: interact.CodeSetIncomplete, Folder: "Docs", Set: full, Fault: catalog.FaultMissingParts, Parts: []int{4}},
+			"A backup of Docs can't be used",
+			"The full backup of 5 Oct (chain ABC123) is missing part 004. Restore its files from your copy, or delete them."},
+		{health.Problem{Code: interact.CodeSetIncomplete, Folder: "Docs", Set: diff, Fault: catalog.FaultRenamed},
+			"A backup of Docs can't be used",
+			"Differential 2 of 5 Oct (chain ABC123) has renamed files. Restore the original file names."},
+		{health.Problem{Code: interact.CodeSetIncomplete, Folder: "Docs", Set: full, Fault: catalog.FaultUnreadable},
+			"A backup of Docs can't be read",
+			"The full backup of 5 Oct (chain ABC123) can't be read. Check the drive, then click Refresh."},
+		{health.Problem{Code: interact.CodeSetIncomplete, Folder: "Docs", Set: full, Fault: catalog.FaultDamaged},
+			"A backup of Docs can't be used",
+			"The full backup of 5 Oct (chain ABC123) is damaged. Restore its files from your copy, or delete them."},
+	}
+	for _, tc := range cases {
+		h := problemHero(tc.p, &health.Snapshot{}, nil, now, Button{})
+		if h.Title != tc.title || h.Line != tc.line {
+			t.Errorf("%s %d:\n got %q / %q\nwant %q / %q", tc.p.Code, tc.p.Fault, h.Title, h.Line, tc.title, tc.line)
 		}
 	}
 }

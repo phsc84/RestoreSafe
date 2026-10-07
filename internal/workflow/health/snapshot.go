@@ -40,8 +40,14 @@ type Problem struct {
 	Path   string
 	// ChainID is the chain concerned (BASE_MISSING).
 	ChainID naming.BackupID
-	// Set is the backup set concerned (VERIFY_FAILED, INCOMPLETE_NEWEST).
+	// Set is the backup set concerned (VERIFY_FAILED, INCOMPLETE_NEWEST,
+	// SET_INCOMPLETE; BASE_MISSING: the full backup when it is there but
+	// can't be used).
 	Set naming.BackupEntry
+	// Fault says why Set can't be used (SET_INCOMPLETE, BASE_MISSING), and
+	// Parts are its missing parts (FaultMissingParts).
+	Fault catalog.Fault
+	Parts []int
 	// Count counts what the problem is about: files, sets, days.
 	Count int
 	// Bytes is a size (SPACE_LOW: the space a full backup of all folders

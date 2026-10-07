@@ -2,6 +2,7 @@ package health
 
 import (
 	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -38,8 +39,9 @@ func problems(p Params, in inspection, s *Snapshot) (problems, notes []Problem) 
 			problems = append(problems, Problem{Code: job.SourceProblemCode(f.Err), Status: interact.StatusError, Folder: f.BackupName, Path: f.Resolved, Detail: fmt.Sprintf("%s → %v", f.Resolved, f.Err)})
 		}
 	}
-	problems = append(problems, baseMissing(s.Sets)...)
-	problems = append(problems, invalidSets(s.Sets)...)
+	bases := baseMissing(s.Sets)
+	problems = append(problems, bases...)
+	problems = append(problems, invalidSets(s.Sets, bases)...)
 	problems = append(problems, verifyFailed(s.Sets, s.Verified)...)
 
 	// Warnings.
@@ -92,7 +94,8 @@ func itemDetail(items []healthItem, code interact.Code) string {
 }
 
 // baseMissing returns one problem per chain whose differentials have no
-// complete full backup.
+// complete full backup. When the full backup is there but can't be used, Set
+// is it and Fault says why.
 func baseMissing(infos []catalog.SetInfo) []Problem {
 	fulls := completeFullChains(infos)
 	var out []Problem
@@ -107,23 +110,52 @@ func baseMissing(infos []catalog.SetInfo) []Problem {
 			continue
 		}
 		index[key] = len(out)
-		out = append(out, Problem{
+		p := Problem{
 			Code: interact.CodeBaseMissing, Status: interact.StatusError,
 			Folder: info.Entry.DirectoryName, ChainID: info.Entry.ChainID, Count: 1,
 			Detail: baseMissingDetail(info),
-		})
+		}
+		if base := brokenFull(infos, key); base != nil {
+			p.Set, p.Fault, p.Parts = base.Entry, catalog.FaultOf(base.Err), catalog.MissingParts(base.Err)
+			p.Detail += fmt.Sprintf("\n%s → %v", base.Entry.String(), base.Err)
+		}
+		out = append(out, p)
 	}
 	return out
 }
 
+// brokenFull returns the full backup of the chain key that is there but
+// can't be used, nil without one.
+func brokenFull(infos []catalog.SetInfo, key string) *catalog.SetInfo {
+	for i := range infos {
+		if info := &infos[i]; !info.Entry.IsDiff() && info.Entry.ChainKey() == key && info.Err != nil {
+			return info
+		}
+	}
+	return nil
+}
+
 // invalidSets returns the sets that are broken, not just incomplete (e.g. a
-// header that does not match the file name): they can never be used.
-func invalidSets(infos []catalog.SetInfo) []Problem {
+// header that does not match the file name): they can never be used. A full
+// backup that a BASE_MISSING problem names is left out: that problem says
+// why it can't be used.
+func invalidSets(infos []catalog.SetInfo, baseProblems []Problem) []Problem {
+	named := make(map[string]bool)
+	for _, p := range baseProblems {
+		if p.Set != (naming.BackupEntry{}) {
+			named[p.Set.String()] = true
+		}
+	}
 	var out []Problem
 	for _, info := range infos {
-		if info.Err != nil && !catalog.IsIncomplete(info.Err) {
-			out = append(out, Problem{Code: interact.CodeSetIncomplete, Status: interact.StatusError, Folder: info.Entry.DirectoryName, Set: info.Entry, Detail: fmt.Sprintf("%s → %v", info.Entry.String(), info.Err)})
+		if info.Err == nil || catalog.IsIncomplete(info.Err) || named[info.Entry.String()] {
+			continue
 		}
+		out = append(out, Problem{
+			Code: interact.CodeSetIncomplete, Status: interact.StatusError, Folder: info.Entry.DirectoryName, Set: info.Entry,
+			Fault: catalog.FaultOf(info.Err), Parts: catalog.MissingParts(info.Err),
+			Detail: fmt.Sprintf("%s → %v", info.Entry.String(), info.Err),
+		})
 	}
 	return out
 }

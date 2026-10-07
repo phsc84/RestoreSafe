@@ -1,6 +1,9 @@
 package health
 
 import (
+	"RestoreSafe/internal/format/catalog"
+	"RestoreSafe/internal/format/container"
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/interact"
@@ -232,5 +235,35 @@ func TestSnapshotListsTheLogOfAFailedRun(t *testing.T) {
 	}
 	if len(s.Logs) < 2 || s.Logs[0].RunID != "FAIL01" {
 		t.Fatalf("the newest log comes first: %+v", s.Logs)
+	}
+}
+
+// TestBaseMissingSaysWhyTheFullCantBeUsed: a full backup that is there but
+// can't be used is reported once, by the BASE_MISSING problem of its
+// differentials, with the reason; a broken set without differentials gets
+// its own SET_INCOMPLETE problem.
+func TestBaseMissingSaysWhyTheFullCantBeUsed(t *testing.T) {
+	t.Parallel()
+	full := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-10-05"}
+	diff := full
+	diff.DiffNumber = 1
+	other := naming.BackupEntry{DirectoryName: "Pics", ChainID: "XYZ789", Date: "2026-10-05"}
+	infos := []catalog.SetInfo{
+		{Entry: diff, Header: &container.Header{}},
+		{Entry: full, Err: &catalog.ErrMissingParts{Parts: []int{1, 2, 3}}},
+		{Entry: other, Err: &catalog.ErrMissingParts{Parts: []int{2}}},
+	}
+	bases := baseMissing(infos)
+	if len(bases) != 1 || bases[0].Set != full || bases[0].Fault != catalog.FaultMissingParts || len(bases[0].Parts) != 3 {
+		t.Fatalf("base problems %+v", bases)
+	}
+	invalid := invalidSets(infos, bases)
+	if len(invalid) != 1 || invalid[0].Set != other || invalid[0].Fault != catalog.FaultMissingParts {
+		t.Fatalf("invalid sets %+v, want only Pics", invalid)
+	}
+
+	// Without the full backup, the problem names no set.
+	if bases := baseMissing(infos[:1]); len(bases) != 1 || bases[0].Set != (naming.BackupEntry{}) {
+		t.Fatalf("base problems %+v", bases)
 	}
 }

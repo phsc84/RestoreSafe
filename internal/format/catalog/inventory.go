@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -210,18 +211,92 @@ func checkContinuity(parts []string) error {
 	if len(parts) == 0 {
 		return fmt.Errorf("No part files found. Remedy: Ensure the .enc files are present in the backup directory.")
 	}
-	for i, p := range parts {
+	var missing []int
+	next := 1
+	for _, p := range parts {
 		_, seq, _ := naming.ParsePartFileName(filepath.Base(p))
-		if seq != i+1 {
-			return fmt.Errorf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", i+1)
+		for ; next < seq; next++ {
+			missing = append(missing, next)
 		}
+		next = seq + 1
+	}
+	if len(missing) > 0 {
+		return &ErrMissingParts{Parts: missing}
+	}
+	return nil
+}
+
+// ErrMissingParts marks a set with gaps in its part files: parts before the
+// last one present are missing.
+type ErrMissingParts struct {
+	// Parts are the numbers of the missing parts, ascending.
+	Parts []int
+}
+
+func (e *ErrMissingParts) Error() string {
+	if len(e.Parts) == 1 {
+		return fmt.Sprintf("Missing part file %03d. Remedy: Restore the missing .enc part or create a new backup.", e.Parts[0])
+	}
+	return fmt.Sprintf("Missing %d part files (%03d to %03d). Remedy: Restore the missing .enc parts or create a new backup.", len(e.Parts), e.Parts[0], e.Parts[len(e.Parts)-1])
+}
+
+// ErrNameMismatch marks a set whose file names don't match its header: the
+// files were renamed.
+type ErrNameMismatch struct{ msg string }
+
+func (e *ErrNameMismatch) Error() string { return e.msg }
+
+// Fault says why a set can't be used.
+type Fault int
+
+const (
+	// FaultNone: the set is complete.
+	FaultNone Fault = iota
+	// FaultIncomplete: an interrupted backup or a missing last part.
+	FaultIncomplete
+	// FaultMissingParts: parts before the last one present are missing.
+	FaultMissingParts
+	// FaultRenamed: the file names don't match the header.
+	FaultRenamed
+	// FaultUnreadable: a part file can't be opened or read.
+	FaultUnreadable
+	// FaultDamaged: the content is invalid (header, sections).
+	FaultDamaged
+)
+
+// FaultOf classifies the error of a SetInfo.
+func FaultOf(err error) Fault {
+	var missing *ErrMissingParts
+	var renamed *ErrNameMismatch
+	var pathErr *fs.PathError
+	switch {
+	case err == nil:
+		return FaultNone
+	case IsIncomplete(err):
+		return FaultIncomplete
+	case errors.As(err, &missing):
+		return FaultMissingParts
+	case errors.As(err, &renamed):
+		return FaultRenamed
+	case errors.As(err, &pathErr):
+		return FaultUnreadable
+	}
+	return FaultDamaged
+}
+
+// MissingParts returns the numbers of the missing parts that err reports,
+// nil when it isn't about missing parts.
+func MissingParts(err error) []int {
+	var missing *ErrMissingParts
+	if errors.As(err, &missing) {
+		return missing.Parts
 	}
 	return nil
 }
 
 func checkNameMatchesHeader(entry naming.BackupEntry, h *container.Header) error {
 	if h.DirectoryName != entry.DirectoryName || h.ChainID != string(entry.ChainID) || h.Date != entry.Date || h.DiffNumber != entry.DiffNumber || h.IsDiff() != entry.IsDiff() {
-		return fmt.Errorf("File name does not match the backup header (header: %s_%s_%s, type %s). Remedy: Do not rename backup files; restore the original file names.", h.DirectoryName, h.ChainID, h.Date, h.SetType)
+		return &ErrNameMismatch{msg: fmt.Sprintf("File name does not match the backup header (header: %s_%s_%s, type %s). Remedy: Do not rename backup files; restore the original file names.", h.DirectoryName, h.ChainID, h.Date, h.SetType)}
 	}
 	return nil
 }

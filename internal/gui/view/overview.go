@@ -278,9 +278,9 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 		if p.Count == 1 {
 			title, line = fmt.Sprintf(heroBaseMissingOne, p.Folder), heroBaseMissingLineOne
 		}
-		return Hero{Title: title, Line: fmt.Sprintf(line, p.ChainID, p.ChainID), Primary: showBackups}
+		return Hero{Title: title, Line: fmt.Sprintf(line, p.ChainID, faultWords(p), p.ChainID), Primary: showBackups}
 	case interact.CodeSetIncomplete:
-		return Hero{Title: fmt.Sprintf(heroSetDamaged, p.Folder), Line: heroSetDamagedLine, Primary: showBackups}
+		return setProblemHero(p, now, showBackups)
 	case interact.CodeVerifyFailed:
 		return Hero{Title: fmt.Sprintf(heroVerifyFailed, p.Folder), Line: heroVerifyLine, Primary: backUp}
 	case interact.CodeOverdue:
@@ -305,6 +305,48 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 		return Hero{Title: heroArgon2, Line: heroArgon2Line, Primary: *editConfig}
 	}
 	return Hero{Title: string(p.Code), Line: p.Detail, Primary: checkAgain}
+}
+
+// setProblemHero words a set that can't be used (SET_INCOMPLETE): which set,
+// why, and the remedy for that reason.
+func setProblemHero(p health.Problem, now time.Time, primary Button) Hero {
+	title, remedy := heroSetUnusable, remedyFromCopy
+	switch p.Fault {
+	case catalog.FaultRenamed:
+		remedy = remedyNames
+	case catalog.FaultUnreadable:
+		title, remedy = heroSetUnreadable, remedyDrive
+	}
+	day := baseDay(p.Set, now)
+	line := fmt.Sprintf(heroSetFullLine, day, p.Set.ChainID, faultWords(p), remedy)
+	if p.Set.IsDiff() {
+		line = fmt.Sprintf(heroSetDiffLine, p.Set.DiffNumber, day, p.Set.ChainID, faultWords(p), remedy)
+	}
+	return Hero{Title: fmt.Sprintf(title, p.Folder), Line: line, Primary: primary}
+}
+
+// faultWords says why the set of p can't be used ("is missing part 001").
+// Without a set (BASE_MISSING), the full backup is missing.
+func faultWords(p health.Problem) string {
+	if p.Set == (naming.BackupEntry{}) {
+		return faultGone
+	}
+	switch p.Fault {
+	case catalog.FaultIncomplete:
+		return faultIncomplete
+	case catalog.FaultMissingParts:
+		if len(p.Parts) == 1 {
+			return fmt.Sprintf(faultPartMissing, p.Parts[0])
+		}
+		if len(p.Parts) > 1 {
+			return fmt.Sprintf(faultPartsMissing, len(p.Parts), p.Parts[0], p.Parts[len(p.Parts)-1])
+		}
+	case catalog.FaultRenamed:
+		return faultRenamed
+	case catalog.FaultUnreadable:
+		return faultUnreadable
+	}
+	return faultDamaged
 }
 
 func more(n int) string {

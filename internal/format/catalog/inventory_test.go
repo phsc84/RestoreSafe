@@ -127,6 +127,33 @@ func TestOpenSetRejectsRenamedFiles(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "does not match the backup header") {
 		t.Fatalf("expected name/header mismatch, got %v", err)
 	}
+	if f := FaultOf(err); f != FaultRenamed {
+		t.Fatalf("fault %d, want FaultRenamed", f)
+	}
+}
+
+// TestFaultOfMissingParts: every gap before the last part is reported, so
+// a set with only its last part names all the others.
+func TestFaultOfMissingParts(t *testing.T) {
+	t.Parallel()
+
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	parts, _ := CollectParts(fx.BackupDir, fx.Entry)
+	for _, p := range parts[:len(parts)-1] {
+		if err := os.Remove(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	info := InspectSet(fx.BackupDir, fx.Entry)
+	if f := FaultOf(info.Err); f != FaultMissingParts {
+		t.Fatalf("fault %d, want FaultMissingParts: %v", f, info.Err)
+	}
+	if got := MissingParts(info.Err); len(got) != len(parts)-1 || got[0] != 1 || got[len(got)-1] != len(parts)-1 {
+		t.Fatalf("missing parts %v, want 1 to %d", got, len(parts)-1)
+	}
+	if FaultOf(nil) != FaultNone || MissingParts(nil) != nil {
+		t.Fatal("a complete set has no fault")
+	}
 }
 
 func TestOpenSetDetectsMissingMiddlePart(t *testing.T) {
@@ -156,7 +183,7 @@ func TestIsIncomplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := InspectSet(fx.BackupDir, fx.Entry)
-	if info.Complete() || !IsIncomplete(info.Err) {
+	if info.Complete() || !IsIncomplete(info.Err) || FaultOf(info.Err) != FaultIncomplete {
 		t.Fatalf("expected incomplete set, got %v", info.Err)
 	}
 }
