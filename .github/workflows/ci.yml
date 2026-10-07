@@ -60,7 +60,9 @@ jobs:
       - name: Report failures
         if: failure()
         run: bash scripts/ci/annotate-failures.sh test.log
-      - name: Coverage per function
+      - name: Coverage floors per package
+        run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+      - name: Total coverage
         run: go tool cover -func=cover.out | tail -n 1
       - uses: actions/upload-artifact@v5
         with:
