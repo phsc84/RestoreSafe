@@ -1,8 +1,9 @@
 // Package interact defines the interface between the backup, restore, and
 // verify workflows and the user. The workflows never read input or write to the
-// console directly: every question goes through a UI method, and every
-// message is written to UI.Output. The window application implements it;
-// interacttest.Script implements it for the tests of the workflows.
+// console directly: every question goes through a UI method, as a type that
+// carries what a frontend needs to word it (questions.go), and the log and
+// console text is written to UI.Output. The window application implements
+// it; interacttest.Script implements it for the tests of the workflows.
 //
 // The workflows call a UI from the goroutine that runs the operation, and each
 // question method blocks until the user has answered. A graphical

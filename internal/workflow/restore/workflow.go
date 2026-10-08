@@ -1,7 +1,9 @@
-// Package restore orchestrates the full restore workflow:
-//  1. List available backups in the backup directory
-//  2. Let the user choose which backup(s) to restore
-//  3. Unlock the keys (password and/or YubiKey, up to 3 password attempts)
+// Package restore restores the backup sets the user chose before Run (with
+// the full backup a differential needs) into a destination folder:
+//  1. Lock the backup directory shared, so no backup runs at the same time
+//  2. Check the sets and the destination, show the plan, and ask to start
+//  3. Unlock the keys (password and/or YubiKey, or the recovery code; up to
+//     3 attempts)
 //  4. Decrypt, extract, and check every file against its manifest hash
 package restore
 

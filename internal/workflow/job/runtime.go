@@ -1,6 +1,6 @@
 // Package job holds what backup, restore and verify runs share: the log
-// file, progress tracking, cancellation, preflight rows and source directory
-// checks.
+// file, progress tracking, cancellation, preflight rows, source directory
+// checks, and the backup-directory lock of restore and verify.
 package job
 
 import (

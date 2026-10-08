@@ -1,5 +1,5 @@
 // Package logging writes the log file of a backup run and mirrors its messages
-// to the user.
+// to the user, and reads the facts of a run back from its log (facts.go).
 package logging
 
 import (

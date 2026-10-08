@@ -1,9 +1,11 @@
 // Package backup orchestrates the full backup workflow:
-//  1. Determine the keys: reuse the current key set or create new keys
-//  2. For each source directory: stream TAR → encrypt → split → .enc parts
+//  1. Lock the backup directory exclusively
+//  2. Plan the run (package plan), show the plan, and ask to start
+//  3. Determine the keys: reuse the current key set or create new keys
+//  4. For each source directory: stream TAR → encrypt → split → .enc parts
 //     (written as .tmp and renamed once the set is complete)
-//  3. Optionally re-read and verify the written sets (verify_after_backup)
-//  4. Apply the retention policy and write a log file per backup run
+//  5. Optionally re-read and verify the written sets (verify_after_backup)
+//  6. Apply the retention policy; the run writes one log file throughout
 package backup
 
 import (
