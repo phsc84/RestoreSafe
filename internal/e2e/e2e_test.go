@@ -1,5 +1,3 @@
-// Package e2e drives the interactive backup, verify, and restore workflows end
-// to end with scripted answers.
 package e2e
 
 import (

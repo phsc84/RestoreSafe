@@ -267,3 +267,20 @@ func TestBaseMissingSaysWhyTheFullCantBeUsed(t *testing.T) {
 		t.Fatalf("base problems %+v", bases)
 	}
 }
+
+// TestBaseMissingNextBackupIsFull: when the full backup of a chain is gone,
+// the next backup of the folder writes a new full backup instead of a
+// differential that no restore could use.
+func TestBaseMissingNextBackupIsFull(t *testing.T) {
+	t.Parallel()
+	s := snapshotOf(t, scenario.Build(t, scenario.BaseMissing))
+	for _, f := range s.Folders {
+		if f.BackupName == "Docs" {
+			if f.Next == nil || f.Next.IsDiff() {
+				t.Fatalf("the next backup of Docs must be a full backup: %+v", f.Next)
+			}
+			return
+		}
+	}
+	t.Fatalf("no folder Docs in %+v", s.Folders)
+}

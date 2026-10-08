@@ -342,6 +342,10 @@ func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressRepor
 	// preflight invariant against a TOCTOU race or two entries resolving to the
 	// same DirectoryName. os.MkdirAll would silently merge into an existing tree.
 	outDir := filepath.Join(o.restorePath, entry.DirectoryName)
+	// Cancelled before the first byte: leave no empty, incomplete folder.
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if err := os.MkdirAll(o.restorePath, 0o750); err != nil {
 		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}

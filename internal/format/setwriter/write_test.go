@@ -140,3 +140,36 @@ func TestFinalizePartsRefusesToOverwrite(t *testing.T) {
 		t.Fatal("existing part was modified")
 	}
 }
+
+// TestWriteFailingInASecondPartRemovesAllParts stands for a full disk: the
+// write of part 2 fails after part 1 was written. Here part 2 cannot be
+// created, as a folder of its name is in the way; a full disk fails the same
+// writer. No part, temporary or final, may remain.
+func TestWriteFailingInASecondPartRemovesAllParts(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "big.bin"), bytes.Repeat([]byte("restoresafe"), 200_000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backupDir := t.TempDir()
+	entry := naming.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}
+	blocker := naming.PartFileName(backupDir, entry, 2) + naming.TempSuffix
+	if err := os.Mkdir(blocker, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	ks, master := newKeySet(t)
+	_, err := Write(context.Background(), Params{
+		SourceDir: src, OutputDir: backupDir, Entry: entry, RunID: "ABC123",
+		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
+	})
+	if err == nil {
+		t.Fatal("expected the write of part 2 to fail")
+	}
+	entries, _ := os.ReadDir(backupDir)
+	for _, e := range entries {
+		if e.Name() != filepath.Base(blocker) {
+			t.Errorf("left behind after the failed write: %s", e.Name())
+		}
+	}
+}
