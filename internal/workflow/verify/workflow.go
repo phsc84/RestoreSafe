@@ -93,23 +93,32 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 	defer masters.Zero()
 
-	return runVerifyOperation(ctx, u, selectedInfos, infos, backupDir, logPath, masters, log, warningCount)
+	op := &operation{selected: selectedInfos, inventory: infos, backupDir: backupDir, logPath: logPath, masters: masters, log: log}
+	return op.run(ctx, u, warningCount)
 }
 
-// runVerifyOperation performs the verification using already-unlocked keys.
-// It takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys; u receives the progress and the
-// summary. inventory is used to find the full backup of each selected
-// differential.
-func runVerifyOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
+// operation is a verification whose keys are unlocked: it asks nothing more,
+// so tests can drive it with master keys they made.
+type operation struct {
+	// selected are the sets to verify; inventory is the backup directory's,
+	// where the full backup of a differential is found.
+	selected, inventory []catalog.SetInfo
+	backupDir           string
+	logPath             string
+	masters             unlock.MasterKeys
+	log                 *logging.Logger
+}
+
+// run verifies the selected sets; u receives the progress and the summary.
+func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) error {
 	out := u.Output()
 	fmt.Fprintln(out)
-	job.LogStart(log, "Verification", selected)
+	job.LogStart(o.log, "Verification", o.selected)
 
-	skipped, err := verifySelectedEntries(ctx, u, selected, inventory, backupDir, masters, log)
+	skipped, err := o.verifyAll(ctx, u)
 	if err != nil {
 		if ctx.Err() != nil {
-			log.Warn("Verification cancelled.")
+			o.log.Warn("Verification cancelled.")
 			return job.Cancelled("Verification")
 		}
 		return err
@@ -118,8 +127,8 @@ func runVerifyOperation(ctx context.Context, u interact.UI, selected, inventory 
 		warningCount++
 	}
 
-	log.Info("Verification completed successfully.")
-	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
+	o.log.Info("Verification completed successfully.")
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }
 
@@ -153,20 +162,20 @@ func validateVerifyPreflight(items []job.SelectionItem) error {
 	)
 }
 
-// verifySelectedEntries verifies each selected set and returns the number of
+// verifyAll verifies each selected set and returns the number of
 // files missing from the restore points because they could not be read
 // during backup.
-func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
+func (o *operation) verifyAll(ctx context.Context, rep interact.ProgressReporter) (int, error) {
 	skipped := 0
-	err := job.EachRestorePoint(selected, inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
-		missing, err := verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, n, len(selected)), info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
+	err := job.EachRestorePoint(o.selected, o.inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
+		missing, err := o.verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, n, len(o.selected)), info.Entry, base, o.masters[info.Header.KeySet.ID])
 		if err != nil {
 			if ctx.Err() == nil {
-				log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: info.Entry.String(), Error: err.Error()})
+				o.log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: info.Entry.String(), Error: err.Error()})
 			}
 			return fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
-		log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: info.Entry.String()})
+		o.log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: info.Entry.String()})
 		skipped += missing
 		return nil
 	})
@@ -178,23 +187,23 @@ func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, s
 
 // verifyEntry verifies one restore point: a full backup, or a differential
 // together with its full backup base.
-func verifyEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir string, master []byte, log *logging.Logger) (int, error) {
-	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(backupDir, entry, base)
+func (o *operation) verifyEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, master []byte) (int, error) {
+	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(o.backupDir, entry, base)
 	if err != nil {
 		return 0, err
 	}
 	defer closeAll()
 
-	log.Info("Processing backup directory: %s", entry.DirectoryName)
+	o.log.Info("Processing backup directory: %s", entry.DirectoryName)
 	var done atomic.Int64
 	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, baseSet)}, &done)
-	m, err := restorepoint.Process(ctx, set, baseSet, master, "", true, log, &done)
+	m, err := restorepoint.Process(ctx, set, baseSet, master, "", true, o.log, &done)
 	stopReport()
 	if err != nil {
 		return 0, err
 	}
-	log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
-	return restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log), nil
+	o.log.Info("  Verified: %d file(s), %d directory(s) in %d part file(s) - [%s] successfully verified", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
+	return restorepoint.ReportSkippedFiles(m, entry.DirectoryName, o.log), nil
 }
 
 // verifyPlan describes the verification for the user, from the values the

@@ -59,7 +59,8 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 		t.Fatalf("differential must find its full backup: %+v", items[0])
 	}
 	var out testutil.Output
-	_, err = verifySelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", &out))
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewConsoleLogger("info", &out)}
+	_, err = op.verifyAll(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("verify differential: %v", err)
 	}
@@ -111,7 +112,8 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 	log, _ := logging.NewLogger(logPath, "info", &out)
 
 	infos := fixtureInfos(t, fx)
-	err := runVerifyOperation(context.Background(), &interacttest.Script{Out: &out}, infos, infos, fx.BackupDir, logPath, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log, 0)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
+	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
 	log.Close()
 	output := out.String()
 	if err != nil {
@@ -125,7 +127,7 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("right"))
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
-	_, err := verifyEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, wrong, logging.NewConsoleLogger("info", nil))
+	_, err := (&operation{backupDir: fx.BackupDir, log: logging.NewConsoleLogger("info", nil)}).verifyEntry(context.Background(), nil, fx.Entry, nil, wrong)
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -139,7 +141,8 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 		t.Fatalf("expected 2 sets, got %d", len(infos))
 	}
 	var out testutil.Output
-	_, err := verifySelectedEntries(context.Background(), nil, infos, infos, fx.BackupDir, unlock.MasterKeys{fx.KeySet.ID: fx.Master}, logging.NewConsoleLogger("info", &out))
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewConsoleLogger("info", &out)}
+	_, err := op.verifyAll(context.Background(), nil)
 	output := out.String()
 	if err != nil || strings.Count(output, "successfully verified") != 2 {
 		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
@@ -149,7 +152,7 @@ func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	entry := naming.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
-	_, err := verifyEntry(context.Background(), nil, entry, nil, t.TempDir(), make([]byte, 32), logging.NewConsoleLogger("info", nil))
+	_, err := (&operation{backupDir: t.TempDir(), log: logging.NewConsoleLogger("info", nil)}).verifyEntry(context.Background(), nil, entry, nil, make([]byte, 32))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}
