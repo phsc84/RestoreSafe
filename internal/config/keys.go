@@ -2,6 +2,7 @@ package config
 
 import (
 	restoresafe "RestoreSafe"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"errors"
 	"fmt"
@@ -144,11 +145,11 @@ func unknownKeysError(err error) error {
 		}
 		found = append(found, fmt.Sprintf("'%s' (line %s)", key, m[1]))
 	}
-	const remedy = "\nRemedy: Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
+	const remedy = "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
 	if len(found) == 1 {
-		return fmt.Errorf("Config file has an unknown setting: %s.%s", found[0], remedy)
+		return problem.Errorf("Config file has an unknown setting: %s.", found[0]).WithRemedyOnOwnLine(remedy)
 	}
-	return fmt.Errorf("Config file has unknown settings: %s.%s", strings.Join(found, ", "), remedy)
+	return problem.Errorf("Config file has unknown settings: %s.", strings.Join(found, ", ")).WithRemedyOnOwnLine(remedy)
 }
 
 // AddMissing adds the settings that the configuration file at path lacks,
@@ -180,7 +181,7 @@ func AddMissing(path string, now time.Time) (string, error) {
 		err = errors.New("the values would change")
 	}
 	if err != nil {
-		return "", fmt.Errorf("RestoreSafe couldn't add the missing settings to %s: %v.\nRemedy: Add them by hand; config-SAMPLE.yaml describes every setting.", path, err)
+		return "", problem.Errorf("RestoreSafe couldn't add the missing settings to %s: %v.", path, err).WithRemedyOnOwnLine("Add them by hand; config-SAMPLE.yaml describes every setting.")
 	}
 
 	mode := os.FileMode(0o600)
@@ -189,10 +190,10 @@ func AddMissing(path string, now time.Time) (string, error) {
 	}
 	backup := path + "." + now.Format("2006-01-02_150405") + ".bak"
 	if err := os.WriteFile(backup, data, mode); err != nil {
-		return "", fmt.Errorf("The copy of the config file can't be saved: %w\nRemedy: Check that you may write to the folder of the config file.", err)
+		return "", problem.Errorf("The copy of the config file can't be saved: %w", err).WithRemedyOnOwnLine("Check that you may write to the folder of the config file.")
 	}
 	if err := replaceFile(path, text, mode); err != nil {
-		return "", fmt.Errorf("The config file can't be written: %w\nRemedy: Check that the file isn't read-only, or add the settings by hand.", err)
+		return "", problem.Errorf("The config file can't be written: %w", err).WithRemedyOnOwnLine("Check that the file isn't read-only, or add the settings by hand.")
 	}
 	return backup, nil
 }
@@ -250,7 +251,7 @@ func withMissing(data []byte, now time.Time) ([]byte, error) {
 		return nil, fmt.Errorf("Config file is invalid: %w", err)
 	}
 	root := topMapping(&doc)
-	flow := errors.New("Config file is written in YAML flow style ({ … }), so RestoreSafe can't add settings to it.\nRemedy: Add them by hand; config-SAMPLE.yaml describes every setting.")
+	flow := problem.New("Config file is written in YAML flow style ({ … }), so RestoreSafe can't add settings to it.").WithRemedyOnOwnLine("Add them by hand; config-SAMPLE.yaml describes every setting.")
 	if root == nil || root.Style&yaml.FlowStyle != 0 {
 		return nil, flow
 	}

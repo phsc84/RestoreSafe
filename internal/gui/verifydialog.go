@@ -242,7 +242,7 @@ func issueOf(err error) string {
 	if err == nil {
 		return ""
 	}
-	return view.IssueText(err.Error())
+	return view.ErrorText(err)
 }
 
 // takeAnswer returns the pending answer and forgets it, so it is given once.

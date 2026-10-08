@@ -3,6 +3,7 @@
 package config
 
 import (
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"errors"
@@ -200,8 +201,8 @@ const (
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Config file not found: %w\n"+
-			"Remedy: Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.", err)
+		return nil, problem.Errorf("Config file not found: %w", err).
+			WithRemedyOnOwnLine("Place 'config.yaml' in the same directory as the application or start RestoreSafe from that directory.")
 	}
 
 	return parse(data)
@@ -218,13 +219,13 @@ func parse(data []byte) (*Config, error) {
 		if unknown := unknownKeysError(err); unknown != nil {
 			return nil, unknown
 		}
-		hint := "\nRemedy: Check YAML syntax (space indentation, correct colons, no tabs)."
+		remedy := "Check YAML syntax (space indentation, correct colons, no tabs)."
 		errMsg := strings.ToLower(err.Error())
 		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
-			hint += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
+			remedy += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
 		}
 
-		return nil, fmt.Errorf("Config file is invalid: %w%s", err, hint)
+		return nil, problem.Errorf("Config file is invalid: %w", err).WithRemedyOnOwnLine(remedy)
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err == nil {
@@ -284,44 +285,44 @@ func (c *Config) withDefaults() {
 
 func (c *Config) validate() error {
 	if len(c.SourceDirectories) == 0 {
-		return fmt.Errorf("No 'source_directories' specified in config file. Remedy: Add at least one source directory under 'source_directories', e.g. ['C:/Users/Name/Documents'].")
+		return problem.New("No 'source_directories' specified in config file.").WithRemedy("Add at least one source directory under 'source_directories', e.g. ['C:/Users/Name/Documents'].")
 	}
 	if c.BackupDirectory == "" {
-		return fmt.Errorf("No 'backup_directory' specified in config file. Remedy: Set a backup directory, e.g. 'C:/Backups'.")
+		return problem.New("No 'backup_directory' specified in config file.").WithRemedy("Set a backup directory, e.g. 'C:/Backups'.")
 	}
 	switch c.LogLevel {
 	case "debug", "info":
 	default:
-		return fmt.Errorf("Invalid 'log_level': %q (allowed: debug, info). Remedy: Set 'log_level' to 'info' or 'debug'.", c.LogLevel)
+		return problem.Errorf("Invalid 'log_level': %q (allowed: debug, info).", c.LogLevel).WithRemedy("Set 'log_level' to 'info' or 'debug'.")
 	}
 	if c.RetentionKeep < 0 {
-		return fmt.Errorf("Invalid 'retention_keep': %d (must be >= 0). Remedy: Use 0 (disabled) or a positive number, e.g. 7.", c.RetentionKeep)
+		return problem.Errorf("Invalid 'retention_keep': %d (must be >= 0).", c.RetentionKeep).WithRemedy("Use 0 (disabled) or a positive number, e.g. 7.")
 	}
 	switch c.AuthenticationMode {
 	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
 	default:
-		return fmt.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only). Remedy: Set 'authentication_mode' to 1, 2, or 3.", c.AuthenticationMode)
+		return problem.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only).", c.AuthenticationMode).WithRemedy("Set 'authentication_mode' to 1, 2, or 3.")
 	}
 	if c.YubiKeySpare && !c.UseYubiKey() {
-		return fmt.Errorf("'yubikey_spare: true' requires a YubiKey mode. Remedy: Set 'authentication_mode' to 2 or 3, or set 'yubikey_spare' to false.")
+		return problem.New("'yubikey_spare: true' requires a YubiKey mode.").WithRemedy("Set 'authentication_mode' to 2 or 3, or set 'yubikey_spare' to false.")
 	}
 	switch c.OnUnreadableFile {
 	case OnUnreadableFail, OnUnreadableSkip:
 	default:
-		return fmt.Errorf("Invalid 'on_unreadable_file': %q (allowed: fail, skip). Remedy: Set 'on_unreadable_file' to \"fail\" or \"skip\".", c.OnUnreadableFile)
+		return problem.Errorf("Invalid 'on_unreadable_file': %q (allowed: fail, skip).", c.OnUnreadableFile).WithRemedy("Set 'on_unreadable_file' to \"fail\" or \"skip\".")
 	}
 	if c.ReminderDays != nil && (*c.ReminderDays < 0 || *c.ReminderDays > MaxReminderDays) {
-		return fmt.Errorf("Invalid 'reminder_days': %d (allowed 0-%d). Remedy: Set it to the number of days without a backup after which RestoreSafe reminds you, or 0 to turn the reminder off; the default is %d.", *c.ReminderDays, MaxReminderDays, DefaultReminderDays)
+		return problem.Errorf("Invalid 'reminder_days': %d (allowed 0-%d).", *c.ReminderDays, MaxReminderDays).WithRemedy(fmt.Sprintf("Set it to the number of days without a backup after which RestoreSafe reminds you, or 0 to turn the reminder off; the default is %d.", DefaultReminderDays))
 	}
 	d := c.Differential
 	if d.FullBackupIntervalDays < 0 || d.FullBackupIntervalDays > MaxFullBackupIntervalDays {
-		return fmt.Errorf("Invalid 'differential.full_backup_interval_days': %d (allowed 1-%d). Remedy: Set it to the maximum age in days of a full backup; the default is %d.", d.FullBackupIntervalDays, MaxFullBackupIntervalDays, DefaultFullBackupIntervalDays)
+		return problem.Errorf("Invalid 'differential.full_backup_interval_days': %d (allowed 1-%d).", d.FullBackupIntervalDays, MaxFullBackupIntervalDays).WithRemedy(fmt.Sprintf("Set it to the maximum age in days of a full backup; the default is %d.", DefaultFullBackupIntervalDays))
 	}
 	if d.MaxSizePercent < 0 || d.MaxSizePercent > 100 {
-		return fmt.Errorf("Invalid 'differential.max_size_percent': %d (allowed 1-100). Remedy: Set it to a percentage of the full backup size; the default is %d.", d.MaxSizePercent, DefaultMaxSizePercent)
+		return problem.Errorf("Invalid 'differential.max_size_percent': %d (allowed 1-100).", d.MaxSizePercent).WithRemedy(fmt.Sprintf("Set it to a percentage of the full backup size; the default is %d.", DefaultMaxSizePercent))
 	}
 	if d.RetentionKeepDifferentials < 0 {
-		return fmt.Errorf("Invalid 'differential.retention_keep_differentials': %d (must be >= 0). Remedy: Use 0 (keep all) or a positive number.", d.RetentionKeepDifferentials)
+		return problem.Errorf("Invalid 'differential.retention_keep_differentials': %d (must be >= 0).", d.RetentionKeepDifferentials).WithRemedy("Use 0 (keep all) or a positive number.")
 	}
 	matcher, err := NewExcludeMatcher(c.Exclude)
 	if err != nil {
@@ -329,16 +330,16 @@ func (c *Config) validate() error {
 	}
 	c.ExcludeMatcher = matcher
 	if c.PasswordMinLength < PasswordMinLengthFloor || c.PasswordMinLength > PasswordMinLengthMax {
-		return fmt.Errorf("Invalid 'password_min_length': %d (allowed %d-%d). Remedy: Set 'password_min_length' to at least %d; the recommended value is %d.", c.PasswordMinLength, PasswordMinLengthFloor, PasswordMinLengthMax, PasswordMinLengthFloor, DefaultPasswordMinLength)
+		return problem.Errorf("Invalid 'password_min_length': %d (allowed %d-%d).", c.PasswordMinLength, PasswordMinLengthFloor, PasswordMinLengthMax).WithRemedy(fmt.Sprintf("Set 'password_min_length' to at least %d; the recommended value is %d.", PasswordMinLengthFloor, DefaultPasswordMinLength))
 	}
 	if c.Argon2.Time < Argon2MinTime {
-		return fmt.Errorf("Invalid 'argon2.time': %d (minimum %d). Remedy: Set 'argon2.time' to %d or higher; the recommended value is 3.", c.Argon2.Time, Argon2MinTime, Argon2MinTime)
+		return problem.Errorf("Invalid 'argon2.time': %d (minimum %d).", c.Argon2.Time, Argon2MinTime).WithRemedy(fmt.Sprintf("Set 'argon2.time' to %d or higher; the recommended value is 3.", Argon2MinTime))
 	}
 	if c.Argon2.MemoryMB < Argon2MinMemoryMB {
-		return fmt.Errorf("Invalid 'argon2.memory_mb': %d (minimum %d). Remedy: Set 'argon2.memory_mb' to %d or higher; the recommended value is 512.", c.Argon2.MemoryMB, Argon2MinMemoryMB, Argon2MinMemoryMB)
+		return problem.Errorf("Invalid 'argon2.memory_mb': %d (minimum %d).", c.Argon2.MemoryMB, Argon2MinMemoryMB).WithRemedy(fmt.Sprintf("Set 'argon2.memory_mb' to %d or higher; the recommended value is 512.", Argon2MinMemoryMB))
 	}
 	if c.Argon2.Threads < Argon2MinThreads {
-		return fmt.Errorf("Invalid 'argon2.threads': %d (minimum %d). Remedy: Set 'argon2.threads' to %d or higher; the recommended value is 4.", c.Argon2.Threads, Argon2MinThreads, Argon2MinThreads)
+		return problem.Errorf("Invalid 'argon2.threads': %d (minimum %d).", c.Argon2.Threads, Argon2MinThreads).WithRemedy(fmt.Sprintf("Set 'argon2.threads' to %d or higher; the recommended value is 4.", Argon2MinThreads))
 	}
 	return nil
 }

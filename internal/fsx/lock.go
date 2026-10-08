@@ -3,8 +3,8 @@
 package fsx
 
 import (
+	"RestoreSafe/internal/problem"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -34,11 +34,11 @@ type BackupLock struct {
 func AcquireBackupLock(backupDir string) (*BackupLock, error) {
 	f, err := os.OpenFile(filepath.Join(backupDir, lockFileName), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("RestoreSafe can't create its lock file in %q: %w. Remedy: Check the write permissions of the backup directory.", filepath.ToSlash(backupDir), err)
+		return nil, problem.Errorf("RestoreSafe can't create its lock file in %q: %w.", filepath.ToSlash(backupDir), err).WithRemedy("Check the write permissions of the backup directory.")
 	}
 	if err := lockFile(f, windows.LOCKFILE_EXCLUSIVE_LOCK); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("Another RestoreSafe window is backing up, restoring or verifying in %q. Remedy: Wait until it has finished, then start the backup again.", filepath.ToSlash(backupDir))
+		return nil, problem.Errorf("Another RestoreSafe window is backing up, restoring or verifying in %q.", filepath.ToSlash(backupDir)).WithRemedy("Wait until it has finished, then start the backup again.")
 	}
 	return &BackupLock{file: f, exclusive: true}, nil
 }
@@ -59,7 +59,7 @@ func AcquireReadLock(backupDir string) (*BackupLock, error) {
 	}
 	if err := lockFile(f, 0); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("A backup is running in %q. Remedy: Wait until it has finished, then start again.", filepath.ToSlash(backupDir))
+		return nil, problem.Errorf("A backup is running in %q.", filepath.ToSlash(backupDir)).WithRemedy("Wait until it has finished, then start again.")
 	}
 	return &BackupLock{file: f}, nil
 }

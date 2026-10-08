@@ -3,7 +3,7 @@ package job
 import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
-	"errors"
+	"RestoreSafe/internal/problem"
 	"fmt"
 )
 
@@ -12,7 +12,7 @@ import (
 // only complete sets are restore points.
 func SelectSets(infos []catalog.SetInfo, requested []naming.BackupEntry) ([]catalog.SetInfo, error) {
 	if len(requested) == 0 {
-		return nil, errors.New("No backup chosen. Remedy: Choose the backup to use.")
+		return nil, problem.New("No backup chosen.").WithRemedy("Choose the backup to use.")
 	}
 	byEntry := make(map[naming.BackupEntry]catalog.SetInfo, len(infos))
 	for _, info := range infos {
@@ -22,7 +22,7 @@ func SelectSets(infos []catalog.SetInfo, requested []naming.BackupEntry) ([]cata
 	for _, entry := range requested {
 		info, ok := byEntry[entry]
 		if !ok {
-			return nil, fmt.Errorf("Backup %s is no longer in the backup directory. Remedy: Check the backup directory, then choose the backup again.", entry.String())
+			return nil, problem.Errorf("Backup %s is no longer in the backup directory.", entry.String()).WithRemedy("Check the backup directory, then choose the backup again.")
 		}
 		if !info.Complete() {
 			return nil, fmt.Errorf("Backup %s cannot be used: %v", entry.String(), info.Err)

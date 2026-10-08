@@ -16,7 +16,8 @@ func LockForReading(backupDir string) (lock *fsx.BackupLock, issue *interact.Iss
 		return lock, &interact.Issue{
 			Status: interact.StatusWarn,
 			Code:   interact.CodeBackupDirNotLocked,
-			Text:   "RestoreSafe can't lock the backup directory. Remedy: Don't start a backup in it while this runs.",
+			Text:   "RestoreSafe can't lock the backup directory.",
+			Remedy: "Don't start a backup in it while this runs.",
 		}, nil
 	}
 	return lock, nil, err

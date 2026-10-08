@@ -98,10 +98,10 @@ func TestConfirmBackupStart(t *testing.T) {
 
 func TestWaitForSpareYubiKey(t *testing.T) {
 	c, _ := scripted("", "Q")
-	if ok, err := c.WaitForSpareYubiKey(); err != nil || !ok {
+	if ok, err := c.WaitForSpareYubiKey(interact.SpareQuestion{}); err != nil || !ok {
 		t.Fatalf("Enter: got %v, %v; want true", ok, err)
 	}
-	if ok, err := c.WaitForSpareYubiKey(); err != nil || ok {
+	if ok, err := c.WaitForSpareYubiKey(interact.SpareQuestion{}); err != nil || ok {
 		t.Fatalf("q: got %v, %v; want false", ok, err)
 	}
 }

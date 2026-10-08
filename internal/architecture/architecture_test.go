@@ -12,7 +12,7 @@ const module = "RestoreSafe/"
 // layers lists the package groups from bottom to top. A package may import
 // packages of its own layer and of lower layers, never of higher ones.
 var layers = [][]string{
-	{".", "internal/fsx", "internal/buildinfo"}, // ".": the module root, the embedded config-SAMPLE.yaml
+	{".", "internal/fsx", "internal/buildinfo", "internal/problem"}, // ".": the module root, the embedded config-SAMPLE.yaml
 	{"internal/security"},
 	{"internal/config", "internal/logging"},
 	{"internal/format"},

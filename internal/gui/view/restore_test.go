@@ -4,11 +4,11 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/restore"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,7 +127,7 @@ func TestRestoreView(t *testing.T) {
 	if v := RestoreViewOf(choices, checked, "today", dest, nil, nil, true); !v.Checking || v.Start.Enabled || v.Hint != "Checking…" || v.HintTone != ToneSecondary {
 		t.Fatalf("while checking %+v", v)
 	}
-	if v := RestoreViewOf(choices, checked, "today", dest, nil, errors.New("No access. Remedy: Check the path."), false); v.HintTone != ToneError || v.Hint != "No access. Check the path." || v.Start.Enabled {
+	if v := RestoreViewOf(choices, checked, "today", dest, nil, problem.New("No access.").WithRemedy("Check the path."), false); v.HintTone != ToneError || v.Hint != "No access. Check the path." || v.Start.Enabled {
 		t.Fatalf("check failed %+v", v)
 	}
 	checkWriting(t, v)
@@ -198,7 +198,7 @@ func TestRestoreProgressAndResults(t *testing.T) {
 
 	f := restoreRun()
 	f.Progressed(interact.Progress{Phase: interact.PhaseRestoring, Index: 1, Count: 2, Item: "Docs", Done: 1, Total: 2}, planNow)
-	f.Done(flow.End{Err: errors.New(`Failed to restore directory "Docs": checksum mismatch. Remedy: Verify.`)}, planNow)
+	f.Done(flow.End{Err: problem.New(`Failed to restore directory "Docs": checksum mismatch.`).WithRemedy("Verify.")}, planNow)
 	r = ResultCardOf(f.Current())
 	want := `Failed to restore directory "Docs": checksum mismatch.|D:\Restore\Docs is incomplete; don't use it as a full copy.|Pics wasn't restored.|Verify this backup, or restore from an older one.`
 	if r == nil || r.Title != "Restore incomplete" || r.Tone != ToneError || strings.Join(r.Lines, "|") != want {

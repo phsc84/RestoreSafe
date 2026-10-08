@@ -243,8 +243,8 @@ func TestVerifyPlan(t *testing.T) {
 	if got := VerifyPlanOf(two, "today", now).Note; got != "Every file is decrypted and checked against its checksum. Differentials are read with their full backups of 1 Sep." {
 		t.Fatalf("two full backups of one day: %q", got)
 	}
-	p.Sets[0].Problem = "Full backup missing. Remedy: Restore it from your copy."
-	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing. Remedy: Restore it from your copy."}}
+	p.Sets[0].Problem, p.Sets[0].Remedy = "Full backup missing.", "Restore it from your copy."
+	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing.", Remedy: "Restore it from your copy."}}
 	v = VerifyPlanOf(p, "today, 09:12", now)
 	if v.Start != nil || len(v.Issues) != 1 || v.Issues[0].Tone != ToneError || v.Folders.Rows[0].Cells[0].Tone != ToneError {
 		t.Fatalf("a blocked plan %+v", v)

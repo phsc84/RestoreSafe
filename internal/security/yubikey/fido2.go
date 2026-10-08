@@ -7,6 +7,7 @@
 package yubikey
 
 import (
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/rand"
@@ -37,7 +38,7 @@ func fido2Log(format string, args ...any) {
 // ── Sentinel errors ───────────────────────────────────────────────────────────
 
 var ErrNotConnected = errors.New("no FIDO2 authenticator detected")
-var ErrRequired = errors.New("FIDO2 authenticator is required but none was detected. Remedy: Connect the YubiKey and retry.")
+var ErrRequired = problem.New("FIDO2 authenticator is required but none was detected.").WithRemedy("Connect the YubiKey and retry.")
 
 // ── Windows WebAuthn API bindings ─────────────────────────────────────────────
 
@@ -480,7 +481,7 @@ func DeriveFIDO2SecretAny(challenges []ChallengeData) (int, []byte, error) {
 			return 0, nil, fmt.Errorf("invalid FIDO2 salt in challenge %d", i)
 		}
 		if salt != nil && !bytes.Equal(salt, s) {
-			return 0, nil, fmt.Errorf("registered YubiKeys use different salts. Remedy: Use an unmodified backup created by RestoreSafe.")
+			return 0, nil, problem.New("registered YubiKeys use different salts.").WithRemedy("Use an unmodified backup created by RestoreSafe.")
 		}
 		salt = s
 		credIDs[i] = credID
@@ -521,12 +522,12 @@ func validateFIDO2Secret(secret []byte) error {
 
 func checkWebAuthnAPIVersion() error {
 	if err := webauthnDLL.Load(); err != nil {
-		return fmt.Errorf("webauthn.dll not available: %w. Remedy: Windows 11 version 22H2 or later is required.", err)
+		return problem.Errorf("webauthn.dll not available: %w.", err).WithRemedy("Windows 11 version 22H2 or later is required.")
 	}
 	ver, _, _ := procWebAuthNGetApiVersionNumber.Call()
 	fido2Log("webauthn.dll API version: %d (minimum required: %d)", ver, webauthnMinAPIVersion)
 	if ver < webauthnMinAPIVersion {
-		return fmt.Errorf("webauthn.dll API version %d is too old (need %d+). Remedy: Windows 11 version 22H2 or later is required.", ver, webauthnMinAPIVersion)
+		return problem.Errorf("webauthn.dll API version %d is too old (need %d+).", ver, webauthnMinAPIVersion).WithRemedy("Windows 11 version 22H2 or later is required.")
 	}
 	return nil
 }
@@ -683,7 +684,7 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 		return nil, ErrAlreadyRegistered
 	}
 	if hr != 0 {
-		return nil, fmt.Errorf("WebAuthNAuthenticatorMakeCredential: %s. Remedy: Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.", webauthnErrorString(hr))
+		return nil, problem.Errorf("WebAuthNAuthenticatorMakeCredential: %s.", webauthnErrorString(hr)).WithRemedy("Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.")
 	}
 	if attestation == nil || attestation.cbCredentialId == 0 {
 		return nil, fmt.Errorf("WebAuthNAuthenticatorMakeCredential returned no credential ID")
@@ -753,7 +754,7 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 		uintptr(unsafe.Pointer(&assertion)),
 	)
 	if hr != 0 {
-		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion: %s. Remedy: Ensure a YubiKey registered for this backup is connected.", webauthnErrorString(hr))
+		return 0, nil, problem.Errorf("WebAuthNAuthenticatorGetAssertion: %s.", webauthnErrorString(hr)).WithRemedy("Ensure a YubiKey registered for this backup is connected.")
 	}
 	if assertion == nil || assertion.pHmacSecret == nil {
 		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")

@@ -63,7 +63,7 @@ const (
 const recheckAfter = 5 * time.Minute
 
 // app is the main window. There is one per process; the window procedure
-// reaches it through theApp.
+// reaches it through the registry of windows (registry.go).
 type app struct {
 	opts      Options
 	backupDir string
@@ -76,6 +76,8 @@ type app struct {
 	plan    *planDialog    // open backup plan dialog, if any
 	restore *restoreDialog // open Restore window, if any
 	verify  *verifyDialog  // open Verify window, if any
+	// credential is the open credential dialog, if any.
+	credential *credentialDialog
 	// lastDestination is where the last restore of this session went.
 	lastDestination string
 	// reloading is set while the configuration file is read again;
@@ -123,8 +125,6 @@ type app struct {
 	pendingReload *reloaded
 }
 
-var theApp *app
-
 // Run shows the main window and runs the message loop until it is closed. It
 // must be called from the main goroutine before any other window is created.
 func Run(opts Options) error {
@@ -141,7 +141,6 @@ func Run(opts Options) error {
 		return err
 	}
 	a := &app{opts: opts, backupDir: fsx.ResolveDir(opts.Config.BackupDirectory, opts.ExeDir)}
-	theApp = a
 	if err := a.createWindow(); err != nil {
 		return err
 	}
@@ -189,15 +188,10 @@ func (a *app) createWindow() error {
 	work, dpi := win32.CursorMonitor()
 	s := widget.Scale(dpi)
 	wc := win32.WndClassEx{
-		WndProc:    windows.NewCallback(wndProc),
-		Instance:   win32.ModuleHandle(),
-		Icon:       appIcon(win32.SystemMetric(win32.SM_CXICON, dpi)),
-		IconSm:     appIcon(win32.SystemMetric(win32.SM_CXSMICON, dpi)),
-		Cursor:     win32.ArrowCursor(),
-		Background: win32.SysColorBrush(win32.COLOR_WINDOW),
-		ClassName:  win32.UTF16(windowClass),
+		Icon:   appIcon(win32.SystemMetric(win32.SM_CXICON, dpi)),
+		IconSm: appIcon(win32.SystemMetric(win32.SM_CXSMICON, dpi)),
 	}
-	if err := win32.RegisterClass(&wc); err != nil {
+	if err := registerClass(wc, windowClass); err != nil {
 		return err
 	}
 
@@ -214,6 +208,7 @@ func (a *app) createWindow() error {
 		return err
 	}
 	a.hwnd = hwnd
+	handlers[hwnd] = a
 	a.dpi = win32.DpiForWindow(hwnd)
 	yubikey.SetParentWindow(uintptr(hwnd))
 
@@ -335,17 +330,13 @@ func (a *app) open(path string, isFile bool) {
 	}
 }
 
-func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
-	a := theApp
-	switch msg {
-	case win32.WM_GETMINMAXINFO:
+// message handles the messages of the main window.
+func (a *app) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
+	if msg == win32.WM_GETMINMAXINFO {
 		s := widget.Scale(win32.DpiForWindow(hwnd))
 		minRect := win32.WindowRectForClient(win32.Rect{Right: s.Px(widget.WindowMinWidth), Bottom: s.Px(widget.WindowMinHeight)}, windowStyle, windowExStyle, uint32(s))
 		win32.MinMaxInfoParam(lparam).MinTrackSize = win32.Point{X: minRect.Width(), Y: minRect.Height()}
 		return 0
-	}
-	if a == nil || a.hwnd == 0 || hwnd != a.hwnd {
-		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
 	}
 	if a.taskbarCreated != 0 && msg == a.taskbarCreated {
 		a.taskbar.Release()
@@ -435,6 +426,7 @@ func wndProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		a.theme.Fonts.Close()
 		a.taskbar.Release()
+		delete(handlers, hwnd)
 		win32.PostQuitMessage(0)
 		return 0
 	}

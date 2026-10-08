@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52); phases C to E open |
+| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52), Phase C done 2026-10-08; phases D and E open; open questions answered except RF-60 (Phase E) |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1); CI runs on each push to the pull request |
@@ -48,6 +48,8 @@ Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `secu
 After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
 
 After Phase B (2026-10-07, `refactor-2.0` at `22257c0`): `gofmt -l .`, staticcheck and deadcode print nothing; all tests pass, including the 2.0.0 format fixtures; coverage 52.3 % in total, every package above its floor; 291 files, 41,924 Go lines (the fixtures add 2.4 MB of test data).
+
+After Phase C (2026-10-08, `refactor-2.0` at `82ae779`): gofmt, staticcheck and deadcode print nothing; all tests pass, including the format fixtures; coverage 52.4 % in total, every package above its floor; no production error text contains "Remedy:"; `gui/flow` matches no workflow text; no production file in `internal/gui` is over 500 lines except `view/strings.go` (515); 312 files, 42,510 Go lines.
 
 ## 3. Constraints
 
@@ -149,6 +151,8 @@ type Error struct {
 
 `Error()` returns `Msg + " Remedy: " + Remedy`, so logs and the existing tests keep their text. The GUI uses `errors.As` to show the remedy on its own line and to pick the action button by `Code`. Convert package by package, starting with `container`, `archive`, and `config` (the most strings). Then add `staticcheck.conf` with `-ST1005` and a comment that error texts are user-facing sentences on purpose.
 Acceptance: no production error string contains "Remedy:" literally; the GUI shows remedies from the field.
+Decided 2026-10-07: all sites, package by package, starting with the errors that carry a `Code` (the ones the GUI acts on). The round may stop after those without leaving anything broken.
+Done up to the last step (`c1bee60` to `2410eae`): `internal/problem` (bottom layer) holds `Error{Msg, Remedy, OwnLine, Err}`; every production error that carried "Remedy:" is one now, converted by a syntax-tree tool where the text was a literal and by hand elsewhere, with unchanged text (the tests compare it). Error types that callers find with `errors.As` (unreadable file, incomplete set, missing parts, renamed files) are the cause of a `problem.Error`. Issues and plans carry the remedy in a field (`Issue.Remedy`, `FolderPlan.Remedy`, `SetPlan.Remedy`, `RestoreSetPlan.OutputRemedy`), and the GUI shows it from there. Differences from the item: no `Code` field yet, because no caller acts on an error's code (the GUI picks actions by the codes of issues and problems); and log and console lines, the printed plan's advisory row and the health problems' Detail keep "Remedy:" as text, because they are the log format (standing constraint 2) or, for Detail, the full text GUI spec 11.8 asks for. Last step, after RF-26: the credential message is the only text the GUI still splits; then `problem.Split`'s text fallback and `textWithRemedy` go. Last step done in `e42d666`: `problem.Split` takes the remedy from a `problem.Error` only; the GUI splits no text.
 
 **RF-26 (P2) Replace the text protocol between workflows and GUI.** `interact.UI` is still shaped like the old console: questions are prompts as strings, and messages are lines written to `Output()`. The GUI recovers meaning by matching text:
 
@@ -162,17 +166,22 @@ Rewording a prompt or a log line silently changes the dialogs. Change:
 - `interacttest.Script` prints the same wording as today, so the e2e scripts' expected output does not change.
 
 Acceptance: `gui/flow` contains no `strings.Contains` or prefix check on workflow text; architecture test unchanged.
+Done in `4f40d12`. The questions are types in `interact`: `SecretQuestion` (password or recovery code, the operation, `OtherKeys` with their creation date for CR-1, an `Attempt` with the reason the previous try failed), `UnlockChoice` (the `AuthMode` instead of its label), `NewPasswordQuestion` (the minimum length) and `SpareQuestion`. Instead of a general `Notice`, every message a dialog showed is part of the question it belongs to, which was enough: the workflows write no message for a dialog any more, and `Output()` carries log and console text only. `interacttest.Script` prints the old wording, so console output and the e2e tests are unchanged. `gui/flow` matches no text, and `gui/view` reads no prompt or message (its regular expressions are gone). One GUI text changed: the password dialog after a YubiKey touch no longer repeats "YubiKey connected. Follow the on-screen prompts", which came too late to help.
 
 **RF-27 (P3) Stale package docs.** `restore`'s doc still lists "Let the user choose which backup(s) to restore" ([restore/workflow.go:1-5](../internal/workflow/restore/workflow.go#L1-L5)); the choice is made before `Run` since decision 2 of PLAN-gui-redesign. Review every `doc.go` and package comment against the current behaviour.
+Done in `46112ff`: restore and backup list their steps in today's order, interact says what Output is for since RF-26, catalog got a package comment, and job, logging and fsx name what they hold now. The other packages' comments were checked and are current.
 
 ## 8. Modularity and duplication (Phase C)
 
 **RF-30 (P2) Restore and verify share one preflight.** `restore/workflow.go` and `verify/workflow.go` duplicate: the preflight item build with base lookup (`buildRestorePreflight` / `buildVerifyPreflight`), the "Backup selection" rows, the size estimate, the "with full backup ... (parts: n)" detail, the auth rows, the per-entry loop, and the cancel handling. Move the shared part into `workflow/job` (it may not go into `restore` or `verify`, architecture rule): `job.SelectionPreflight(selected, inventory) []SelectionItem` and `job.SelectionRows(...)`. Restore adds its destination checks on top.
 Acceptance: the duplicated functions exist once; the restore and verify tests pass unchanged.
+Done in `c025396`: `job.SelectionPreflight`, `SelectionRows`, `SelectionBytes`, `SelectionItem.SetPlan`, `EachRestorePoint`, `OpenRestorePoint` and `LogStart`, with tests of their own (`job` 83.5 %). Verify uses the shared item as it is; restore embeds it and adds its destination folder. The tests pass with only the renames of verify's item. The cancel branches stay in each workflow: their messages differ.
 
 **RF-31 (P2) Parameter structs for long signatures.** Several functions take 8-10 positional parameters, several of them strings or `*atomic.Int64` of the same type, which invites swapped arguments: `runRestoreOperation` (10), `RunSectionPipeline` (9, two of them prose strings), `restorePreflightReport` (7), `backupDirectory`, `logPartSummary`. Use a struct per operation (`restore.operation{...}`) with methods instead of passing the same eight values down three levels.
+Done in `c9a6cdf`, `88d2792`, `20ec84b` and `afd6b68`: restore, verify and backup each have an `operation` struct whose methods share the run's values; `logPartSummary` takes `setwriter.Counters`; `restorepoint.Process(..., verifyOnly, ...)` became `Restore` and `Verify` with an `Output` (logger and byte counter), and the section reader derives its prose itself instead of taking it as two parameters. `restorePreflightReport` is down to 6 parameters since RF-21 and stays.
 
 **RF-32 (P3) Context as a parameter, not a field.** `archive.BuildOptions.Context` and `setwriter.Params.Context` keep the context in a struct, and `nil` means background. Make it the first parameter (`BuildTar(ctx, w, opts, mb)`, `setwriter.Write(ctx, p)`), as the workflows already do.
+Done in `974cc48`. `fsx.ContextWriter` keeps its context as a field on purpose: an `io.Writer` has nowhere else to take it from.
 
 **RF-33 (P2) Split the large GUI files.** `gui/backups.go` (948), `gui/wizard.go` (931) and `gui/overview.go` (693) each mix building controls, layout, list custom-draw, and commands. `overview.go` also holds helpers that 8 files use (`card`, `layoutRow`, `toneColor`, `heroColors`, `badgeColors`, `segmentColor`, `glyphOf`, `measure`).
 
@@ -181,7 +190,10 @@ Acceptance: the duplicated functions exist once; the restore and verify tests pa
 - Target: no file in `gui` over 500 lines.
 - Update the target structure in PLAN-gui-redesign section 3, which still lists files that were never created (`verifydialog.go`, `credentials.go`, `widget/list.go`, `widget/stack.go`, `view/progress.go`), or move the plan to the archive (RF-62).
 
+Done in `515ff1d`, `28ae632`, `b49acf5` and `0250574`, moving code unchanged with a syntax-tree tool: `card.go`, `palette.go` and `page.go` hold what the pages share; the Create backup page, the Restore backup page and the Restore window are split into the page and its `_layout`, `_list` and (for the window) `_check` files; `gui/view` got `vocabulary.go`, `verifyplan.go`, `logviewer.go` and `restorepage_actions.go`, and `gui/win32` got `display.go`. The files the item names are `restorepage.go`, `restoredialog.go` and `createpage.go` since the pages were renamed. Every production file in `internal/gui` is under 500 lines except `view/strings.go` (515), which stays whole: it is the one place of every user-visible string (GUI spec 3.6). PLAN-gui-redesign's target structure is not updated: that plan is deleted after the 2.0.0 release (RF-62).
+
 **RF-34 (P3) Package-level GUI state.** `theApp`, `activeDetails`, `activeCredential`, `dialogWindows`, and the `*ClassExists` flags are globals ([app.go:124](../internal/gui/app.go#L124), [details.go:30](../internal/gui/details.go#L30), [dialogs.go:47](../internal/gui/dialogs.go#L47), [dialogwin.go:33](../internal/gui/dialogwin.go#L33)). A Win32 window procedure needs one way to find its Go object, but one is enough: keep a single registry `map[HWND]handler` (or `GWLP_USERDATA` per window) in the `gui` package and make the dialog state fields of `app`. This lets more of `gui` be tested with a hidden window (RF-40).
+Done in `82ae779`: `registry.go` maps every top-level window to its handler (`app`, `dialogWindow`, the details viewer, each with a `message` method), served by one window procedure; `registerClass` registers every class once; the open credential dialog is a field of `app`. `theApp`, `activeDetails`, `activeCredential`, `dialogWindows` and the class flags are gone. Checked on the real window with `Smoke-BackupRestore.ps1`, `Check-States.ps1` (all 13 conditions; `Argon2Capped` needs a configuration without its own `argon2` block, as the script appends one), `Accessibility.ps1`, and an ad-hoc check of the details viewer. Testing `gui` with a hidden window (the item's motive) is now possible; writing such tests belongs to the coverage targets of RF-40.
 
 ## 9. Performance (Phase D)
 
@@ -195,6 +207,7 @@ Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a cons
 **RF-37 (P2) Go benchmarks that CI can run.** The throughput tests need `RESTORESAFE_BENCH_ROOT` and 1.7 GB of data, so they never run by themselves. Add small `testing.B` benchmarks for `EncryptStream`, `DecryptStream`, `archive.BuildTar` over a temp tree, manifest encode and parse at 100k entries, and `catalog.Inventory` with 500 sets. CI runs them with `-benchtime=1x` only to keep them compiling; a developer compares with `benchstat`.
 
 **RF-38 (P3, only if RF-35 shows CPU-bound crypto) Parallel chunk encryption.** The pipeline is one producer (walk, read, SHA-256, TAR) and one consumer (encrypt, write) joined by an unbuffered `io.Pipe`. Chunks are independent (counter nonce, per-chunk AAD), so N workers can seal chunks while one writer keeps the order. Bounds: N = min(GOMAXPROCS, 4), memory ≤ 2 × N × 8 MiB. The on-disk output must be byte-identical to the sequential writer for the same key, which a test checks. Same for decrypt, with read-ahead of the next part.
+Dropped 2026-10-07: the owner wants simple and robust code, so the crypto pipeline stays sequential whatever the profile shows. RF-35 still profiles, for RF-36 and RF-39.
 
 **RF-39 (P3) Manifest memory against SPEC 5.3.** SPEC-2.0 section 5.3 says "the manifest is written as a stream", but `container.Write` takes the whole manifest as `[]byte` from `manifestFn` ([set.go:55](../internal/format/container/set.go#L55)) and `ReadManifest` reads it into a `bytes.Buffer`. At 1,000,000 files that is ~300 MB once more, on top of the builder's entries. Either stream it (`manifestFn func(io.Writer) error`) or correct the spec. Add a test with 1,000,000 synthetic entries that checks the peak heap stays under a stated limit.
 
@@ -220,6 +233,7 @@ Done in `d11617c`. No package `init` touches the Windows API before `main`, and 
 **RF-57 (P3) Document what is plaintext.** The set header is plaintext JSON: folder name, dates, chain and run ID, app version, and the key set (salts, wrapped keys, YubiKey credential IDs). The README says "AES-256-GCM encryption (content and metadata/file names)". Make the README precise: file and folder names *inside* a backup are encrypted; the backed-up folder's name, the dates, and the key slots are not.
 
 **RF-58 (P2) Release integrity.** Releases are a ZIP with no checksum or signature. Publish `SHA256SUMS.txt` with every release (RF-3) and the command to check it (`Get-FileHash`) in the README. Authenticode signing is an open question (section 14).
+Decided 2026-10-07: checksums only, no Authenticode signing (no running costs for a tool that earns nothing). The README says that SmartScreen may warn about the downloaded exe ("unknown publisher", More info, Run anyway) and how to check `SHA256SUMS.txt`. Done in `d32c6d9` (README) and `d7b800c` (SHA256SUMS.txt).
 
 **RF-59 (P1) Elevated, RestoreSafe reads files that other programs hold locked.** `archive.writeFile` opens a source file with `os.Open` ([build.go:314](../internal/format/archive/build.go#L314)), which asks for backup semantics (`FILE_FLAG_BACKUP_SEMANTICS`). In a process that holds the backup privilege, as an elevated administrator does, Windows then skips the share-mode check: a file another program holds without sharing, such as a PST open in Outlook, is read anyway, possibly while it is being written, and the backup holds an inconsistent copy instead of skipping the file. Found by the first CI runs (RF-11): the runner is elevated, and four tests of locked files failed until `testutil/filelock` removed the privilege from the test process (`2c0948d`). Unelevated, which is how RestoreSafe normally runs, the lock holds.
 Change: open source files for reading without backup semantics (`windows.CreateFile` with `GENERIC_READ`, `FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE`, `FILE_FLAG_SEQUENTIAL_SCAN`), so a locked file is unreadable, and `on_unreadable_file` applies, whether RestoreSafe runs elevated or not. Opening for attributes keeps backup semantics; it reads no file content and needs them for directories. Then `filelock.Hold` stops removing the privilege, so the locked-file tests run elevated on CI. User-visible only when elevated: a locked file is skipped (or fails the backup) instead of being copied; add it to CHANGELOG.
@@ -257,6 +271,7 @@ Done in `9b6b196`: `TestWebAuthnStructLayout` reads the sizes and offsets from t
 ## 12. Project structure and documentation (Phase E)
 
 **RF-60 (P3) Module path.** The module is named `RestoreSafe`. Go tooling expects a lower-case path that can be fetched, e.g. `github.com/phsc84/restoresafe`; tools like `goimports` then group local imports correctly, and `-X` flags and `go install` work as usual. Renaming changes every import line (mechanical, one commit). Open question (section 14).
+Deferred 2026-10-07: decided when Phase E starts.
 
 **RF-61 (P3) Root package.** [sample.go](../sample.go) exists only to `//go:embed config-SAMPLE.yaml` (a package cannot embed files from a parent directory). Keep the technique; rename the file to `embed.go` and keep the package comment, so its purpose is clear from the file list.
 
@@ -291,17 +306,17 @@ Each phase is a series of small commits, each building and passing. Items inside
 | A. Tooling | RF-1, 2, 3, 4, 10, 11, 12 | now, on its own branch; merge into `v2` | Touches no product code (RF-3 only the build); makes every later phase checkable. RF-4 first, RF-10 before RF-1's coverage step. |
 | B. Safety net and quick fixes | RF-20, 21, 22, 23, 24, 40, 41, 50, 51, 52, 59 | before the 2.0.0 release | RF-41 must capture 2.0.0's format before anything else changes; RF-24, 50, 51, 52, 59 are user-facing fixes worth shipping in 2.0.0. |
 | C. Structure | RF-25, 26, 27, 30, 31, 32, 33, 34 | after 2.0.0 | Large diffs; would conflict with the release fixes. RF-26 before RF-33 (the dialogs change shape). |
-| D. Performance and hardening | RF-35 → 36, 37 → 38, 39; RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
+| D. Performance and hardening | RF-35 → 36, 37, 39 (RF-38 dropped); RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
 | E. Project and docs | RF-60, 61, 62, 63, 64 | last | RF-60 touches every file; doing it last avoids conflicts with all other work. |
 
 ## 14. Open questions
 
-These are the owner's decisions; the spec works with either answer.
+These are the owner's decisions; the spec works with either answer. Answered 2026-10-07 (bold).
 
-1. **Module path (RF-60).** Rename to `github.com/phsc84/restoresafe`, or keep `RestoreSafe`?
-2. **Parallel encryption (RF-38).** Accept the extra complexity in the crypto pipeline if the profile shows a gain of, say, 30 % or more, or keep the pipeline sequential regardless?
-3. **Code signing (RF-58).** Buy an Authenticode certificate (or use a signing service) so SmartScreen stops warning, or publish checksums only?
-4. **Typed errors (RF-25).** Convert all 145 sites, or only the ones the GUI wants to act on (codes), leaving the rest as text?
+1. **Module path (RF-60).** Rename to `github.com/phsc84/restoresafe`, or keep `RestoreSafe`? **Deferred to Phase E.**
+2. **Parallel encryption (RF-38).** Accept the extra complexity in the crypto pipeline if the profile shows a gain of, say, 30 % or more, or keep the pipeline sequential regardless? **Dropped: the pipeline stays sequential.**
+3. **Code signing (RF-58).** Buy an Authenticode certificate (or use a signing service) so SmartScreen stops warning, or publish checksums only? **Checksums only.**
+4. **Typed errors (RF-25).** Convert all 145 sites, or only the ones the GUI wants to act on (codes), leaving the rest as text? **All sites, GUI-relevant first.**
 
 ## 15. Not part of this refactoring
 

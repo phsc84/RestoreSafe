@@ -91,7 +91,7 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 		p.Reload.Reason = reasonReloadBusy
 	}
 	if reloadErr != nil {
-		p.ConfigError = issueText(strings.ReplaceAll(reloadErr.Error(), "\nRemedy: ", " Remedy: "))
+		p.ConfigError = errorText(reloadErr)
 	}
 	switch n := len(cfg.MissingKeys); {
 	case n == 1:

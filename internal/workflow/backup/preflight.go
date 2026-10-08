@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
 	"RestoreSafe/internal/workflow/plan"
@@ -148,7 +149,9 @@ func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEst
 		if first == nil {
 			first = check.err
 		}
-		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: check.code, Text: strings.TrimPrefix(check.err.Error(), "Backup preflight failed: ")})
+		issue := interact.IssueOf(interact.StatusError, check.code, check.err)
+		issue.Text = strings.TrimPrefix(issue.Text, "Backup preflight failed: ")
+		issues = append(issues, issue)
 	}
 	if targetWarn != "" {
 		issues = append(issues, interact.Issue{Status: interact.StatusWarn, Code: interact.CodeSpaceEstimateOnly, Text: targetWarn})
@@ -171,7 +174,8 @@ func validateSourceDirectories(sources []plan.Source) error {
 	return job.ValidatePreflightItems(
 		sources,
 		func(src plan.Source) bool { return src.Err != nil },
-		"Backup preflight failed: %d source directory(s) are invalid or inaccessible. Remedy: Fix the [ERROR] entries above and start backup again.",
+		"Backup preflight failed: %d source directory(s) are invalid or inaccessible.",
+		"Fix the [ERROR] entries above and start backup again.",
 	)
 }
 
@@ -191,7 +195,7 @@ func validateTargetSpaceForBackup(backupDir string, est spaceEstimate) (warning 
 		return "", nil
 	}
 	if fsx.IsSpaceInsufficient(est.likely, freeBytes) {
-		return "", fmt.Errorf("Backup preflight failed: %s", fsx.FormatInsufficientBackupSpaceMessage(uint64(est.likely), freeBytes))
+		return "", fmt.Errorf("Backup preflight failed: %w", fsx.InsufficientBackupSpace(uint64(est.likely), freeBytes))
 	}
 	if est.anyDiff && fsx.IsSpaceInsufficient(est.full, freeBytes) {
 		return spaceWarning("in the backup directory", est, freeBytes), nil
@@ -268,16 +272,7 @@ func validateBackupPartCount(cfg *config.Config, sources []plan.Source) error {
 
 		estimatedParts := estimatePartCountWithMargin(size, splitSizeBytes)
 		if estimatedParts > naming.MaxPartSequence {
-			return fmt.Errorf(
-				"Backup preflight failed: %q is approximately %s, which at a split size of %d MB would create about %d part files (incl. %d%% overhead margin) - exceeding the %d-part limit of the backup naming scheme. Remedy: Increase split_size_mb in config.yaml so the backup fits within %d parts, or split the source into smaller backups.",
-				source.Resolved,
-				fsx.FormatBytesBinary(uint64(size)),
-				cfg.SplitSizeMB,
-				estimatedParts,
-				partCountSafetyMarginPercent,
-				naming.MaxPartSequence,
-				naming.MaxPartSequence,
-			)
+			return problem.Errorf("Backup preflight failed: %q is approximately %s, which at a split size of %d MB would create about %d part files (incl. %d%% overhead margin) - exceeding the %d-part limit of the backup naming scheme.", source.Resolved, fsx.FormatBytesBinary(uint64(size)), cfg.SplitSizeMB, estimatedParts, partCountSafetyMarginPercent, naming.MaxPartSequence).WithRemedy(fmt.Sprintf("Increase split_size_mb in config.yaml so the backup fits within %d parts, or split the source into smaller backups.", naming.MaxPartSequence))
 		}
 	}
 
@@ -418,7 +413,7 @@ func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, key
 	for _, src := range sources {
 		fp := interact.FolderPlan{Name: src.BackupName, Path: src.Resolved, Skipped: src.Skip, Warning: src.Warning}
 		if src.Err != nil {
-			fp.Problem = src.Err.Error()
+			fp.Problem, fp.Remedy = problem.Split(src.Err)
 		} else if folder := folders[src.BackupName]; folder != nil && !src.Skip {
 			fp.Reason = folder.Reason
 			if folder.IsDiff() {

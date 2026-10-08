@@ -173,7 +173,7 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 	case checking || (plan == nil && err == nil):
 		v.Hint, v.Checking = statusChecking, true
 	case err != nil:
-		v.Hint, v.HintTone = issueText(err.Error()), ToneError
+		v.Hint, v.HintTone = errorText(err), ToneError
 	}
 	if v.Hint != "" {
 		if v.HintTone == ToneNeutral {
@@ -194,7 +194,7 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 			exists++
 		case s.OutputProblem != "":
 			check = TableCell{Text: destInvalid, Tone: ToneError}
-			v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destInvalidLine, s.Set.DirectoryName, issueText(s.OutputProblem)), Tone: ToneError, Glyph: GlyphError})
+			v.Issues = append(v.Issues, IssueLine{Text: fmt.Sprintf(destInvalidLine, s.Set.DirectoryName, issueText(s.OutputProblem, s.OutputRemedy)), Tone: ToneError, Glyph: GlyphError})
 		}
 		v.Checks[s.Set] = check
 		v.Tips[s.Set] = joinTip(dir, check.Text)
@@ -215,7 +215,7 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 		case interact.CodeRestoreTargetExists, interact.CodeRestoreTargetInvalid, interact.CodeSpaceInsufficient, interact.CodeFreeSpaceUnknown:
 			continue // shown in the Check column, its lines and the Space line
 		}
-		line := IssueLine{Text: issueText(issue.Text), Tone: ToneWarning, Glyph: GlyphWarning}
+		line := IssueLine{Text: issueText(issue.Text, issue.Remedy), Tone: ToneWarning, Glyph: GlyphWarning}
 		if issue.Status == interact.StatusError {
 			line.Tone, line.Glyph = ToneError, GlyphError
 		}

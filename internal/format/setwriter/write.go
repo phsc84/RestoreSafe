@@ -11,6 +11,7 @@ import (
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
+	"RestoreSafe/internal/problem"
 	"bufio"
 	"context"
 	"errors"
@@ -64,9 +65,6 @@ type Params struct {
 	SyncParts    bool
 	OnPartOpened func(seq int, path string)
 	Counters     Counters
-	// Context cancels the write; nil means no cancellation. A cancelled
-	// write removes its parts and returns an error matching the context's.
-	Context context.Context
 	// Progress receives the source bytes handled so far (see
 	// archive.BuildOptions.Progress); may be nil.
 	Progress *atomic.Int64
@@ -85,8 +83,8 @@ type Result struct {
 // is set. Parts are written with the temporary suffix and renamed to their
 // final names only after the trailer is on disk, so an interrupted backup
 // never looks like a complete set. On error, all parts written so far are
-// removed.
-func Write(p Params) (*Result, error) {
+// removed; a cancelled ctx is such an error, matching the context's.
+func Write(ctx context.Context, p Params) (*Result, error) {
 	setType := manifest.SetTypeFull
 	var baseManifest *manifest.Manifest
 	if p.Base != nil {
@@ -133,7 +131,7 @@ func Write(p Params) (*Result, error) {
 	pr, pw := io.Pipe()
 	tarErrCh := make(chan error, 1)
 	go func() {
-		err := archive.BuildTar(pw, archive.BuildOptions{
+		err := archive.BuildTar(ctx, pw, archive.BuildOptions{
 			SourceDir:      p.SourceDir,
 			ExcludeDirs:    p.ExcludeDirs,
 			Exclude:        p.Exclude,
@@ -141,7 +139,6 @@ func Write(p Params) (*Result, error) {
 			OnSkip:         p.OnSkip,
 			Stats:          &stats,
 			Base:           baseManifest,
-			Context:        p.Context,
 			Progress:       p.Progress,
 		}, mb)
 		pw.CloseWithError(err) //nolint:errcheck
@@ -206,10 +203,10 @@ func FinalizeParts(tempParts []string) ([]string, error) {
 			return nil, fmt.Errorf("Internal error: part %q has no temporary suffix.", tmp)
 		}
 		if _, err := os.Stat(dst); err == nil {
-			return nil, fmt.Errorf("Backup file %q already exists. Remedy: Remove or rename the existing file and start the backup again.", dst)
+			return nil, problem.Errorf("Backup file %q already exists.", dst).WithRemedy("Remove or rename the existing file and start the backup again.")
 		}
 		if err := os.Rename(tmp, dst); err != nil {
-			return nil, fmt.Errorf("Failed to finalize part file %q: %w. Remedy: Check write permissions in the backup directory.", tmp, err)
+			return nil, problem.Errorf("Failed to finalize part file %q: %w.", tmp, err).WithRemedy("Check write permissions in the backup directory.")
 		}
 		final[i] = dst
 	}

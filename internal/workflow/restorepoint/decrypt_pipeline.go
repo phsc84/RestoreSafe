@@ -3,7 +3,6 @@ package restorepoint
 import (
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/logging"
 	"RestoreSafe/internal/workflow/job"
 	"context"
 	"fmt"
@@ -26,28 +25,23 @@ func (r *recordingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// RunSectionPipeline decrypts the data section of set and streams the
-// plaintext (a TAR stream) to consume. It stops when ctx is cancelled, and
-// adds the plaintext bytes to done (may be nil).
+// decrypt decrypts the data section of set and streams the plaintext (a TAR
+// stream) to consume. It stops when ctx is cancelled, and adds the
+// plaintext bytes to the reading's Done.
 //
 // consume is expected to read the stream to EOF. The read end of the pipe is
 // always closed once consume returns, so the decrypt goroutine can never block
 // forever writing to a consumer that has stopped reading. When both sides
 // fail, the error of the side that failed first is reported.
-func RunSectionPipeline(
-	ctx context.Context,
-	set *container.Set,
-	keys *container.SectionKeys,
-	log *logging.Logger,
-	directoryName string,
-	progressVerb string,
-	consumeFailurePrefix string,
-	done *atomic.Int64,
-	consume func(io.Reader) error,
-) error {
+func (rd reading) decrypt(ctx context.Context, set *container.Set, keys *container.SectionKeys, consume func(io.Reader) error) error {
+	verb, failure := "decrypted", "Extraction"
+	if rd.verifyOnly {
+		verb, failure = "verified", "Verification"
+	}
+	done := rd.out.Done
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
-	stopProgress := job.StartProgressTracking(log, directoryName, progressVerb, &outBytes, &outBytes, &outWriteCalls)
+	stopProgress := job.StartProgressTracking(rd.out.Log, rd.name, verb, &outBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
 	pr, pw := io.Pipe()
@@ -65,7 +59,7 @@ func RunSectionPipeline(
 	decErr := <-decErrCh
 
 	if consumeErr != nil && (decErr == nil || rw.failed.Load()) {
-		return fmt.Errorf("%s failed: %w", consumeFailurePrefix, consumeErr)
+		return fmt.Errorf("%s failed: %w", failure, consumeErr)
 	}
 	if decErr != nil {
 		return fmt.Errorf("Decryption failed: %w", decErr)

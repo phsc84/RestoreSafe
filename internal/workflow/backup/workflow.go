@@ -1,9 +1,11 @@
 // Package backup orchestrates the full backup workflow:
-//  1. Determine the keys: reuse the current key set or create new keys
-//  2. For each source directory: stream TAR → encrypt → split → .enc parts
+//  1. Lock the backup directory exclusively
+//  2. Plan the run (package plan), show the plan, and ask to start
+//  3. Determine the keys: reuse the current key set or create new keys
+//  4. For each source directory: stream TAR → encrypt → split → .enc parts
 //     (written as .tmp and renamed once the set is complete)
-//  3. Optionally re-read and verify the written sets (verify_after_backup)
-//  4. Apply the retention policy and write a log file per backup run
+//  5. Optionally re-read and verify the written sets (verify_after_backup)
+//  6. Apply the retention policy; the run writes one log file throughout
 package backup
 
 import (
@@ -15,6 +17,7 @@ import (
 	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -37,7 +40,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	// Resolve backup directory (may be relative to exe dir).
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if err := os.MkdirAll(backupDir, 0o750); err != nil {
-		return fmt.Errorf("Failed to create backup directory: %w. Remedy: Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.", err)
+		return problem.Errorf("Failed to create backup directory: %w.", err).WithRemedy("Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.")
 	}
 
 	lock, err := fsx.AcquireBackupLock(backupDir)
@@ -50,7 +53,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backup directory: %w. Remedy: Check read permissions in the backup directory.", err)
+		return problem.Errorf("Failed to scan backup directory: %w.", err).WithRemedy("Check read permissions in the backup directory.")
 	}
 
 	// Determine backup run identifiers.
@@ -88,7 +91,8 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	}
 	defer cryptox.ZeroBytes(master)
 
-	return runBackupOperation(ctx, u, cfg, log, logPath, backupDir, sources, date, runID, keySet, master, plans)
+	op := &operation{cfg: cfg, log: log, logPath: logPath, backupDir: backupDir, date: date, runID: runID, keySet: keySet, master: master}
+	return op.run(ctx, u, sources, plans)
 }
 
 // newRunID generates a run ID that is not yet used as chain ID or run ID in
@@ -131,24 +135,24 @@ func removeLeftoverTempParts(backupDir string, log *logging.Logger) {
 	}
 }
 
-// runBackupOperation performs the backup using an already-unlocked key set.
-// It takes no further input from the user, so it can be driven directly in
-// tests and automated flows by supplying the key set and master key; u
-// receives the progress and the summary. plans decides full or differential
-// per directory; directories without a plan (or a nil map) get a full backup.
-func runBackupOperation(
-	ctx context.Context,
-	u interact.UI,
-	cfg *config.Config,
-	log *logging.Logger,
-	logPath, backupDir string,
-	sources []plan.Source,
-	date string,
-	runID naming.BackupID,
-	keySet *container.KeySet,
-	master []byte,
-	plans map[string]*plan.Folder,
-) error {
+// operation is a backup run whose keys are known: it asks nothing more, so
+// tests can drive it with keys they made.
+type operation struct {
+	cfg       *config.Config
+	log       *logging.Logger
+	logPath   string
+	backupDir string
+	// date and runID name the sets of the run.
+	date   string
+	runID  naming.BackupID
+	keySet *container.KeySet
+	master []byte
+}
+
+// run backs up sources; u receives the progress and the summary. plans
+// decides full or differential per directory; directories without a plan
+// (or a nil map) get a full backup.
+func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Source, plans map[string]*plan.Folder) error {
 	out := u.Output()
 	fmt.Fprintln(out)
 	n := runnableSourceCount(sources)
@@ -157,7 +161,7 @@ func runBackupOperation(
 		dirWord = "directory"
 	}
 	start := time.Now()
-	log.Info("Backup started - ID: %s, date: %s, %d source %s", string(runID), date, n, dirWord)
+	o.log.Info("Backup started - ID: %s, date: %s, %d source %s", string(o.runID), o.date, n, dirWord)
 	warningCount := 0
 	var written []naming.BackupEntry
 	// retentionHold lists directories whose new backup misses unreadable
@@ -168,7 +172,7 @@ func runBackupOperation(
 	index := 0
 	for _, source := range sources {
 		if source.Warning != "" {
-			log.Warn("Source directory warning: %s → %s", source.Resolved, source.Warning)
+			o.log.Warn("Source directory warning: %s → %s", source.Resolved, source.Warning)
 			warningCount++
 		}
 		if source.Skip {
@@ -181,28 +185,28 @@ func runBackupOperation(
 			directoryName = naming.DirectoryBaseName(srcAbs)
 		}
 
-		log.Info("Processing source directory: %s", srcAbs)
-		log.Debug("Directory name in archive: %s", directoryName)
+		o.log.Info("Processing source directory: %s", srcAbs)
+		o.log.Debug("Directory name in archive: %s", directoryName)
 
-		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: runID, Date: date}
+		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: o.runID, Date: o.date}
 		var base *setwriter.Base
 		if folder := plans[directoryName]; folder.IsDiff() {
-			loaded, err := loadBase(backupDir, folder.Base, keySet, master)
+			loaded, err := loadBase(o.backupDir, folder.Base, o.keySet, o.master)
 			if err != nil {
-				log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", folder.Base.Entry.String(), err)
+				o.log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", folder.Base.Entry.String(), err)
 				warningCount++
 			} else {
 				base = loaded
-				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: folder.Base.Entry.ChainID, Date: date, DiffNumber: folder.DiffNumber}
-				log.Info("  Backup type: differential %03d of chain %s (%s)", folder.DiffNumber, folder.Base.Entry.ChainID, folder.Reason)
+				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: folder.Base.Entry.ChainID, Date: o.date, DiffNumber: folder.DiffNumber}
+				o.log.Info("  Backup type: differential %03d of chain %s (%s)", folder.DiffNumber, folder.Base.Entry.ChainID, folder.Reason)
 			}
 		} else if folder != nil {
-			log.Info("  Backup type: full (%s)", folder.Reason)
+			o.log.Info("  Backup type: full (%s)", folder.Reason)
 		}
 		index++
-		stats, err := backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, runID, base, backupDir, keySet, master, cfg, log)
+		stats, err := o.backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, base)
 		if err != nil {
-			return backupFailed(ctx, log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
+			return backupFailed(ctx, o.log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
 		}
 		setResult := logging.ResultOK
 		if stats.Skipped+stats.Stale > 0 {
@@ -210,16 +214,16 @@ func runBackupOperation(
 			retentionHold[directoryName] = true
 			setResult = logging.ResultWarnings
 		}
-		log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, Bytes: stats.Bytes})
+		o.log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, Bytes: stats.Bytes})
 		written = append(written, entry)
 	}
 
 	// Optionally verify the freshly written sets before pruning old backups.
 	verifyFailed := false
-	if cfg.VerifyAfterBackup && len(written) > 0 {
-		failed, err := verifyBackupAfterWrite(ctx, u, backupDir, written, master, log)
+	if o.cfg.VerifyAfterBackup && len(written) > 0 {
+		failed, err := verifyBackupAfterWrite(ctx, u, o.backupDir, written, o.master, o.log)
 		if err != nil {
-			return backupFailed(ctx, log, start, err)
+			return backupFailed(ctx, o.log, start, err)
 		}
 		if failed > 0 {
 			verifyFailed = true
@@ -229,32 +233,32 @@ func runBackupOperation(
 
 	// A cancelled run leaves the older backups alone.
 	if err := ctx.Err(); err != nil {
-		return backupFailed(ctx, log, start, err)
+		return backupFailed(ctx, o.log, start, err)
 	}
 
 	// Retention is skipped when verification failed so a verified older backup
 	// set is never pruned in favour of an unverified new one.
 	if verifyFailed {
-		log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
+		o.log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
 	} else {
 		job.ReportPhase(u, interact.PhaseCleaningUp, "Cleaning up")
-		if err := applyRetentionPolicy(backupDir, cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, log); err != nil {
-			log.Warn("  Cleanup old data failed: %v", err)
+		if err := applyRetentionPolicy(o.backupDir, o.cfg.RetentionKeep, o.cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, o.log); err != nil {
+			o.log.Warn("  Cleanup old data failed: %v", err)
 			warningCount++
 		}
 	}
 
 	if len(retentionHold) > 0 {
-		log.Warn("Backup completed with warnings: some files could not be read and are not in this backup (see the warnings above).")
+		o.log.Warn("Backup completed with warnings: some files could not be read and are not in this backup (see the warnings above).")
 	} else {
-		log.Info("Backup completed successfully")
+		o.log.Info("Backup completed successfully")
 	}
 	result := logging.ResultOK
 	if warningCount > 0 {
 		result = logging.ResultWarnings
 	}
-	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: result, Warnings: warningCount, Seconds: secondsSince(start)})
-	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
+	o.log.Fact(logging.Fact{Kind: logging.FactBackup, Result: result, Warnings: warningCount, Seconds: secondsSince(start)})
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }
 
@@ -296,7 +300,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 		// verified when it was written.
 		var done atomic.Int64
 		stop := job.TrackProgress(job.Stamp(rep, interact.PhaseVerifying, i+1, len(entries)), interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, nil)}, &done)
-		m, err := restorepoint.VerifyOwnData(ctx, set, master, log, &done)
+		m, err := restorepoint.VerifyOwnData(ctx, set, master, restorepoint.Output{Log: log, Done: &done})
 		stop()
 		parts := len(set.Paths)
 		set.Close() //nolint:errcheck
@@ -342,35 +346,24 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 	return &setwriter.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
 }
 
-// backupDirectory writes one backup set of srcDir into backupDir: a
+// backupDirectory writes one backup set of srcDir into the backup directory: a
 // differential of base, or a full backup when base is nil. It returns the
 // files it skipped as unreadable and the size of the set.
-func backupDirectory(
-	ctx context.Context,
-	rep interact.ProgressReporter,
-	srcDir string,
-	entry naming.BackupEntry,
-	runID naming.BackupID,
-	base *setwriter.Base,
-	backupDir string,
-	keySet *container.KeySet,
-	master []byte,
-	cfg *config.Config,
-	log *logging.Logger,
-) (setStats, error) {
+func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressReporter, srcDir string, entry naming.BackupEntry, base *setwriter.Base) (setStats, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
+	counters := setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
 	var progressLog *logging.Logger
-	if cfg.IODiagnostics {
-		progressLog = log
+	if o.cfg.IODiagnostics {
+		progressLog = o.log
 	}
 	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
 	defer stopProgress()
 
-	excludeDirs := []string{backupDir}
+	excludeDirs := []string{o.backupDir}
 	var done atomic.Int64
 	var total int64
 	if rep != nil {
-		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: cfg.ExcludeMatcher})
+		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: o.cfg.ExcludeMatcher})
 	}
 	progress := interact.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}
 	stopReport := job.TrackProgress(rep, progress, &done)
@@ -380,54 +373,53 @@ func backupDirectory(
 		}
 	}()
 
-	log.Debug("Starting TAR creation and encryption for: %s", srcDir)
-	res, err := setwriter.Write(setwriter.Params{
+	o.log.Debug("Starting TAR creation and encryption for: %s", srcDir)
+	res, err := setwriter.Write(ctx, setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    excludeDirs,
-		OutputDir:      backupDir,
+		OutputDir:      o.backupDir,
 		Entry:          entry,
 		Base:           base,
-		RunID:          runID,
-		KeySet:         *keySet,
-		Master:         master,
-		SplitSizeBytes: cfg.SplitSizeMB * 1024 * 1024,
+		RunID:          o.runID,
+		KeySet:         *o.keySet,
+		Master:         o.master,
+		SplitSizeBytes: o.cfg.SplitSizeMB * 1024 * 1024,
 		SyncParts:      true,
-		Exclude:        cfg.ExcludeMatcher,
-		SkipUnreadable: cfg.SkipUnreadableFiles(),
+		Exclude:        o.cfg.ExcludeMatcher,
+		SkipUnreadable: o.cfg.SkipUnreadableFiles(),
 		OnSkip: func(rel, reason string, stale bool) {
 			if stale {
-				log.Warn("  Older version kept (could not be read): %s → %s", rel, reason)
+				o.log.Warn("  Older version kept (could not be read): %s → %s", rel, reason)
 				return
 			}
-			log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
+			o.log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
 		},
 		OnPartOpened: func(seq int, path string) {
-			log.Info("  Part %03d: %s", seq, filepath.Base(path))
+			o.log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
-		Counters: setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls},
-		Context:  ctx,
+		Counters: counters,
 		Progress: &done,
 	})
 	if err != nil {
 		return setStats{}, err
 	}
 
-	logPartSummary(res.Parts, entry.DirectoryName, cfg.IODiagnostics, &outBytes, &outWriteCalls, log)
-	log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, fsx.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
+	o.logPartSummary(res.Parts, entry.DirectoryName, counters)
+	o.log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, fsx.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
 	if base != nil {
-		log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, fsx.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
+		o.log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, fsx.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
 	}
 	if n := res.Stats.Excluded; n > 0 {
-		log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)
+		o.log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)
 	}
 	if n := res.Stats.Vanished; n > 0 {
-		log.Info("  Deleted while the backup was running: %d file(s)/directory(s) (not in this backup)", n)
+		o.log.Info("  Deleted while the backup was running: %d file(s)/directory(s) (not in this backup)", n)
 	}
 	if n := res.Stats.Skipped; n > 0 {
-		log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
+		o.log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
 	}
 	if n := res.Stats.Stale; n > 0 {
-		log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
+		o.log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
 	}
 	size := partsSize(res.Parts)
 	// The last report of the step carries the size of the set (GUI spec BR-4).

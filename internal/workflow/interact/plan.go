@@ -55,8 +55,10 @@ type FolderPlan struct {
 	// not backed up again.
 	Skipped bool
 	Warning string
-	// Problem is set when the folder cannot be backed up.
+	// Problem is set when the folder cannot be backed up; Remedy says what
+	// the user does about it.
 	Problem string
+	Remedy  string
 }
 
 // KeyPlan says which keys lock the new backups and what the user is asked
@@ -97,8 +99,10 @@ type SetPlan struct {
 	Base naming.BackupEntry
 	// Bytes is the size read (the set and its base).
 	Bytes int64
-	// Problem is set when the set cannot be used.
+	// Problem is set when the set cannot be used; Remedy says what the user
+	// does about it.
 	Problem string
+	Remedy  string
 }
 
 // RestoreSetPlan is one chosen backup set of a restore and the folder it is
@@ -107,8 +111,9 @@ type RestoreSetPlan struct {
 	SetPlan
 	OutputDir string
 	// OutputProblem is set when the folder cannot be created (e.g. it
-	// exists).
+	// exists); OutputRemedy says what the user does about it.
 	OutputProblem string
+	OutputRemedy  string
 	// OutputCode classifies OutputProblem: RESTORE_TARGET_EXISTS or
 	// RESTORE_TARGET_INVALID.
 	OutputCode Code

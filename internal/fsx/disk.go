@@ -3,6 +3,7 @@
 package fsx
 
 import (
+	"RestoreSafe/internal/problem"
 	"fmt"
 
 	"golang.org/x/sys/windows"
@@ -25,7 +26,7 @@ func QueryDiskSpace(path string) (free, total uint64, err error) {
 	var totalNumberOfFreeBytes uint64
 	err = windows.GetDiskFreeSpaceEx(pathPtr, &free, &total, &totalNumberOfFreeBytes)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Failed to query free space for %q: %w. Remedy: Check drive availability and access rights.", path, err)
+		return 0, 0, problem.Errorf("Failed to query free space for %q: %w.", path, err).WithRemedy("Check drive availability and access rights.")
 	}
 	return free, total, nil
 }

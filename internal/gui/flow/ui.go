@@ -5,20 +5,7 @@ import (
 	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"io"
-	"strings"
 )
-
-// Question is the context of a credential question.
-type Question struct {
-	// Prompt is the workflow's prompt, e.g. "Enter backup password: ".
-	Prompt string
-	// Message is the last message the workflow wrote since the previous
-	// question, e.g. "Wrong password. 2 attempt(s) remaining.", or "".
-	Message string
-	// Retry is set when the same question is asked again: Message explains
-	// what was wrong.
-	Retry bool
-}
 
 // Dialogs shows the questions of an operation; the window implements it.
 // Every method runs on the UI thread and must call answer exactly once,
@@ -30,20 +17,19 @@ type Dialogs interface {
 	VerifyPlan(p interact.VerifyPlan, answer func())
 	// ConfirmStart asks to start "restore" or "verification".
 	ConfirmStart(action string, answer func(bool, error))
-	// ChooseUnlockMethod answers true for the recovery code; regular names
-	// the regular credentials, e.g. "password + YubiKey". A dialog that
+	// ChooseUnlockMethod answers true for the recovery code. A dialog that
 	// takes the password with the choice answers it as secret, which the
 	// caller zeroes; nil otherwise.
-	ChooseUnlockMethod(q Question, regular string, answer func(recovery bool, secret []byte, err error))
+	ChooseUnlockMethod(q interact.UnlockChoice, answer func(recovery bool, secret []byte, err error))
 	// Password answers the secret; the caller zeroes it.
-	Password(q Question, answer func(secret []byte, err error))
+	Password(q interact.SecretQuestion, answer func(secret []byte, err error))
 	// NewPassword answers the password and its confirmation, or ok=false
 	// when the user cancelled.
-	NewPassword(q Question, confirmPrompt string, answer func(password, confirm []byte, ok bool))
+	NewPassword(q interact.NewPasswordQuestion, answer func(password, confirm []byte, ok bool))
 	// RecoveryCode shows a new recovery code once; ok=false cancels.
 	RecoveryCode(code string, answer func(ok bool))
 	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
-	SpareYubiKey(q Question, answer func(ok bool))
+	SpareYubiKey(q interact.SpareQuestion, answer func(ok bool))
 }
 
 // UI implements interact.UI for one operation: every question goes through
@@ -51,12 +37,6 @@ type Dialogs interface {
 type UI struct {
 	b *Bridge
 	d Dialogs
-	// seenOutput marks the output already shown with a question, so a
-	// dialog only repeats a message written since the previous one.
-	seenOutput         int
-	lastPasswordPrompt string
-	newPasswordAsked   bool
-	spareAsked         bool
 	// pendingSecret is a password typed with the choice of the unlock
 	// method, for the next Password question.
 	pendingSecret []byte
@@ -109,14 +89,13 @@ func (u *UI) ConfirmStart(action string) (bool, error) {
 // ChooseUnlockMethod asks for the regular credentials or the recovery code.
 // The dialog may take the password with the choice (password-only keys);
 // the next Password question then returns it without asking again.
-func (u *UI) ChooseUnlockMethod(regular string) (bool, error) {
-	q := Question{Message: u.recentMessage()}
+func (u *UI) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 	type choice struct {
 		recovery bool
 		secret   []byte
 	}
 	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.ChooseUnlockMethod(q, regular, func(recovery bool, secret []byte, err error) {
+		u.d.ChooseUnlockMethod(q, func(recovery bool, secret []byte, err error) {
 			answer(choice{recovery, secret}, err)
 		})
 	}, choice{}, interact.ErrCancelled)
@@ -129,30 +108,13 @@ func (u *UI) ChooseUnlockMethod(regular string) (bool, error) {
 	return c.recovery, nil
 }
 
-// recentMessage returns the last output line written since the previous
-// question (e.g. "Wrong password. 2 attempt(s) remaining."); log lines,
-// which start with a timestamp, are left out.
-func (u *UI) recentMessage() string {
-	seq, last := u.b.OutputMark()
-	if seq == u.seenOutput || strings.HasPrefix(last, "[") {
-		u.seenOutput = seq
-		return ""
-	}
-	u.seenOutput = seq
-	return last
-}
-
 // Password asks for a secret without echo.
-func (u *UI) Password(prompt string) ([]byte, error) {
-	if s := u.pendingSecret; s != nil && !strings.Contains(strings.ToLower(prompt), "recovery code") {
+func (u *UI) Password(q interact.SecretQuestion) ([]byte, error) {
+	if s := u.pendingSecret; s != nil && q.Kind == interact.SecretPassword {
 		// Typed with the choice of the unlock method.
 		u.pendingSecret = nil
-		u.lastPasswordPrompt = prompt
-		u.recentMessage()
 		return s, nil
 	}
-	q := Question{Prompt: prompt, Message: u.recentMessage(), Retry: u.lastPasswordPrompt == prompt}
-	u.lastPasswordPrompt = prompt
 	v, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.Password(q, func(secret []byte, err error) { answer(secret, err) })
 	}, nil, interact.ErrCancelled)
@@ -164,11 +126,9 @@ func (u *UI) Password(prompt string) ([]byte, error) {
 
 // NewPassword asks for a new password and its confirmation in one dialog,
 // with the rules and errors of interact.ReadPasswordConfirmed.
-func (u *UI) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
-	q := Question{Prompt: prompt, Message: u.recentMessage(), Retry: u.newPasswordAsked}
-	u.newPasswordAsked = true
+func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.NewPassword(q, confirmPrompt, func(pw, confirm []byte, ok bool) {
+		u.d.NewPassword(q, func(pw, confirm []byte, ok bool) {
 			if !ok {
 				answer(nil, interact.ErrCancelled)
 				return
@@ -214,9 +174,7 @@ func (u *UI) ShowRecoveryCode(code string) error {
 
 // WaitForSpareYubiKey waits until the user confirms the spare YubiKey is
 // connected.
-func (u *UI) WaitForSpareYubiKey() (bool, error) {
-	q := Question{Message: u.recentMessage(), Retry: u.spareAsked}
-	u.spareAsked = true
+func (u *UI) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
 	v, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.SpareYubiKey(q, func(ok bool) { answer(ok, nil) })
 	}, false, nil)

@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"RestoreSafe/internal/security/recovery"
 	"RestoreSafe/internal/security/yubikey"
@@ -33,7 +34,7 @@ const maxEnrollAttempts = 3
 // zero the returned master key.
 func obtainKeys(u interact.UI, cfg *config.Config, keys plan.Keys, log *logging.Logger) (*container.KeySet, []byte, error) {
 	if keys.Existing != nil {
-		master, err := unlockKeySetFn(u, keys.Existing, unlock.Options{PasswordPrompt: "Enter backup password: "}, log)
+		master, err := unlockKeySetFn(u, keys.Existing, unlock.Options{Action: "backup"}, log)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -131,25 +132,31 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 	return ks, master, nil
 }
 
+// enrollAttempt describes try n of a question while keys are created,
+// after failure.
+func enrollAttempt(n int, failure error) interact.Attempt {
+	return interact.Attempt{N: n, Left: maxEnrollAttempts - n + 1, Failure: failure}
+}
+
 // readNewPassword asks for a new password (entered twice) of at least
 // minLength characters, allowing corrections.
 func readNewPassword(u interact.UI, minLength int) ([]byte, error) {
 	if minLength < config.PasswordMinLengthFloor {
 		minLength = config.DefaultPasswordMinLength
 	}
-	out := u.Output()
+	var failure error
 	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
-		pw, err := u.NewPassword(fmt.Sprintf("Enter new backup password (at least %d characters): ", minLength), "Re-enter new backup password: ")
+		pw, err := u.NewPassword(interact.NewPasswordQuestion{MinLength: minLength, Attempt: enrollAttempt(attempt, failure)})
 		if err != nil {
 			if errors.Is(err, interact.ErrPasswordMismatch) || errors.Is(err, interact.ErrPasswordEmpty) {
-				fmt.Fprintf(out, "%v Please try again.\n", err)
+				failure = err
 				continue
 			}
 			return nil, err
 		}
 		if n := utf8.RuneCount(pw); n < minLength {
 			cryptox.ZeroBytes(pw)
-			fmt.Fprintf(out, "The password has %d characters; at least %d are required. Please try again.\n", n, minLength)
+			failure = fmt.Errorf("The password has %d characters; at least %d are required.", n, minLength)
 			continue
 		}
 		return pw, nil
@@ -185,22 +192,23 @@ func registerYubiKeys(u interact.UI, password []byte, mode config.AuthMode, spar
 
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Spare YubiKey: remove YubiKey 1 and insert your spare YubiKey.")
+	var failure error
 	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
-		connected, err := u.WaitForSpareYubiKey()
+		connected, err := u.WaitForSpareYubiKey(interact.SpareQuestion{Attempt: enrollAttempt(attempt, failure)})
 		if err != nil {
 			return slots, err
 		}
 		if !connected {
-			return slots, fmt.Errorf("Spare YubiKey registration cancelled. No backup was written. Remedy: Set 'yubikey_spare: false' in config.yaml to back up without a spare YubiKey.")
+			return slots, problem.New("Spare YubiKey registration cancelled. No backup was written.").WithRemedy("Set 'yubikey_spare: false' in config.yaml to back up without a spare YubiKey.")
 		}
 		if err := checkYubiKeyConnectedFn(); err != nil {
-			fmt.Fprintln(out, "No YubiKey detected. Insert the spare YubiKey.")
+			failure = errors.New("No YubiKey detected. Insert the spare YubiKey.")
 			continue
 		}
 		fmt.Fprintln(out, "  Windows asks twice for the PIN of the spare YubiKey (register, then derive).")
 		combined, challengeJSON, err := registerSpareFn(password, primary)
 		if errors.Is(err, yubikey.ErrAlreadyRegistered) {
-			fmt.Fprintln(out, "This is YubiKey 1. Remove it and insert your spare YubiKey.")
+			failure = errors.New("This is YubiKey 1. Remove it and insert your spare YubiKey.")
 			continue
 		}
 		if err != nil {

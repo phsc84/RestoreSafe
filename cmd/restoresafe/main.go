@@ -6,6 +6,7 @@ package main
 import (
 	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/gui"
+	"RestoreSafe/internal/problem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,7 +61,7 @@ func configPathFromArgs(args []string, exeDir string) (string, error) {
 			idx := strings.IndexByte(arg, '=')
 			flag, value := arg[:idx], strings.TrimSpace(arg[idx+1:])
 			if value == "" || !filepath.IsAbs(value) {
-				return "", fmt.Errorf("%s requires an absolute path. Remedy: Pass %s=<absolute-path-to-config.yaml>.", flag, flag)
+				return "", problem.Errorf("%s requires an absolute path.", flag).WithRemedy(fmt.Sprintf("Pass %s=<absolute-path-to-config.yaml>.", flag))
 			}
 			configPath = filepath.Clean(value)
 		}

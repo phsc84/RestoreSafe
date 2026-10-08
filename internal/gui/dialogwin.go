@@ -3,8 +3,6 @@ package gui
 import (
 	"RestoreSafe/internal/gui/widget"
 	"RestoreSafe/internal/gui/win32"
-
-	"golang.org/x/sys/windows"
 )
 
 // dialogWindow is the frame of the plan and credential dialogs: a window
@@ -30,33 +28,14 @@ type dialogWindow struct {
 	onMessage func(msg uint32, wparam, lparam uintptr) (result uintptr, handled bool)
 }
 
-var (
-	dialogWindows      = map[win32.HWND]*dialogWindow{}
-	dialogClassesExist = map[string]bool{}
-	dialogProcPtr      uintptr
-)
-
 const dialogStyle = win32.WS_POPUP | win32.WS_CAPTION | win32.WS_SYSMENU
 
 const dialogExStyle = win32.WS_EX_DLGMODALFRAME | win32.WS_EX_CONTROLPARENT
 
 // newDialogWindow creates a hidden dialog window of class, owned by owner.
 func newDialogWindow(t *widget.Theme, owner win32.HWND, class, title string) (*dialogWindow, error) {
-	if !dialogClassesExist[class] {
-		if dialogProcPtr == 0 {
-			dialogProcPtr = windows.NewCallback(dialogWindowProc)
-		}
-		wc := win32.WndClassEx{
-			WndProc:    dialogProcPtr,
-			Instance:   win32.ModuleHandle(),
-			Cursor:     win32.ArrowCursor(),
-			Background: win32.SysColorBrush(win32.COLOR_WINDOW),
-			ClassName:  win32.UTF16(class),
-		}
-		if err := win32.RegisterClass(&wc); err != nil {
-			return nil, err
-		}
-		dialogClassesExist[class] = true
+	if err := registerClass(win32.WndClassEx{}, class); err != nil {
+		return nil, err
 	}
 	hwnd, err := win32.CreateWindow(dialogExStyle, class, title, dialogStyle, 0, 0, 0, 0, owner, 0)
 	if err != nil {
@@ -75,7 +54,7 @@ func newDialogWindow(t *widget.Theme, owner win32.HWND, class, title string) (*d
 			d.command(id)
 		}
 	}
-	dialogWindows[hwnd] = d
+	handlers[hwnd] = d
 	return d, nil
 }
 
@@ -130,16 +109,13 @@ func (d *dialogWindow) destroy() {
 	if d.ownFonts {
 		defer d.theme.Fonts.Close()
 	}
-	delete(dialogWindows, d.hwnd)
+	delete(handlers, d.hwnd)
 	win32.SetForeground(d.owner)
 	win32.DestroyWindow(d.hwnd)
 }
 
-func dialogWindowProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
-	d := dialogWindows[hwnd]
-	if d == nil {
-		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
-	}
+// message handles the messages of the dialog window.
+func (d *dialogWindow) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	if d.onMessage != nil {
 		if r, ok := d.onMessage(msg, wparam, lparam); ok {
 			return r

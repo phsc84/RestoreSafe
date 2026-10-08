@@ -3,6 +3,7 @@
 package interacttest
 
 import (
+	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"io"
@@ -21,6 +22,8 @@ type Script struct {
 	ReadPassword func(prompt string) ([]byte, error)
 	// LogPath is the log file the workflow reported.
 	LogPath string
+	// announced is the backup whose other keys were last announced.
+	announced naming.BackupEntry
 }
 
 var _ interact.UI = (*Script)(nil)
@@ -48,17 +51,42 @@ func (s *Script) readLine(prompt string) (string, error) {
 	return "", fmt.Errorf("no scripted answer for %q", prompt)
 }
 
-// Password answers a secret prompt.
-func (s *Script) Password(prompt string) ([]byte, error) {
+func (s *Script) readSecret(prompt string) ([]byte, error) {
 	if s.ReadPassword != nil {
 		return s.ReadPassword(prompt)
 	}
 	return nil, fmt.Errorf("no scripted answer for %q", prompt)
 }
 
-// NewPassword reads a new password twice.
-func (s *Script) NewPassword(prompt, confirmPrompt string) ([]byte, error) {
-	return interact.ReadPasswordConfirmed(s.Password, prompt, confirmPrompt)
+// announceKeys says once which backup needs other keys.
+func (s *Script) announceKeys(k *interact.OtherKeys) {
+	if k == nil || s.announced == k.Set {
+		return
+	}
+	s.announced = k.Set
+	s.printf("Backup %s uses different keys (created %s). Authenticate with the credentials of those keys.\n", k.Set.String(), k.Created.Local().Format("2006-01-02"))
+}
+
+// Password answers a secret prompt, after the reason the previous answer
+// failed.
+func (s *Script) Password(q interact.SecretQuestion) ([]byte, error) {
+	s.announceKeys(q.Keys)
+	if q.Failure != nil {
+		s.printf("%v %d attempt(s) remaining.\n", q.Failure, q.Left)
+	}
+	if q.Kind == interact.SecretRecoveryCode {
+		return s.readSecret("Enter recovery code: ")
+	}
+	return s.readSecret(fmt.Sprintf("Enter %s password: ", q.Action))
+}
+
+// NewPassword reads a new password twice, after the reason the previous
+// one was refused.
+func (s *Script) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
+	if q.Failure != nil {
+		s.printf("%v Please try again.\n", q.Failure)
+	}
+	return interact.ReadPasswordConfirmed(s.readSecret, fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength), "Re-enter new backup password: ")
 }
 
 // ConfirmStart asks a yes/no question; yes is the default.
@@ -142,9 +170,10 @@ func (s *Script) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.
 
 // ChooseUnlockMethod asks for the regular credentials (default) or the
 // recovery code.
-func (s *Script) ChooseUnlockMethod(regular string) (bool, error) {
+func (s *Script) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
+	s.announceKeys(q.Keys)
 	for {
-		answer, err := s.readLine(fmt.Sprintf("Unlock with [Y] %s (default) or [R] recovery code? [Y/r]: ", regular))
+		answer, err := s.readLine(fmt.Sprintf("Unlock with [Y] %s (default) or [R] recovery code? [Y/r]: ", q.Mode.Label()))
 		if err != nil {
 			return false, err
 		}
@@ -174,8 +203,12 @@ func (s *Script) ShowRecoveryCode(code string) error {
 	return nil
 }
 
-// WaitForSpareYubiKey waits for Enter; "q" cancels.
-func (s *Script) WaitForSpareYubiKey() (bool, error) {
+// WaitForSpareYubiKey waits for Enter, after the reason the previous try
+// failed; "q" cancels.
+func (s *Script) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
+	if q.Failure != nil {
+		s.println(q.Failure)
+	}
 	answer, err := s.readLine("Press Enter when the spare YubiKey is connected (q = cancel): ")
 	if err != nil {
 		return false, err

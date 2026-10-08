@@ -21,7 +21,9 @@ GitHub enforces this for `main` and `v2` with the ruleset in [.github/rulesets/r
 
 The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. Work branches are not protected.
 
-After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. Switch to `v2` itself (`git switch v2`, `git pull`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
+After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. To bring your local `v2` up to date with GitHub without leaving the work branch, run `git fetch origin v2:v2` (it only moves `v2` forward, so it cannot lose anything). Switch to `v2` itself (`git switch v2`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
+
+A pull request lives on GitHub, not in Git: its commits are those of its branch. See them with `gh pr list --state all`, `gh pr view <number>`, and `gh pr checks <number>`.
 
 ## 2. Commits
 
@@ -104,7 +106,7 @@ The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, 
 - **The backup format of 2.x is frozen.** Every backup written by 2.0.0 must restore with every later 2.x version.
 - **Behaviour is preserved** unless a change says otherwise and adds a CHANGELOG entry: texts, the log file format, the order of questions.
 - **No unattended operation.** RestoreSafe never schedules backups, runs in the background, or stores credentials.
-- **Error texts are sentences for the user**, with a remedy ("... Remedy: ..."), so staticcheck's ST1005 is turned off in [staticcheck.conf](staticcheck.conf).
+- **Errors the user sees are `problem.Error`s**: what happened, and what the user does about it, e.g. `problem.Errorf("Failed to read backup header: %w.", err).WithRemedy("Check that the backup file is complete.")`. Never write "Remedy:" into an error text: the GUI shows the remedy from its field, and logs get "<message> Remedy: <remedy>" from `Error()`. The texts are sentences for the user, so staticcheck's ST1005 is turned off in [staticcheck.conf](staticcheck.conf).
 
 The standing constraints of refactoring work are in [docs/SPEC-refactoring.md](docs/SPEC-refactoring.md) section 2; the specifications are listed in [docs/README.md](docs/README.md).
 

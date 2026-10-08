@@ -45,7 +45,7 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 	defer testutil.RemoveAll(t, backupDir)
 	ks, master := testutil.NewPasswordKeySet(t, []byte("bench-pw"))
 	entry := naming.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "BENCH2", Date: "2026-09-28"}
-	if _, err := setwriter.Write(setwriter.Params{
+	if _, err := setwriter.Write(context.Background(), setwriter.Params{
 		SourceDir:      srcDir,
 		OutputDir:      backupDir,
 		Entry:          entry,
@@ -75,7 +75,8 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 		}
 		masters := unlock.MasterKeys{ks.ID: append([]byte(nil), master...)}
 		start := time.Now()
-		_, err = restoreSelectedEntries(context.Background(), nil, infos, infos, backupDir, restoreRoot, masters, logging.NewConsoleLogger("info", nil))
+		op := &operation{selected: infos, inventory: infos, backupDir: backupDir, restorePath: restoreRoot, masters: masters, log: logging.NewConsoleLogger("info", nil)}
+		_, err = op.restoreAll(context.Background(), nil)
 		elapsed := time.Since(start)
 		if err != nil {
 			t.Fatalf("restore: %v", err)

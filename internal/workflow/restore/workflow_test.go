@@ -67,7 +67,8 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	var out testutil.Output
 	log, _ := logging.NewLogger(logPath, "info", &out)
 
-	err := runRestoreOperation(context.Background(), &interacttest.Script{Out: &out}, infos, infos, fx.BackupDir, fx.RestoreRoot, logPath, masterKeys(fx.BackupFixture), log, 0)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, logPath: logPath, masters: masterKeys(fx.BackupFixture), log: log}
+	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
 	log.Close()
 	output := out.String()
 	if err != nil {
@@ -91,7 +92,8 @@ func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = restoreSelectedEntries(context.Background(), nil, selected, infos, fx.BackupDir, fx.RestoreRoot, masterKeys(fx.BackupFixture), logging.NewConsoleLogger("info", nil))
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewConsoleLogger("info", nil)}
+	_, err = op.restoreAll(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("restore differential: %v", err)
 	}
@@ -102,7 +104,7 @@ func TestRestoreEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("right"))
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 
-	_, err := restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, wrong, logging.NewConsoleLogger("info", nil))
+	_, err := entryOperation(fx.BackupDir, fx.RestoreRoot).restoreEntry(context.Background(), nil, fx.Entry, nil, wrong)
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -113,7 +115,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	_, err := restoreEntry(context.Background(), nil, fx.Entry, nil, fx.BackupDir, fx.RestoreRoot, fx.Master, logging.NewConsoleLogger("info", nil))
+	_, err := entryOperation(fx.BackupDir, fx.RestoreRoot).restoreEntry(context.Background(), nil, fx.Entry, nil, fx.Master)
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("expected existing-destination error, got %v", err)
 	}
@@ -122,7 +124,7 @@ func TestRestoreEntryRefusesExistingDestination(t *testing.T) {
 func TestRestoreEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	entry := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}
-	_, err := restoreEntry(context.Background(), nil, entry, nil, t.TempDir(), t.TempDir(), make([]byte, 32), logging.NewConsoleLogger("info", nil))
+	_, err := entryOperation(t.TempDir(), t.TempDir()).restoreEntry(context.Background(), nil, entry, nil, make([]byte, 32))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}
@@ -172,4 +174,10 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}
+}
+
+// entryOperation is a restore from backupDir into restorePath that logs to
+// nowhere, for tests of single sets.
+func entryOperation(backupDir, restorePath string) *operation {
+	return &operation{backupDir: backupDir, restorePath: restorePath, log: logging.NewConsoleLogger("info", nil)}
 }

@@ -1,6 +1,9 @@
 package fsx
 
-import "fmt"
+import (
+	"RestoreSafe/internal/problem"
+	"fmt"
+)
 
 // FormatBytesBinary formats bytes using 1024-based steps with user-friendly
 // labels (KB, MB, GB, ...).
@@ -25,24 +28,18 @@ func FormatBytesBinary(bytes uint64) string {
 	return fmt.Sprintf("%.2f %s", float64(bytes)/div, labels[exp])
 }
 
-// FormatInsufficientBackupSpaceMessage returns a consistent message for
-// estimated backup size exceeding currently free target space.
-func FormatInsufficientBackupSpaceMessage(neededBytes, availableBytes uint64) string {
-	return fmt.Sprintf(
-		"Insufficient free space for backup: needed %s, available %s. Remedy: Free disk space or choose a different backup directory.",
-		FormatBytesBinary(neededBytes),
-		FormatBytesBinary(availableBytes),
-	)
+// InsufficientBackupSpace returns the error of a backup whose estimated size
+// exceeds the free space of the backup directory.
+func InsufficientBackupSpace(neededBytes, availableBytes uint64) error {
+	return problem.Errorf("Insufficient free space for backup: needed %s, available %s.", FormatBytesBinary(neededBytes), FormatBytesBinary(availableBytes)).
+		WithRemedy("Free disk space or choose a different backup directory.")
 }
 
-// FormatInsufficientRestoreSpaceMessage returns a consistent message for
-// selected restore data exceeding currently free destination space.
-func FormatInsufficientRestoreSpaceMessage(neededBytes, availableBytes uint64) string {
-	return fmt.Sprintf(
-		"Insufficient free space for restore: needed %s, available %s. Remedy: Free disk space or choose a different restore destination.",
-		FormatBytesBinary(neededBytes),
-		FormatBytesBinary(availableBytes),
-	)
+// InsufficientRestoreSpace returns the error of a restore whose data exceeds
+// the free space of the destination.
+func InsufficientRestoreSpace(neededBytes, availableBytes uint64) error {
+	return problem.Errorf("Insufficient free space for restore: needed %s, available %s.", FormatBytesBinary(neededBytes), FormatBytesBinary(availableBytes)).
+		WithRemedy("Free disk space or choose a different restore destination.")
 }
 
 // IsSpaceInsufficient reports whether the estimated byte count exceeds available free bytes.

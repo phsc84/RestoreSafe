@@ -51,10 +51,11 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
-	err := runBackupOperation(context.Background(), &interacttest.Script{Out: &env.out}, env.cfg, env.logger, env.logPath, env.backupDir, env.sources, "2026-05-31", id, ks, master, nil)
+	op := &operation{cfg: env.cfg, log: env.logger, logPath: env.logPath, backupDir: env.backupDir, date: "2026-05-31", runID: id, keySet: ks, master: master}
+	err := op.run(context.Background(), &interacttest.Script{Out: &env.out}, env.sources, nil)
 	env.logger.Close()
 	if err != nil {
-		t.Fatalf("runBackupOperation failed: %v", err)
+		t.Fatalf("backup run failed: %v", err)
 	}
 	return env.out.String()
 }

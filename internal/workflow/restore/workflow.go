@@ -1,7 +1,9 @@
-// Package restore orchestrates the full restore workflow:
-//  1. List available backups in the backup directory
-//  2. Let the user choose which backup(s) to restore
-//  3. Unlock the keys (password and/or YubiKey, up to 3 password attempts)
+// Package restore restores the backup sets the user chose before Run (with
+// the full backup a differential needs) into a destination folder:
+//  1. Lock the backup directory shared, so no backup runs at the same time
+//  2. Check the sets and the destination, show the plan, and ask to start
+//  3. Unlock the keys (password and/or YubiKey, or the recovery code; up to
+//     3 attempts)
 //  4. Decrypt, extract, and check every file against its manifest hash
 package restore
 
@@ -12,6 +14,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/fsx"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/yubikey"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/job"
@@ -42,7 +45,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if strings.TrimSpace(req.Destination) == "" {
-		return errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
+		return problem.New("No restore destination chosen.").WithRemedy("Choose the folder to restore into.")
 	}
 	restorePath := req.Destination
 
@@ -54,7 +57,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil {
-		return fmt.Errorf("Failed to scan backup directory %q: %w. Remedy: Check the backup_directory path in config.yaml and ensure the directory exists and is readable.", backupDir, err)
+		return problem.Errorf("Failed to scan backup directory %q: %w.", backupDir, err).WithRemedy("Check the backup_directory path in config.yaml and ensure the directory exists and is readable.")
 	}
 	selectedInfos, err := job.SelectSets(infos, req.Sets)
 	if err != nil {
@@ -77,7 +80,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	details := restorePreflightReport(cfg, backupDir, restorePath, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	if lockIssue != nil {
 		details.Issues = append(details.Issues, *lockIssue)
-		log.Warn("%s", lockIssue.Text)
+		log.Warn("%s", lockIssue.Full())
 		warningCount++
 	}
 	u.ShowRestorePlan(restorePlan(preflight, restorePath, &first.KeySet, details))
@@ -99,34 +102,40 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 
 	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
-	masters, err := unlock.KeySets(u, selectedInfos, "Enter restore password: ", log)
+	masters, err := unlock.KeySets(u, selectedInfos, "restore", log)
 	if err != nil {
 		return err
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, warningCount)
+	op := &operation{selected: selectedInfos, inventory: infos, backupDir: backupDir, restorePath: restorePath, logPath: logPath, masters: masters, log: log}
+	return op.run(ctx, u, warningCount)
 }
 
-// runRestoreOperation performs the restore using already-unlocked keys. It
-// takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys; u receives the progress and the
-// summary. inventory is used to find the full backup of each selected
-// differential.
-func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
-	out := u.Output()
-	fmt.Fprintln(out)
-	first := selected[0].Header
-	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
-	log.Info("Restore selection:")
-	for _, info := range selected {
-		log.Info("  %s", info.Entry.String())
-	}
+// operation is a restore whose keys are unlocked: it asks nothing more, so
+// tests can drive it with master keys they made.
+type operation struct {
+	// selected are the sets to restore; inventory is the backup directory's,
+	// where the full backup of a differential is found.
+	selected, inventory []catalog.SetInfo
+	backupDir           string
+	// restorePath is the destination; every set is restored into a folder
+	// of its name inside it.
+	restorePath string
+	logPath     string
+	masters     unlock.MasterKeys
+	log         *logging.Logger
+}
 
-	unread, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
+// run restores the selected sets; u receives the progress and the summary.
+func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) error {
+	fmt.Fprintln(u.Output())
+	job.LogStart(o.log, "Restore", o.selected)
+
+	unread, err := o.restoreAll(ctx, u)
 	if err != nil {
 		if ctx.Err() != nil {
-			log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
+			o.log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
 			return job.Cancelled("Restore")
 		}
 		return err
@@ -135,51 +144,40 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 		warningCount++
 	}
 
-	log.Info("Restore completed successfully.")
-	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
+	o.log.Info("Restore completed successfully.")
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }
 
+// restorePreflightItem is a chosen set with the folder it is restored into.
 type restorePreflightItem struct {
-	Entry          naming.BackupEntry
-	PartCount      int
-	TotalSizeBytes int64
-	OutputDir      string
-	// Base is the full backup a differential needs.
-	Base         *catalog.SetInfo
-	Err          error // set-level error (missing base)
+	job.SelectionItem
+	OutputDir    string
 	OutputDirErr error // output directory error (already exists, invalid name)
 	// OutputDirCode classifies OutputDirErr.
 	OutputDirCode interact.Code
 }
 
-// buildRestorePreflight checks the selected sets. A differential also needs
-// its chain's full backup (looked up in inventory); the size estimate covers
-// both, because restore reads both.
+// selections returns the chosen sets of items.
+func selections(items []restorePreflightItem) []job.SelectionItem {
+	out := make([]job.SelectionItem, len(items))
+	for i, item := range items {
+		out[i] = item.SelectionItem
+	}
+	return out
+}
+
+// buildRestorePreflight checks the selected sets (job.SelectionPreflight)
+// and the folders they are restored into.
 func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath string) []restorePreflightItem {
 	items := make([]restorePreflightItem, 0, len(selected))
-	for _, info := range selected {
-		entry := info.Entry
-		item := restorePreflightItem{
-			Entry:          entry,
-			PartCount:      len(info.Parts),
-			TotalSizeBytes: info.SizeBytes,
-			OutputDir:      filepath.Join(restorePath, entry.DirectoryName),
-			Err:            info.Err,
-		}
-		if item.Err == nil && entry.IsDiff() {
-			base, err := catalog.BaseOf(inventory, entry)
-			if err != nil {
-				item.Err = err
-			} else {
-				item.Base = base
-				item.TotalSizeBytes += base.SizeBytes
-			}
-		}
+	for _, sel := range job.SelectionPreflight(selected, inventory) {
+		entry := sel.Entry
+		item := restorePreflightItem{SelectionItem: sel, OutputDir: filepath.Join(restorePath, entry.DirectoryName)}
 		if nameErr := naming.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr, item.OutputDirCode = nameErr, interact.CodeRestoreTargetInvalid
 		} else if _, err := os.Stat(item.OutputDir); err == nil {
-			item.OutputDirErr, item.OutputDirCode = fmt.Errorf("Restore directory already exists. Remedy: Choose a different restore destination or rename/delete the existing restore directory."), interact.CodeRestoreTargetExists
+			item.OutputDirErr, item.OutputDirCode = problem.New("Restore directory already exists.").WithRemedy("Choose a different restore destination or rename/delete the existing restore directory."), interact.CodeRestoreTargetExists
 		}
 		items = append(items, item)
 	}
@@ -196,37 +194,23 @@ func restorePreflightReport(
 	mode config.AuthMode,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
-	var issues []interact.Issue
-	addError := func(code interact.Code, text string) {
-		issues = append(issues, interact.Issue{Status: interact.StatusError, Code: code, Text: text})
+	rows, issues := job.SelectionRows(backupDir, selections(items))
+	addError := func(code interact.Code, err error) {
+		issues = append(issues, interact.IssueOf(interact.StatusError, code, err))
 	}
 
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	destDisplay := displayRestoreOutputDir(restorePath)
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
 
-	rows := []interact.Row{interact.Heading("Backup selection"), interact.Item(interact.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
-	for _, item := range items {
-		status := interact.StatusOK
-		if item.Err != nil {
-			status = interact.StatusError
-			addError(interact.CodeBaseMissing, item.Err.Error())
-		}
-		var details []string
-		if item.Base != nil {
-			details = append(details, fmt.Sprintf("with full backup %s (parts: %d)", item.Base.Entry.String(), len(item.Base.Parts)))
-		}
-		rows = append(rows, interact.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
-	}
-
 	rows = append(rows, interact.Heading("Restore destination"))
 	if restoreFreeErr != nil {
 		rows = append(rows, interact.Item(interact.StatusError, destDisplay))
-		addError(interact.CodeFreeSpaceUnknown, fmt.Sprintf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
+		addError(interact.CodeFreeSpaceUnknown, fmt.Errorf("Cannot query free space for restore destination %s: %v", destDisplay, restoreFreeErr))
 	} else {
 		rows = append(rows, interact.Item(interact.StatusOK, destDisplay))
 		if fsx.IsSpaceInsufficient(estimatedRestoreBytes, restoreFreeBytes) {
-			addError(interact.CodeSpaceInsufficient, fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+			addError(interact.CodeSpaceInsufficient, fsx.InsufficientRestoreSpace(uint64(estimatedRestoreBytes), restoreFreeBytes))
 		}
 	}
 
@@ -235,7 +219,7 @@ func restorePreflightReport(
 		status := interact.StatusOK
 		if item.OutputDirErr != nil {
 			status = interact.StatusError
-			addError(item.OutputDirCode, item.OutputDirErr.Error())
+			addError(item.OutputDirCode, item.OutputDirErr)
 		}
 		rows = append(rows, interact.Item(status, displayRestoreOutputDir(item.OutputDir)))
 	}
@@ -267,7 +251,8 @@ func validateRestorePreflight(items []restorePreflightItem) error {
 	return job.ValidatePreflightItems(
 		items,
 		func(item restorePreflightItem) bool { return item.Err != nil || item.OutputDirErr != nil },
-		"Restore preflight failed: %d selected item(s) are invalid. Remedy: Fix the [ERROR] entries above and start restore again.",
+		"Restore preflight failed: %d selected item(s) are invalid.",
+		"Fix the [ERROR] entries above and start restore again.",
 	)
 }
 
@@ -286,18 +271,11 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 		return nil
 	}
 
-	return fmt.Errorf("Restore preflight failed: %s", fsx.FormatInsufficientRestoreSpaceMessage(uint64(estimatedRestoreBytes), restoreFreeBytes))
+	return fmt.Errorf("Restore preflight failed: %w", fsx.InsufficientRestoreSpace(uint64(estimatedRestoreBytes), restoreFreeBytes))
 }
 
 func estimateRestoreBytes(items []restorePreflightItem) int64 {
-	var total int64
-	for _, item := range items {
-		if item.Err != nil {
-			continue
-		}
-		total += item.TotalSizeBytes
-	}
-	return total
+	return job.SelectionBytes(selections(items))
 }
 
 func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
@@ -321,91 +299,72 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 	return fsx.QueryFreeSpaceBytes(restorePath)
 }
 
-// restoreSelectedEntries restores each selected set and returns the number of
-// files that are missing from the restore points because they could not be
-// read during backup. It stops when ctx is cancelled and reports its
-// progress to rep.
-func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
+// restoreAll restores each selected set and returns the number of files
+// that are missing from the restore points because they could not be read
+// during backup. It stops when ctx is cancelled and reports its progress to
+// rep.
+func (o *operation) restoreAll(ctx context.Context, rep interact.ProgressReporter) (int, error) {
 	skipped := 0
-	for i, info := range selected {
-		entry := info.Entry
-		var base *naming.BackupEntry
-		if entry.IsDiff() {
-			baseInfo, err := catalog.BaseOf(inventory, entry)
-			if err != nil {
-				return 0, err
-			}
-			base = &baseInfo.Entry
-		}
-
-		master := masters[info.Header.KeySet.ID]
-		n, err := restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, i+1, len(selected)), entry, base, backupDir, restorePath, master, log)
+	err := job.EachRestorePoint(o.selected, o.inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
+		missing, err := o.restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, n, len(o.selected)), info.Entry, base, o.masters[info.Header.KeySet.ID])
 		if err != nil {
-			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
+			return fmt.Errorf("Failed to restore directory %q: %w", info.Entry.String(), err)
 		}
-		skipped += n
+		skipped += missing
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return skipped, nil
 }
 
 // restoreEntry decrypts one backup set (for a differential together with its
-// full backup base) and extracts it to destDir, checking every file against
+// full backup base) and extracts it into the destination, checking every file against
 // its manifest hash. It returns the number of files that could not be read
 // during backup: missing from the restore point, or restored in an older
 // version (stale). A restore fact records both counts.
-func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir, destDir string, master []byte, log *logging.Logger) (int, error) {
+func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, master []byte) (int, error) {
 	if err := naming.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
-	set, err := catalog.OpenSet(backupDir, entry)
+	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(o.backupDir, entry, base)
 	if err != nil {
 		return 0, err
 	}
-	defer set.Close()
-	var baseSet *container.Set
-	if base != nil {
-		baseSet, err = catalog.OpenSet(backupDir, *base)
-		if err != nil {
-			return 0, fmt.Errorf("Full backup %s: %w", base.String(), err)
-		}
-		defer baseSet.Close()
-	}
+	defer closeAll()
 
-	log.Info("Processing backup directory: %s", entry.DirectoryName)
+	o.log.Info("Processing backup directory: %s", entry.DirectoryName)
 
 	// Verify restore directory can be created before starting decryption.
 	// Ensure the parent exists, then create the entry's directory atomically:
 	// os.Mkdir fails with os.ErrExist if it already exists, re-enforcing the
 	// preflight invariant against a TOCTOU race or two entries resolving to the
 	// same DirectoryName. os.MkdirAll would silently merge into an existing tree.
-	outDir := filepath.Join(destDir, entry.DirectoryName)
-	if err := os.MkdirAll(destDir, 0o750); err != nil {
-		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
+	outDir := filepath.Join(o.restorePath, entry.DirectoryName)
+	if err := os.MkdirAll(o.restorePath, 0o750); err != nil {
+		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}
 	if err := os.Mkdir(outDir, 0o750); err != nil {
 		if errors.Is(err, os.ErrExist) {
-			return 0, fmt.Errorf("Restore directory already exists: %s. Remedy: Choose a different restore destination or rename/delete the existing restore directory.", filepath.ToSlash(outDir))
+			return 0, problem.Errorf("Restore directory already exists: %s.", filepath.ToSlash(outDir)).WithRemedy("Choose a different restore destination or rename/delete the existing restore directory.")
 		}
-		return 0, fmt.Errorf("Failed to create restore directory: %w. Remedy: Check write permissions and use a valid destination path.", err)
+		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}
 
 	var done atomic.Int64
 	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, baseSet)}, &done)
-	m, err := restorepoint.Process(ctx, set, baseSet, master, outDir, false, log, &done)
+	m, err := restorepoint.Restore(ctx, set, baseSet, master, outDir, restorepoint.Output{Log: o.log, Done: &done})
 	stopReport()
 	if err != nil {
-		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
+		o.log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
-	parts := len(set.Paths)
-	if baseSet != nil {
-		parts += len(baseSet.Paths)
-	}
-	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
-	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, log)
-	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log)
+	o.log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
+	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, o.log)
+	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, o.log)
 	if skipped+stale > 0 {
-		log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: entry.String(), Skipped: skipped, Stale: stale})
+		o.log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: entry.String(), Skipped: skipped, Stale: stale})
 	}
 	return skipped + stale, nil
 }
@@ -425,9 +384,10 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 		p.FreeBytes = int64(free)
 	}
 	for _, item := range items {
-		sp := interact.RestoreSetPlan{SetPlan: job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err), OutputDir: item.OutputDir}
+		sp := interact.RestoreSetPlan{SetPlan: item.SetPlan(), OutputDir: item.OutputDir}
 		if item.OutputDirErr != nil {
-			sp.OutputProblem, sp.OutputCode = item.OutputDirErr.Error(), item.OutputDirCode
+			sp.OutputProblem, sp.OutputRemedy = problem.Split(item.OutputDirErr)
+			sp.OutputCode = item.OutputDirCode
 		}
 		p.Sets = append(p.Sets, sp)
 	}
@@ -441,7 +401,7 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 // while the user makes them.
 func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetInfo, sets []naming.BackupEntry, destination string) (interact.RestorePlan, error) {
 	if strings.TrimSpace(destination) == "" {
-		return interact.RestorePlan{}, errors.New("No restore destination chosen. Remedy: Choose the folder to restore into.")
+		return interact.RestorePlan{}, problem.New("No restore destination chosen.").WithRemedy("Choose the folder to restore into.")
 	}
 	selected, err := job.SelectSets(infos, sets)
 	if err != nil {

@@ -8,23 +8,49 @@ import (
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"context"
 	"fmt"
 	"io"
 	"sync/atomic"
 )
 
-// Process restores the restore point of set into destDir, or, with
-// verifyOnly, checks it without writing anything. For a differential, base is
-// its full backup: the differential's manifest is the target state, files
-// unchanged since the full backup come from base, and new or changed files
-// from the differential. Every file is checked against its manifest hash. It
-// returns the target manifest so the caller can report skipped files. It
-// stops when ctx is cancelled and adds the decrypted bytes to done (may be
-// nil).
-func Process(ctx context.Context, set, base *container.Set, master []byte, destDir string, verifyOnly bool, log *logging.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
+// Output receives what reading a restore point reports: its log lines and
+// the decrypted bytes, for the progress. Both may be nil.
+type Output struct {
+	Log  *logging.Logger
+	Done *atomic.Int64
+}
+
+// reading is one pass over the data sections of a restore point.
+type reading struct {
+	out Output
+	// name is the set's directory name, for the progress log.
+	name string
+	// verifyOnly checks the files without writing them.
+	verifyOnly bool
+}
+
+// Restore restores the restore point of set into destDir. For a
+// differential, base is its full backup: the differential's manifest is the
+// target state, files unchanged since the full backup come from base, and
+// new or changed files from the differential. Every file is checked against
+// its manifest hash. It returns the target manifest so the caller can report
+// skipped files, and stops when ctx is cancelled.
+func Restore(ctx context.Context, set, base *container.Set, master []byte, destDir string, out Output) (*manifest.Manifest, error) {
+	return read(ctx, set, base, master, destDir, reading{out: out, name: set.Header.DirectoryName})
+}
+
+// Verify checks the restore point of set as Restore restores it, without
+// writing anything.
+func Verify(ctx context.Context, set, base *container.Set, master []byte, out Output) (*manifest.Manifest, error) {
+	return read(ctx, set, base, master, "", reading{out: out, name: set.Header.DirectoryName, verifyOnly: true})
+}
+
+func read(ctx context.Context, set, base *container.Set, master []byte, destDir string, rd reading) (*manifest.Manifest, error) {
+	log := rd.out.Log
 	if set.Header.IsDiff() && base == nil {
-		return nil, fmt.Errorf("The full backup of chain %s is required to restore %s_%s. Remedy: Put the FULL files of %s into the backup directory.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date, set.Header.ChainID)
+		return nil, problem.Errorf("The full backup of chain %s is required to restore %s_%s.", set.Header.ChainID, set.Header.DirectoryName, set.Header.Date).WithRemedy(fmt.Sprintf("Put the FULL files of %s into the backup directory.", set.Header.ChainID))
 	}
 	keys, err := set.SectionKeys(master)
 	if err != nil {
@@ -53,18 +79,14 @@ func Process(ctx context.Context, set, base *container.Set, master []byte, destD
 		}
 	}
 
-	r := archive.NewRestorer(m, destDir, verifyOnly)
+	r := archive.NewRestorer(m, destDir, rd.verifyOnly)
 	if err := r.CreateDirectories(); err != nil {
 		return nil, err
 	}
 
-	verb, prefix := "decrypted", "Extraction"
-	if verifyOnly {
-		verb, prefix = "verified", "Verification"
-	}
 	if set.Header.IsDiff() {
 		log.Info("  Reading unchanged files from the full backup (%s)", base.Header.Date)
-		err = RunSectionPipeline(ctx, base, baseKeys, log, set.Header.DirectoryName, verb, prefix, done, func(tarStream io.Reader) error {
+		err = rd.decrypt(ctx, base, baseKeys, func(tarStream io.Reader) error {
 			return r.ExtractSection(tarStream, archive.DecideFromBase(m))
 		})
 		if err != nil {
@@ -72,7 +94,7 @@ func Process(ctx context.Context, set, base *container.Set, master []byte, destD
 		}
 		log.Info("  Reading new and changed files from differential %03d (%s)", set.Header.DiffNumber, set.Header.Date)
 	}
-	err = RunSectionPipeline(ctx, set, keys, log, set.Header.DirectoryName, verb, prefix, done, func(tarStream io.Reader) error {
+	err = rd.decrypt(ctx, set, keys, func(tarStream io.Reader) error {
 		return r.ExtractSection(tarStream, archive.DecideOwn(m))
 	})
 	if err != nil {
@@ -92,13 +114,13 @@ func Process(ctx context.Context, set, base *container.Set, master []byte, destD
 func checkBaseLink(diff, base *container.Header, baseManifestSHA256 string) error {
 	switch {
 	case base.IsDiff():
-		return fmt.Errorf("The base of %s_%s is not a full backup. Remedy: Use unmodified backup files.", diff.DirectoryName, diff.Date)
+		return problem.Errorf("The base of %s_%s is not a full backup.", diff.DirectoryName, diff.Date).WithRemedy("Use unmodified backup files.")
 	case base.ChainID != diff.ChainID || base.DirectoryName != diff.DirectoryName || base.Date != diff.BaseDate:
-		return fmt.Errorf("The full backup %s_%s_%s does not belong to differential %03d (expected full backup of %s). Remedy: Use the FULL files that belong to this chain.", base.DirectoryName, base.ChainID, base.Date, diff.DiffNumber, diff.BaseDate)
+		return problem.Errorf("The full backup %s_%s_%s does not belong to differential %03d (expected full backup of %s).", base.DirectoryName, base.ChainID, base.Date, diff.DiffNumber, diff.BaseDate).WithRemedy("Use the FULL files that belong to this chain.")
 	case base.KeySet.ID != diff.KeySet.ID:
-		return fmt.Errorf("The full backup of chain %s uses different keys than differential %03d. Remedy: Use unmodified backup files.", diff.ChainID, diff.DiffNumber)
+		return problem.Errorf("The full backup of chain %s uses different keys than differential %03d.", diff.ChainID, diff.DiffNumber).WithRemedy("Use unmodified backup files.")
 	case baseManifestSHA256 != diff.BaseManifestSHA256:
-		return fmt.Errorf("The full backup of chain %s is not the one differential %03d was created from (manifest checksum mismatch). Remedy: Use the original FULL files of this chain.", diff.ChainID, diff.DiffNumber)
+		return problem.Errorf("The full backup of chain %s is not the one differential %03d was created from (manifest checksum mismatch).", diff.ChainID, diff.DiffNumber).WithRemedy("Use the original FULL files of this chain.")
 	}
 	return nil
 }
@@ -106,9 +128,9 @@ func checkBaseLink(diff, base *container.Header, baseManifestSHA256 string) erro
 // VerifyOwnData checks a set's own data section against its manifest: every
 // file stored in the set is decrypted and hashed. For a differential this
 // covers the new and changed files without reading the full backup, which is
-// what verify_after_backup needs right after writing it. ctx and done work as
-// in Process.
-func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *logging.Logger, done *atomic.Int64) (*manifest.Manifest, error) {
+// what verify_after_backup needs right after writing it. ctx and out work as
+// in Restore.
+func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, out Output) (*manifest.Manifest, error) {
 	keys, err := set.SectionKeys(master)
 	if err != nil {
 		return nil, err
@@ -120,7 +142,7 @@ func VerifyOwnData(ctx context.Context, set *container.Set, master []byte, log *
 	}
 	r := archive.NewRestorer(m, "", true)
 	r.ExpectOwnContentOnly()
-	err = RunSectionPipeline(ctx, set, keys, log, set.Header.DirectoryName, "verified", "Verification", done, func(tarStream io.Reader) error {
+	err = reading{out: out, name: set.Header.DirectoryName, verifyOnly: true}.decrypt(ctx, set, keys, func(tarStream io.Reader) error {
 		return r.ExtractSection(tarStream, archive.DecideOwn(m))
 	})
 	if err != nil {

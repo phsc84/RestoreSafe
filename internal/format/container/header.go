@@ -18,6 +18,7 @@ import (
 	"RestoreSafe/internal/buildinfo"
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/sha256"
@@ -134,13 +135,13 @@ func (h *Header) Validate() error {
 		return headerErr("unsupported chunk size %d", h.ChunkSize)
 	}
 	if h.Compression != CompressionNone {
-		return fmt.Errorf("Backup uses compression %q, which this RestoreSafe version does not support. Remedy: Use the newer RestoreSafe version that created this backup: https://github.com/phsc84/RestoreSafe/releases", h.Compression)
+		return problem.Errorf("Backup uses compression %q, which this RestoreSafe version does not support.", h.Compression).WithRemedy("Use the newer RestoreSafe version that created this backup: https://github.com/phsc84/RestoreSafe/releases")
 	}
 	return h.KeySet.Validate()
 }
 
 func headerErr(format string, args ...any) error {
-	return fmt.Errorf("Invalid backup header: %s. Remedy: Use an unmodified backup created by RestoreSafe.", fmt.Sprintf(format, args...))
+	return problem.Errorf("Invalid backup header: %s.", fmt.Sprintf(format, args...)).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 }
 
 // Encode validates the header and returns its on-disk bytes.
@@ -174,16 +175,16 @@ func HashHeader(encoded []byte) []byte {
 func ReadHeader(r io.Reader) (*Header, []byte, error) {
 	prefix := make([]byte, headerPrefixLen)
 	if _, err := io.ReadFull(r, prefix); err != nil {
-		return nil, nil, fmt.Errorf("Failed to read backup header: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, nil, problem.Errorf("Failed to read backup header: %w.", err).WithRemedy("Check that the backup file is complete and readable.")
 	}
 	if string(prefix[:len(magicPrefix)]) != magicPrefix {
-		return nil, nil, fmt.Errorf("Invalid file format (not a RestoreSafe backup). Remedy: Select a valid RestoreSafe .enc backup file.")
+		return nil, nil, problem.New("Invalid file format (not a RestoreSafe backup).").WithRemedy("Select a valid RestoreSafe .enc backup file.")
 	}
 	if version := prefix[6]; version != FormatVersion {
 		if version < FormatVersion {
-			return nil, nil, fmt.Errorf("Backup was created by RestoreSafe 1.x (backup format %d) and cannot be read by RestoreSafe 2. Remedy: Restore it with RestoreSafe 1.0.2: https://github.com/phsc84/RestoreSafe/releases", version)
+			return nil, nil, problem.Errorf("Backup was created by RestoreSafe 1.x (backup format %d) and cannot be read by RestoreSafe 2.", version).WithRemedy("Restore it with RestoreSafe 1.0.2: https://github.com/phsc84/RestoreSafe/releases")
 		}
-		return nil, nil, fmt.Errorf("Backup format %d is newer than this RestoreSafe version supports (format %d). Remedy: Use the newer RestoreSafe version that created this backup: https://github.com/phsc84/RestoreSafe/releases", version, FormatVersion)
+		return nil, nil, problem.Errorf("Backup format %d is newer than this RestoreSafe version supports (format %d).", version, FormatVersion).WithRemedy("Use the newer RestoreSafe version that created this backup: https://github.com/phsc84/RestoreSafe/releases")
 	}
 	if prefix[7] != 0 {
 		return nil, nil, headerErr("reserved byte is not zero")
@@ -194,7 +195,7 @@ func ReadHeader(r io.Reader) (*Header, []byte, error) {
 	}
 	body := make([]byte, length)
 	if _, err := io.ReadFull(r, body); err != nil {
-		return nil, nil, fmt.Errorf("Failed to read backup header: %w. Remedy: Check that the backup file is complete and readable.", err)
+		return nil, nil, problem.Errorf("Failed to read backup header: %w.", err).WithRemedy("Check that the backup file is complete and readable.")
 	}
 
 	var h Header

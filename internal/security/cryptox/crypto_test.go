@@ -291,7 +291,7 @@ func TestValidateArgon2ParamsRejectsThreadsBeforeTruncation(t *testing.T) {
 	t.Parallel()
 
 	// 256 would truncate to 0 as uint8; it must be rejected as a raw value.
-	if err := ValidateArgon2Params(2, MinArgonMemoryKB, 256, "in test", "Remedy: none."); err == nil {
+	if err := ValidateArgon2Params(2, MinArgonMemoryKB, 256, "in test", "none."); err == nil {
 		t.Fatal("expected threads=256 to be rejected")
 	}
 }

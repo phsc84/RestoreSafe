@@ -28,12 +28,12 @@ func openFixtureSet(t *testing.T) (*testutil.BackupFixture, *container.Set, *con
 	return fx, set, keys
 }
 
-func TestRunSectionPipelineSuccess(t *testing.T) {
+func TestDecryptSectionSuccess(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
 	var n int64
-	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	err := reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		var err error
 		n, err = io.Copy(io.Discard, r)
 		return err
@@ -46,28 +46,28 @@ func TestRunSectionPipelineSuccess(t *testing.T) {
 	}
 }
 
-func TestRunSectionPipelineConsumeErrorWrapsMessage(t *testing.T) {
+func TestDecryptSectionConsumeErrorWrapsMessage(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
 	consumeErr := errors.New("validation failed")
-	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	err := reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		io.Copy(io.Discard, r) //nolint:errcheck
 		return consumeErr
 	})
-	if err == nil || !strings.Contains(err.Error(), "Archive validation failed") || !errors.Is(err, consumeErr) {
+	if err == nil || !strings.Contains(err.Error(), "Verification failed") || !errors.Is(err, consumeErr) {
 		t.Fatalf("expected wrapped consume error, got %v", err)
 	}
 }
 
 // A consumer failing early must be reported as the cause, not the resulting
 // pipe error on the decrypt side.
-func TestRunSectionPipelineReportsEarlyConsumerFailure(t *testing.T) {
+func TestDecryptSectionReportsEarlyConsumerFailure(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
 	consumeErr := errors.New("checksum mismatch")
-	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	err := reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		_, _ = io.ReadFull(r, make([]byte, 10))
 		return consumeErr
 	})
@@ -76,13 +76,13 @@ func TestRunSectionPipelineReportsEarlyConsumerFailure(t *testing.T) {
 	}
 }
 
-func TestRunSectionPipelineWrongKeyReportsCorruption(t *testing.T) {
+func TestDecryptSectionWrongKeyReportsCorruption(t *testing.T) {
 	t.Parallel()
 
 	fx, set, _ := openFixtureSet(t)
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 	keys, _ := set.SectionKeys(wrong)
-	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	err := reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	})
@@ -91,28 +91,28 @@ func TestRunSectionPipelineWrongKeyReportsCorruption(t *testing.T) {
 	}
 }
 
-// TestRunSectionPipelineConsumerStopsEarly guards against a deadlock: a
+// TestDecryptSectionConsumerStopsEarly guards against a deadlock: a
 // consumer that returns nil before draining the plaintext stream must not
 // leave the decrypt goroutine blocked forever on the pipe write. The contract
 // under test is that the call returns at all; a regression hangs and is
 // reported by the test binary timeout with a goroutine dump.
-func TestRunSectionPipelineConsumerStopsEarly(t *testing.T) {
+func TestDecryptSectionConsumerStopsEarly(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
-	_ = RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	_ = reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		_, _ = io.ReadFull(r, make([]byte, 1))
 		return nil
 	})
 }
 
-func TestRunSectionPipelineCountsDoneAndStopsWhenCancelled(t *testing.T) {
+func TestDecryptSectionCountsDoneAndStopsWhenCancelled(t *testing.T) {
 	t.Parallel()
 
 	fx, set, keys := openFixtureSet(t)
 	var done atomic.Int64
 	var n int64
-	err := RunSectionPipeline(context.Background(), set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", &done, func(r io.Reader) error {
+	err := reading{name: fx.Entry.DirectoryName, verifyOnly: true, out: Output{Done: &done}}.decrypt(context.Background(), set, keys, func(r io.Reader) error {
 		var err error
 		n, err = io.Copy(io.Discard, r)
 		return err
@@ -126,7 +126,7 @@ func TestRunSectionPipelineCountsDoneAndStopsWhenCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err = RunSectionPipeline(ctx, set, keys, nil, fx.Entry.DirectoryName, "verified", "Archive validation", nil, func(r io.Reader) error {
+	err = reading{name: fx.Entry.DirectoryName, verifyOnly: true}.decrypt(ctx, set, keys, func(r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	})

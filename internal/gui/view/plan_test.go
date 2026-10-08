@@ -5,11 +5,13 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
 	"RestoreSafe/internal/format/naming"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/backup"
 	"RestoreSafe/internal/workflow/interact"
 	"RestoreSafe/internal/workflow/interact/interacttest"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +25,7 @@ func samplePlan() interact.BackupPlan {
 		Folders: []interact.FolderPlan{
 			{Name: "Documents", Path: `C:\Docs`, Differential: true, DiffNumber: 4, BaseCreated: time.Date(2026, 9, 1, 20, 0, 0, 0, time.Local), EstimatedBytes: 200 << 20, AllBytes: 9 << 30},
 			{Name: "Pictures", Path: `D:\Pics`, Reason: "last differential was 57% of the full backup (limit 50%)", EstimatedBytes: 54 << 30, AllBytes: 54 << 30},
-			{Name: "Old", Path: `E:\Old`, Problem: "Source directory does not exist. Remedy: Connect the drive."},
+			{Name: "Old", Path: `E:\Old`, Problem: "Source directory does not exist.", Remedy: "Connect the drive."},
 			{Name: "Docs2", Path: `C:\Docs`, Skipped: true},
 		},
 		NeededBytes: 55 << 30, AllBytes: 63 << 30, FreeBytes: 370 << 30,
@@ -84,7 +86,7 @@ func TestBackupPlanButtons(t *testing.T) {
 	}
 
 	p.Issues = []interact.Issue{
-		{Status: interact.StatusError, Code: interact.CodeSpaceInsufficient, Text: "Not enough free space. Remedy: Free up space."},
+		{Status: interact.StatusError, Code: interact.CodeSpaceInsufficient, Text: "Not enough free space.", Remedy: "Free up space."},
 		{Status: interact.StatusWarn, Text: "A warning."},
 	}
 	v = BackupPlanOf(p, &interact.BackupStartOptions{Blocked: true, OfferFull: true}, nil, planNow)
@@ -190,15 +192,18 @@ func TestBackupPlanOfARealPlan(t *testing.T) {
 
 func TestIssueTextEndsTheMessageBeforeTheRemedy(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ in, issue, first string }{
-		{"Not enough space. Remedy: Free up space.", "Not enough space. Free up space.", "Not enough space."},
-		{"yaml: line 3: bad escape Remedy: Check YAML syntax.", "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
-		{"No remedy here", "No remedy here", "No remedy here"},
+	for _, tc := range []struct {
+		in           error
+		issue, first string
+	}{
+		{problem.New("Not enough space.").WithRemedy("Free up space."), "Not enough space. Free up space.", "Not enough space."},
+		{problem.New("yaml: line 3: bad escape").WithRemedy("Check YAML syntax."), "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
+		{errors.New("No remedy here"), "No remedy here", "No remedy here"},
 	} {
-		if got := issueText(tc.in); got != tc.issue {
-			t.Errorf("issueText(%q) = %q, want %q", tc.in, got, tc.issue)
+		if got := errorText(tc.in); got != tc.issue {
+			t.Errorf("errorText(%q) = %q, want %q", tc.in, got, tc.issue)
 		}
-		if got := firstSentences(tc.in); got != tc.first {
+		if got := firstSentences(problem.Split(tc.in)); got != tc.first {
 			t.Errorf("firstSentences(%q) = %q, want %q", tc.in, got, tc.first)
 		}
 	}

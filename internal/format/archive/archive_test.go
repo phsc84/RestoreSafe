@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/format/manifest"
 	"archive/tar"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func build(t *testing.T, src string, excludes ...string) (*manifest.Manifest, []
 	t.Helper()
 	mb := manifest.NewBuilder(manifest.Header{SetType: manifest.SetTypeFull, ChainID: "ABC123", DirectoryName: "src", SourcePath: src})
 	var tarBuf bytes.Buffer
-	if err := BuildTar(&tarBuf, BuildOptions{SourceDir: src, ExcludeDirs: excludes}, mb); err != nil {
+	if err := BuildTar(context.Background(), &tarBuf, BuildOptions{SourceDir: src, ExcludeDirs: excludes}, mb); err != nil {
 		t.Fatalf("BuildTar: %v", err)
 	}
 	data, err := mb.Bytes()

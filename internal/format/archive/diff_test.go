@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/format/manifest"
 	"RestoreSafe/internal/testutil/filelock"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,7 +15,7 @@ func buildDiff(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte) {
 	t.Helper()
 	mb := manifest.NewBuilder(manifest.Header{SetType: manifest.SetTypeDiff, ChainID: "ABC123", DiffNumber: 1, DirectoryName: "src", SourcePath: opts.SourceDir})
 	var buf bytes.Buffer
-	if err := BuildTar(&buf, opts, mb); err != nil {
+	if err := BuildTar(context.Background(), &buf, opts, mb); err != nil {
 		t.Fatalf("BuildTar (differential): %v", err)
 	}
 	data, err := mb.Bytes()

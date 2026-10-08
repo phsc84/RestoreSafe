@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/format/setwriter"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -110,7 +111,7 @@ func (f *BackupFixture) CreateBackupInDir(t testing.TB, entry naming.BackupEntry
 func WriteFullSet(t testing.TB, srcDir, backupDir string, entry naming.BackupEntry, ks *container.KeySet, master []byte) int {
 	t.Helper()
 
-	res, err := setwriter.Write(setwriter.Params{
+	res, err := setwriter.Write(context.Background(), setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,
@@ -153,7 +154,7 @@ func WriteDiffSet(t testing.TB, srcDir, backupDir string, base naming.BackupEntr
 
 	entry := naming.BackupEntry{DirectoryName: base.DirectoryName, ChainID: base.ChainID, Date: date, DiffNumber: diffNumber}
 	runID, _ := naming.NewBackupID()
-	_, err = setwriter.Write(setwriter.Params{
+	_, err = setwriter.Write(context.Background(), setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    []string{backupDir},
 		OutputDir:      backupDir,

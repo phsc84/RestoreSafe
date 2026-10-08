@@ -1,9 +1,10 @@
 // Package logging writes the log file of a backup run and mirrors its messages
-// to the user.
+// to the user, and reads the facts of a run back from its log (facts.go).
 package logging
 
 import (
 	"RestoreSafe/internal/buildinfo"
+	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"os"
@@ -80,7 +81,7 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 	// Open temp log for appending.
 	f, err := os.OpenFile(tempPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
-		return nil, fmt.Errorf("Log file in temp directory could not be created: %w. Remedy: Check TEMP/TMP path and write permissions.", err)
+		return nil, problem.Errorf("Log file in temp directory could not be created: %w.", err).WithRemedy("Check TEMP/TMP path and write permissions.")
 	}
 
 	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: tempPath, console: console}

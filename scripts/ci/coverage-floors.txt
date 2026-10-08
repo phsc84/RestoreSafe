@@ -9,6 +9,7 @@ internal/format/manifest         85
 internal/format/naming           85
 internal/workflow/plan           85
 internal/workflow/health         85
+internal/problem                 85
 internal/format/archive          70
 internal/format/catalog          70
 internal/format/container        70

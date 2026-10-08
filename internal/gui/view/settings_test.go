@@ -2,9 +2,9 @@ package view
 
 import (
 	"RestoreSafe/internal/config"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/health"
-	"errors"
 	"strings"
 	"testing"
 )
@@ -72,7 +72,7 @@ func TestSettingsShowProblemsAndReload(t *testing.T) {
 		t.Fatal("Reload waits for the running operation")
 	}
 
-	p = settingsOf(t, scenario.BackupDirUnreachable, errors.New("Config file is invalid: yaml: line 3: mapping values are not allowed\nRemedy: Check YAML syntax."), false)
+	p = settingsOf(t, scenario.BackupDirUnreachable, problem.New("Config file is invalid: yaml: line 3: mapping values are not allowed").WithRemedyOnOwnLine("Check YAML syntax."), false)
 	if p.BackupDirState.Value != "Not reachable" || p.ConfigError != "Config file is invalid: yaml: line 3: mapping values are not allowed. Check YAML syntax." {
 		t.Fatalf("dir %+v, error %q", p.BackupDirState, p.ConfigError)
 	}

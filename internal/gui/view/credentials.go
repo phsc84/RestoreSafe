@@ -1,10 +1,9 @@
 package view
 
 import (
-	"RestoreSafe/internal/gui/flow"
+	"RestoreSafe/internal/config"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -39,31 +38,30 @@ type CredentialDialog struct {
 }
 
 // UnlockDialogOf words the question for the password or the recovery code
-// (figure 9.1). Naming the keys by their date (CR-1) matters only when a
-// restore or verification spans several key sets; it comes with them.
-func UnlockDialogOf(q flow.Question) CredentialDialog {
-	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Error: retryError(q)}
-	if strings.Contains(strings.ToLower(q.Prompt), "recovery code") {
+// (figure 9.1); with keys other than the operation's first, it names them by
+// their backup and date (CR-1).
+func UnlockDialogOf(q interact.SecretQuestion) CredentialDialog {
+	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Error: unlockError(q.Attempt)}
+	if q.Kind == interact.SecretRecoveryCode {
 		d.Intro = unlockRecoveryIntro
 		d.Fields = []Field{{Label: fieldRecoveryCode}}
 		return d
 	}
 	d.Intro = unlockIntro
-	d.Hint = noticeOf(q)
+	d.Hint = otherKeysNotice(q.Keys, q.Attempt)
 	d.Fields = []Field{{Label: fieldPassword, Masked: true}}
 	return d
 }
 
 // UnlockChoiceOf words the unlock dialog of keys with a recovery code (CR-1):
-// the regular way, with the password field for password-only keys, and the
-// link to the recovery code. regular names the keys' credentials as
-// config.AuthMode.Label does.
-func UnlockChoiceOf(q flow.Question, regular string) CredentialDialog {
-	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Link: linkUseRecovery, Hint: noticeOf(q)}
-	switch r := strings.ToLower(regular); {
-	case strings.Contains(r, "yubikey only"):
+// the regular way of the keys' mode, with the password field for
+// password-only keys, and the link to the recovery code.
+func UnlockChoiceOf(q interact.UnlockChoice) CredentialDialog {
+	d := CredentialDialog{Title: unlockTitle, OK: buttonUnlock, Cancel: buttonCancel, Link: linkUseRecovery, Hint: otherKeysNotice(q.Keys, interact.Attempt{})}
+	switch q.Mode {
+	case config.AuthModeYubiKey:
 		d.Intro = unlockWithYubiKey
-	case strings.Contains(r, "yubikey"):
+	case config.AuthModePasswordYubiKey:
 		d.Intro = unlockWithBoth
 	default:
 		d.Intro = unlockIntro
@@ -72,43 +70,42 @@ func UnlockChoiceOf(q flow.Question, regular string) CredentialDialog {
 	return d
 }
 
-// noticeOf is what the workflow said before a first question, e.g. that a
-// backup uses older keys; "" on a retry, which retryError words.
-func noticeOf(q flow.Question) string {
-	if q.Retry {
+// otherKeysNotice names the backup that needs keys other than the
+// operation's first (CR-1); "" for the first keys and on a retry, which
+// unlockError words.
+func otherKeysNotice(k *interact.OtherKeys, a interact.Attempt) string {
+	if k == nil || a.Retry() {
 		return ""
 	}
-	return issueText(q.Message)
+	return fmt.Sprintf(unlockOtherKeys, k.Set.String(), k.Created.Local().Format("2006-01-02"))
 }
 
 // NewPasswordDialogOf words the first step of creating keys (figure 9.2).
-func NewPasswordDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDialog {
+func NewPasswordDialogOf(q interact.NewPasswordQuestion, keys interact.KeyPlan) CredentialDialog {
 	d := CredentialDialog{
 		Title:  stepTitle(createKeysTitle, keys, keyStepPassword),
 		Intro:  newPasswordIntro,
 		Hint:   newPasswordHint,
 		Fields: []Field{{Label: fieldPassword, Masked: true}, {Label: fieldConfirmPassword, Masked: true}},
-		Error:  retryError(q),
+		Error:  retryError(q.Attempt),
 		Note:   stepsLine(keys),
 		OK:     buttonNext,
 		Cancel: buttonCancel,
 	}
-	if m := minLengthPattern.FindStringSubmatch(q.Prompt); m != nil {
-		d.Hint = fmt.Sprintf(newPasswordHintN, m[1])
+	if q.MinLength > 0 {
+		d.Hint = fmt.Sprintf(newPasswordHintN, q.MinLength)
 	}
 	return d
 }
 
-var minLengthPattern = regexp.MustCompile(`at least (\d+) characters`)
-
 // SpareYubiKeyDialogOf asks to connect the spare YubiKey (GUI spec CR-2).
-func SpareYubiKeyDialogOf(q flow.Question, keys interact.KeyPlan) CredentialDialog {
+func SpareYubiKeyDialogOf(q interact.SpareQuestion, keys interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
 		Title: stepTitle(createKeysTitle, keys, keyStepSpare),
 		Intro: spareIntro,
 		Hint:  spareHint,
-		// The workflow says why it asks again, e.g. that this is YubiKey 1.
-		Error:  retryError(q),
+		// Why it asks again, e.g. that this is YubiKey 1.
+		Error:  retryError(q.Attempt),
 		OK:     buttonContinue,
 		Cancel: buttonCancel,
 	}
@@ -200,23 +197,24 @@ func stepsLine(k interact.KeyPlan) string {
 	return stepsPrefix + strings.Join(names, " › ")
 }
 
-var attemptsPattern = regexp.MustCompile(`(\d+) attempt\(s\) remaining\.$`)
-
-// retryError rewords the workflow's message about the last answer, e.g.
-// "Wrong password. 2 attempt(s) remaining." as "Wrong password. 2 attempts
-// left."; "" for the first question.
-func retryError(q flow.Question) string {
-	if !q.Retry || q.Message == "" {
+// retryError is why the last answer failed, e.g. "Passwords do not match.";
+// "" for the first question.
+func retryError(a interact.Attempt) string {
+	if !a.Retry() || a.Failure == nil {
 		return ""
 	}
-	msg := issueText(q.Message)
-	msg = strings.TrimSuffix(msg, " Please try again.")
-	if m := attemptsPattern.FindStringSubmatch(msg); m != nil {
-		left := fmt.Sprintf(attemptsLeft, m[1])
-		if m[1] == "1" {
-			left = attemptLeftOne
-		}
-		msg = msg[:len(msg)-len(m[0])] + left
+	return errorText(a.Failure)
+}
+
+// unlockError is why the last unlock failed with the attempts left, e.g.
+// "Wrong password. 2 attempts left."; "" for the first question.
+func unlockError(a interact.Attempt) string {
+	msg := retryError(a)
+	if msg == "" {
+		return ""
 	}
-	return msg
+	if a.Left == 1 {
+		return msg + " " + attemptLeftOne
+	}
+	return msg + " " + fmt.Sprintf(attemptsLeft, a.Left)
 }

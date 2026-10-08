@@ -4,6 +4,7 @@
 package container
 
 import (
+	"RestoreSafe/internal/problem"
 	"errors"
 	"fmt"
 	"os"
@@ -76,7 +77,7 @@ func (s *Writer) SetSyncOnClose(enabled bool) {
 // Write implements io.Writer. It splits data across files as needed.
 func (s *Writer) Write(p []byte) (int, error) {
 	if s.maxBytes <= 0 {
-		return 0, fmt.Errorf("Invalid split part size: %d. Remedy: Configure split_size_mb to a value greater than 0.", s.maxBytes)
+		return 0, problem.Errorf("Invalid split part size: %d.", s.maxBytes).WithRemedy("Configure split_size_mb to a value greater than 0.")
 	}
 
 	total := 0

@@ -10,10 +10,10 @@ import (
 
 // fakeDialogs answers the questions as the test scripts them.
 type fakeDialogs struct {
-	questions    []Question
+	questions    []any
 	plans        []interact.BackupPlan
 	opts         []interact.BackupStartOptions
-	password     func(Question) ([]byte, error)
+	password     func(interact.SecretQuestion) ([]byte, error)
 	newPw        func() ([]byte, []byte, bool)
 	start        interact.BackupStart
 	confirm      []byte // the confirmation NewPassword answered
@@ -32,16 +32,16 @@ func (f *fakeDialogs) ConfirmBackupStart(o interact.BackupStartOptions, answer f
 func (f *fakeDialogs) RestorePlan(interact.RestorePlan, func()) {}
 func (f *fakeDialogs) VerifyPlan(interact.VerifyPlan, func())   {}
 func (f *fakeDialogs) ConfirmStart(string, func(bool, error))   {}
-func (f *fakeDialogs) ChooseUnlockMethod(_ Question, _ string, answer func(bool, []byte, error)) {
+func (f *fakeDialogs) ChooseUnlockMethod(_ interact.UnlockChoice, answer func(bool, []byte, error)) {
 	answer(f.recovery, f.choiceSecret, nil)
 }
-func (f *fakeDialogs) RecoveryCode(string, func(bool))   {}
-func (f *fakeDialogs) SpareYubiKey(Question, func(bool)) {}
-func (f *fakeDialogs) Password(q Question, answer func([]byte, error)) {
+func (f *fakeDialogs) RecoveryCode(string, func(bool))                 {}
+func (f *fakeDialogs) SpareYubiKey(interact.SpareQuestion, func(bool)) {}
+func (f *fakeDialogs) Password(q interact.SecretQuestion, answer func([]byte, error)) {
 	f.questions = append(f.questions, q)
 	answer(f.password(q))
 }
-func (f *fakeDialogs) NewPassword(q Question, _ string, answer func([]byte, []byte, bool)) {
+func (f *fakeDialogs) NewPassword(q interact.NewPasswordQuestion, answer func([]byte, []byte, bool)) {
 	f.questions = append(f.questions, q)
 	pw, confirm, ok := f.newPw()
 	f.confirm = confirm
@@ -71,30 +71,21 @@ func newTestUI(t *testing.T, d Dialogs) *UI {
 	return NewUI(b, d)
 }
 
-func TestUIPasswordRetriesShowTheWorkflowMessage(t *testing.T) {
+// The dialogs get the workflow's question as it is: output written in
+// between (log lines, notices) does not change it (refactoring 2.0 RF-26).
+func TestUIPasswordPassesTheQuestionOn(t *testing.T) {
 	t.Parallel()
-	d := &fakeDialogs{password: func(Question) ([]byte, error) { return []byte("pw"), nil }}
+	d := &fakeDialogs{password: func(interact.SecretQuestion) ([]byte, error) { return []byte("pw"), nil }}
 	u := newTestUI(t, d)
-	if _, err := u.Password("Enter backup password: "); err != nil {
-		t.Fatal(err)
-	}
-	fmt.Fprintln(u.Output(), "Wrong password. 2 attempt(s) remaining.")
-	if _, err := u.Password("Enter backup password: "); err != nil {
-		t.Fatal(err)
-	}
+	wrong := errors.New("Wrong password.")
+	retry := interact.SecretQuestion{Action: "backup", Attempt: interact.Attempt{N: 2, Left: 2, Failure: wrong}}
 	fmt.Fprintln(u.Output(), "[2026-09-30 09:12:03] INFO  - a log line")
-	if _, err := u.Password("Enter recovery code: "); err != nil {
+	if _, err := u.Password(retry); err != nil {
 		t.Fatal(err)
 	}
-	q := d.questions
-	if q[0].Retry || q[0].Message != "" {
-		t.Fatalf("first question: %+v", q[0])
-	}
-	if !q[1].Retry || q[1].Message != "Wrong password. 2 attempt(s) remaining." {
-		t.Fatalf("retry: %+v", q[1])
-	}
-	if q[2].Retry || q[2].Message != "" {
-		t.Fatalf("another prompt after a log line: %+v", q[2])
+	got, ok := d.questions[0].(interact.SecretQuestion)
+	if !ok || got.Action != "backup" || !got.Retry() || got.Left != 2 || got.Failure != wrong {
+		t.Fatalf("the dialog got %+v", d.questions[0])
 	}
 }
 
@@ -112,7 +103,7 @@ func TestUINewPasswordChecksTheConfirmation(t *testing.T) {
 	} {
 		d := &fakeDialogs{newPw: func() ([]byte, []byte, bool) { return []byte(tc.pw), []byte(tc.confirm), tc.ok }}
 		u := newTestUI(t, d)
-		pw, err := u.NewPassword("New password: ", "Confirm: ")
+		pw, err := u.NewPassword(interact.NewPasswordQuestion{MinLength: 12})
 		if !errors.Is(err, tc.want) || (err == nil && string(pw) != tc.pw) {
 			t.Fatalf("%q/%q: %q, %v; want %v", tc.pw, tc.confirm, pw, err, tc.want)
 		}
@@ -144,10 +135,10 @@ func TestUICancelAnswersQuestions(t *testing.T) {
 	if choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{}); choice != interact.BackupCancel || err != nil {
 		t.Fatalf("start after cancel: %v, %v", choice, err)
 	}
-	if _, err := u.Password("Enter backup password: "); !errors.Is(err, interact.ErrCancelled) {
+	if _, err := u.Password(interact.SecretQuestion{Action: "backup"}); !errors.Is(err, interact.ErrCancelled) {
 		t.Fatalf("password after cancel: %v", err)
 	}
-	if ok, _ := u.WaitForSpareYubiKey(); ok {
+	if ok, _ := u.WaitForSpareYubiKey(interact.SpareQuestion{}); ok {
 		t.Fatal("spare YubiKey after cancel")
 	}
 }
@@ -273,25 +264,25 @@ func TestMachineRecordsTheFoldersBackedUp(t *testing.T) {
 func TestUIPasswordTypedWithTheUnlockChoice(t *testing.T) {
 	t.Parallel()
 	asked := 0
-	d := &fakeDialogs{choiceSecret: []byte("typed"), password: func(Question) ([]byte, error) { asked++; return []byte("again"), nil }}
+	d := &fakeDialogs{choiceSecret: []byte("typed"), password: func(interact.SecretQuestion) ([]byte, error) { asked++; return []byte("again"), nil }}
 	u := newTestUI(t, d)
-	if recovery, err := u.ChooseUnlockMethod("password only"); recovery || err != nil {
+	if recovery, err := u.ChooseUnlockMethod(interact.UnlockChoice{}); recovery || err != nil {
 		t.Fatalf("choice %v %v", recovery, err)
 	}
-	if pw, err := u.Password("Enter verification password: "); string(pw) != "typed" || err != nil || asked != 0 {
+	if pw, err := u.Password(interact.SecretQuestion{Action: "verification", Attempt: interact.Attempt{N: 1}}); string(pw) != "typed" || err != nil || asked != 0 {
 		t.Fatalf("the password typed with the choice: %q %v (asked %d)", pw, err, asked)
 	}
 	// A wrong password asks again, as a retry.
-	if pw, _ := u.Password("Enter verification password: "); string(pw) != "again" || !d.questions[0].Retry {
+	if pw, _ := u.Password(interact.SecretQuestion{Action: "verification", Attempt: interact.Attempt{N: 2}}); string(pw) != "again" || !d.questions[0].(interact.SecretQuestion).Retry() {
 		t.Fatalf("retry %q %+v", pw, d.questions)
 	}
 
-	r := &fakeDialogs{recovery: true, password: func(Question) ([]byte, error) { return []byte("CODE"), nil }}
+	r := &fakeDialogs{recovery: true, password: func(interact.SecretQuestion) ([]byte, error) { return []byte("CODE"), nil }}
 	ur := newTestUI(t, r)
-	if recovery, _ := ur.ChooseUnlockMethod("password only"); !recovery {
+	if recovery, _ := ur.ChooseUnlockMethod(interact.UnlockChoice{}); !recovery {
 		t.Fatal("the recovery code was chosen")
 	}
-	if code, _ := ur.Password("Enter recovery code: "); string(code) != "CODE" || len(r.questions) != 1 {
+	if code, _ := ur.Password(interact.SecretQuestion{Kind: interact.SecretRecoveryCode}); string(code) != "CODE" || len(r.questions) != 1 {
 		t.Fatalf("the recovery code is asked: %q", code)
 	}
 }

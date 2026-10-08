@@ -288,6 +288,7 @@ const (
 	unlockRecoveryIntro  = "Enter your recovery code as it is written on your note."
 	unlockWithYubiKey    = "Unlock with your YubiKey. Windows asks you to touch it."
 	unlockWithBoth       = "Unlock with your YubiKey and your password. Windows asks for the YubiKey first."
+	unlockOtherKeys      = "Backup %s uses different keys (created %s). Authenticate with the credentials of those keys."
 	linkUseRecovery      = "Use your recovery code instead"
 	fieldPassword        = "Password"
 	fieldConfirmPassword = "Confirm password"
@@ -301,7 +302,7 @@ const (
 	stepOf               = "%s · Step %d of %d"
 	newPasswordIntro     = "Choose a password for your backups."
 	newPasswordHint      = "You need it for every backup and every restore."
-	newPasswordHintN     = "At least %s characters. You need it for every backup and every restore."
+	newPasswordHintN     = "At least %d characters. You need it for every backup and every restore."
 	stepsPrefix          = "Steps: "
 	stepNamePassword     = "password"
 	stepNameYubiKey      = "register your YubiKey"
@@ -311,7 +312,7 @@ const (
 	spareHint            = "Windows then asks twice for the PIN of the spare YubiKey."
 	recoveryIntro        = "Store this code in your password manager or write it down now. It's shown only once and opens your backups on its own."
 	recoveryNote         = "Keep it in a safe place, never next to your backups or unencrypted on this computer."
-	attemptsLeft         = "%s attempts left."
+	attemptsLeft         = "%d attempts left."
 	attemptLeftOne       = "1 attempt left."
 )
 

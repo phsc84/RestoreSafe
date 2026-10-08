@@ -276,7 +276,7 @@ func validateSlot(s Slot) error {
 	if s.KDF.Alg != kdfAlgArgon2 || len(s.KDF.Salt) != cryptox.SaltLen {
 		return fmt.Errorf("invalid key derivation settings")
 	}
-	if err := cryptox.ValidateArgon2Params(s.KDF.Time, s.KDF.MemoryKiB, s.KDF.Threads, "in backup header", "Remedy: Use an unmodified backup created by RestoreSafe."); err != nil {
+	if err := cryptox.ValidateArgon2Params(s.KDF.Time, s.KDF.MemoryKiB, s.KDF.Threads, "in backup header", "Use an unmodified backup created by RestoreSafe."); err != nil {
 		return err
 	}
 	if len(s.Nonce) != cryptox.NonceLen || len(s.Wrapped) != wrappedKeyLen {

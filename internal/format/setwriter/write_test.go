@@ -8,6 +8,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/security/cryptox"
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 	entry := naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}
 
 	var opened []string
-	res, err := Write(Params{
+	res, err := Write(context.Background(), Params{
 		SourceDir: src, OutputDir: backupDir, Entry: entry, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
 		OnPartOpened: func(seq int, path string) { opened = append(opened, filepath.Base(path)) },
@@ -87,7 +88,7 @@ func TestWriteFullSetRemovesPartsOnFailure(t *testing.T) {
 
 	backupDir := t.TempDir()
 	ks, master := newKeySet(t)
-	_, err := Write(Params{
+	_, err := Write(context.Background(), Params{
 		SourceDir: filepath.Join(t.TempDir(), "does-not-exist"), OutputDir: backupDir,
 		Entry: naming.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}, RunID: "ABC123",
 		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
@@ -114,7 +115,7 @@ func TestWriteRejectsInconsistentDifferentialParams(t *testing.T) {
 		{naming.BackupEntry{DirectoryName: "src", ChainID: "ABC123", Date: "2026-09-26"}, base},
 		{naming.BackupEntry{DirectoryName: "src", ChainID: "XYZ999", Date: "2026-09-26", DiffNumber: 1}, base},
 	} {
-		_, err := Write(Params{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
+		_, err := Write(context.Background(), Params{SourceDir: t.TempDir(), OutputDir: t.TempDir(), Entry: tc.entry, Base: tc.base, RunID: "RUN001", KeySet: *ks, Master: master, SplitSizeBytes: 1 << 20})
 		if err == nil || !strings.Contains(err.Error(), "Internal error") {
 			t.Fatalf("%+v: expected internal error, got %v", tc.entry, err)
 		}

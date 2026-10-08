@@ -11,6 +11,7 @@
 package manifest
 
 import (
+	"RestoreSafe/internal/problem"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -271,7 +272,7 @@ func decodeStrict(line []byte, v any) error {
 }
 
 func manifestErr(format string, args ...any) error {
-	return fmt.Errorf("Invalid backup manifest: %s. Remedy: Use an unmodified backup created by RestoreSafe.", fmt.Sprintf(format, args...))
+	return problem.Errorf("Invalid backup manifest: %s.", fmt.Sprintf(format, args...)).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 }
 
 // Validate checks the manifest against the rules of the format (2.0 spec 5.2).
@@ -279,7 +280,7 @@ func manifestErr(format string, args ...any) error {
 func (m *Manifest) Validate() error {
 	h := m.Header
 	if h.ManifestVersion != Version {
-		return fmt.Errorf("Unsupported backup manifest version %d. Remedy: Use the RestoreSafe version that created this backup.", h.ManifestVersion)
+		return problem.Errorf("Unsupported backup manifest version %d.", h.ManifestVersion).WithRemedy("Use the RestoreSafe version that created this backup.")
 	}
 	if h.HashAlg != HashAlg {
 		return manifestErr("unsupported hash algorithm %q", h.HashAlg)
@@ -415,7 +416,7 @@ func isValidHash(h string) bool {
 // cannot escape the restore directory.
 func ValidatePath(p string) error {
 	invalid := func(reason string) error {
-		return fmt.Errorf("Invalid path in backup (%s): %q. Remedy: Do not use this backup; use only unmodified, trusted backup files.", reason, p)
+		return problem.Errorf("Invalid path in backup (%s): %q.", reason, p).WithRemedy("Do not use this backup; use only unmodified, trusted backup files.")
 	}
 	if strings.TrimSpace(p) == "" {
 		return invalid("empty")
