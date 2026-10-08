@@ -15,6 +15,10 @@ New-Item -ItemType Directory -Force $Work | Out-Null
 $exe = Join-Path $Work "RestoreSafe.exe"
 Push-Location $repo
 try {
+  # The manifest in the resources selects Common Controls 6, which the
+  # window needs; resource.syso is generated, as by build.bat.
+  go tool goversioninfo -64 -o cmd/restoresafe/resource.syso build/versioninfo.json
+  if ($LASTEXITCODE -ne 0) { throw "goversioninfo failed" }
   go build -trimpath -ldflags="-H=windowsgui" -o $exe ./cmd/restoresafe
   if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 } finally { Pop-Location }
@@ -67,7 +71,10 @@ function Show-Diagnostics {
   if ($p.HasExited) { Write-Host "RestoreSafe exited with code $($p.ExitCode)" }
   else {
     Write-Host "RestoreSafe runs; main window '$($p.MainWindowTitle)' $($p.MainWindowHandle)"
-    foreach ($h in [U]::TopLevel($p.Id)) { Write-Host "  window class $([U]::Class($h)), text '$([U]::Text($h))'" }
+    foreach ($h in [U]::TopLevel($p.Id)) {
+      Write-Host "  window class $([U]::Class($h)), text '$([U]::Text($h))'"
+      foreach ($c in [U]::Children($h)) { if ([U]::Text($c)) { Write-Host "    $([U]::Text($c))" } }
+    }
     Stop-Process -Id $p.Id -Force
   }
   Add-Type -AssemblyName System.Windows.Forms, System.Drawing
