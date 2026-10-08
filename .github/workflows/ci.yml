@@ -120,3 +120,27 @@ jobs:
         with:
           name: fuzz-failures
           path: internal/**/testdata/fuzz/
+
+  gui:
+    name: GUI smoke test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The runner's session has a desktop, which the UI Automation of
+      # scripts\gui-test needs: the smoke test drives the real window through
+      # two backups, a restore and a verification, then every status of the
+      # Create backup page is checked.
+      - name: Smoke test and state check
+        shell: powershell
+        run: .\scripts\ci\gui-smoke.ps1 -Work "$env:RUNNER_TEMP\gui-smoke"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: gui-screenshots
+          path: |
+            ${{ runner.temp }}/gui-smoke/shots
+            ${{ runner.temp }}/gui-smoke/states

@@ -72,7 +72,12 @@ switch ($Condition) {
     $letter = [char[]]"QRSTUVWXYZ" | Where-Object { $used -notcontains [string]$_ } | Select-Object -First 1
     $text = $text -replace '(?m)^backup_directory:.*$', "backup_directory: `"$($letter):/RestoreSafe-test`""
   }
-  "Argon2Capped" { $text += "`nargon2:`n  memory_mb: 99999`n" }
+  "Argon2Capped" {
+    # Raise memory_mb in an existing argon2 block; a second block would make
+    # the configuration invalid instead of capped.
+    if ($text -match '(?m)^\s+memory_mb:') { $text = $text -replace '(?m)^(\s+memory_mb:).*$', '$1 99999' }
+    else { $text += "`nargon2:`n  memory_mb: 99999`n" }
+  }
   "NewKeysNeeded" {
     if ($text -match '(?m)^recovery_code:\s*true') { $text = $text -replace '(?m)^recovery_code:\s*true', 'recovery_code: false' }
     else { $text = ($text -replace '(?m)^recovery_code:.*$', '') + "`nrecovery_code: true`n" }
