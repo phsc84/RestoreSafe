@@ -96,7 +96,7 @@ type UI interface {
 
 	// ShowRecoveryCode shows a new recovery code. It is shown only this once.
 	// It returns ErrCancelled when the user cancels instead of storing it.
-	ShowRecoveryCode(code string) error
+	ShowRecoveryCode(code []byte) error
 	// WaitForSpareYubiKey waits until the user has connected the spare
 	// YubiKey. It returns false when the user cancels.
 	WaitForSpareYubiKey(q SpareQuestion) (bool, error)

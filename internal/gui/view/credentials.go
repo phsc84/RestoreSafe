@@ -23,11 +23,10 @@ type CredentialDialog struct {
 	Fields []Field
 	// Error is under the fields: what was wrong with the last answer.
 	Error string
-	// Code is a recovery code to store, shown on one line.
-	Code string
-	// Copy is the text the Copy button puts on the clipboard; "" for no
-	// Copy button.
-	Copy string
+	// Code is a recovery code to store, shown on one line with a Copy
+	// button; nil for none. It is a secret: bytes, so that the caller can
+	// zero it after the dialog closed.
+	Code []byte
 	Note string
 	OK   string
 	// Cancel is "" when the dialog cannot be cancelled.
@@ -115,12 +114,11 @@ func SpareYubiKeyDialogOf(q interact.SpareQuestion, keys interact.KeyPlan) Crede
 // button that copies it, e.g. into a password manager. It has no Cancel
 // button, but closing it cancels. It is not a numbered step: it asks
 // nothing.
-func RecoveryCodeDialogOf(code string, _ interact.KeyPlan) CredentialDialog {
+func RecoveryCodeDialogOf(code []byte, _ interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
 		Title: recoveryTitle,
 		Intro: recoveryIntro,
 		Code:  code,
-		Copy:  code,
 		Note:  recoveryNote,
 		OK:    buttonStored,
 	}

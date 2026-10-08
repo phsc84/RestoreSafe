@@ -127,13 +127,15 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, l
 		if err != nil {
 			return nil, err
 		}
-		code, err := recovery.Parse(string(input))
+		code, err := recovery.Parse(input)
 		cryptox.ZeroBytes(input)
 		if err == nil && code.Check() != ks.Slots[index].Check {
+			code.Zero()
 			err = problem.New("This recovery code belongs to different keys.").WithRemedy("Use the recovery code created together with these backups.")
 		}
 		if err == nil {
 			secret := code.Secret()
+			code.Zero()
 			master, unlockErr := ks.Unlock(index, secret)
 			cryptox.ZeroBytes(secret)
 			if unlockErr == nil {

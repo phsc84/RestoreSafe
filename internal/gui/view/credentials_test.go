@@ -56,12 +56,9 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 	if s.Error != "This is YubiKey 1. Remove it and insert your spare YubiKey." {
 		t.Fatalf("spare retry %q", s.Error)
 	}
-	r := RecoveryCodeDialogOf("K7QF-9M2D-XW4P-HT6N-3JBV-R8LC", all)
-	if r.Title != "Your recovery code" || r.Cancel != "" || r.Code != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
+	r := RecoveryCodeDialogOf([]byte("K7QF-9M2D-XW4P-HT6N-3JBV-R8LC"), all)
+	if r.Title != "Your recovery code" || r.Cancel != "" || string(r.Code) != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
 		t.Fatalf("recovery code %+v", r)
-	}
-	if r.Copy != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" {
-		t.Fatalf("the Copy button copies the whole code: %q", r.Copy)
 	}
 
 	only := interact.KeyPlan{New: true, Password: true}

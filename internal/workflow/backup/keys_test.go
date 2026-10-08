@@ -23,7 +23,8 @@ type enrollStub struct {
 	lines     []string
 	connected string // "keyA" or "keyB": which YubiKey is plugged in
 	secrets   map[string][]byte
-	code      recovery.Code
+	code      string // display form of the recovery code
+	secret    []byte // its key material
 	out       bytes.Buffer
 	console   *interacttest.Script
 }
@@ -80,8 +81,9 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 		return yubikey.CombinePasswordWithSecret(pw, s.secrets[s.connected]), challenge(s.connected, primary.NoPassword), nil
 	}
 	code, _ := recovery.Generate()
-	s.code = code
-	generateRecoveryCodeFn = func() (recovery.Code, error) { return code, nil }
+	s.code, s.secret = string(code.Display()), code.Secret()
+	// A new Code on every call: the workflow zeroes the one it gets.
+	generateRecoveryCodeFn = func() (recovery.Code, error) { return recovery.Parse([]byte(s.code)) }
 }
 
 func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, string, error) {
@@ -139,7 +141,7 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("mode %d: enrollKeySet: %v\n%s", mode, err, out)
 		}
-		if !strings.Contains(out, "This is YubiKey 1") || !strings.Contains(out, s.code.String()) {
+		if !strings.Contains(out, "This is YubiKey 1") || !strings.Contains(out, s.code) {
 			t.Fatalf("mode %d: unexpected output %q", mode, out)
 		}
 		if len(ks.Slots) != 3 || ks.YubiKeyCount() != 2 || !ks.HasSlotType(container.SlotRecovery) {
@@ -157,7 +159,7 @@ func TestEnrollKeySetWithSpareYubiKeyAndRecoveryCode(t *testing.T) {
 				t.Fatalf("mode %d: %s does not unlock slot %d: %v", mode, key, i, err)
 			}
 		}
-		if got, err := ks.Unlock(2, s.code.Secret()); err != nil || !bytes.Equal(got, master) {
+		if got, err := ks.Unlock(2, s.secret); err != nil || !bytes.Equal(got, master) {
 			t.Fatalf("mode %d: recovery code does not unlock: %v", mode, err)
 		}
 	}

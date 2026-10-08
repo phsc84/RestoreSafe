@@ -105,21 +105,29 @@ func ClientToScreen(hwnd HWND, pt Point) Point {
 }
 
 // CopyText puts text on the clipboard.
-func CopyText(owner HWND, text string) error { return copyText(owner, text, false) }
-
-// CopySecretText puts a secret on the clipboard, marked so that Windows
-// keeps it out of the clipboard history and the cloud clipboard, and
-// clipboard monitors leave it alone.
-func CopySecretText(owner HWND, text string) error { return copyText(owner, text, true) }
-
-// Clipboard formats that mark a secret; their value is a DWORD 0.
-var secretClipboardFormats = []string{"ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"}
-
-func copyText(owner HWND, text string, secret bool) error {
+func CopyText(owner HWND, text string) error {
 	u, err := windows.UTF16FromString(text)
 	if err != nil {
 		return err
 	}
+	return copyUTF16(owner, u, false)
+}
+
+// CopySecret puts a secret, given as UTF-8 bytes, on the clipboard, marked
+// so that Windows keeps it out of the clipboard history and the cloud
+// clipboard, and clipboard monitors leave it alone. It zeroes its UTF-16
+// copy afterwards; the clipboard keeps its own.
+func CopySecret(owner HWND, secret []byte) error {
+	u := secretUTF16(secret)
+	defer clear(u)
+	return copyUTF16(owner, u, true)
+}
+
+// Clipboard formats that mark a secret; their value is a DWORD 0.
+var secretClipboardFormats = []string{"ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"}
+
+// copyUTF16 puts the NUL-terminated text u on the clipboard.
+func copyUTF16(owner HWND, u []uint16, secret bool) error {
 	if r, _, err := procOpenClipboard.Call(uintptr(owner)); r == 0 {
 		return lastErr("OpenClipboard", err)
 	}

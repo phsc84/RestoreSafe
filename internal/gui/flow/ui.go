@@ -27,7 +27,7 @@ type Dialogs interface {
 	// when the user cancelled.
 	NewPassword(q interact.NewPasswordQuestion, answer func(password, confirm []byte, ok bool))
 	// RecoveryCode shows a new recovery code once; ok=false cancels.
-	RecoveryCode(code string, answer func(ok bool))
+	RecoveryCode(code []byte, answer func(ok bool))
 	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
 	SpareYubiKey(q interact.SpareQuestion, answer func(ok bool))
 }
@@ -159,7 +159,7 @@ func checkNewPassword(pw, confirm []byte) ([]byte, error) {
 }
 
 // ShowRecoveryCode shows the new recovery code once.
-func (u *UI) ShowRecoveryCode(code string) error {
+func (u *UI) ShowRecoveryCode(code []byte) error {
 	_, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.RecoveryCode(code, func(ok bool) {
 			if !ok {

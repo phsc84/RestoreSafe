@@ -126,7 +126,7 @@ func (q questions) newKeys() interact.KeyPlan {
 
 // RecoveryCode shows the new recovery code once (figure 9.3). Closing the
 // dialog cancels the backup.
-func (q questions) RecoveryCode(code string, answer func(bool)) {
+func (q questions) RecoveryCode(code []byte, answer func(bool)) {
 	answer(q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys())).ok)
 }
 
