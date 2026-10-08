@@ -65,10 +65,15 @@ func (r *Restorer) targetPath(rel string) (string, error) {
 	return p, nil
 }
 
-// CreateDirectories creates every directory of the target manifest.
+// CreateDirectories creates every directory of the target manifest. It
+// refuses a destination, or a directory just created, that is a reparse
+// point.
 func (r *Restorer) CreateDirectories() error {
 	if r.verifyOnly {
 		return nil
+	}
+	if err := checkNotReparsePoint(r.destDir); err != nil {
+		return err
 	}
 	for _, e := range r.target.Entries {
 		if e.Type != manifest.TypeDir {
@@ -80,6 +85,9 @@ func (r *Restorer) CreateDirectories() error {
 		}
 		if err := os.Mkdir(p, 0o750); err != nil {
 			return problem.Errorf("Failed to create directory %q: %w.", p, err).WithRemedy("Check write permissions in the restore destination.")
+		}
+		if err := checkNotReparsePoint(p); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -138,6 +146,9 @@ func (r *Restorer) extractFile(content io.Reader, e *manifest.Entry) error {
 
 	p, err := r.targetPath(e.Path)
 	if err != nil {
+		return err
+	}
+	if err := checkNotReparsePoint(filepath.Dir(p)); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(p, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
