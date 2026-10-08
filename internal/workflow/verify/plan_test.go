@@ -22,7 +22,7 @@ func TestVerifyPlanDescribesTheVerification(t *testing.T) {
 	cfg := &config.Config{BackupDirectory: fx.BackupDir}
 	noYubiKey := func() error { return nil }
 	planFor := func(inventory []catalog.SetInfo) interact.VerifyPlan {
-		items := buildVerifyPreflight(selected, inventory)
+		items := job.SelectionPreflight(selected, inventory)
 		return verifyPlan(items, fx.KeySet, verifyPreflightReport(cfg, fx.BackupDir, items, config.AuthModePassword, noYubiKey))
 	}
 

@@ -17,7 +17,6 @@ import (
 	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 )
@@ -65,7 +64,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 	defer log.Close()
 
-	preflight := buildVerifyPreflight(selectedInfos, infos)
+	preflight := job.SelectionPreflight(selectedInfos, infos)
 	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
 	if lockIssue != nil {
 		details.Issues = append(details.Issues, *lockIssue)
@@ -105,12 +104,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 func runVerifyOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
 	out := u.Output()
 	fmt.Fprintln(out)
-	first := selected[0].Header
-	log.Info("Verification started - ID: %s, date: %s", first.RunID, first.Date)
-	log.Info("Verification selection:")
-	for _, info := range selected {
-		log.Info("  %s", info.Entry.String())
-	}
+	job.LogStart(log, "Verification", selected)
 
 	skipped, err := verifySelectedEntries(ctx, u, selected, inventory, backupDir, masters, log)
 	if err != nil {
@@ -129,67 +123,20 @@ func runVerifyOperation(ctx context.Context, u interact.UI, selected, inventory 
 	return nil
 }
 
-type verifyPreflightItem struct {
-	Entry          naming.BackupEntry
-	PartCount      int
-	TotalSizeBytes int64
-	// Base is the full backup a differential needs.
-	Base *catalog.SetInfo
-	Err  error
-}
-
-// buildVerifyPreflight checks the selected sets. Verifying a differential
-// verifies the complete restore point, so its full backup is needed too.
-func buildVerifyPreflight(selected, inventory []catalog.SetInfo) []verifyPreflightItem {
-	items := make([]verifyPreflightItem, 0, len(selected))
-	for _, info := range selected {
-		item := verifyPreflightItem{
-			Entry:          info.Entry,
-			PartCount:      len(info.Parts),
-			TotalSizeBytes: info.SizeBytes,
-			Err:            info.Err,
-		}
-		if item.Err == nil && info.Entry.IsDiff() {
-			base, err := catalog.BaseOf(inventory, info.Entry)
-			if err != nil {
-				item.Err = err
-			} else {
-				item.Base = base
-				item.TotalSizeBytes += base.SizeBytes
-			}
-		}
-		items = append(items, item)
-	}
-	return items
-}
-
 // verifyPreflightReport describes the verification: the selected backups
 // (with the full backup a differential needs) and the issues that block it.
 func verifyPreflightReport(
 	cfg *config.Config,
 	backupDir string,
-	items []verifyPreflightItem,
+	items []job.SelectionItem,
 	mode config.AuthMode,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
-	var issues []interact.Issue
-	rows := []interact.Row{interact.Heading("Backup selection"), interact.Item(interact.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
-	for _, item := range items {
-		status := interact.StatusOK
-		if item.Err != nil {
-			status = interact.StatusError
-			issues = append(issues, interact.IssueOf(interact.StatusError, interact.CodeBaseMissing, item.Err))
-		}
-		var details []string
-		if item.Base != nil {
-			details = append(details, fmt.Sprintf("with full backup %s (parts: %d)", item.Base.Entry.String(), len(item.Base.Parts)))
-		}
-		rows = append(rows, interact.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
-	}
+	rows, issues := job.SelectionRows(backupDir, items)
 	rows = append(rows, job.AuthRows(mode.Label(), mode.UsesYubiKey(), "verification", checkYubiKeyConnected)...)
 
 	size := "unknown"
-	if totalBytes := estimateVerifyBytes(items); totalBytes > 0 {
+	if totalBytes := job.SelectionBytes(items); totalBytes > 0 {
 		size = fsx.FormatBytesBinary(uint64(totalBytes))
 	}
 	summary := []interact.Row{interact.Field("Backup size", size), interact.Field("Log level", strings.ToLower(cfg.LogLevel))}
@@ -197,20 +144,10 @@ func verifyPreflightReport(
 	return interact.Report{Title: "Verification preflight", Sections: []interact.Section{{Rows: rows}, {Rows: summary}}, Issues: issues}
 }
 
-func estimateVerifyBytes(items []verifyPreflightItem) int64 {
-	var total int64
-	for _, item := range items {
-		if item.Err == nil {
-			total += item.TotalSizeBytes
-		}
-	}
-	return total
-}
-
-func validateVerifyPreflight(items []verifyPreflightItem) error {
+func validateVerifyPreflight(items []job.SelectionItem) error {
 	return job.ValidatePreflightItems(
 		items,
-		func(item verifyPreflightItem) bool { return item.Err != nil },
+		func(item job.SelectionItem) bool { return item.Err != nil },
 		"Verification preflight failed: %d selected item(s) are incomplete or invalid.",
 		"Fix the [ERROR] entries above and start verification again.",
 	)
@@ -221,24 +158,20 @@ func validateVerifyPreflight(items []verifyPreflightItem) error {
 // during backup.
 func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
 	skipped := 0
-	for i, info := range selected {
-		var base *naming.BackupEntry
-		if info.Entry.IsDiff() {
-			baseInfo, err := catalog.BaseOf(inventory, info.Entry)
-			if err != nil {
-				return 0, err
-			}
-			base = &baseInfo.Entry
-		}
-		n, err := verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, i+1, len(selected)), info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
+	err := job.EachRestorePoint(selected, inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
+		missing, err := verifyEntry(ctx, job.Stamp(rep, interact.PhaseVerifying, n, len(selected)), info.Entry, base, backupDir, masters[info.Header.KeySet.ID], log)
 		if err != nil {
 			if ctx.Err() == nil {
 				log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: info.Entry.String(), Error: err.Error()})
 			}
-			return 0, fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
+			return fmt.Errorf("Failed to verify directory %q: %w", info.Entry.String(), err)
 		}
 		log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: info.Entry.String()})
-		skipped += n
+		skipped += missing
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return skipped, nil
 }
@@ -246,21 +179,11 @@ func verifySelectedEntries(ctx context.Context, rep interact.ProgressReporter, s
 // verifyEntry verifies one restore point: a full backup, or a differential
 // together with its full backup base.
 func verifyEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir string, master []byte, log *logging.Logger) (int, error) {
-	set, err := catalog.OpenSet(backupDir, entry)
+	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(backupDir, entry, base)
 	if err != nil {
 		return 0, err
 	}
-	defer set.Close()
-	parts := len(set.Paths)
-	var baseSet *container.Set
-	if base != nil {
-		baseSet, err = catalog.OpenSet(backupDir, *base)
-		if err != nil {
-			return 0, fmt.Errorf("Full backup %s: %w", base.String(), err)
-		}
-		defer baseSet.Close()
-		parts += len(baseSet.Paths)
-	}
+	defer closeAll()
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
 	var done atomic.Int64
@@ -276,10 +199,10 @@ func verifyEntry(ctx context.Context, rep interact.ProgressReporter, entry namin
 
 // verifyPlan describes the verification for the user, from the values the
 // details report was built from.
-func verifyPlan(items []verifyPreflightItem, ks *container.KeySet, details interact.Report) interact.VerifyPlan {
-	p := interact.VerifyPlan{Bytes: estimateVerifyBytes(items), Unlock: job.UnlockPlan(ks), Issues: details.Issues, Details: details}
+func verifyPlan(items []job.SelectionItem, ks *container.KeySet, details interact.Report) interact.VerifyPlan {
+	p := interact.VerifyPlan{Bytes: job.SelectionBytes(items), Unlock: job.UnlockPlan(ks), Issues: details.Issues, Details: details}
 	for _, item := range items {
-		p.Sets = append(p.Sets, job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err))
+		p.Sets = append(p.Sets, item.SetPlan())
 	}
 	return p
 }

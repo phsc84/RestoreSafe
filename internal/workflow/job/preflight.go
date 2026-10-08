@@ -2,9 +2,7 @@ package job
 
 import (
 	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
 	"fmt"
@@ -50,18 +48,4 @@ func UnlockPlan(ks *container.KeySet) interact.UnlockPlan {
 		YubiKey:      mode == config.AuthModePasswordYubiKey || mode == config.AuthModeYubiKey,
 		RecoveryCode: ks.HasSlotType(container.SlotRecovery),
 	}
-}
-
-// SetPlan describes a chosen backup set of a restore or verify: base is the
-// full backup read with a differential (nil for a full backup), bytes the
-// size read, and err the problem that keeps the set from being used.
-func SetPlan(entry naming.BackupEntry, base *catalog.SetInfo, bytes int64, err error) interact.SetPlan {
-	p := interact.SetPlan{Set: entry, Bytes: bytes}
-	if base != nil {
-		p.Base = base.Entry
-	}
-	if err != nil {
-		p.Problem, p.Remedy = problem.Split(err)
-	}
-	return p
 }

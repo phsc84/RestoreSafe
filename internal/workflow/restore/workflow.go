@@ -119,12 +119,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
 	out := u.Output()
 	fmt.Fprintln(out)
-	first := selected[0].Header
-	log.Info("Restore started - ID: %s, date: %s", first.RunID, first.Date)
-	log.Info("Restore selection:")
-	for _, info := range selected {
-		log.Info("  %s", info.Entry.String())
-	}
+	job.LogStart(log, "Restore", selected)
 
 	unread, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
 	if err != nil {
@@ -143,42 +138,31 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 	return nil
 }
 
+// restorePreflightItem is a chosen set with the folder it is restored into.
 type restorePreflightItem struct {
-	Entry          naming.BackupEntry
-	PartCount      int
-	TotalSizeBytes int64
-	OutputDir      string
-	// Base is the full backup a differential needs.
-	Base         *catalog.SetInfo
-	Err          error // set-level error (missing base)
+	job.SelectionItem
+	OutputDir    string
 	OutputDirErr error // output directory error (already exists, invalid name)
 	// OutputDirCode classifies OutputDirErr.
 	OutputDirCode interact.Code
 }
 
-// buildRestorePreflight checks the selected sets. A differential also needs
-// its chain's full backup (looked up in inventory); the size estimate covers
-// both, because restore reads both.
+// selections returns the chosen sets of items.
+func selections(items []restorePreflightItem) []job.SelectionItem {
+	out := make([]job.SelectionItem, len(items))
+	for i, item := range items {
+		out[i] = item.SelectionItem
+	}
+	return out
+}
+
+// buildRestorePreflight checks the selected sets (job.SelectionPreflight)
+// and the folders they are restored into.
 func buildRestorePreflight(selected, inventory []catalog.SetInfo, restorePath string) []restorePreflightItem {
 	items := make([]restorePreflightItem, 0, len(selected))
-	for _, info := range selected {
-		entry := info.Entry
-		item := restorePreflightItem{
-			Entry:          entry,
-			PartCount:      len(info.Parts),
-			TotalSizeBytes: info.SizeBytes,
-			OutputDir:      filepath.Join(restorePath, entry.DirectoryName),
-			Err:            info.Err,
-		}
-		if item.Err == nil && entry.IsDiff() {
-			base, err := catalog.BaseOf(inventory, entry)
-			if err != nil {
-				item.Err = err
-			} else {
-				item.Base = base
-				item.TotalSizeBytes += base.SizeBytes
-			}
-		}
+	for _, sel := range job.SelectionPreflight(selected, inventory) {
+		entry := sel.Entry
+		item := restorePreflightItem{SelectionItem: sel, OutputDir: filepath.Join(restorePath, entry.DirectoryName)}
 		if nameErr := naming.ValidateBackupEntryName(entry.DirectoryName); nameErr != nil {
 			item.OutputDirErr, item.OutputDirCode = nameErr, interact.CodeRestoreTargetInvalid
 		} else if _, err := os.Stat(item.OutputDir); err == nil {
@@ -199,7 +183,7 @@ func restorePreflightReport(
 	mode config.AuthMode,
 	checkYubiKeyConnected func() error,
 ) interact.Report {
-	var issues []interact.Issue
+	rows, issues := job.SelectionRows(backupDir, selections(items))
 	addError := func(code interact.Code, err error) {
 		issues = append(issues, interact.IssueOf(interact.StatusError, code, err))
 	}
@@ -207,20 +191,6 @@ func restorePreflightReport(
 	estimatedRestoreBytes := estimateRestoreBytes(items)
 	destDisplay := displayRestoreOutputDir(restorePath)
 	restoreFreeBytes, restoreFreeErr := queryRestoreTargetFreeBytes(restorePath)
-
-	rows := []interact.Row{interact.Heading("Backup selection"), interact.Item(interact.StatusNone, "Path: "+filepath.ToSlash(backupDir))}
-	for _, item := range items {
-		status := interact.StatusOK
-		if item.Err != nil {
-			status = interact.StatusError
-			addError(interact.CodeBaseMissing, item.Err)
-		}
-		var details []string
-		if item.Base != nil {
-			details = append(details, fmt.Sprintf("with full backup %s (parts: %d)", item.Base.Entry.String(), len(item.Base.Parts)))
-		}
-		rows = append(rows, interact.Item(status, fmt.Sprintf("%s (parts: %d)", item.Entry.String(), item.PartCount), details...))
-	}
 
 	rows = append(rows, interact.Heading("Restore destination"))
 	if restoreFreeErr != nil {
@@ -294,14 +264,7 @@ func validateRestoreTargetSpace(restorePath string, items []restorePreflightItem
 }
 
 func estimateRestoreBytes(items []restorePreflightItem) int64 {
-	var total int64
-	for _, item := range items {
-		if item.Err != nil {
-			continue
-		}
-		total += item.TotalSizeBytes
-	}
-	return total
+	return job.SelectionBytes(selections(items))
 }
 
 func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
@@ -331,23 +294,16 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 // progress to rep.
 func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
 	skipped := 0
-	for i, info := range selected {
-		entry := info.Entry
-		var base *naming.BackupEntry
-		if entry.IsDiff() {
-			baseInfo, err := catalog.BaseOf(inventory, entry)
-			if err != nil {
-				return 0, err
-			}
-			base = &baseInfo.Entry
-		}
-
-		master := masters[info.Header.KeySet.ID]
-		n, err := restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, i+1, len(selected)), entry, base, backupDir, restorePath, master, log)
+	err := job.EachRestorePoint(selected, inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
+		missing, err := restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, n, len(selected)), info.Entry, base, backupDir, restorePath, masters[info.Header.KeySet.ID], log)
 		if err != nil {
-			return 0, fmt.Errorf("Failed to restore directory %q: %w", entry.String(), err)
+			return fmt.Errorf("Failed to restore directory %q: %w", info.Entry.String(), err)
 		}
-		skipped += n
+		skipped += missing
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return skipped, nil
 }
@@ -361,19 +317,11 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 	if err := naming.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
-	set, err := catalog.OpenSet(backupDir, entry)
+	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(backupDir, entry, base)
 	if err != nil {
 		return 0, err
 	}
-	defer set.Close()
-	var baseSet *container.Set
-	if base != nil {
-		baseSet, err = catalog.OpenSet(backupDir, *base)
-		if err != nil {
-			return 0, fmt.Errorf("Full backup %s: %w", base.String(), err)
-		}
-		defer baseSet.Close()
-	}
+	defer closeAll()
 
 	log.Info("Processing backup directory: %s", entry.DirectoryName)
 
@@ -401,10 +349,6 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
-	parts := len(set.Paths)
-	if baseSet != nil {
-		parts += len(baseSet.Paths)
-	}
 	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
 	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, log)
 	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log)
@@ -429,7 +373,7 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 		p.FreeBytes = int64(free)
 	}
 	for _, item := range items {
-		sp := interact.RestoreSetPlan{SetPlan: job.SetPlan(item.Entry, item.Base, item.TotalSizeBytes, item.Err), OutputDir: item.OutputDir}
+		sp := interact.RestoreSetPlan{SetPlan: item.SetPlan(), OutputDir: item.OutputDir}
 		if item.OutputDirErr != nil {
 			sp.OutputProblem, sp.OutputRemedy = problem.Split(item.OutputDirErr)
 			sp.OutputCode = item.OutputDirCode

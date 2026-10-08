@@ -31,13 +31,13 @@ func fixtureInfos(t *testing.T, fx *testutil.BackupFixture) []catalog.SetInfo {
 func TestBuildVerifyPreflightUsesInventory(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-preflight-pass"))
 	infos := fixtureInfos(t, fx)
-	items := buildVerifyPreflight(infos, infos)
+	items := job.SelectionPreflight(infos, infos)
 	if len(items) != 1 || items[0].Err != nil || items[0].PartCount != fx.Parts || items[0].TotalSizeBytes <= 0 {
 		t.Fatalf("unexpected preflight item: %+v", items)
 	}
 
 	orphan := catalog.SetInfo{Entry: naming.BackupEntry{DirectoryName: "D", ChainID: "ABC123", Date: "2026-03-14", DiffNumber: 1}}
-	if items := buildVerifyPreflight([]catalog.SetInfo{orphan}, infos); items[0].Err == nil || !strings.Contains(items[0].Err.Error(), "is missing") {
+	if items := job.SelectionPreflight([]catalog.SetInfo{orphan}, infos); items[0].Err == nil || !strings.Contains(items[0].Err.Error(), "is missing") {
 		t.Fatalf("expected missing-base error, got %+v", items[0])
 	}
 }
@@ -54,7 +54,7 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items := buildVerifyPreflight(selected, infos)
+	items := job.SelectionPreflight(selected, infos)
 	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
 		t.Fatalf("differential must find its full backup: %+v", items[0])
 	}
@@ -71,10 +71,10 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 func TestValidateVerifyPreflight(t *testing.T) {
 	t.Parallel()
 
-	if err := validateVerifyPreflight([]verifyPreflightItem{{}, {}}); err != nil {
+	if err := validateVerifyPreflight([]job.SelectionItem{{}, {}}); err != nil {
 		t.Fatalf("expected no error for valid verify preflight, got %v", err)
 	}
-	err := validateVerifyPreflight([]verifyPreflightItem{{}, {Err: errors.New("broken")}})
+	err := validateVerifyPreflight([]job.SelectionItem{{}, {Err: errors.New("broken")}})
 	if err == nil || !strings.Contains(err.Error(), "1 selected item") {
 		t.Fatalf("unexpected verify preflight error: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 	t.Parallel()
 
 	entry := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
-	items := []verifyPreflightItem{
+	items := []job.SelectionItem{
 		{Entry: entry, PartCount: 2, TotalSizeBytes: 2048},
 		{Entry: naming.BackupEntry{DirectoryName: "Bad", ChainID: "ABC123", Date: "2026-03-20"}, Err: errors.New("Backup set is incomplete")},
 	}
