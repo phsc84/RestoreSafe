@@ -4,6 +4,7 @@ import (
 	"RestoreSafe/internal/format/naming"
 	"RestoreSafe/internal/gui/flow"
 	"RestoreSafe/internal/logging"
+	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/testutil/scenario"
 	"RestoreSafe/internal/workflow/health"
 	"RestoreSafe/internal/workflow/interact"
@@ -115,7 +116,7 @@ func TestResultCardOfABlockedPlan(t *testing.T) {
 	p := samplePlan()
 	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "There isn't enough space.", Remedy: "Free up space."}}
 	m.PlanShown(p)
-	m.Done(flow.End{Err: errors.New("Backup preflight failed: not enough space. Remedy: Free up space.")}, planNow)
+	m.Done(flow.End{Err: problem.New("Backup preflight failed: not enough space.").WithRemedy("Free up space.")}, planNow)
 	c := ResultCardOf(m.Current())
 	if c == nil || c.Title != "Backup didn't start" || c.Tone != ToneError || len(c.Lines) != 1 || c.Lines[0] != "There isn't enough space." {
 		t.Fatalf("card %+v", c)
@@ -143,7 +144,7 @@ func TestResultCardOfACancelledBackup(t *testing.T) {
 func TestResultCardOfAFailedBackup(t *testing.T) {
 	t.Parallel()
 	// Pictures is in progress when the worker fails.
-	r := finishedBackup(nil, errors.New(`Backup of "D:\Pics" failed: the disk is full. Remedy: Free up space.`), logging.RunFacts{}, 2)
+	r := finishedBackup(nil, problem.New(`Backup of "D:\Pics" failed: the disk is full.`).WithRemedy("Free up space."), logging.RunFacts{}, 2)
 	c := ResultCardOf(r)
 	want := `Backup of "D:\Pics" failed: the disk is full.|Documents was backed up.|The unfinished Pictures backup was removed.|No old backups were removed.`
 	if c == nil || c.Title != "Backup failed" || strings.Join(c.Lines, "|") != want || c.Details == nil {

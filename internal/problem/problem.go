@@ -100,13 +100,5 @@ func Split(err error) (text, remedy string) {
 			return text, e.Remedy
 		}
 	}
-	return splitText(full)
-}
-
-// splitText splits a text at its first " Remedy: " (or a remedy on its own
-// line), as the GUI did. It serves errors that are not Errors yet while the
-// program is converted (refactoring 2.0 RF-25).
-func splitText(s string) (text, remedy string) {
-	text, remedy, _ = strings.Cut(strings.ReplaceAll(s, remedyLabelOwnLine, remedyLabel), remedyLabel)
-	return text, remedy
+	return full, ""
 }

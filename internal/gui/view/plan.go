@@ -5,7 +5,6 @@ import (
 	"RestoreSafe/internal/format/catalog"
 	"RestoreSafe/internal/problem"
 	"RestoreSafe/internal/workflow/interact"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -319,11 +318,6 @@ func issueText(text, remedy string) string {
 
 // errorText shows a workflow error with its remedy as plain sentences.
 func errorText(err error) string { return issueText(problem.Split(err)) }
-
-// textWithRemedy shows a credential message, which may still carry a
-// remedy as "Remedy: ...", until the typed notices of refactoring 2.0 RF-26
-// replace the text.
-func textWithRemedy(s string) string { return errorText(errors.New(s)) }
 
 // endSentence adds a full stop to a message that does not end its
 // sentence.

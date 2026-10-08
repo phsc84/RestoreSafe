@@ -42,9 +42,9 @@ func TestSplit(t *testing.T) {
 		{"typed", typed, "The full backup is missing.", "Restore its files."},
 		{"wrapped by a caller", fmt.Errorf("Restore failed: %w", typed), "Restore failed: The full backup is missing.", "Restore its files."},
 		{"no remedy", errors.New("Wrong password."), "Wrong password.", ""},
-		{"untyped text", errors.New("Disk full. Remedy: Free up space."), "Disk full.", "Free up space."},
 		{"own line", Errorf("Invalid YAML.").WithRemedyOnOwnLine("Check the syntax."), "Invalid YAML.", "Check the syntax."},
-		{"untyped own line", errors.New("Invalid YAML.\nRemedy: Check the syntax."), "Invalid YAML.", "Check the syntax."},
+		// A remedy belongs in the field: text is not split.
+		{"untyped text", errors.New("Disk full. Remedy: Free up space."), "Disk full. Remedy: Free up space.", ""},
 	} {
 		text, remedy := Split(c.err)
 		if text != c.wantText || remedy != c.wantRemd {

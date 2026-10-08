@@ -192,15 +192,18 @@ func TestBackupPlanOfARealPlan(t *testing.T) {
 
 func TestIssueTextEndsTheMessageBeforeTheRemedy(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ in, issue, first string }{
-		{"Not enough space. Remedy: Free up space.", "Not enough space. Free up space.", "Not enough space."},
-		{"yaml: line 3: bad escape Remedy: Check YAML syntax.", "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
-		{"No remedy here", "No remedy here", "No remedy here"},
+	for _, tc := range []struct {
+		in           error
+		issue, first string
+	}{
+		{problem.New("Not enough space.").WithRemedy("Free up space."), "Not enough space. Free up space.", "Not enough space."},
+		{problem.New("yaml: line 3: bad escape").WithRemedy("Check YAML syntax."), "yaml: line 3: bad escape. Check YAML syntax.", "yaml: line 3: bad escape."},
+		{errors.New("No remedy here"), "No remedy here", "No remedy here"},
 	} {
-		if got := errorText(errors.New(tc.in)); got != tc.issue {
+		if got := errorText(tc.in); got != tc.issue {
 			t.Errorf("errorText(%q) = %q, want %q", tc.in, got, tc.issue)
 		}
-		if got := firstSentences(problem.Split(errors.New(tc.in))); got != tc.first {
+		if got := firstSentences(problem.Split(tc.in)); got != tc.first {
 			t.Errorf("firstSentences(%q) = %q, want %q", tc.in, got, tc.first)
 		}
 	}
