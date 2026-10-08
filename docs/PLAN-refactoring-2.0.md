@@ -200,9 +200,20 @@ Done in `82ae779`: `registry.go` maps every top-level window to its handler (`ap
 The two opt-in throughput benchmarks (DEVELOPMENT.md section 11) are the yardstick for this section. Before any change, record their medians on an SSD and on the network share in this document; every change in this section reports the before and after.
 
 **RF-35 (P2) Profile first.** Add `-cpuprofile` and `-memprofile` runs of `TestThroughputBenchmarkBackup` and `...Restore` and note the top 10 functions here. RF-36 and RF-38 are only done if the profile shows their cost. AES-GCM with AES-NI and SHA-256 with SHA-NI are each well above 1 GB/s per core, so the bottleneck may be I/O, not crypto.
+Done 2026-10-08. Baseline (1.7 GB of benchmark data, median of 3 runs; SSD: the local NVMe disk, network: the owner's share `M:\RestoreSafe-test`):
+
+| Where | Backup | Restore |
+|---|---|---|
+| SSD | 5.1–5.2 s, 329–338 MiB/s | 6.8 s, 255 MiB/s |
+| Network share | 58.8 s, 29.3 MiB/s | 30.3 s, 56.9 MiB/s |
+
+Top functions by CPU (flat), backup: `runtime.cgocall` (the Windows file syscalls) 71 %, `sha256.blockSHANI` 8.5 %, `gcm.gcmAesEnc` 4.3 %, `runtime.memmove` 3.0 %, `runtime.memclrNoHeapPointers` 2.9 % (clearing the new Seal buffers), ChaCha8 (the benchmark's data generation, not RestoreSafe) 2.8 %, `runtime.semawakeup` 1.4 %, `runtime.sysUnusedOS` 1.1 %. Restore: `runtime.cgocall` 65 %, `sha256.blockSHANI` 14.7 %, `gcm.gcmAesDec` 5.9 %, `runtime.memmove` 5.5 %, `runtime.semawakeup` 1.4 %. So both are I/O-bound; crypto is under 25 % of the CPU time, as expected.
+Allocations: `gcm.sliceForAppend` (the `Seal(nil, ...)` of RF-36) is 6.7 GB of 8.7 GB allocated in a backup, about 4 GB per GB backed up. Restore allocates little (`DecryptStream` reuses its buffer). RF-36 is done for the allocations and the GC work; it will not change the throughput much.
+RF-59 (`CreateFile` without backup semantics) was checked against the commit before it, alternating runs on the same data: 337.6 and 328.8 MiB/s against 329.0 and 319.7 MiB/s, so no cost. A first run of 283 MiB/s was variance.
 
 **RF-36 (P2) No allocation per chunk.** `cryptox.writeEncryptedChunk` calls `gcm.Seal(nil, ...)`, which allocates a new 8 MiB + 16 B slice for every chunk, and `chunkNonce` and `chunkAAD` allocate per chunk ([crypto.go:318](../internal/security/cryptox/crypto.go#L318)). A 100 GB backup makes ~12,800 large allocations, and the GC work that goes with them. Reuse one ciphertext buffer, one nonce array, and one AAD buffer per stream (`DecryptStream` already reuses its buffer). Combine the 5-byte prefix and the ciphertext into one `Write`.
 Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a constant number of allocations, independent of the size.
+Done 2026-10-08. `chunkParams` holds the nonce and AAD buffers of a stream; `Seal` appends to one prefix-plus-ciphertext buffer, written with one `Write`; `DecryptStream` no longer allocates its prefix per chunk either. Tests: `TestStreamAllocationsIndependentOfSize` (encrypt and decrypt allocate the same for 2 and 16 chunks; a test instead of a `testing.B` benchmark, so that CI checks it on every run) and `TestEncryptStreamKnownAnswer` (the SHA-256 of the output for a fixed key and input, taken from the code before the change: the format fixtures check reading, this checks writing). SSD before and after: allocations in a backup 8.7 GB to 0.36 GB; backup 318 MiB/s, restore 257 MiB/s, both within the runs' variance.
 
 **RF-37 (P2) Go benchmarks that CI can run.** The throughput tests need `RESTORESAFE_BENCH_ROOT` and 1.7 GB of data, so they never run by themselves. Add small `testing.B` benchmarks for `EncryptStream`, `DecryptStream`, `archive.BuildTar` over a temp tree, manifest encode and parse at 100k entries, and `catalog.Inventory` with 500 sets. CI runs them with `-benchtime=1x` only to keep them compiling; a developer compares with `benchstat`.
 

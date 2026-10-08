@@ -2,8 +2,10 @@ package cryptox
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -317,10 +319,79 @@ func TestDeriveSubkeySeparatesInfoAndSalt(t *testing.T) {
 func TestChunkNonceDeterministic(t *testing.T) {
 	t.Parallel()
 
-	if !bytes.Equal(chunkNonce(7), chunkNonce(7)) {
-		t.Fatal("chunkNonce is not deterministic")
+	p := newChunkParams(nil)
+	seven := bytes.Clone(p.nonce(7))
+	eight := bytes.Clone(p.nonce(8))
+	if !bytes.Equal(seven, p.nonce(7)) {
+		t.Fatal("chunk nonce is not deterministic")
 	}
-	if bytes.Equal(chunkNonce(7), chunkNonce(8)) {
-		t.Fatal("chunkNonce must differ per index")
+	if bytes.Equal(seven, eight) {
+		t.Fatal("chunk nonce must differ per index")
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+// TestStreamAllocationsIndependentOfSize checks that no chunk allocates: a
+// stream of 16 chunks allocates as much as a stream of 2.
+func TestStreamAllocationsIndependentOfSize(t *testing.T) {
+	key := bytes.Repeat([]byte{7}, KeyLen)
+	encrypted := func(size int64) []byte {
+		var out bytes.Buffer
+		if err := EncryptStream(&out, io.LimitReader(zeroReader{}, size), key, []byte("aad")); err != nil {
+			t.Fatal(err)
+		}
+		return out.Bytes()
+	}
+	small, large := encrypted(2*ChunkSize), encrypted(16*ChunkSize)
+
+	allocs := func(f func() error) float64 {
+		return testing.AllocsPerRun(2, func() {
+			if err := f(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	encrypt := func(size int64) float64 {
+		return allocs(func() error {
+			return EncryptStream(io.Discard, io.LimitReader(zeroReader{}, size), key, []byte("aad"))
+		})
+	}
+	decrypt := func(data []byte) float64 {
+		return allocs(func() error {
+			return DecryptStream(io.Discard, bytes.NewReader(data), key, []byte("aad"))
+		})
+	}
+	if s, l := encrypt(2*ChunkSize), encrypt(16*ChunkSize); s != l {
+		t.Errorf("EncryptStream allocations: %v for 2 chunks, %v for 16 chunks", s, l)
+	}
+	if s, l := decrypt(small), decrypt(large); s != l {
+		t.Errorf("DecryptStream allocations: %v for 2 chunks, %v for 16 chunks", s, l)
+	}
+}
+
+// TestEncryptStreamKnownAnswer pins the bytes EncryptStream writes for a fixed
+// key and input of two full chunks and a partial one, so that a change to the
+// writer cannot change the backup format unnoticed.
+func TestEncryptStreamKnownAnswer(t *testing.T) {
+	t.Parallel()
+
+	key := bytes.Repeat([]byte{7}, KeyLen)
+	src := make([]byte, 2*ChunkSize+1000)
+	for i := range src {
+		src[i] = byte(i * 31)
+	}
+	var out bytes.Buffer
+	if err := EncryptStream(&out, bytes.NewReader(src), key, []byte("aad")); err != nil {
+		t.Fatal(err)
+	}
+	const want = "cb34cf92b29b910eae57968b5597b0c5514e9f41a068d892ba3c1134d8da6d97"
+	if got := fmt.Sprintf("%x", sha256.Sum256(out.Bytes())); got != want {
+		t.Fatalf("EncryptStream output changed: sha256 %s, want %s", got, want)
 	}
 }
