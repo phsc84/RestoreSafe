@@ -2,6 +2,8 @@
 
 The manual part of the GUI test plan ([SPEC-gui.md](SPEC-gui.md), sections 16.5 to 16.7). Run it on a real Windows 11 machine for every release candidate, after `go test ./...` and the scripts in [scripts/gui-test](../scripts/gui-test/README.md) have passed. Use test configurations and directories in `sandbox\`, never your real backups; `New-TestCondition.ps1` prepares the conditions named below.
 
+CI runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` on every pull request (job **GUI smoke test**, [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1)), at 100 % on the runner's 1024 × 768 desktop. The release gate also needs them at 150 % (SPEC-gui 16.7): that run stays manual.
+
 Release gate (16.7): every row is **Passed**, or **Accepted** with a reason in the Notes column. No row may stay **Open**.
 
 Status of the last run: **pre-run** on 2026-10-02 by Claude (Claude Code): `go test ./...` and the scripts of `scripts/gui-test` at 150 % on one monitor, plus scripted walks through the pages and dialogs. Rows those runs covered completely are **Passed (script)**; the notes of Open rows say what was pre-checked. Everything that needs a person, real YubiKeys, other scalings, Narrator or high contrast is Open for the manual run. The results of the first GUI (2026-09-27) no longer apply.

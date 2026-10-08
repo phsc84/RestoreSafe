@@ -56,7 +56,7 @@ A push to a work branch without a PR runs nothing.
 
 ### What it does
 
-Four jobs run in parallel, each on its own runner; together they take about seven minutes, the fuzzing job the longest.
+Five jobs run in parallel, each on its own runner; together they take about eight minutes, the fuzzing job the longest.
 
 | Job | Steps | Fails when |
 |---|---|---|
@@ -64,6 +64,7 @@ Four jobs run in parallel, each on its own runner; together they take about seve
 | Tests and coverage | `go test -coverprofile ./...`; the coverage floor of each package ([scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt)); the total coverage; every benchmark once (`-benchtime 1x`); uploads `cover.out` as an artifact | a test or benchmark fails, or a package falls below its floor |
 | Race detector | `go test -race ./...` with cgo and the runner's gcc | a test fails, or two goroutines access the same data without synchronisation |
 | Fuzzing | every fuzz target for 30 seconds ([scripts/ci/fuzz.sh](scripts/ci/fuzz.sh)); on failure uploads the failing inputs as the `fuzz-failures` artifact | a fuzz target finds an input that breaks its property |
+| GUI smoke test | builds RestoreSafe.exe with its resources and runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` of [scripts/gui-test](scripts/gui-test/README.md) on the runner's desktop ([scripts/ci/gui-smoke.ps1](scripts/ci/gui-smoke.ps1)); on failure uploads the screenshots as the `gui-screenshots` artifact | a step of the smoke test fails, or a status of the Create backup page shows the wrong title or action |
 
 The release build stays `CGO_ENABLED=0`; only the race detector needs cgo.
 
