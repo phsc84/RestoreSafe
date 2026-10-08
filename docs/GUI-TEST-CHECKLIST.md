@@ -10,10 +10,10 @@ Status of the last run: **pre-run** on 2026-10-02 by Claude (Claude Code): `go t
 
 | Run | |
 |---|---|
-| Date, commit | Pre-run 2026-10-02, `gui-redesign` at fade221 and later (docs only) |
-| Windows build, scaling, monitors | Windows 11 Pro 10.0.26200.9457, 150 %, one monitor |
+| Date, commit | Pre-run 2026-10-02, `gui-redesign` at fade221 and later (docs only); manual run started 2026-10-08, `refactor-2.0` at 7d82d8a |
+| Windows build, scaling, monitors | Pre-run: Windows 11 Pro 10.0.26200.9457, 150 %, one monitor. Manual run: Windows 11 Pro 10.0.26200, 100 %, 125 %, 150 % and 200 %, one 4K monitor |
 | YubiKeys used | none (password-only test configurations) |
-| Tester | pre-run: Claude; manual run: open |
+| Tester | pre-run: Claude; manual run: phsc84 |
 
 ## Known differences from the spec
 
@@ -136,8 +136,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ID | Check | Status | Notes |
 |---|---|---|---|
 | 3.3 | A screenshot of every page and dialog (`Screenshot.ps1`) reviewed against GUI spec 3.3 (colours, spacing, fonts) and the wireframes | Open | |
-| 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | Open | 150 % pre-checked; a simulated DPI change of the plan and password dialogs to 100 % pre-checked. |
-| 15 | Moving the window between monitors with different scaling | Open | |
+| 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | Passed | 2026-10-08 at 7d82d8a, by hand on one 4K monitor at each scaling. |
+| 15 | Moving the window between monitors with different scaling | Accepted | No second monitor. Tested 2026-10-08 at 7d82d8a instead by changing the scaling in Windows settings while RestoreSafe ran, with the main window and a dialog open: the same `WM_DPICHANGED` as a move to another monitor, and all was good. Not tested: the drag across the monitor boundary. |
 | 3.2 | Minimum window size: nothing overlaps, all buttons visible | Open | |
 | 15 | High contrast (Aquatic and Desert): every status still readable, icons visible, focus visible | Open | New in 10a: system colors in high contrast. Not run (it changes the system theme). |
 
