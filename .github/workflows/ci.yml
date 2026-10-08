@@ -64,6 +64,12 @@ jobs:
         run: bash scripts/ci/annotate-failures.sh test.log
       - name: Coverage floors per package
         run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+      # Each benchmark runs once, so that it keeps working; the numbers are
+      # not compared (DEVELOPMENT.md section 11).
+      - name: Benchmarks run once
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 -run '^$' -bench . -benchtime 1x ./...
       - name: Total coverage
         run: go tool cover -func=cover.out | tail -n 1
       - uses: actions/upload-artifact@v7
