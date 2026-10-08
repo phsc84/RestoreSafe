@@ -37,7 +37,8 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
 	cfg := &config.Config{SplitSizeMB: 1, IODiagnostics: ioDiagnostics}
 	entry := naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
-	_, backupErr := backupDirectory(context.Background(), nil, sourceDir, entry, "ORD123", nil, backupDir, ks, master, cfg, logger)
+	op := &operation{cfg: cfg, log: logger, backupDir: backupDir, runID: "ORD123", keySet: ks, master: master}
+	_, backupErr := op.backupDirectory(context.Background(), nil, sourceDir, entry, nil)
 	logger.Close()
 	if backupErr != nil {
 		t.Fatalf("backupDirectory failed: %v", backupErr)
