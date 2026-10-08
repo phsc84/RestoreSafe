@@ -294,6 +294,7 @@ Done in `9b6b196`: `TestWebAuthnStructLayout` reads the sizes and offsets from t
 Decided 2026-10-08: rename to `github.com/phsc84/restoresafe` (lowercase; GitHub resolves the repository name case-insensitively) as the last step of Phase D, before the owner's full test. The import blocks show why: `"RestoreSafe/internal/..."` sorts into the standard library's group, as Go treats a first path element without a dot like the standard library.
 
 **RF-61 (P3) Root package.** [sample.go](../sample.go) exists only to `//go:embed config-SAMPLE.yaml` (a package cannot embed files from a parent directory). Keep the technique; rename the file to `embed.go` and keep the package comment, so its purpose is clear from the file list.
+Done 2026-10-08: `git mv sample.go embed.go`, content unchanged.
 
 **RF-62 (P2) Sort the docs.** Partly done on 2026-10-06: the specs are named `SPEC-2.0.md` and `SPEC-gui.md`, their status lines are current, the finished implementation phases are out of the 2.0 spec, code comments say "2.0 spec n" or "GUI spec n", [docs/README.md](README.md) lists the documents, the mockups are deleted, and SPEC-refactoring.md describes refactoring rounds in general. Left: once 2.0.0 is released, delete the GUI plan (its section 9), remove GUI spec 17.2 (which only points to it), and update the index. Finished plans are deleted, not archived (SPEC-refactoring section 8), so there is no `docs/archive/`.
 
@@ -312,7 +313,8 @@ docs/
 
 - README "Main configuration options" gives `retention_keep` a default of `3`; the program's default is `0` (keep all) and only `config-SAMPLE.yaml` sets 3 ([config/keys.go:30](../internal/config/keys.go#L30)). Name the column "In config-SAMPLE.yaml", or list both.
 - DEVELOPMENT.md section 10 refers to `docs\REFACTORING-PLAN.md`, which does not exist. Point it at the architecture test and SPEC-refactoring.md. Done 2026-10-07 (DEVELOPMENT.md is not tracked).
-- RF-57 (encryption wording).
+- RF-57 (encryption wording). Done with RF-57.
+Done 2026-10-08: the README row of `retention_keep` names both values; every other row of the table matches the program's defaults and `config-SAMPLE.yaml` (checked).
 
 **RF-64 (P3) Add a CLAUDE.md / contributor note.** One page: the layer rules, the commands (`go build`, `go vet`, `go test`, `go tool staticcheck`), the standing constraints of SPEC-refactoring section 2, the error convention of RF-25, and the commit style. It replaces the parts of the private DEVELOPMENT.md that a contributor needs.
 Done for the contributor note: [CONTRIBUTING.md](../CONTRIBUTING.md) describes branches, commits, pull requests, CI and its coverage floors, CHANGELOG entries, the rules of the code, and releases; the README and DEVELOPMENT.md link to it. Open: whether a CLAUDE.md is still worth having next to it, and the error convention once RF-25 is decided.

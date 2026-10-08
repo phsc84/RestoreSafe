@@ -122,7 +122,7 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 | Option | Default | Purpose |
 |---|---|---|
-| `retention_keep` | `3` | Number of backup chains kept per source directory (0 = keep all) |
+| `retention_keep` | `3` in `config-SAMPLE.yaml`; `0` when the line is missing | Number of backup chains kept per source directory (0 = keep all) |
 | `differential.enabled` | `true` | Create differential backups when a usable full backup exists |
 | `differential.full_backup_interval_days` | `30` | Create a new full backup when the last one is this many days old |
 | `differential.max_size_percent` | `50` | Create a new full backup when the last differential reached this percentage of the full backup |
