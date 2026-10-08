@@ -27,7 +27,7 @@ func TestVerifyOwnDataChecksTheSetsOwnFiles(t *testing.T) {
 		// its full backup is not read.
 		{"differential", openSet(t, fx.BackupDir, diff), 2},
 	} {
-		m, err := VerifyOwnData(context.Background(), e.set, fx.Master, nil, nil)
+		m, err := VerifyOwnData(context.Background(), e.set, fx.Master, Output{})
 		if err != nil {
 			t.Fatalf("%s: %v", e.name, err)
 		}
@@ -50,7 +50,7 @@ func TestVerifyOwnDataDetectsCorruptedPart(t *testing.T) {
 	if err := os.WriteFile(parts[1], data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_, err = VerifyOwnData(context.Background(), openSet(t, fx.BackupDir, fx.Entry), fx.Master, nil, nil)
+	_, err = VerifyOwnData(context.Background(), openSet(t, fx.BackupDir, fx.Entry), fx.Master, Output{})
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected corruption error, got %v", err)
 	}
@@ -62,10 +62,10 @@ func TestProcessAndVerifyOwnDataRejectWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	set := openSet(t, fx.BackupDir, fx.Entry)
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
-	if _, err := Process(context.Background(), set, nil, wrong, "", true, nil, nil); err == nil {
+	if _, err := Verify(context.Background(), set, nil, wrong, Output{}); err == nil {
 		t.Fatal("Process must fail with a wrong key")
 	}
-	if _, err := VerifyOwnData(context.Background(), set, wrong, nil, nil); err == nil {
+	if _, err := VerifyOwnData(context.Background(), set, wrong, Output{}); err == nil {
 		t.Fatal("VerifyOwnData must fail with a wrong key")
 	}
 }
@@ -76,7 +76,7 @@ func TestProcessStopsWhenCancelled(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := Process(ctx, openSet(t, fx.BackupDir, fx.Entry), nil, fx.Master, "", true, nil, nil); err == nil {
+	if _, err := Verify(ctx, openSet(t, fx.BackupDir, fx.Entry), nil, fx.Master, Output{}); err == nil {
 		t.Fatal("a cancelled Process must fail")
 	}
 }

@@ -197,7 +197,7 @@ func (o *operation) verifyEntry(ctx context.Context, rep interact.ProgressReport
 	o.log.Info("Processing backup directory: %s", entry.DirectoryName)
 	var done atomic.Int64
 	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, baseSet)}, &done)
-	m, err := restorepoint.Process(ctx, set, baseSet, master, "", true, o.log, &done)
+	m, err := restorepoint.Verify(ctx, set, baseSet, master, restorepoint.Output{Log: o.log, Done: &done})
 	stopReport()
 	if err != nil {
 		return 0, err

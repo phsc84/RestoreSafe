@@ -354,7 +354,7 @@ func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressRepor
 
 	var done atomic.Int64
 	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, baseSet)}, &done)
-	m, err := restorepoint.Process(ctx, set, baseSet, master, outDir, false, o.log, &done)
+	m, err := restorepoint.Restore(ctx, set, baseSet, master, outDir, restorepoint.Output{Log: o.log, Done: &done})
 	stopReport()
 	if err != nil {
 		o.log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))

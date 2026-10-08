@@ -300,7 +300,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 		// verified when it was written.
 		var done atomic.Int64
 		stop := job.TrackProgress(job.Stamp(rep, interact.PhaseVerifying, i+1, len(entries)), interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, nil)}, &done)
-		m, err := restorepoint.VerifyOwnData(ctx, set, master, log, &done)
+		m, err := restorepoint.VerifyOwnData(ctx, set, master, restorepoint.Output{Log: log, Done: &done})
 		stop()
 		parts := len(set.Paths)
 		set.Close() //nolint:errcheck
