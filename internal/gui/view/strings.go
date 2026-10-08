@@ -388,6 +388,8 @@ const (
 	verifyReadsBase     = "Differentials are read with their full backup of %s."
 	verifyReadsBasesOf  = "Differentials are read with their full backups of %s."
 	verifyReadsBases    = "Differentials are read with their full backups."
+	verifyHiddenOne     = "The folder filter on Restore backup hides 1 other folder of this backup. Choose All folders to verify it too."
+	verifyHidden        = "The folder filter on Restore backup hides %d other folders of this backup. Choose All folders to verify them too."
 	logTitleFile        = "Log (%s)"
 	logTitleOf          = "Log of %s (%s)"
 	linkRunLog          = "Show log"

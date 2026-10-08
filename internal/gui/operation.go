@@ -79,7 +79,7 @@ func (a *app) startOperation(req opRequest) {
 		a.machine.Current().What, a.machine.Current().Whole = a.verifyWhat, a.verifyWhole
 		a.showPage(view.PageRestore)
 		a.refreshRun()
-		a.openVerifyDialog(a.verifyWhat)
+		a.openVerifyDialog(a.verifyWhat, a.verifyHidden)
 	}
 	a.updateTaskbar()
 

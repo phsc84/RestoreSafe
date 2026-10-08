@@ -29,8 +29,10 @@ type verifyDialog struct {
 	win *dialogWindow
 
 	plan *interact.VerifyPlan
-	// what names the selection: "today, 09:12".
-	what string
+	// what names the selection: "today, 09:12"; hidden counts the sets of
+	// that backup the folder filter left out.
+	what   string
+	hidden int
 	// answer answers ConfirmStart; nil while no question is open.
 	answer func(bool, error)
 	// ended is set when the verification ended before it started, err why.
@@ -48,7 +50,7 @@ type verifyDialog struct {
 }
 
 // openVerifyDialog opens the Verify window in its waiting state.
-func (a *app) openVerifyDialog(what string) {
+func (a *app) openVerifyDialog(what string, hidden int) {
 	if a.verify != nil {
 		return
 	}
@@ -56,7 +58,7 @@ func (a *app) openVerifyDialog(what string) {
 	if err != nil {
 		return
 	}
-	d := &verifyDialog{a: a, win: win, what: what}
+	d := &verifyDialog{a: a, win: win, what: what, hidden: hidden}
 	d.table = newDialogTable(win.theme, win.panel.HWND(), func() { d.layout(false) })
 	win.panel.OnNotify = func(hdr *win32.NMHdr) uintptr {
 		r, _ := d.table.notify(hdr)
@@ -120,7 +122,7 @@ func (d *verifyDialog) build(place bool) {
 			st.row(10, cell{hwnd: bar.HWND(), fill: true})
 		}
 	default:
-		d.view = view.VerifyPlanOf(*d.plan, d.what, time.Now())
+		d.view = view.VerifyPlanOf(*d.plan, d.what, d.hidden, time.Now())
 		if d.ended {
 			d.view.Start = nil // only Cancel is left, as in a blocked backup plan (BP-5)
 			if d.err != nil && !d.plan.HasErrors() {
@@ -178,6 +180,10 @@ func (d *verifyDialog) content(st *stack) {
 	}
 	st.gap(8)
 	st.para(v.Note, widget.TextSmall, pal.TextSecondary, view.GlyphInfo)
+	if v.Hidden != "" {
+		st.gap(6)
+		st.para(v.Hidden, widget.TextSmall, pal.TextSecondary, view.GlyphInfo)
+	}
 	for _, issue := range v.Issues {
 		st.gap(6)
 		st.para(issue.Text, widget.TextBody, toneColor(pal, issue.Tone), issue.Glyph)

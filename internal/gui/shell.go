@@ -136,8 +136,8 @@ func (a *app) do(action view.Action) {
 		}
 	case view.ActionRestore:
 		b := a.shell.restore
-		if len(b.chosen()) > 0 {
-			a.openRestore(b.selRun)
+		if sets := b.chosen(); len(sets) > 0 {
+			a.openRestore(b.selRun, sets)
 		}
 	case view.ActionOpenRestored:
 		if r := a.machine.Current(); r != nil && r.Restore != nil {
@@ -145,7 +145,8 @@ func (a *app) do(action view.Action) {
 		}
 	case view.ActionVerify:
 		if sets := a.shell.restore.chosen(); len(sets) > 0 {
-			a.verifyWhat, a.verifyWhole = a.shell.restore.bar.What, a.shell.restore.bar.Whole
+			bar := a.shell.restore.bar
+			a.verifyWhat, a.verifyWhole, a.verifyHidden = bar.What, bar.Whole, bar.Hidden
 			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
 		}
 	case view.ActionCheckAgain:

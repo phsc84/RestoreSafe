@@ -105,8 +105,8 @@ type restoreDialog struct {
 	filling          bool
 }
 
-// openRestore opens the Restore window on the run runID.
-func (a *app) openRestore(runID naming.BackupID) {
+// openRestore opens the Restore window on the run runID with sets checked.
+func (a *app) openRestore(runID naming.BackupID, sets []naming.BackupEntry) {
 	if a.restore != nil || a.snapshot == nil || a.machine.Busy() {
 		return
 	}
@@ -115,7 +115,7 @@ func (a *app) openRestore(runID naming.BackupID) {
 		return
 	}
 	win32.SetStyle(win.hwnd, win32.Style(win.hwnd)|win32.WS_THICKFRAME)
-	w := &restoreDialog{a: a, win: win, checked: map[naming.BackupEntry]bool{}, dest: a.lastDestination}
+	w := &restoreDialog{a: a, win: win, dest: a.lastDestination}
 	if w.dest == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			w.dest = filepath.Join(home, "Restore")
@@ -123,9 +123,7 @@ func (a *app) openRestore(runID naming.BackupID) {
 	}
 	w.when = view.RestorePointOf(a.snapshot, runID, time.Now())
 	w.folders = view.RestoreFoldersOf(a.snapshot, runID)
-	for _, f := range w.folders {
-		w.checked[f.Set] = f.Enabled
-	}
+	w.checked = view.Preselected(w.folders, sets)
 	win.onCommand = func(id uint16) { w.command(id, win32.BN_CLICKED) }
 	win.defID = func() uint16 {
 		if w.start != 0 && win32.IsEnabled(w.start) {

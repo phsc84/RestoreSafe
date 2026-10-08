@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -109,6 +110,17 @@ func UnrestorableNote(choices []FolderChoice) string {
 		return fmt.Sprintf(unrestorableOne, names[0])
 	}
 	return fmt.Sprintf(unrestorableMany, joinAnd(names))
+}
+
+// Preselected checks the choices that can be restored among sets, the sets
+// selected on Restore backup: all of the run's, or the filtered folder's
+// (RW-5).
+func Preselected(choices []FolderChoice, sets []naming.BackupEntry) map[naming.BackupEntry]bool {
+	checked := map[naming.BackupEntry]bool{}
+	for _, c := range choices {
+		checked[c.Set] = c.Enabled && slices.Contains(sets, c.Set)
+	}
+	return checked
 }
 
 // Chosen returns the checked sets of choices that can be restored.
