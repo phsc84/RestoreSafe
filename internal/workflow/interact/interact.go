@@ -84,20 +84,19 @@ type UI interface {
 	ConfirmBackupStart(opts BackupStartOptions) (BackupStart, error)
 
 	// ChooseUnlockMethod asks whether to unlock with the regular credentials
-	// (described by regular, e.g. "Password + YubiKey") or the recovery code.
-	// It returns true for the recovery code.
-	ChooseUnlockMethod(regular string) (bool, error)
+	// or the recovery code. It returns true for the recovery code.
+	ChooseUnlockMethod(q UnlockChoice) (bool, error)
 	// Password asks for a secret (password or recovery code) without echo.
-	Password(prompt string) ([]byte, error)
+	Password(q SecretQuestion) ([]byte, error)
 	// NewPassword asks for a new password and its confirmation. It returns
 	// ErrPasswordEmpty or ErrPasswordMismatch when the user
 	// can correct the input by trying again.
-	NewPassword(prompt, confirmPrompt string) ([]byte, error)
+	NewPassword(q NewPasswordQuestion) ([]byte, error)
 
 	// ShowRecoveryCode shows a new recovery code. It is shown only this once.
 	// It returns ErrCancelled when the user cancels instead of storing it.
 	ShowRecoveryCode(code string) error
 	// WaitForSpareYubiKey waits until the user has connected the spare
 	// YubiKey. It returns false when the user cancels.
-	WaitForSpareYubiKey() (bool, error)
+	WaitForSpareYubiKey(q SpareQuestion) (bool, error)
 }

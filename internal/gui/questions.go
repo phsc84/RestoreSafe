@@ -72,8 +72,8 @@ func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 
 // ChooseUnlockMethod shows the unlock dialog with the link to the recovery
 // code (CR-1). For password-only keys it takes the password too.
-func (q questions) ChooseUnlockMethod(qu flow.Question, regular string, answer func(bool, []byte, error)) {
-	d := view.UnlockChoiceOf(qu, regular)
+func (q questions) ChooseUnlockMethod(qu interact.UnlockChoice, answer func(bool, []byte, error)) {
+	d := view.UnlockChoiceOf(qu)
 	res := q.a.runCredentialDialog(d)
 	switch {
 	case res.link:
@@ -97,7 +97,7 @@ func (q questions) keys() *interact.KeyPlan {
 }
 
 // Password asks for the password or the recovery code (figure 9.1).
-func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
+func (q questions) Password(qu interact.SecretQuestion, answer func([]byte, error)) {
 	res := q.a.runCredentialDialog(view.UnlockDialogOf(qu))
 	if !res.ok {
 		answer(nil, interact.ErrCancelled)
@@ -107,7 +107,7 @@ func (q questions) Password(qu flow.Question, answer func([]byte, error)) {
 }
 
 // NewPassword asks for a new password and its confirmation (figure 9.2).
-func (q questions) NewPassword(qu flow.Question, _ string, answer func(pw, confirm []byte, ok bool)) {
+func (q questions) NewPassword(qu interact.NewPasswordQuestion, answer func(pw, confirm []byte, ok bool)) {
 	res := q.a.runCredentialDialog(view.NewPasswordDialogOf(qu, q.newKeys()))
 	if !res.ok {
 		answer(nil, nil, false)
@@ -131,6 +131,6 @@ func (q questions) RecoveryCode(code string, answer func(bool)) {
 }
 
 // SpareYubiKey asks to connect the spare YubiKey.
-func (q questions) SpareYubiKey(qu flow.Question, answer func(bool)) {
+func (q questions) SpareYubiKey(qu interact.SpareQuestion, answer func(bool)) {
 	answer(q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys())).ok)
 }

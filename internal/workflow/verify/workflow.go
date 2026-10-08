@@ -88,7 +88,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 
 	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
-	masters, err := unlock.KeySets(u, selectedInfos, "Enter verification password: ", log)
+	masters, err := unlock.KeySets(u, selectedInfos, "verification", log)
 	if err != nil {
 		return err
 	}

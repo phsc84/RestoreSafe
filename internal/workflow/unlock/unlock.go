@@ -26,11 +26,14 @@ var (
 
 // Options configures KeySet.
 type Options struct {
-	// PasswordPrompt is shown when the password is needed.
-	PasswordPrompt string
+	// Action is the operation that needs the keys: "backup", "restore" or
+	// "verification".
+	Action string
 	// AllowRecovery offers the recovery code as an alternative when the key
 	// set has one (restore and verify).
 	AllowRecovery bool
+	// Keys is set when the operation unlocked another key set before.
+	Keys *interact.OtherKeys
 }
 
 // KeySet asks for the credential the key set requires (password,
@@ -39,12 +42,12 @@ type Options struct {
 // once. The caller must zero the returned key.
 func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logger) ([]byte, error) {
 	if opts.AllowRecovery && ks.HasSlotType(container.SlotRecovery) {
-		useRecovery, err := u.ChooseUnlockMethod(ks.AuthMode.Label())
+		useRecovery, err := u.ChooseUnlockMethod(interact.UnlockChoice{Mode: ks.AuthMode, Action: opts.Action, Keys: opts.Keys})
 		if err != nil {
 			return nil, err
 		}
 		if useRecovery {
-			return unlockWithRecoveryCode(u, ks, log)
+			return unlockWithRecoveryCode(u, ks, opts, log)
 		}
 	}
 
@@ -78,8 +81,9 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		return master, nil
 	}
 
+	var failure error
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		password, err := u.Password(opts.PasswordPrompt)
+		password, err := u.Password(interact.SecretQuestion{Kind: interact.SecretPassword, Action: opts.Action, Keys: opts.Keys, Attempt: attemptOf(attempt, failure)})
 		if err != nil {
 			return nil, err
 		}
@@ -99,9 +103,8 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		if !errors.Is(err, cryptox.ErrWrongPassword) {
 			return nil, err
 		}
-		remaining := maxPasswordAttempts - attempt
-		if remaining > 0 {
-			fmt.Fprintf(u.Output(), "%s %d attempt(s) remaining.\n", PasswordFailurePrefix(yubiSecret != nil, false), remaining)
+		failure = errors.New(PasswordFailurePrefix(yubiSecret != nil, false))
+		if attempt < maxPasswordAttempts {
 			log.WarnLogOnly("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
@@ -111,10 +114,16 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 	return nil, fmt.Errorf("Too many wrong password attempts.")
 }
 
-func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, log *logging.Logger) ([]byte, error) {
+// attemptOf describes try n of a credential question, after failure.
+func attemptOf(n int, failure error) interact.Attempt {
+	return interact.Attempt{N: n, Left: maxPasswordAttempts - n + 1, Failure: failure}
+}
+
+func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logger) ([]byte, error) {
 	index := ks.SlotIndexes(container.SlotRecovery)[0]
+	var failure error
 	for attempt := 1; attempt <= maxPasswordAttempts; attempt++ {
-		input, err := u.Password("Enter recovery code: ")
+		input, err := u.Password(interact.SecretQuestion{Kind: interact.SecretRecoveryCode, Action: opts.Action, Keys: opts.Keys, Attempt: attemptOf(attempt, failure)})
 		if err != nil {
 			return nil, err
 		}
@@ -136,8 +145,8 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, log *logging.Lo
 			}
 			err = fmt.Errorf("Wrong recovery code.")
 		}
-		if remaining := maxPasswordAttempts - attempt; remaining > 0 {
-			fmt.Fprintf(u.Output(), "%v %d attempt(s) remaining.\n", err, remaining)
+		failure = err
+		if attempt < maxPasswordAttempts {
 			log.WarnLogOnly("Recovery code rejected; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
@@ -156,18 +165,19 @@ func (m MasterKeys) Zero() {
 
 // KeySets unlocks every distinct key set used by sets. Usually all
 // selected backups share one key set, so the user authenticates once; backups
-// made with older keys need their own credentials, which the prompt says.
-func KeySets(u interact.UI, sets []catalog.SetInfo, passwordPrompt string, log *logging.Logger) (MasterKeys, error) {
+// made with older keys need their own credentials, which the question names.
+func KeySets(u interact.UI, sets []catalog.SetInfo, action string, log *logging.Logger) (MasterKeys, error) {
 	keys := make(MasterKeys)
 	for _, info := range sets {
 		ks := info.Header.KeySet
 		if _, done := keys[ks.ID]; done {
 			continue
 		}
+		opts := Options{Action: action, AllowRecovery: true}
 		if len(keys) > 0 {
-			fmt.Fprintf(u.Output(), "Backup %s uses different keys (created %s). Authenticate with the credentials of those keys.\n", info.Entry.String(), ks.Created().Local().Format("2006-01-02"))
+			opts.Keys = &interact.OtherKeys{Set: info.Entry, Created: ks.Created()}
 		}
-		master, err := KeySet(u, &ks, Options{PasswordPrompt: passwordPrompt, AllowRecovery: true}, log)
+		master, err := KeySet(u, &ks, opts, log)
 		if err != nil {
 			keys.Zero()
 			return nil, err

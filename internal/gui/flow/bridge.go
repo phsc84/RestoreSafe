@@ -28,8 +28,6 @@ type Bridge struct {
 	closed     bool
 	output     strings.Builder
 	outPosted  bool
-	outSeq     int
-	lastLine   string
 	progress   interact.Progress
 	progPosted bool
 	result     *interact.Result
@@ -126,12 +124,6 @@ func (b *Bridge) Close() (hadCurrent bool) {
 func (b *Bridge) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	b.output.Write(p)
-	b.outSeq++
-	for _, line := range strings.Split(string(p), "\n") {
-		if l := strings.TrimSpace(line); l != "" {
-			b.lastLine = l
-		}
-	}
 	post := !b.outPosted
 	b.outPosted = true
 	b.mu.Unlock()
@@ -149,14 +141,6 @@ func (b *Bridge) TakeOutput() string {
 	b.output.Reset()
 	b.outPosted = false
 	return s
-}
-
-// OutputMark returns a mark of the output so far and its last non-empty
-// line, to tell whether something was written since an earlier mark.
-func (b *Bridge) OutputMark() (seq int, lastLine string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.outSeq, b.lastLine
 }
 
 // Progress implements interact.ProgressReporter; it keeps only the latest report.

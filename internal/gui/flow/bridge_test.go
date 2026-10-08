@@ -92,9 +92,6 @@ func TestBridgeOutputKeepsOrderAndIsCoalesced(t *testing.T) {
 	if got := u.b.TakeOutput(); got != "one\ntwo\nWrong password. 2 attempt(s) remaining.\n" {
 		t.Fatalf("unexpected output %q", got)
 	}
-	if _, last := u.b.OutputMark(); last != "Wrong password. 2 attempt(s) remaining." {
-		t.Fatalf("unexpected last line %q", last)
-	}
 	u.b.Write([]byte("three\n")) //nolint:errcheck
 	if k := u.next(t); k != NoteOutput {
 		t.Fatal("output after takeOutput must be posted again")
