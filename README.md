@@ -58,11 +58,13 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
 - Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
+- A restore stops when its destination folder, or a folder in it, is a link to another place (a junction or symbolic link), so that no other program can redirect the restored files
 
 ### Reliability
 - Every backup contains an encrypted manifest: the list of all files with their checksums; restore and verify check each file against it
 - A backup appears under its final file names only when it is complete; an interrupted backup never looks like a valid backup
 - Startup health check: validates directories, YubiKey, keys, and the structural integrity of existing backups at launch
+- Two RestoreSafe windows with the same backup directory don't get in each other's way: a restore or verification does not start while a backup runs (whose cleanup could delete the files it reads), and a backup does not start while a restore or verification runs; restores and verifications may run at the same time. A backup directory where RestoreSafe can't create its lock file can't be backed up into; a restore from it shows a warning instead
 - Streaming pipeline: low CPU/RAM footprint
 - Optional post-backup verification (`verify_after_backup: true`): each new backup is re-read and checked right after it is written
 
@@ -197,7 +199,7 @@ Use `exclude` in `config.yaml` to leave out files and directories (case-insensit
 | `/Cache` or `Projects/*/build` | A path from the source directory root (patterns containing `/`) |
 | `logs/` | Directories named `logs` only (trailing `/`) |
 
-A file that cannot be read (for example a mail archive locked by an open mail program) aborts the backup by default (`on_unreadable_file: fail`). With `on_unreadable_file: skip`, RestoreSafe backs up everything else, lists the file as a warning, and keeps your older backups of that directory until a backup without skipped files succeeds. In a differential, a changed file that cannot be read keeps its older version from the full backup. Files deleted while the backup runs are simply not included.
+A file that cannot be read (for example a mail archive locked by an open mail program) aborts the backup by default (`on_unreadable_file: fail`). With `on_unreadable_file: skip`, RestoreSafe backs up everything else, lists the file as a warning, and keeps your older backups of that directory until a backup without skipped files succeeds. In a differential, a changed file that cannot be read keeps its older version from the full backup. Files deleted while the backup runs are simply not included. A file that another program holds locked counts as unreadable also when RestoreSafe runs as administrator, so it is never copied while it may be changing.
 
 ## Full and differential backups
 
