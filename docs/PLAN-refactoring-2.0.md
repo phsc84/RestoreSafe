@@ -305,9 +305,40 @@ Each phase is a series of small commits, each building and passing. Items inside
 |---|---|---|---|
 | A. Tooling | RF-1, 2, 3, 4, 10, 11, 12 | now, on its own branch; merge into `v2` | Touches no product code (RF-3 only the build); makes every later phase checkable. RF-4 first, RF-10 before RF-1's coverage step. |
 | B. Safety net and quick fixes | RF-20, 21, 22, 23, 24, 40, 41, 50, 51, 52, 59 | before the 2.0.0 release | RF-41 must capture 2.0.0's format before anything else changes; RF-24, 50, 51, 52, 59 are user-facing fixes worth shipping in 2.0.0. |
-| C. Structure | RF-25, 26, 27, 30, 31, 32, 33, 34 | after 2.0.0 | Large diffs; would conflict with the release fixes. RF-26 before RF-33 (the dialogs change shape). |
-| D. Performance and hardening | RF-35 → 36, 37, 39 (RF-38 dropped); RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
-| E. Project and docs | RF-60, 61, 62, 63, 64 | last | RF-60 touches every file; doing it last avoids conflicts with all other work. |
+| C. Structure | RF-25, 26, 27, 30, 31, 32, 33, 34 | after 2.0.0; done before it (2026-10-08) | Large diffs; would conflict with the release fixes. RF-26 before RF-33 (the dialogs change shape). |
+| D. Performance and hardening | RF-35 → 36, 37, 39 (RF-38 dropped); RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C, before the 2.0.0 release (13.1) | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
+| E. Project and docs | RF-60, 61, 62, 63, 64 | last; all but RF-62 before the 2.0.0 release (13.1) | RF-60 touches every file; doing it last avoids conflicts with all other work. |
+
+### 13.1 Before and after the 2.0.0 release (2026-10-08)
+
+The owner tests the whole application once the refactoring is done, and then releases 2.0.0. So everything that does not need the release comes before it, and the test covers the code as it ships. Only these wait for the release:
+
+- RF-62: deleting PLAN-gui-redesign.md and GUI spec 17.2; a plan is deleted because its work was released.
+- Closing the round (SPEC-refactoring section 8): the final baseline and "Done" in docs/README.md, after the last item.
+
+Phase D, item by item:
+
+| Item | Before 2.0.0 | Note |
+|---|---|---|
+| RF-35 profiling, RF-37 benchmarks | yes | RF-35 measures on an SSD and on the owner's network share: the share needs its path (a folder for about 4 GB of test data, deleted afterwards) or the owner runs the command; otherwise profile on the SSD only. |
+| RF-36 allocations per chunk | yes, if RF-35 shows the cost | The bytes written must not change; the format fixtures check it. |
+| RF-39 manifest memory | yes | Stream the manifest or correct the spec; the format stays byte for byte. |
+| RF-53 recovery code as bytes | yes | In memory only; touches the Copy button of the recovery code dialog. |
+| RF-54 fuzzing, RF-56 no key derivation in the health check | yes | Tests only. |
+| RF-55 restore into a reparse point | yes | Refuses a junction as destination (rare): a CHANGELOG entry. |
+| RF-57 what is plaintext | yes | README only. |
+| RF-42 fault-injection matrix | yes | Tests only. |
+| RF-43 GUI smoke test in CI | try | GitHub's Windows runners may have no interactive desktop; then it stays a step of the release checklist, as the item says. |
+| RF-44, RF-58 | done | |
+
+Phase E, item by item:
+
+| Item | Before 2.0.0 | Note |
+|---|---|---|
+| RF-61 `sample.go` to `embed.go`, RF-63 documentation drift | yes | Small. |
+| RF-64 contributor note | mostly done | CONTRIBUTING.md. |
+| RF-60 module path | owner's decision | Mechanical and checked completely by the compiler and CI; before the release is a good moment, as no other branch is open. Decided at the latest when Phase D is done. |
+| RF-62 sort the docs | after the release | See above. |
 
 ## 14. Open questions
 
