@@ -45,9 +45,6 @@ type BuildOptions struct {
 	// last-write time, and change time) are recorded without being read,
 	// and only new and changed files go into the TAR.
 	Base *manifest.Manifest
-	// Context stops the build with its error when it is cancelled; nil means
-	// no cancellation.
-	Context context.Context
 	// Progress receives the bytes of source files handled so far: read into
 	// the TAR, or unchanged since the full backup; may be nil.
 	Progress *atomic.Int64
@@ -99,11 +96,8 @@ func newUnreadable(path string, err error, headerWritten bool) error {
 // TAR stream to w, and adds one manifest entry per directory and file to mb.
 // The TAR contains only regular files; directories and all metadata live in
 // the manifest. Symlinks, junctions, and other special entries are skipped.
-func BuildTar(w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
-	ctx := opts.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
+// It stops with the error of ctx when ctx is cancelled.
+func BuildTar(ctx context.Context, w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	cw := &countingWriter{w: &fsx.ContextWriter{Ctx: ctx, W: w}}
 	tw := tar.NewWriter(cw)
 	buf := make([]byte, copyBufferSize)

@@ -374,7 +374,7 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 	}()
 
 	o.log.Debug("Starting TAR creation and encryption for: %s", srcDir)
-	res, err := setwriter.Write(setwriter.Params{
+	res, err := setwriter.Write(ctx, setwriter.Params{
 		SourceDir:      srcDir,
 		ExcludeDirs:    excludeDirs,
 		OutputDir:      o.backupDir,
@@ -398,7 +398,6 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 			o.log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
 		Counters: counters,
-		Context:  ctx,
 		Progress: &done,
 	})
 	if err != nil {

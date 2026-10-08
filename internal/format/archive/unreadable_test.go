@@ -6,6 +6,7 @@ import (
 	"RestoreSafe/internal/testutil/filelock"
 	"archive/tar"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
@@ -18,7 +19,7 @@ func buildWith(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte, err
 	t.Helper()
 	mb := manifest.NewBuilder(manifest.Header{SetType: manifest.SetTypeFull, ChainID: "ABC123", DirectoryName: "src", SourcePath: opts.SourceDir})
 	var buf bytes.Buffer
-	if err := BuildTar(&buf, opts, mb); err != nil {
+	if err := BuildTar(context.Background(), &buf, opts, mb); err != nil {
 		return nil, nil, err
 	}
 	data, err := mb.Bytes()

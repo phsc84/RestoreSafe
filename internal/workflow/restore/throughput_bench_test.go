@@ -45,7 +45,7 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 	defer testutil.RemoveAll(t, backupDir)
 	ks, master := testutil.NewPasswordKeySet(t, []byte("bench-pw"))
 	entry := naming.BackupEntry{DirectoryName: filepath.Base(srcDir), ChainID: "BENCH2", Date: "2026-09-28"}
-	if _, err := setwriter.Write(setwriter.Params{
+	if _, err := setwriter.Write(context.Background(), setwriter.Params{
 		SourceDir:      srcDir,
 		OutputDir:      backupDir,
 		Entry:          entry,
