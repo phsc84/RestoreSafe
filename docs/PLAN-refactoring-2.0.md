@@ -271,7 +271,7 @@ Done in `9b6b196`: `TestWebAuthnStructLayout` reads the sizes and offsets from t
 ## 12. Project structure and documentation (Phase E)
 
 **RF-60 (P3) Module path.** The module is named `RestoreSafe`. Go tooling expects a lower-case path that can be fetched, e.g. `github.com/phsc84/restoresafe`; tools like `goimports` then group local imports correctly, and `-X` flags and `go install` work as usual. Renaming changes every import line (mechanical, one commit). Open question (section 14).
-Deferred 2026-10-07: decided when Phase E starts.
+Decided 2026-10-08: rename to `github.com/phsc84/restoresafe` (lowercase; GitHub resolves the repository name case-insensitively) as the last step of Phase D, before the owner's full test. The import blocks show why: `"RestoreSafe/internal/..."` sorts into the standard library's group, as Go treats a first path element without a dot like the standard library.
 
 **RF-61 (P3) Root package.** [sample.go](../sample.go) exists only to `//go:embed config-SAMPLE.yaml` (a package cannot embed files from a parent directory). Keep the technique; rename the file to `embed.go` and keep the package comment, so its purpose is clear from the file list.
 
@@ -344,7 +344,7 @@ Phase E, item by item:
 
 These are the owner's decisions; the spec works with either answer. Answered 2026-10-07 (bold).
 
-1. **Module path (RF-60).** Rename to `github.com/phsc84/restoresafe`, or keep `RestoreSafe`? **Deferred to Phase E.**
+1. **Module path (RF-60).** Rename to `github.com/phsc84/restoresafe`, or keep `RestoreSafe`? **Rename to `github.com/phsc84/restoresafe`, at the end of Phase D.**
 2. **Parallel encryption (RF-38).** Accept the extra complexity in the crypto pipeline if the profile shows a gain of, say, 30 % or more, or keep the pipeline sequential regardless? **Dropped: the pipeline stays sequential.**
 3. **Code signing (RF-58).** Buy an Authenticode certificate (or use a signing service) so SmartScreen stops warning, or publish checksums only? **Checksums only.**
 4. **Typed errors (RF-25).** Convert all 145 sites, or only the ones the GUI wants to act on (codes), leaving the rest as text? **All sites, GUI-relevant first.**
