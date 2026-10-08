@@ -158,25 +158,35 @@ func Open(paths []string) (*Set, error) {
 }
 
 func openParts(pr *partsReader, paths []string) (*Set, error) {
-	h, encoded, err := ReadHeader(io.NewSectionReader(pr, 0, pr.Size()))
+	h, encoded, trailer, err := readStructure(pr, pr.Size(), len(paths))
 	if err != nil {
-		return nil, err
-	}
-	if pr.Size() < int64(len(encoded))+TrailerLen {
-		return nil, incompleteErr("file is too short")
-	}
-	raw := make([]byte, TrailerLen)
-	if _, err := pr.ReadAt(raw, pr.Size()-TrailerLen); err != nil {
-		return nil, err
-	}
-	trailer, err := DecodeTrailer(raw)
-	if err != nil {
-		return nil, err
-	}
-	if err := trailer.check(int64(len(encoded)), pr.Size(), len(paths)); err != nil {
 		return nil, err
 	}
 	return &Set{Paths: paths, Header: h, HeaderHash: HashHeader(encoded), Trailer: trailer, parts: pr}, nil
+}
+
+// readStructure reads and checks the header and trailer of a set of size
+// bytes in parts part files.
+func readStructure(r io.ReaderAt, size int64, parts int) (*Header, []byte, Trailer, error) {
+	h, encoded, err := ReadHeader(io.NewSectionReader(r, 0, size))
+	if err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	if size < int64(len(encoded))+TrailerLen {
+		return nil, nil, Trailer{}, incompleteErr("file is too short")
+	}
+	raw := make([]byte, TrailerLen)
+	if _, err := r.ReadAt(raw, size-TrailerLen); err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	trailer, err := DecodeTrailer(raw)
+	if err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	if err := trailer.check(int64(len(encoded)), size, parts); err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	return h, encoded, trailer, nil
 }
 
 // Close releases the open part file handle.

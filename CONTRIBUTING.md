@@ -56,13 +56,14 @@ A push to a work branch without a PR runs nothing.
 
 ### What it does
 
-Three jobs run in parallel, each on its own runner; together they take about three minutes.
+Four jobs run in parallel, each on its own runner; together they take about seven minutes, the fuzzing job the longest.
 
 | Job | Steps | Fails when |
 |---|---|---|
 | Format, vet, build, static analysis | `gofmt -l .`; `go vet ./...`; the build in the release configuration (`CGO_ENABLED=0`); `go tool staticcheck ./...`; `go tool govulncheck ./...`; `go tool deadcode -test ./...` | a file is not gofmt-formatted, vet or staticcheck reports a finding, the build fails, or the code calls a function with a known vulnerability. deadcode only reports unreachable functions and never fails the job. |
-| Tests and coverage | `go test -coverprofile ./...`; the coverage floor of each package ([scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt)); the total coverage; uploads `cover.out` as an artifact | a test fails, or a package falls below its floor |
+| Tests and coverage | `go test -coverprofile ./...`; the coverage floor of each package ([scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt)); the total coverage; every benchmark once (`-benchtime 1x`); uploads `cover.out` as an artifact | a test or benchmark fails, or a package falls below its floor |
 | Race detector | `go test -race ./...` with cgo and the runner's gcc | a test fails, or two goroutines access the same data without synchronisation |
+| Fuzzing | every fuzz target for 30 seconds ([scripts/ci/fuzz.sh](scripts/ci/fuzz.sh)); on failure uploads the failing inputs as the `fuzz-failures` artifact | a fuzz target finds an input that breaks its property |
 
 The release build stays `CGO_ENABLED=0`; only the race detector needs cgo.
 
@@ -87,6 +88,18 @@ go tool govulncheck ./...
 ```
 
 The race detector needs a MinGW-w64 gcc in `PATH` (e.g. from [winlibs.com](https://winlibs.com/)), then `$env:CGO_ENABLED = "1"; go test -race ./...`. Without one, CI runs it.
+
+### Benchmarks and fuzzing
+
+The `testing.B` benchmarks (`bench_test.go` in cryptox, archive, manifest, and catalog) run only once in CI, so that they keep working; their numbers mean something only when compared on one machine, before and after a change:
+
+```powershell
+go test -count=10 -run '^$' -bench . ./internal/security/cryptox ./internal/format/... > old.txt
+# make the change, then the same command into new.txt
+go run golang.org/x/perf/cmd/benchstat@latest old.txt new.txt
+```
+
+Every parser of bytes that can come from a backup directory or a file has a fuzz target (`func FuzzX(f *testing.F)`). `go test` runs their seed inputs and the inputs saved under `testdata/fuzz/`. To fuzz locally: `bash scripts/ci/fuzz.sh 30` (every target, seconds each), or one target longer with `go test -run '^$' -fuzz '^FuzzOpen$' -fuzztime 5m ./internal/format/container`. When a target fails, Go saves the input under the package's `testdata/fuzz/<target>/` (in CI: the `fuzz-failures` artifact). Commit it with the fix: it stays a regression test.
 
 ### Coverage floors
 
