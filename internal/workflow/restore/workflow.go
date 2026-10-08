@@ -108,23 +108,34 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 	defer masters.Zero()
 
-	return runRestoreOperation(ctx, u, selectedInfos, infos, backupDir, restorePath, logPath, masters, log, warningCount)
+	op := &operation{selected: selectedInfos, inventory: infos, backupDir: backupDir, restorePath: restorePath, logPath: logPath, masters: masters, log: log}
+	return op.run(ctx, u, warningCount)
 }
 
-// runRestoreOperation performs the restore using already-unlocked keys. It
-// takes no further user input, so tests and automated flows can drive it
-// directly by supplying the master keys; u receives the progress and the
-// summary. inventory is used to find the full backup of each selected
-// differential.
-func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory []catalog.SetInfo, backupDir, restorePath, logPath string, masters unlock.MasterKeys, log *logging.Logger, warningCount int) error {
-	out := u.Output()
-	fmt.Fprintln(out)
-	job.LogStart(log, "Restore", selected)
+// operation is a restore whose keys are unlocked: it asks nothing more, so
+// tests can drive it with master keys they made.
+type operation struct {
+	// selected are the sets to restore; inventory is the backup directory's,
+	// where the full backup of a differential is found.
+	selected, inventory []catalog.SetInfo
+	backupDir           string
+	// restorePath is the destination; every set is restored into a folder
+	// of its name inside it.
+	restorePath string
+	logPath     string
+	masters     unlock.MasterKeys
+	log         *logging.Logger
+}
 
-	unread, err := restoreSelectedEntries(ctx, u, selected, inventory, backupDir, restorePath, masters, log)
+// run restores the selected sets; u receives the progress and the summary.
+func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) error {
+	fmt.Fprintln(u.Output())
+	job.LogStart(o.log, "Restore", o.selected)
+
+	unread, err := o.restoreAll(ctx, u)
 	if err != nil {
 		if ctx.Err() != nil {
-			log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
+			o.log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
 			return job.Cancelled("Restore")
 		}
 		return err
@@ -133,8 +144,8 @@ func runRestoreOperation(ctx context.Context, u interact.UI, selected, inventory
 		warningCount++
 	}
 
-	log.Info("Restore completed successfully.")
-	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: logPath})
+	o.log.Info("Restore completed successfully.")
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }
 
@@ -288,14 +299,14 @@ func queryRestoreTargetFreeBytes(restorePath string) (uint64, error) {
 	return fsx.QueryFreeSpaceBytes(restorePath)
 }
 
-// restoreSelectedEntries restores each selected set and returns the number of
-// files that are missing from the restore points because they could not be
-// read during backup. It stops when ctx is cancelled and reports its
-// progress to rep.
-func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, selected, inventory []catalog.SetInfo, backupDir, restorePath string, masters unlock.MasterKeys, log *logging.Logger) (int, error) {
+// restoreAll restores each selected set and returns the number of files
+// that are missing from the restore points because they could not be read
+// during backup. It stops when ctx is cancelled and reports its progress to
+// rep.
+func (o *operation) restoreAll(ctx context.Context, rep interact.ProgressReporter) (int, error) {
 	skipped := 0
-	err := job.EachRestorePoint(selected, inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
-		missing, err := restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, n, len(selected)), info.Entry, base, backupDir, restorePath, masters[info.Header.KeySet.ID], log)
+	err := job.EachRestorePoint(o.selected, o.inventory, func(n int, info catalog.SetInfo, base *naming.BackupEntry) error {
+		missing, err := o.restoreEntry(ctx, job.Stamp(rep, interact.PhaseRestoring, n, len(o.selected)), info.Entry, base, o.masters[info.Header.KeySet.ID])
 		if err != nil {
 			return fmt.Errorf("Failed to restore directory %q: %w", info.Entry.String(), err)
 		}
@@ -309,29 +320,29 @@ func restoreSelectedEntries(ctx context.Context, rep interact.ProgressReporter, 
 }
 
 // restoreEntry decrypts one backup set (for a differential together with its
-// full backup base) and extracts it to destDir, checking every file against
+// full backup base) and extracts it into the destination, checking every file against
 // its manifest hash. It returns the number of files that could not be read
 // during backup: missing from the restore point, or restored in an older
 // version (stale). A restore fact records both counts.
-func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, backupDir, destDir string, master []byte, log *logging.Logger) (int, error) {
+func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry naming.BackupEntry, base *naming.BackupEntry, master []byte) (int, error) {
 	if err := naming.ValidateBackupEntryName(entry.DirectoryName); err != nil {
 		return 0, err
 	}
-	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(backupDir, entry, base)
+	set, baseSet, parts, closeAll, err := job.OpenRestorePoint(o.backupDir, entry, base)
 	if err != nil {
 		return 0, err
 	}
 	defer closeAll()
 
-	log.Info("Processing backup directory: %s", entry.DirectoryName)
+	o.log.Info("Processing backup directory: %s", entry.DirectoryName)
 
 	// Verify restore directory can be created before starting decryption.
 	// Ensure the parent exists, then create the entry's directory atomically:
 	// os.Mkdir fails with os.ErrExist if it already exists, re-enforcing the
 	// preflight invariant against a TOCTOU race or two entries resolving to the
 	// same DirectoryName. os.MkdirAll would silently merge into an existing tree.
-	outDir := filepath.Join(destDir, entry.DirectoryName)
-	if err := os.MkdirAll(destDir, 0o750); err != nil {
+	outDir := filepath.Join(o.restorePath, entry.DirectoryName)
+	if err := os.MkdirAll(o.restorePath, 0o750); err != nil {
 		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}
 	if err := os.Mkdir(outDir, 0o750); err != nil {
@@ -343,17 +354,17 @@ func restoreEntry(ctx context.Context, rep interact.ProgressReporter, entry nami
 
 	var done atomic.Int64
 	stopReport := job.TrackProgress(rep, interact.Progress{Step: "Restoring", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, baseSet)}, &done)
-	m, err := restorepoint.Process(ctx, set, baseSet, master, outDir, false, log, &done)
+	m, err := restorepoint.Process(ctx, set, baseSet, master, outDir, false, o.log, &done)
 	stopReport()
 	if err != nil {
-		log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
+		o.log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
-	log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
-	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, log)
-	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, log)
+	o.log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)
+	stale := restorepoint.ReportStaleFiles(m, entry.DirectoryName, o.log)
+	skipped := restorepoint.ReportSkippedFiles(m, entry.DirectoryName, o.log)
 	if skipped+stale > 0 {
-		log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: entry.String(), Skipped: skipped, Stale: stale})
+		o.log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: entry.String(), Skipped: skipped, Stale: stale})
 	}
 	return skipped + stale, nil
 }
