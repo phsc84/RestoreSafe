@@ -28,7 +28,8 @@ type ResultCard struct {
 	Details *Button
 	// Log is nil when the run has no log file.
 	Log *Button
-	// Open opens the restored folders; nil for other operations.
+	// Open opens the restored folders or the backup directory; nil for a
+	// verification and for an operation that did not start.
 	Open *Button
 	Done Button
 }
@@ -46,8 +47,12 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 	if r.LogPath != "" || (r.Result != nil && r.Result.LogPath != "") {
 		c.Log = &Button{Text: buttonShowRunLog, Action: ActionShowLog, Enabled: true}
 	}
-	if r.Op == flow.OpRestore && r.Restore != nil && !r.Started.IsZero() {
+	switch {
+	case r.Started.IsZero():
+	case r.Op == flow.OpRestore && r.Restore != nil:
 		c.Open = &Button{Text: buttonOpenFolder2, Action: ActionOpenRestored, Enabled: true}
+	case r.Op == flow.OpBackup:
+		c.Open = &Button{Text: buttonOpenFolder2, Action: ActionOpenBackupDir, Enabled: true}
 	}
 	switch {
 	case err == nil && r.Result == nil, errors.Is(err, interact.ErrCancelled):

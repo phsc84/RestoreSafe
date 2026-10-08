@@ -376,28 +376,28 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (ok)  3 folders backed up                                   [ Show log ] [ Done ] │
+│ (ok)  3 folders backed up                   [ Show log ] [ Open folder ] [ Done ] │
 │       3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).                   │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (!)  3 folders backed up with 2 warnings                    [ Show log ] [ Done ] │
+│ (!)  3 folders backed up with 2 warnings    [ Show log ] [ Open folder ] [ Done ] │
 │      2 files in Documents were in use and weren't backed up. Old backups of       │
 │      Documents are kept.                                                          │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (x)  Backup failed                                          [ Show log ] [ Done ] │
+│ (x)  Backup failed                          [ Show log ] [ Open folder ] [ Done ] │
 │      Projects: the backup directory ran out of space. Documents was backed up;    │
 │      the unfinished Projects backup was removed. > Show details                   │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────────────┐
-│ ( )  Backup cancelled                                                    [ Done ] │
+│ ( )  Backup cancelled                                    [ Open folder ] [ Done ] │
 │      Documents was backed up. The unfinished Projects backup was removed.         │
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 | ID | Requirement |
 |---|---|
-| BR-7 | The result card maps the workflow result as in the table below: the first line is the outcome, the second what happened per folder and whether retention ran. "Show details" shows the workflow's message with its remedy. "Show log" opens the operation's log in the log window of BK-5, on every page. The same mapping applies to a restore (RW-8: "2 folders restored", then "About 92 GB to D:\Restore in 18 min. Every file matched its checksum.") and to verify, whose title answers what a verification is for: "The backup of today, 09:12 can be restored", then "Checked 3 folders in 1 min, including the full backups they're based on. Every file matched its checksum." (a differential is only checked together with its full backup, BK-7a). The title claims the whole backup only when every folder of it was verified; when some of its folders can't be verified (their full backup is missing), it names the folders that were: "Pictures from the backup of today, 09:12 can be restored". A verification that found damage: "Damage found in the backup of today, 09:12". The problem line ("Another backup has a problem…") is added only to a green card: the check vouches for what the run did, not for the other backups. |
+| BR-7 | The result card maps the workflow result as in the table below: the first line is the outcome, the second what happened per folder and whether retention ran. "Show details" shows the workflow's message with its remedy. "Show log" opens the operation's log in the log window of BK-5, on every page. "Open folder" opens the backup directory after a backup and the destination after a restore, once the operation has started. The same mapping applies to a restore (RW-8: "2 folders restored", then "About 92 GB to D:\Restore in 18 min. Every file matched its checksum.") and to verify, whose title answers what a verification is for: "The backup of today, 09:12 can be restored", then "Checked 3 folders in 1 min, including the full backups they're based on. Every file matched its checksum." (a differential is only checked together with its full backup, BK-7a). The title claims the whole backup only when every folder of it was verified; when some of its folders can't be verified (their full backup is missing), it names the folders that were: "Pictures from the backup of today, 09:12 can be restored". A verification that found damage: "Damage found in the backup of today, 09:12". The problem line ("Another backup has a problem…") is added only to a green card: the check vouches for what the run did, not for the other backups. |
 | BR-8 | If the window isn't in the foreground when an operation ends, the taskbar button flashes (`FlashWindowEx`, until the window is activated). No other notification is shown. |
 
 | Workflow result | Icon | First line |

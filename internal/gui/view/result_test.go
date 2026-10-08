@@ -48,8 +48,8 @@ func TestResultCardOfASuccessfulBackup(t *testing.T) {
 	if len(c.Lines) != 1 || c.Lines[0] != want {
 		t.Fatalf("lines %q, want %q", c.Lines, want)
 	}
-	if c.Log == nil || c.Details != nil || c.Done.Action != ActionDismiss {
-		t.Fatalf("buttons %+v %+v", c.Log, c.Details)
+	if c.Log == nil || c.Details != nil || c.Open == nil || c.Open.Action != ActionOpenBackupDir || c.Done.Action != ActionDismiss {
+		t.Fatalf("buttons %+v %+v %+v", c.Log, c.Details, c.Open)
 	}
 	checkWriting(t, c)
 }
