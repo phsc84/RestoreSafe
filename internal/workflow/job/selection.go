@@ -1,10 +1,11 @@
 package job
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/problem"
 	"fmt"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // SelectSets returns the inventory entries of the requested backup sets, in

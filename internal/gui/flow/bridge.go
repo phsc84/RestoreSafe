@@ -1,9 +1,10 @@
 package flow
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"sync"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Notifications the bridge posts to the window. The window handles them on

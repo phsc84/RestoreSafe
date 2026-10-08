@@ -1,19 +1,20 @@
 package gui
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/win32"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
 )
 
 // runState is the worker of the operation in progress; a.machine holds its

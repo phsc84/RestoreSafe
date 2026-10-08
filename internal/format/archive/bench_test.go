@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
 	"bytes"
 	"context"
 	"fmt"
@@ -9,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
 )
 
 // BenchmarkBuildTar reads a tree of 10 directories of 20 files of 128 KiB

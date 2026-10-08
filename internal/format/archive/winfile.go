@@ -3,13 +3,14 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/problem"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )

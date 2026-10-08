@@ -1,11 +1,12 @@
 package job
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // ValidatePreflightItems returns a formatted error when one or more items fail

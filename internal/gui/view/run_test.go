@@ -1,12 +1,13 @@
 package view
 
 import (
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // runningBackup is a backup of samplePlan's folders, confirmed at planNow.

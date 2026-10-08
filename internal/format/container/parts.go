@@ -1,11 +1,12 @@
 package container
 
 import (
-	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"os"
 	"sort"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // partsReader presents the part files of a set as one io.ReaderAt. It keeps

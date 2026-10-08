@@ -1,18 +1,19 @@
 package view
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
 	"io"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func restorePageOf(t *testing.T, c scenario.Condition) (RestorePage, *health.Snapshot, scenario.Scenario) {

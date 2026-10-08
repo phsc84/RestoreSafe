@@ -1,19 +1,20 @@
 package view
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
 )
 
 // finishedBackup runs samplePlan's two folders to the end with res, err and

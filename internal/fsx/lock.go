@@ -3,10 +3,11 @@
 package fsx
 
 import (
-	"RestoreSafe/internal/problem"
 	"errors"
 	"os"
 	"path/filepath"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )

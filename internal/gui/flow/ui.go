@@ -1,10 +1,11 @@
 package flow
 
 import (
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"io"
+
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Dialogs shows the questions of an operation; the window implements it.

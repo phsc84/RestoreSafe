@@ -4,13 +4,14 @@
 package main
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/gui"
-	"RestoreSafe/internal/problem"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/gui"
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )

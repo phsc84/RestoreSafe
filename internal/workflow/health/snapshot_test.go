@@ -1,12 +1,6 @@
 package health
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
 	"io"
@@ -14,6 +8,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func snapshotOf(t *testing.T, s scenario.Scenario) Snapshot {

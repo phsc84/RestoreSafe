@@ -1,18 +1,19 @@
 package unlock
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/security/recovery"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/interact/interacttest"
 	"bytes"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/recovery"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
 type unlockStub struct {

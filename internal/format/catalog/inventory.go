@@ -1,10 +1,6 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/problem"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // ScanBackups lists every backup set (complete part-file names only) in

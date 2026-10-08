@@ -1,9 +1,10 @@
 package widget
 
 import (
-	"RestoreSafe/internal/gui/win32"
 	"math"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // contrast is the WCAG 2 contrast ratio of two colors.

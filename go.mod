@@ -1,4 +1,4 @@
-module RestoreSafe
+module github.com/phsc84/restoresafe
 
 go 1.27.2
 

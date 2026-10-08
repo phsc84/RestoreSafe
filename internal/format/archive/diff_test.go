@@ -1,14 +1,15 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/testutil/filelock"
 	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/testutil/filelock"
 )
 
 func buildDiff(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte) {

@@ -1,17 +1,18 @@
 package view
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // ResultCard is the end of an operation (GUI spec 6.3, BR-7).

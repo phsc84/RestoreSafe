@@ -1,11 +1,12 @@
 package container
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
 	"bytes"
 	"io"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
 )
 
 // FuzzDecodeTrailer checks that an accepted trailer is exactly the encoding

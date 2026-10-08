@@ -1,10 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/problem"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
@@ -19,6 +15,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )

@@ -1,9 +1,10 @@
 package view
 
 import (
-	"RestoreSafe/internal/format/naming"
 	"fmt"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 // ActionBar is the selection in words and its actions (GUI spec BK-4).

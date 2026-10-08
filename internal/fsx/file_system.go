@@ -1,9 +1,10 @@
 package fsx
 
 import (
-	"RestoreSafe/internal/problem"
 	"os"
 	"path/filepath"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // ValidateSourceDirectory checks that resolved is an accessible, readable directory.

@@ -5,13 +5,6 @@
 package setwriter
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/archive"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/problem"
 	"bufio"
 	"context"
 	"errors"
@@ -20,6 +13,14 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/archive"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Counters receive byte counts for progress and stall reporting. Any field may

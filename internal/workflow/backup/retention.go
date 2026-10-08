@@ -1,16 +1,17 @@
 package backup
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/workflow/plan"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // applyRetentionPolicy deletes the backup sets that plan.Retention selects

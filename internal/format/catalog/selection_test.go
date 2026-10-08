@@ -1,10 +1,11 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 func completeInfo(dir, chain, run, date string, created time.Time) SetInfo {

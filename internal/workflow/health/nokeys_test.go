@@ -1,15 +1,16 @@
 package health
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/testutil"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 // TestHealthCheckDerivesNoKeys checks that the health check, which runs at

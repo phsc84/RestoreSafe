@@ -5,15 +5,6 @@
 package gui
 
 import (
-	"RestoreSafe/internal/buildinfo"
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/health"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -21,6 +12,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/buildinfo"
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
 
 	"golang.org/x/sys/windows"
 )

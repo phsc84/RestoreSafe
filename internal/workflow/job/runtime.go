@@ -4,12 +4,13 @@
 package job
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
 	"context"
 	"fmt"
 	"io"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
 )
 
 // OpenLogger opens the log file of the backup run date/runID in backupDir,

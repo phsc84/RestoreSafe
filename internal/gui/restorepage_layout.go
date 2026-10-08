@@ -1,8 +1,8 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // headHeight returns the height in pixels of the title, the run card and

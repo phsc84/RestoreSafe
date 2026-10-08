@@ -34,7 +34,6 @@
 package cryptox
 
 import (
-	"RestoreSafe/internal/problem"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -44,6 +43,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/crypto/argon2"
 )

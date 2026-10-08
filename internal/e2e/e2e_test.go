@@ -1,16 +1,6 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/testutil/filelock"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"bytes"
 	"context"
 	"fmt"
@@ -20,6 +10,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/filelock"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
 )
 
 const password = "correct horse battery"

@@ -1,14 +1,15 @@
 package view
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // RestorePointOf names when the run runID was made: "today, 09:12"; "" for

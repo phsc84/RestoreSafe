@@ -1,9 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/testutil/filelock"
 	"archive/tar"
 	"bytes"
 	"context"
@@ -13,6 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/testutil/filelock"
 )
 
 func buildWith(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte, error) {

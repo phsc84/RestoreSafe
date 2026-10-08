@@ -1,11 +1,12 @@
 package flow
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // fakeDialogs answers the questions as the test scripts them.

@@ -1,9 +1,9 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // questions shows the questions of an operation: the backup plan dialog,

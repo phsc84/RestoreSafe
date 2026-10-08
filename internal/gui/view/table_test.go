@@ -1,10 +1,11 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/testutil/scenario"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
 )
 
 // checkTable checks that every row has one cell per column and exactly one

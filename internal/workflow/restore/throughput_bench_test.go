@@ -1,12 +1,6 @@
 package restore
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/format/setwriter"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"fmt"
 	"os"
@@ -15,6 +9,13 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/format/setwriter"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
 // TestThroughputBenchmarkRestore times restores of a backup set into a

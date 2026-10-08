@@ -1,9 +1,10 @@
 package interact
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 // The questions a workflow asks while it unlocks or creates keys

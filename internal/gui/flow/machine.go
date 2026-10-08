@@ -1,9 +1,10 @@
 package flow
 
 import (
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/interact"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Op is the operation a run performs.

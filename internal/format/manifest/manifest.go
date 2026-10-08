@@ -11,7 +11,6 @@
 package manifest
 
 import (
-	"RestoreSafe/internal/problem"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -19,6 +18,8 @@ import (
 	"io"
 	"path"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Version is the manifest format version written by this RestoreSafe version.

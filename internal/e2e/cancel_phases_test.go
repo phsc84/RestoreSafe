@@ -1,17 +1,18 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
 )
 
 // cancelAt returns a UI that cancels ctx at the first progress report of

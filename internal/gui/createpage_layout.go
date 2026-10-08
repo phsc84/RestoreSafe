@@ -1,8 +1,8 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // layout places the title, the hero or the run card below it, like on

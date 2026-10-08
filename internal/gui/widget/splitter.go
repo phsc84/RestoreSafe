@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // SplitterHeight is the height of a splitter in DIPs.
 const SplitterHeight = 8

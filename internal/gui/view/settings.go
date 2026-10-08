@@ -1,13 +1,14 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Setting is one value of a Settings card: a label, the value in words,

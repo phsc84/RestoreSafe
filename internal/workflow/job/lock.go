@@ -1,9 +1,10 @@
 package job
 
 import (
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
+
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // LockForReading takes the shared lock of backupDir for a restore or a

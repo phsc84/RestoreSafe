@@ -1,10 +1,11 @@
 package gui
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/gui/win32"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // reloaded is the result of reading the configuration file again; added is

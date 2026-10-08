@@ -1,13 +1,14 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
 	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
 )
 
 // buildWithHook backs up src with SkipUnreadable while change alters the file

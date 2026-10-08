@@ -1,8 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/problem"
 	"archive/tar"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +11,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Action tells the extractor what to do with one TAR entry.

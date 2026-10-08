@@ -4,15 +4,16 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/format/archive"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
 	"context"
 	"fmt"
 	"io"
 	"sync/atomic"
+
+	"github.com/phsc84/restoresafe/internal/format/archive"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Output receives what reading a restore point reports: its log lines and

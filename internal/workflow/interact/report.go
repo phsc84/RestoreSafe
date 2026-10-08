@@ -1,10 +1,11 @@
 package interact
 
 import (
-	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Status is the state of a report item or issue.

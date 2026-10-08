@@ -1,9 +1,10 @@
 package config
 
 import (
-	"RestoreSafe/internal/problem"
 	"path"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // ExcludeMatcher decides which files and directories are left out of a

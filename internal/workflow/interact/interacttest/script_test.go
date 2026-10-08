@@ -1,11 +1,12 @@
 package interacttest
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"bytes"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func scripted(lines ...string) (*Script, *bytes.Buffer) {

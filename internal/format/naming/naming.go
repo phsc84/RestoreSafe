@@ -12,7 +12,6 @@
 package naming
 
 import (
-	"RestoreSafe/internal/problem"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -21,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 const (

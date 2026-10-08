@@ -4,11 +4,12 @@
 package container
 
 import (
-	"RestoreSafe/internal/problem"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // SplitWriteBufferSize is the buffered writer size used before split output writes.

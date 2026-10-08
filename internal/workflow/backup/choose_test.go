@@ -1,12 +1,13 @@
 package backup
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/plan"
 	"bytes"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // planRecorder is a script that records the plans it is shown.

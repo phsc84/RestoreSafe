@@ -1,13 +1,14 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestUnlockDialog(t *testing.T) {

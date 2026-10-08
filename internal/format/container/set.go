@@ -1,15 +1,16 @@
 package container
 
 import (
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 // Section IDs, part of every chunk's associated data.

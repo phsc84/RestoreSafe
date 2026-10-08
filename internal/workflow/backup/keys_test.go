@@ -1,21 +1,22 @@
 package backup
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/security/recovery"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/plan"
-	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/security/recovery"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
+	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
 type enrollStub struct {

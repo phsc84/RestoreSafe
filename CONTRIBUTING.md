@@ -116,6 +116,7 @@ The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, 
 ## 6. Rules of the code
 
 - **Layers.** Imports point downward only: `cmd` → `gui` → `workflow` → `format` → `config`/`logging` → `security` → `fsx`/`buildinfo`. The full rules are in the package documentation of [internal/architecture](internal/architecture/doc.go); its test fails on a violation and on a package that belongs to no layer. A new package is added to that test in the same commit.
+- **Imports.** The module is `github.com/phsc84/restoresafe`. Import blocks group the standard library, the module's own packages, and other modules, as `go run golang.org/x/tools/cmd/goimports -local github.com/phsc84/restoresafe -w .` sorts them.
 - **The backup format of 2.x is frozen.** Every backup written by 2.0.0 must restore with every later 2.x version.
 - **Behaviour is preserved** unless a change says otherwise and adds a CHANGELOG entry: texts, the log file format, the order of questions.
 - **No unattended operation.** RestoreSafe never schedules backups, runs in the background, or stores credentials.

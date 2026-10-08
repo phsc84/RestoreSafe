@@ -1,11 +1,12 @@
 package container
 
 import (
-	"RestoreSafe/internal/problem"
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // TrailerLen is the fixed trailer size at the end of every set.

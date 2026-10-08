@@ -1,10 +1,11 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Field is an edit field of a credential dialog.

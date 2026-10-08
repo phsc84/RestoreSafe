@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // Area is a rectangle in pixels that a layout cuts into rows and columns.
 // Sizes are given in DIPs and scaled by S. A cut never makes the area

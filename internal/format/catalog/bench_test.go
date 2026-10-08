@@ -1,12 +1,13 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/testutil"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 // BenchmarkInventory lists a backup directory of 500 sets.

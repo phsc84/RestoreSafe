@@ -1,11 +1,12 @@
 package archive
 
 import (
-	"RestoreSafe/internal/config"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
 )
 
 func TestSourceSizeFollowsExcludeRules(t *testing.T) {

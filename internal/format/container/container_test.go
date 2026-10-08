@@ -1,10 +1,6 @@
 package container
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/yubikey"
 	"bytes"
 	"errors"
 	"fmt"
@@ -13,6 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
 )
 
 var testParams = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}

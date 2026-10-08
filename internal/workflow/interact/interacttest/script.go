@@ -3,11 +3,12 @@
 package interacttest
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Script is a text UI for tests: questions are text prompts whose answers

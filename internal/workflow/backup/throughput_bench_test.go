@@ -1,11 +1,6 @@
 package backup
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/plan"
 	"context"
 	"fmt"
 	"math/rand/v2"
@@ -15,6 +10,12 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // TestThroughputBenchmarkBackup times backups of a mixed dataset whose source

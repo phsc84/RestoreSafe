@@ -1,11 +1,12 @@
 package health
 
 import (
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"sync"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // SnapshotTimeout is how long the user interface waits for a snapshot

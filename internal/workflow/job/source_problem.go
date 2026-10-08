@@ -1,9 +1,10 @@
 package job
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"io/fs"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // SourceProblemCode classifies the error of a source directory:

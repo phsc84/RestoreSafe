@@ -1,8 +1,9 @@
 package widget
 
 import (
-	"RestoreSafe/internal/gui/win32"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 
 	"golang.org/x/sys/windows"
 )

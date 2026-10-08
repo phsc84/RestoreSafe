@@ -1,7 +1,6 @@
 package container
 
 import (
-	"RestoreSafe/internal/format/manifest"
 	"bytes"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
 )
 
 // heapPeak samples the live heap every millisecond until stop is called and

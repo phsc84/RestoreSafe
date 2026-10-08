@@ -4,12 +4,13 @@
 package recovery
 
 import (
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/sha256"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 // Recovery codes are 25 random Crockford Base32 characters (125 bits)

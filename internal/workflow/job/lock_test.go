@@ -1,9 +1,10 @@
 package job
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"path/filepath"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestLockForReadingWarnsWhenTheDirectoryCannotBeLocked(t *testing.T) {
