@@ -337,7 +337,7 @@ Phase E, item by item:
 |---|---|---|
 | RF-61 `sample.go` to `embed.go`, RF-63 documentation drift | yes | Small. |
 | RF-64 contributor note | mostly done | CONTRIBUTING.md. |
-| RF-60 module path | owner's decision | Mechanical and checked completely by the compiler and CI; before the release is a good moment, as no other branch is open. Decided at the latest when Phase D is done. |
+| RF-60 module path | yes, at the end of Phase D | Decided 2026-10-08: `github.com/phsc84/restoresafe`. Mechanical and checked completely by the compiler and CI. |
 | RF-62 sort the docs | after the release | See above. |
 
 ## 14. Open questions
