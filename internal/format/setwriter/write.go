@@ -156,13 +156,13 @@ func Write(ctx context.Context, p Params) (*Result, error) {
 
 	tarDone := false
 	var tarErr error
-	res, writeErr := container.Write(out, h, p.Master, p.SplitSizeBytes, dataIn, func() ([]byte, error) {
+	res, writeErr := container.Write(out, h, p.Master, p.SplitSizeBytes, dataIn, func(w io.Writer) error {
 		tarErr = <-tarErrCh
 		tarDone = true
 		if tarErr != nil {
-			return nil, tarErr
+			return tarErr
 		}
-		return mb.Bytes()
+		return mb.Encode(w)
 	})
 	pr.CloseWithError(errors.New("backup aborted")) //nolint:errcheck
 	if !tarDone {

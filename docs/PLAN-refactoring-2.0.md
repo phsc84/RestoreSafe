@@ -221,6 +221,7 @@ Done 2026-10-08. `chunkParams` holds the nonce and AAD buffers of a stream; `Sea
 Dropped 2026-10-07: the owner wants simple and robust code, so the crypto pipeline stays sequential whatever the profile shows. RF-35 still profiles, for RF-36 and RF-39.
 
 **RF-39 (P3) Manifest memory against SPEC 5.3.** SPEC-2.0 section 5.3 says "the manifest is written as a stream", but `container.Write` takes the whole manifest as `[]byte` from `manifestFn` ([set.go:55](../internal/format/container/set.go#L55)) and `ReadManifest` reads it into a `bytes.Buffer`. At 1,000,000 files that is ~300 MB once more, on top of the builder's entries. Either stream it (`manifestFn func(io.Writer) error`) or correct the spec. Add a test with 1,000,000 synthetic entries that checks the peak heap stays under a stated limit.
+Done 2026-10-08. `manifestFn` is `func(io.Writer) error`; `Builder.Encode` writes line by line, `manifest.Decode` parses from a reader; `container.Write` and `ReadManifest` join them to the crypto stream with an `io.Pipe` and hash the plaintext on the way. `Validate` drops its second path map (`seenFolded` finds exact duplicates too). `TestManifestStreamsAtOneMillionEntries` (211 MB manifest): writing adds 107 MiB to the heap at peak, reading 149 MiB on top of the parsed entries; the limit is the size of the serialized manifest, which the old code exceeded (424 MiB when writing from one buffer). Skipped under `-race`. SPEC 5.3 now says "written and read as a stream".
 
 ## 10. Security hardening (Phase B for P1, Phase D for the rest)
 

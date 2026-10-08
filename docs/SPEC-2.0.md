@@ -310,7 +310,7 @@ Hard error on any of: unknown `manifest_version`, header line fields disagreeing
 
 ### 5.3 Size and memory
 
-About 250-300 bytes per entry: 15,000 files ≈ 5 MB, 1,000,000 files ≈ 300 MB. The manifest is written as a stream. Differential creation and differential restore hold one map `path -> entry` in memory (15,000 files ≈ 6 MB; 1,000,000 files ≈ 350 MB). See 13.3 for the constant-memory alternative.
+About 250-300 bytes per entry: 15,000 files ≈ 5 MB, 1,000,000 files ≈ 300 MB. The manifest is written and read as a stream: the entries are held in memory, the serialized manifest never as a whole. Differential creation and differential restore hold one map `path -> entry` in memory (15,000 files ≈ 6 MB; 1,000,000 files ≈ 350 MB). See 13.3 for the constant-memory alternative.
 
 ## 6. Backup workflow
 

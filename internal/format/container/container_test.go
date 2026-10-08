@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,11 @@ func writeTestSet(t *testing.T, dir string, ks *KeySet, master, payload []byte, 
 	sw := NewWriter(func(seq int) string {
 		return filepath.Join(dir, fmt.Sprintf("part-%03d.enc", seq))
 	}, splitSize)
-	res, err := Write(sw, h, master, splitSize, bytes.NewReader(payload), func() ([]byte, error) { return testManifest(t, h, len(payload)), nil })
+	mf := testManifest(t, h, len(payload))
+	res, err := Write(sw, h, master, splitSize, bytes.NewReader(payload), func(w io.Writer) error {
+		_, err := w.Write(mf)
+		return err
+	})
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
