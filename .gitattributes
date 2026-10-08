@@ -25,3 +25,6 @@ go.sum text eol=lf
 
 # Format fixtures are compared byte for byte: no line-ending conversion.
 internal/format/testdata/** -text
+
+# Saved fuzz inputs are read by go test; keep them as Go wrote them.
+**/testdata/fuzz/** text eol=lf
