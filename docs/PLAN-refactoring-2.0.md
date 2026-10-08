@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52); phases C to E open; open questions answered except RF-60 (Phase E) |
+| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52), Phase C done 2026-10-08; phases D and E open; open questions answered except RF-60 (Phase E) |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1); CI runs on each push to the pull request |
@@ -48,6 +48,8 @@ Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `secu
 After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
 
 After Phase B (2026-10-07, `refactor-2.0` at `22257c0`): `gofmt -l .`, staticcheck and deadcode print nothing; all tests pass, including the 2.0.0 format fixtures; coverage 52.3 % in total, every package above its floor; 291 files, 41,924 Go lines (the fixtures add 2.4 MB of test data).
+
+After Phase C (2026-10-08, `refactor-2.0` at `82ae779`): gofmt, staticcheck and deadcode print nothing; all tests pass, including the format fixtures; coverage 52.4 % in total, every package above its floor; no production error text contains "Remedy:"; `gui/flow` matches no workflow text; no production file in `internal/gui` is over 500 lines except `view/strings.go` (515); 312 files, 42,510 Go lines.
 
 ## 3. Constraints
 
@@ -191,6 +193,7 @@ Done in `974cc48`. `fsx.ContextWriter` keeps its context as a field on purpose: 
 Done in `515ff1d`, `28ae632`, `b49acf5` and `0250574`, moving code unchanged with a syntax-tree tool: `card.go`, `palette.go` and `page.go` hold what the pages share; the Create backup page, the Restore backup page and the Restore window are split into the page and its `_layout`, `_list` and (for the window) `_check` files; `gui/view` got `vocabulary.go`, `verifyplan.go`, `logviewer.go` and `restorepage_actions.go`, and `gui/win32` got `display.go`. The files the item names are `restorepage.go`, `restoredialog.go` and `createpage.go` since the pages were renamed. Every production file in `internal/gui` is under 500 lines except `view/strings.go` (515), which stays whole: it is the one place of every user-visible string (GUI spec 3.6). PLAN-gui-redesign's target structure is not updated: that plan is deleted after the 2.0.0 release (RF-62).
 
 **RF-34 (P3) Package-level GUI state.** `theApp`, `activeDetails`, `activeCredential`, `dialogWindows`, and the `*ClassExists` flags are globals ([app.go:124](../internal/gui/app.go#L124), [details.go:30](../internal/gui/details.go#L30), [dialogs.go:47](../internal/gui/dialogs.go#L47), [dialogwin.go:33](../internal/gui/dialogwin.go#L33)). A Win32 window procedure needs one way to find its Go object, but one is enough: keep a single registry `map[HWND]handler` (or `GWLP_USERDATA` per window) in the `gui` package and make the dialog state fields of `app`. This lets more of `gui` be tested with a hidden window (RF-40).
+Done in `82ae779`: `registry.go` maps every top-level window to its handler (`app`, `dialogWindow`, the details viewer, each with a `message` method), served by one window procedure; `registerClass` registers every class once; the open credential dialog is a field of `app`. `theApp`, `activeDetails`, `activeCredential`, `dialogWindows` and the class flags are gone. Checked on the real window with `Smoke-BackupRestore.ps1`, `Check-States.ps1` (all 13 conditions; `Argon2Capped` needs a configuration without its own `argon2` block, as the script appends one), `Accessibility.ps1`, and an ad-hoc check of the details viewer. Testing `gui` with a hidden window (the item's motive) is now possible; writing such tests belongs to the coverage targets of RF-40.
 
 ## 9. Performance (Phase D)
 
