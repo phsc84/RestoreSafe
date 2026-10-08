@@ -5,7 +5,7 @@
 | Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52), Phase C done 2026-10-08; phases D and E done 2026-10-08 except RF-62, which waits for the 2.0.0 release (13.1), and the optional coverage targets of RF-40; all open questions answered |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
-| Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1); CI runs on each push to the pull request |
+| Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1, B: #2, C: #3, D and E: #4); CI runs on each push to the pull request |
 | Scope | Structure, dead and legacy code, performance, security hardening, tests, tooling, and docs. **No change to the backup format, the keys, or what a backup, restore, or verify does for the user.** |
 
 ## 1. Purpose
