@@ -60,9 +60,10 @@ try {
 
   # Restore of the newest run's folders through the Restore window.
   Go-Page $main 1
+  # The check after an operation rebuilds the list and can drop a selection
+  # made just before it: select again until the action is enabled.
   $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
-  Select-ListItem $list 0
-  Wait-Until { Find-Control $main BackupsRestore -Enabled } 20 "a backup selected" | Out-Null
+  Wait-Until { try { Select-ListItem $list 0 } catch {}; Find-Control $main BackupsRestore -Enabled } 20 "a backup selected" | Out-Null
   Snap $main "backups"
   Click-Control $main BackupsRestore
   $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore window"
@@ -80,7 +81,7 @@ try {
   # Verification of the newest run.
   Go-Page $main 1
   $list = Wait-Until { Find-Control $main BackupsList } 10 "Backups list"
-  Select-ListItem $list 0
+  Wait-Until { try { Select-ListItem $list 0 } catch {}; Find-Control $main BackupsVerify -Enabled } 20 "a backup selected" | Out-Null
   Click-Control $main BackupsVerify
   $ver = Wait-Until { Find-Window $p.Id "RestoreSafeVerify" } 10 "Verify window"
   Wait-Until { Find-Control $ver VerifyStart -Enabled } 60 "verification plan" | Out-Null
