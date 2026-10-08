@@ -1,9 +1,10 @@
 package interact
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 // BackupPlan is what a backup run will do. The workflow shows it before it

@@ -1,10 +1,11 @@
 package widget
 
 import (
-	"RestoreSafe/internal/gui/win32"
 	"runtime"
 	"testing"
 	"unsafe"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // testTheme returns a theme at 96 dpi and a hidden top-level window to put

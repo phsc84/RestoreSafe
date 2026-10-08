@@ -1,17 +1,18 @@
 package health
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/plan"
 	"os"
 	"path/filepath"
 	"slices"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // State is the overall state of the backups (GUI spec 3.5). The frontend adds

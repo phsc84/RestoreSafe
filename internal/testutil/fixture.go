@@ -2,11 +2,6 @@
 package testutil
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/format/setwriter"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"context"
 	"os"
@@ -14,6 +9,12 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/format/setwriter"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 const (

@@ -1,10 +1,10 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
-	"RestoreSafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 
 	"golang.org/x/sys/windows"
 )
@@ -82,7 +82,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 			d.close(false)
 		case idCredentialCopy:
 			// Into a password manager, say; out of the clipboard history.
-			if win32.CopySecretText(win.hwnd, v.Copy) == nil {
+			if win32.CopySecret(win.hwnd, v.Code) == nil {
 				win32.SetText(copyButton, view.ButtonCopied)
 			}
 		}
@@ -96,16 +96,18 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		st.gap(4)
 		st.para(v.Hint, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 	}
-	if v.Code != "" {
+	if v.Code != nil {
 		st.gap(12)
 		font, err := codeFont(uint32(s))
 		if err == nil {
 			d.codeFont = font
 		}
 		// A static control: the code is copied only with the Copy button
-		// (GUI spec 13.3).
-		h, _ := win32.CreateWindow(0, "STATIC", v.Code, win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|win32.SS_CENTER, 0, 0, 0, 0, panel.HWND(), 0)
+		// (GUI spec 13.3). SetSecretText zeroes its UTF-16 copy; the control
+		// keeps its own until the window is destroyed.
+		h, _ := win32.CreateWindow(0, "STATIC", "", win32.WS_CHILD|win32.WS_VISIBLE|win32.SS_NOPREFIX|win32.SS_CENTER, 0, 0, 0, 0, panel.HWND(), 0)
 		panel.Adopt(h)
+		win32.SetSecretText(h, v.Code)
 		if font != 0 {
 			win32.SetFont(h, font)
 		}
@@ -146,7 +148,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	if v.Cancel != "" {
 		cancel = panel.Button(v.Cancel, idCredentialCancel)
 	}
-	if v.Copy != "" {
+	if v.Code != nil {
 		copyButton = panel.Button(view.ButtonCopy, idCredentialCopy)
 	}
 	margin := s.Px(credentialMargin)

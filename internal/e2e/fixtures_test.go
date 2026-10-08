@@ -1,11 +1,6 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/testutil/filelock"
-	"RestoreSafe/internal/workflow/restore"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -22,6 +17,12 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/filelock"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
 
 	"golang.org/x/sys/windows"
 )

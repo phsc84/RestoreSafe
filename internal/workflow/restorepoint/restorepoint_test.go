@@ -1,16 +1,17 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/testutil"
 	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func openSet(t *testing.T, dir string, e naming.BackupEntry) *container.Set {

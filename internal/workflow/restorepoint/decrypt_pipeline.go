@@ -1,13 +1,14 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/workflow/job"
 	"context"
 	"fmt"
 	"io"
 	"sync/atomic"
+
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
 )
 
 // recordingWriter remembers whether a write to the pipe failed, which means

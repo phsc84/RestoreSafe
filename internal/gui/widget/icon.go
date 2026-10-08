@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // Icon draws a glyph, optionally on a filled circle (the hero, GUI spec 3.3).
 type Icon struct {

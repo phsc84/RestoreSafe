@@ -6,6 +6,8 @@ package win32
 import (
 	"fmt"
 	"syscall"
+	"unicode/utf16"
+	"unicode/utf8"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -343,6 +345,28 @@ func ClientRect(hwnd HWND) Rect {
 // SetText sets the text of a window or control.
 func SetText(hwnd HWND, text string) {
 	procSetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(UTF16(text))))
+}
+
+// SetSecretText sets the text of hwnd to a secret given as UTF-8 bytes and
+// zeroes its UTF-16 copy afterwards; the window keeps its own.
+func SetSecretText(hwnd HWND, secret []byte) {
+	u := secretUTF16(secret)
+	defer clear(u)
+	procSetWindowTextW.Call(uintptr(hwnd), uintptr(unsafe.Pointer(&u[0])))
+}
+
+// secretUTF16 converts a secret from UTF-8 to NUL-terminated UTF-16 without
+// a string in between, so that the caller can zero the result.
+func secretUTF16(secret []byte) []uint16 {
+	// A UTF-8 sequence never needs more UTF-16 units than bytes, so the
+	// buffer never grows and leaves no copy behind.
+	u := make([]uint16, 0, len(secret)+1)
+	for i := 0; i < len(secret); {
+		r, size := utf8.DecodeRune(secret[i:])
+		i += size
+		u = utf16.AppendRune(u, r)
+	}
+	return append(u, 0)
 }
 
 // Enable enables or disables a window.

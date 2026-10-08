@@ -1,9 +1,10 @@
 package backup
 
 import (
-	"RestoreSafe/internal/format/setwriter"
 	"os"
 	"path/filepath"
+
+	"github.com/phsc84/restoresafe/internal/format/setwriter"
 )
 
 // logPartSummary logs the parts of a set and, with io_diagnostics, how the

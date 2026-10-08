@@ -1,8 +1,8 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
 )
 
 // The colors and glyphs of the widgets for the tones, badges, segments and

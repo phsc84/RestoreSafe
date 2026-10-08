@@ -1,16 +1,17 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/health"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Hero is the status at the top of the Create backup page (GUI spec OV-1).

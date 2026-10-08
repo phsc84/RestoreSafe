@@ -1,12 +1,13 @@
 package plan
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/testutil"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func infoWithKeySet(ks *container.KeySet) catalog.SetInfo {

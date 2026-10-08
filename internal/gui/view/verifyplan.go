@@ -1,9 +1,10 @@
 package view
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // VerifyPlanView is the Verify window (figure 7.3), laid out and worded

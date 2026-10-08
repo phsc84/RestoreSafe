@@ -1,10 +1,11 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/workflow/interact"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestRTFEscape(t *testing.T) {

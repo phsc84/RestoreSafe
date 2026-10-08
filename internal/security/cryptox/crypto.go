@@ -34,7 +34,6 @@
 package cryptox
 
 import (
-	"RestoreSafe/internal/problem"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hkdf"
@@ -44,6 +43,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -227,6 +228,8 @@ func EncryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 	}
 
 	buf := make([]byte, ChunkSize)
+	chunks := newChunkParams(aadPrefix)
+	out := make([]byte, chunkPrefixLen, chunkPrefixLen+maxEncryptedChunkSize)
 	var chunkIndex uint64
 	for {
 		n, readErr := io.ReadFull(src, buf)
@@ -235,7 +238,7 @@ func EncryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 		}
 
 		isFinal := errors.Is(readErr, io.EOF) || errors.Is(readErr, io.ErrUnexpectedEOF)
-		if err := writeEncryptedChunk(dst, gcm, aadPrefix, chunkIndex, buf[:n], isFinal); err != nil {
+		if err := writeEncryptedChunk(dst, gcm, chunks, out, chunkIndex, buf[:n], isFinal); err != nil {
 			return err
 		}
 		if isFinal {
@@ -257,10 +260,11 @@ func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 
 	var chunkIndex uint64
 	sawFinal := false
+	chunks := newChunkParams(aadPrefix)
 	encrypted := make([]byte, 0, maxEncryptedChunkSize)
+	var prefix [chunkPrefixLen]byte
 
 	for {
-		var prefix [chunkPrefixLen]byte
 		if _, err := io.ReadFull(src, prefix[:1]); err != nil {
 			if errors.Is(err, io.EOF) {
 				if sawFinal {
@@ -291,7 +295,7 @@ func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 			return problem.Errorf("Failed to read chunk data: %w.", err).WithRemedy("Check backup-part completeness and file readability.")
 		}
 
-		plaintext, err := gcm.Open(encrypted[:0], chunkNonce(chunkIndex), encrypted, chunkAAD(aadPrefix, chunkIndex, flags))
+		plaintext, err := gcm.Open(encrypted[:0], chunks.nonce(chunkIndex), encrypted, chunks.aad(chunkIndex, flags))
 		if err != nil {
 			return ErrCorrupted
 		}
@@ -310,39 +314,50 @@ func DecryptStream(dst io.Writer, src io.Reader, key, aadPrefix []byte) error {
 	}
 }
 
-func writeEncryptedChunk(w io.Writer, gcm cipher.AEAD, aadPrefix []byte, index uint64, plaintext []byte, isFinal bool) error {
+// writeEncryptedChunk seals plaintext and writes the chunk prefix and the
+// ciphertext with one Write. out is the stream's buffer of length
+// chunkPrefixLen and capacity chunkPrefixLen+maxEncryptedChunkSize; Seal
+// appends to it, so that no chunk allocates.
+func writeEncryptedChunk(w io.Writer, gcm cipher.AEAD, chunks *chunkParams, out []byte, index uint64, plaintext []byte, isFinal bool) error {
 	var flags byte
 	if isFinal {
 		flags = chunkFlagFinal
 	}
 
-	encrypted := gcm.Seal(nil, chunkNonce(index), plaintext, chunkAAD(aadPrefix, index, flags))
-
-	var prefix [chunkPrefixLen]byte
-	prefix[0] = flags
-	binary.BigEndian.PutUint32(prefix[1:], uint32(len(encrypted)))
-	if _, err := w.Write(prefix[:]); err != nil {
-		return fmt.Errorf("Failed to write chunk header: %w", err)
-	}
-	if _, err := w.Write(encrypted); err != nil {
-		return fmt.Errorf("Failed to write chunk data: %w", err)
+	out = gcm.Seal(out[:chunkPrefixLen], chunks.nonce(index), plaintext, chunks.aad(index, flags))
+	out[0] = flags
+	binary.BigEndian.PutUint32(out[1:chunkPrefixLen], uint32(len(out)-chunkPrefixLen))
+	if _, err := w.Write(out); err != nil {
+		return fmt.Errorf("Failed to write chunk: %w", err)
 	}
 	return nil
 }
 
-// chunkNonce derives a deterministic 12-byte nonce from the chunk index
+// chunkParams builds the nonce and the associated data of each chunk of one
+// stream in buffers it reuses. A returned slice is valid until the next call.
+type chunkParams struct {
+	nonceBuf [NonceLen]byte
+	aadBuf   []byte
+}
+
+func newChunkParams(aadPrefix []byte) *chunkParams {
+	p := &chunkParams{aadBuf: make([]byte, len(aadPrefix)+9)}
+	copy(p.aadBuf, aadPrefix)
+	return p
+}
+
+// nonce derives a deterministic 12-byte nonce from the chunk index
 // (low 8 bytes = index, high 4 bytes = 0).
 //
 // A counter nonce is safe because every stream is encrypted with its own key
 // (see EncryptStream), while chunks within a stream are numbered by a strictly
 // increasing counter. No (key, nonce) pair is ever reused.
-func chunkNonce(index uint64) []byte {
-	nonce := make([]byte, NonceLen)
-	binary.BigEndian.PutUint64(nonce[4:], index)
-	return nonce
+func (p *chunkParams) nonce(index uint64) []byte {
+	binary.BigEndian.PutUint64(p.nonceBuf[4:], index)
+	return p.nonceBuf[:]
 }
 
-// chunkAAD builds the GCM associated data for a chunk: the caller's prefix,
+// aad builds the GCM associated data for a chunk: the caller's prefix,
 // the 8-byte chunk index, and the 1-byte flags field.
 //
 // The prefix binds each chunk to its set header and section (package
@@ -351,10 +366,9 @@ func chunkNonce(index uint64) []byte {
 // chunk (to hide a dropped tail) fails gcm.Open; truncation that removes whole
 // trailing chunks is caught by the sawFinal check in DecryptStream. The index
 // is defense-in-depth; the counter nonce already encodes it.
-func chunkAAD(prefix []byte, index uint64, flags byte) []byte {
-	aad := make([]byte, len(prefix)+9)
-	copy(aad, prefix)
-	binary.BigEndian.PutUint64(aad[len(prefix):], index)
-	aad[len(prefix)+8] = flags
-	return aad
+func (p *chunkParams) aad(index uint64, flags byte) []byte {
+	n := len(p.aadBuf) - 9
+	binary.BigEndian.PutUint64(p.aadBuf[n:], index)
+	p.aadBuf[n+8] = flags
+	return p.aadBuf
 }

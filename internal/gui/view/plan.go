@@ -1,13 +1,14 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // PlanRow is one folder of the backup plan (GUI spec BP-1).

@@ -1,10 +1,11 @@
 package job
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
 	"io"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {

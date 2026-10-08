@@ -1,12 +1,13 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/health"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
 )
 
 func settingsOf(t *testing.T, c scenario.Condition, reloadErr error, busy bool) SettingsPage {

@@ -1,24 +1,26 @@
 package container
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/yubikey"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
 )
 
 var testParams = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
 
 var testHash = strings.Repeat("cd", 32)
 
-func newPasswordKeySet(t *testing.T, password string) (*KeySet, []byte) {
+func newPasswordKeySet(t testing.TB, password string) (*KeySet, []byte) {
 	t.Helper()
 	ks, master, err := NewKeySet(config.AuthModePassword)
 	if err != nil {
@@ -30,7 +32,7 @@ func newPasswordKeySet(t *testing.T, password string) (*KeySet, []byte) {
 	return ks, master
 }
 
-func testManifest(t *testing.T, h *Header, dataLen int) []byte {
+func testManifest(t testing.TB, h *Header, dataLen int) []byte {
 	t.Helper()
 	b := manifest.NewBuilder(manifest.Header{SetType: h.SetType, ChainID: h.ChainID, DiffNumber: h.DiffNumber, DirectoryName: h.DirectoryName, SourcePath: "C:/src"})
 	zero := int64(0)
@@ -44,7 +46,7 @@ func testManifest(t *testing.T, h *Header, dataLen int) []byte {
 
 // writeTestSet writes a full set with the given payload into dir and returns
 // the part paths.
-func writeTestSet(t *testing.T, dir string, ks *KeySet, master, payload []byte, splitSize int64) ([]string, *WriteResult) {
+func writeTestSet(t testing.TB, dir string, ks *KeySet, master, payload []byte, splitSize int64) ([]string, *WriteResult) {
 	t.Helper()
 	h, err := NewHeader(manifest.SetTypeFull, "ABC123", "ABC123", "Documents", "2026-09-26", *ks)
 	if err != nil {
@@ -53,7 +55,11 @@ func writeTestSet(t *testing.T, dir string, ks *KeySet, master, payload []byte, 
 	sw := NewWriter(func(seq int) string {
 		return filepath.Join(dir, fmt.Sprintf("part-%03d.enc", seq))
 	}, splitSize)
-	res, err := Write(sw, h, master, splitSize, bytes.NewReader(payload), func() ([]byte, error) { return testManifest(t, h, len(payload)), nil })
+	mf := testManifest(t, h, len(payload))
+	res, err := Write(sw, h, master, splitSize, bytes.NewReader(payload), func(w io.Writer) error {
+		_, err := w.Write(mf)
+		return err
+	})
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -381,6 +387,11 @@ func FuzzReadHeader(f *testing.F) {
 		}
 		if err := h.Validate(); err != nil {
 			t.Fatalf("accepted header fails validation: %v", err)
+		}
+		for _, s := range h.KeySet.Slots {
+			if s.KDF.MemoryKiB > cryptox.MaxArgonMemoryKB {
+				t.Fatalf("accepted header asks for %d KiB of Argon2 memory", s.KDF.MemoryKiB)
+			}
 		}
 	})
 }

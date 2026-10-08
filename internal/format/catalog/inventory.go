@@ -1,10 +1,6 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/problem"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +8,11 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // ScanBackups lists every backup set (complete part-file names only) in
@@ -40,30 +41,48 @@ func ScanBackups(backupDir string) ([]naming.BackupEntry, error) {
 
 // CollectParts returns the part file paths of an entry, sorted by part number.
 func CollectParts(backupDir string, entry naming.BackupEntry) ([]string, error) {
-	des, err := os.ReadDir(backupDir)
+	all, err := listParts(backupDir)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read backup directory %q: %w", backupDir, err)
+	}
+	if all[entry] == nil {
+		return []string{}, nil
+	}
+	return all[entry], nil
+}
+
+// listParts reads backupDir once and returns the part file paths of every
+// set, sorted by part number. A read error is returned as os.ReadDir returns
+// it, so that os.IsNotExist works on it.
+func listParts(backupDir string) (map[naming.BackupEntry][]string, error) {
+	des, err := os.ReadDir(backupDir)
+	if err != nil {
+		return nil, err
 	}
 
 	type seqPath struct {
 		seq  int
 		path string
 	}
-	var parts []seqPath
+	bySet := make(map[naming.BackupEntry][]seqPath)
 	for _, de := range des {
 		e, seq, ok := naming.ParsePartFileName(de.Name())
-		if !ok || e != entry {
+		if !ok {
 			continue
 		}
-		parts = append(parts, seqPath{seq, filepath.Join(backupDir, de.Name())})
+		bySet[e] = append(bySet[e], seqPath{seq, filepath.Join(backupDir, de.Name())})
 	}
-	sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
 
-	paths := make([]string, len(parts))
-	for i, p := range parts {
-		paths[i] = p.path
+	all := make(map[naming.BackupEntry][]string, len(bySet))
+	for e, parts := range bySet {
+		sort.Slice(parts, func(i, j int) bool { return parts[i].seq < parts[j].seq })
+		paths := make([]string, len(parts))
+		for i, p := range parts {
+			paths[i] = p.path
+		}
+		all[e] = paths
 	}
-	return paths, nil
+	return all, nil
 }
 
 // SetInfo is the password-free inspection result of one backup set.
@@ -95,6 +114,11 @@ func OpenSet(backupDir string, entry naming.BackupEntry) (*container.Set, error)
 	if err != nil {
 		return nil, err
 	}
+	return openParts(entry, parts)
+}
+
+// openParts is OpenSet for the part paths of entry.
+func openParts(entry naming.BackupEntry, parts []string) (*container.Set, error) {
 	if err := checkContinuity(parts); err != nil {
 		return nil, err
 	}
@@ -111,19 +135,22 @@ func OpenSet(backupDir string, entry naming.BackupEntry) (*container.Set, error)
 
 // InspectSet opens and closes a set to report its status.
 func InspectSet(backupDir string, entry naming.BackupEntry) SetInfo {
-	info := SetInfo{Entry: entry}
 	parts, err := CollectParts(backupDir, entry)
 	if err != nil {
-		info.Err = err
-		return info
+		return SetInfo{Entry: entry, Err: err}
 	}
-	info.Parts = parts
+	return inspectParts(entry, parts)
+}
+
+// inspectParts is InspectSet for the part paths of entry.
+func inspectParts(entry naming.BackupEntry, parts []string) SetInfo {
+	info := SetInfo{Entry: entry, Parts: parts}
 	for _, p := range parts {
 		if fi, err := os.Stat(p); err == nil {
 			info.SizeBytes += fi.Size()
 		}
 	}
-	set, err := OpenSet(backupDir, entry)
+	set, err := openParts(entry, parts)
 	if err != nil {
 		info.Err = err
 		return info
@@ -134,15 +161,16 @@ func InspectSet(backupDir string, entry naming.BackupEntry) SetInfo {
 	return info
 }
 
-// Inventory inspects every backup set in backupDir, newest first.
+// Inventory inspects every backup set in backupDir, newest first. It reads
+// the directory once, not once per set.
 func Inventory(backupDir string) ([]SetInfo, error) {
-	entries, err := ScanBackups(backupDir)
+	all, err := listParts(backupDir)
 	if err != nil {
 		return nil, err
 	}
-	infos := make([]SetInfo, 0, len(entries))
-	for _, e := range entries {
-		infos = append(infos, InspectSet(backupDir, e))
+	infos := make([]SetInfo, 0, len(all))
+	for e, parts := range all {
+		infos = append(infos, inspectParts(e, parts))
 	}
 	sortNewestFirst(infos)
 	return infos, nil

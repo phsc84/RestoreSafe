@@ -1,14 +1,6 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/interact/interacttest"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +10,15 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
 )
 
 // observedUI is a script that also records progress reports and

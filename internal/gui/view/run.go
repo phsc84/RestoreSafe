@@ -1,10 +1,11 @@
 package view
 
 import (
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // StepState is where a step of the trail is.

@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // SidebarItem is an entry of the navigation.
 type SidebarItem struct {

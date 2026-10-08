@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // HighContrast is the palette of the Windows high-contrast theme in use:
 // the system colors. Status keeps its meaning through glyphs and words

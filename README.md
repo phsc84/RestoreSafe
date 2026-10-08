@@ -54,7 +54,7 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 - Exclude patterns for files and directories you don't want to back up
 
 ### Security
-- AES-256-GCM encryption (content and metadata/file names)
+- AES-256-GCM encryption of the file contents and of the names, sizes and times of the backed-up files (see [What is not encrypted](#what-is-not-encrypted))
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
 - Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
@@ -122,7 +122,7 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 | Option | Default | Purpose |
 |---|---|---|
-| `retention_keep` | `3` | Number of backup chains kept per source directory (0 = keep all) |
+| `retention_keep` | `3` in `config-SAMPLE.yaml`; `0` when the line is missing | Number of backup chains kept per source directory (0 = keep all) |
 | `differential.enabled` | `true` | Create differential backups when a usable full backup exists |
 | `differential.full_backup_interval_days` | `30` | Create a new full backup when the last one is this many days old |
 | `differential.max_size_percent` | `50` | Create a new full backup when the last differential reached this percentage of the full backup |
@@ -238,6 +238,15 @@ Open any one box  ->  master key  ->  your files
 ```
 
 The boxes are not secret. Someone who steals your backup files also has the boxes, but they still need one of your unlock methods to open one. Without it, the backup is useless to them.
+
+### What is not encrypted
+
+Everything inside a backup is encrypted: the contents of your files, their names, folders, sizes and times. A few things are readable without unlocking, because RestoreSafe needs them to list your backups before you enter a password:
+
+- the name of the backed-up folder (for example `Documents`), the dates and the backup ID, which are in the file names too;
+- the time the backup was made and the RestoreSafe version;
+- the boxes: for each, its kind (password, YubiKey, recovery code), the salt and settings of its key derivation, and for a YubiKey the ID of its registered credential;
+- the total size of the backup files, as for any file.
 
 ### Your unlock methods
 

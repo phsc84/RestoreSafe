@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // Segment is a part of a bar: a fraction of its width in a color.
 type Segment struct {

@@ -1,14 +1,15 @@
 package job
 
 import (
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/interact"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestLogStreamProgressWritesDebugLine(t *testing.T) {

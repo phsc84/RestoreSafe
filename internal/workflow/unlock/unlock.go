@@ -3,17 +3,18 @@
 package unlock
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/recovery"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/recovery"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 const maxPasswordAttempts = 3
@@ -127,13 +128,15 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, l
 		if err != nil {
 			return nil, err
 		}
-		code, err := recovery.Parse(string(input))
+		code, err := recovery.Parse(input)
 		cryptox.ZeroBytes(input)
 		if err == nil && code.Check() != ks.Slots[index].Check {
+			code.Zero()
 			err = problem.New("This recovery code belongs to different keys.").WithRemedy("Use the recovery code created together with these backups.")
 		}
 		if err == nil {
 			secret := code.Secret()
+			code.Zero()
 			master, unlockErr := ks.Unlock(index, secret)
 			cryptox.ZeroBytes(secret)
 			if unlockErr == nil {

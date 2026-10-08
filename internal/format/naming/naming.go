@@ -12,7 +12,6 @@
 package naming
 
 import (
-	"RestoreSafe/internal/problem"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -21,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 const (
@@ -139,6 +140,11 @@ func ParseTempPartFileName(basename string) (BackupEntry, int, bool) {
 }
 
 func parsePartFileName(basename string) (BackupEntry, int, bool, bool) {
+	// A file name has no path separators; a directory name with one would
+	// name a different path when written again.
+	if strings.ContainsAny(basename, `/\`) {
+		return BackupEntry{}, 0, false, false
+	}
 	m := partFilePattern.FindStringSubmatch(basename)
 	if m == nil {
 		return BackupEntry{}, 0, false, false

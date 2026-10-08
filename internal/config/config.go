@@ -3,14 +3,15 @@
 package config
 
 import (
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 
 	"go.yaml.in/yaml/v3"
 )

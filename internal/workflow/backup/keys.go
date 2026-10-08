@@ -1,20 +1,21 @@
 package backup
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/recovery"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/plan"
-	"RestoreSafe/internal/workflow/unlock"
 	"bytes"
 	"errors"
 	"fmt"
 	"unicode/utf8"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/recovery"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
+	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
 // Injectable for tests.
@@ -101,6 +102,7 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 			return nil, nil, err
 		}
 		slots = append(slots, newSlot{slotType: container.SlotRecovery, label: "Recovery code", secret: code.Secret(), check: code.Check()})
+		code.Zero()
 	}
 
 	ks, master, err := container.NewKeySet(mode)
@@ -231,7 +233,11 @@ func createRecoveryCode(u interact.UI) (recovery.Code, error) {
 	if err != nil {
 		return recovery.Code{}, err
 	}
-	if err := u.ShowRecoveryCode(code.String()); err != nil {
+	display := code.Display()
+	err = u.ShowRecoveryCode(display)
+	cryptox.ZeroBytes(display)
+	if err != nil {
+		code.Zero()
 		return recovery.Code{}, err
 	}
 	return code, nil

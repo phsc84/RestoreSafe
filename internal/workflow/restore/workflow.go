@@ -8,18 +8,6 @@
 package restore
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/restorepoint"
-	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"errors"
 	"fmt"
@@ -27,6 +15,19 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
+	"github.com/phsc84/restoresafe/internal/workflow/restorepoint"
+	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
 // Request is what the user chose to restore.
@@ -342,6 +343,10 @@ func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressRepor
 	// preflight invariant against a TOCTOU race or two entries resolving to the
 	// same DirectoryName. os.MkdirAll would silently merge into an existing tree.
 	outDir := filepath.Join(o.restorePath, entry.DirectoryName)
+	// Cancelled before the first byte: leave no empty, incomplete folder.
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if err := os.MkdirAll(o.restorePath, 0o750); err != nil {
 		return 0, problem.Errorf("Failed to create restore directory: %w.", err).WithRemedy("Check write permissions and use a valid destination path.")
 	}

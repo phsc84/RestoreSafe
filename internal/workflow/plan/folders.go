@@ -1,11 +1,12 @@
 package plan
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
 	"fmt"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 // Folder says whether one source directory gets a full or a differential

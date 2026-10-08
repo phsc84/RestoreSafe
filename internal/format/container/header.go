@@ -15,11 +15,6 @@
 package container
 
 import (
-	"RestoreSafe/internal/buildinfo"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
@@ -28,6 +23,12 @@ import (
 	"io"
 	"regexp"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/buildinfo"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 const (

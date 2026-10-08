@@ -1,10 +1,11 @@
 package job
 
 import (
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/interact"
 	"sync/atomic"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // StartProgressTracking launches a goroutine that logs I/O progress at regular

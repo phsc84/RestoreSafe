@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const module = "RestoreSafe/"
+const module = "github.com/phsc84/restoresafe/"
 
 // layers lists the package groups from bottom to top. A package may import
 // packages of its own layer and of lower layers, never of higher ones.

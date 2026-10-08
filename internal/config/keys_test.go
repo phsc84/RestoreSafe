@@ -1,7 +1,6 @@
 package config
 
 import (
-	restoresafe "RestoreSafe"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	restoresafe "github.com/phsc84/restoresafe"
 
 	"go.yaml.in/yaml/v3"
 )

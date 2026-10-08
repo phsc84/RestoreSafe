@@ -1,13 +1,14 @@
 package logging_test
 
 import (
-	"RestoreSafe/internal/logging"
 	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/logging"
 )
 
 func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {

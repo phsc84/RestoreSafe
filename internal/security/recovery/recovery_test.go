@@ -1,6 +1,7 @@
 package recovery
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestGenerateRecoveryCodeFormatAndRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		s := code.String()
+		s := string(code.Display())
 		if len(s) != 35 || strings.Count(s, "-") != 5 {
 			t.Fatalf("unexpected display form %q", s)
 		}
@@ -23,8 +24,8 @@ func TestGenerateRecoveryCodeFormatAndRoundTrip(t *testing.T) {
 		}
 		seen[s] = true
 
-		parsed, err := Parse(s)
-		if err != nil || parsed != code {
+		parsed, err := Parse([]byte(s))
+		if err != nil || !sameCode(parsed, code) {
 			t.Fatalf("round trip of %q failed: %v", s, err)
 		}
 		if !ValidCheck(code.Check()) || len(code.Secret()) != 25 {
@@ -37,7 +38,7 @@ func TestParseRecoveryCodeNormalizesInput(t *testing.T) {
 	t.Parallel()
 
 	code, _ := Generate()
-	s := code.String()
+	s := string(code.Display())
 	variants := []string{
 		strings.ToLower(s),
 		strings.ReplaceAll(s, "-", " "),
@@ -45,14 +46,14 @@ func TestParseRecoveryCodeNormalizesInput(t *testing.T) {
 		"  " + s + "  ",
 	}
 	for _, v := range variants {
-		if got, err := Parse(v); err != nil || got != code {
+		if got, err := Parse([]byte(v)); err != nil || !sameCode(got, code) {
 			t.Fatalf("variant %q not accepted: %v", v, err)
 		}
 	}
 	// Crockford decoding: O reads as 0, I and L as 1.
 	if strings.ContainsAny(s, "01") {
 		confusable := strings.NewReplacer("0", "O", "1", "l").Replace(s)
-		if got, err := Parse(confusable); err != nil || got != code {
+		if got, err := Parse([]byte(confusable)); err != nil || !sameCode(got, code) {
 			t.Fatalf("confusable variant %q not accepted: %v", confusable, err)
 		}
 	}
@@ -62,20 +63,39 @@ func TestParseRecoveryCodeRejectsTyposAndBadInput(t *testing.T) {
 	t.Parallel()
 
 	code, _ := Generate()
-	s := []byte(code.String())
+	s := []byte(string(code.Display()))
 	// Change the first data character to a different valid character.
 	if s[0] == 'A' {
 		s[0] = 'B'
 	} else {
 		s[0] = 'A'
 	}
-	if _, err := Parse(string(s)); err == nil || !strings.Contains(err.Error(), "typo") {
+	if _, err := Parse(s); err == nil || !strings.Contains(err.Error(), "typo") {
 		t.Fatalf("expected checksum error, got %v", err)
 	}
-	if _, err := Parse("ABCDE-FGHJK"); err == nil || !strings.Contains(err.Error(), "must have 30 characters") {
+	if _, err := Parse([]byte("ABCDE-FGHJK")); err == nil || !strings.Contains(err.Error(), "must have 30 characters") {
 		t.Fatalf("expected length error, got %v", err)
 	}
-	if _, err := Parse(code.String()[:34] + "U"); err == nil || !strings.Contains(err.Error(), "invalid character") {
+	if _, err := Parse(append(code.Display()[:34], 'U')); err == nil || !strings.Contains(err.Error(), "invalid character") {
 		t.Fatalf("expected invalid-character error, got %v", err)
+	}
+}
+
+func sameCode(a, b Code) bool { return bytes.Equal(a.data, b.data) && a.check == b.check }
+
+func TestZeroClearsTheCode(t *testing.T) {
+	t.Parallel()
+
+	code, err := Generate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := code.Secret()
+	code.Zero()
+	if !bytes.Equal(code.data, make([]byte, recoveryDataChars)) {
+		t.Fatalf("Zero left %q", code.data)
+	}
+	if bytes.Equal(secret, code.data) {
+		t.Fatal("Secret must return a copy")
 	}
 }

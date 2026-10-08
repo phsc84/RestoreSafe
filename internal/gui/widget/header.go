@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // headerPadding is the space before a column title, in DIPs, about the
 // list view's own indent of a cell's text.

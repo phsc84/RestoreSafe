@@ -7,8 +7,6 @@
 package yubikey
 
 import (
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
@@ -21,6 +19,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 
 	"golang.org/x/sys/windows"
 )

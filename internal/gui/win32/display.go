@@ -1,8 +1,9 @@
 package win32
 
 import (
-	"golang.org/x/sys/windows"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // LogFont is a LOGFONTW.

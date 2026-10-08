@@ -56,13 +56,15 @@ A push to a work branch without a PR runs nothing.
 
 ### What it does
 
-Three jobs run in parallel, each on its own runner; together they take about three minutes.
+Five jobs run in parallel, each on its own runner; together they take about eight minutes, the fuzzing job the longest.
 
 | Job | Steps | Fails when |
 |---|---|---|
 | Format, vet, build, static analysis | `gofmt -l .`; `go vet ./...`; the build in the release configuration (`CGO_ENABLED=0`); `go tool staticcheck ./...`; `go tool govulncheck ./...`; `go tool deadcode -test ./...` | a file is not gofmt-formatted, vet or staticcheck reports a finding, the build fails, or the code calls a function with a known vulnerability. deadcode only reports unreachable functions and never fails the job. |
-| Tests and coverage | `go test -coverprofile ./...`; the coverage floor of each package ([scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt)); the total coverage; uploads `cover.out` as an artifact | a test fails, or a package falls below its floor |
+| Tests and coverage | `go test -coverprofile ./...`; the coverage floor of each package ([scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt)); the total coverage; every benchmark once (`-benchtime 1x`); uploads `cover.out` as an artifact | a test or benchmark fails, or a package falls below its floor |
 | Race detector | `go test -race ./...` with cgo and the runner's gcc | a test fails, or two goroutines access the same data without synchronisation |
+| Fuzzing | every fuzz target for 30 seconds ([scripts/ci/fuzz.sh](scripts/ci/fuzz.sh)); on failure uploads the failing inputs as the `fuzz-failures` artifact | a fuzz target finds an input that breaks its property |
+| GUI smoke test | builds RestoreSafe.exe with its resources and runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` of [scripts/gui-test](scripts/gui-test/README.md) on the runner's desktop ([scripts/ci/gui-smoke.ps1](scripts/ci/gui-smoke.ps1)); on failure uploads the screenshots as the `gui-screenshots` artifact | a step of the smoke test fails, or a status of the Create backup page shows the wrong title or action |
 
 The release build stays `CGO_ENABLED=0`; only the race detector needs cgo.
 
@@ -88,6 +90,18 @@ go tool govulncheck ./...
 
 The race detector needs a MinGW-w64 gcc in `PATH` (e.g. from [winlibs.com](https://winlibs.com/)), then `$env:CGO_ENABLED = "1"; go test -race ./...`. Without one, CI runs it.
 
+### Benchmarks and fuzzing
+
+The `testing.B` benchmarks (`bench_test.go` in cryptox, archive, manifest, and catalog) run only once in CI, so that they keep working; their numbers mean something only when compared on one machine, before and after a change:
+
+```powershell
+go test -count=10 -run '^$' -bench . ./internal/security/cryptox ./internal/format/... > old.txt
+# make the change, then the same command into new.txt
+go run golang.org/x/perf/cmd/benchstat@latest old.txt new.txt
+```
+
+Every parser of bytes that can come from a backup directory or a file has a fuzz target (`func FuzzX(f *testing.F)`). `go test` runs their seed inputs and the inputs saved under `testdata/fuzz/`. To fuzz locally: `bash scripts/ci/fuzz.sh 30` (every target, seconds each), or one target longer with `go test -run '^$' -fuzz '^FuzzOpen$' -fuzztime 5m ./internal/format/container`. When a target fails, Go saves the input under the package's `testdata/fuzz/<target>/` (in CI: the `fuzz-failures` artifact). Commit it with the fix: it stays a regression test.
+
 ### Coverage floors
 
 [scripts/ci/coverage-floors.txt](scripts/ci/coverage-floors.txt) lists the minimum coverage per package, in % of statements. A floor is raised when a package's coverage has risen for good. It is never lowered just to let a change through; a lower floor needs a reason in the refactoring plan.
@@ -103,6 +117,7 @@ The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, 
 ## 6. Rules of the code
 
 - **Layers.** Imports point downward only: `cmd` → `gui` → `workflow` → `format` → `config`/`logging` → `security` → `fsx`/`buildinfo`. The full rules are in the package documentation of [internal/architecture](internal/architecture/doc.go); its test fails on a violation and on a package that belongs to no layer. A new package is added to that test in the same commit.
+- **Imports.** The module is `github.com/phsc84/restoresafe`. Import blocks group the standard library, the module's own packages, and other modules, as `go run golang.org/x/tools/cmd/goimports -local github.com/phsc84/restoresafe -w .` sorts them.
 - **The backup format of 2.x is frozen.** Every backup written by 2.0.0 must restore with every later 2.x version.
 - **Behaviour is preserved** unless a change says otherwise and adds a CHANGELOG entry: texts, the log file format, the order of questions.
 - **No unattended operation.** RestoreSafe never schedules backups, runs in the background, or stores credentials.

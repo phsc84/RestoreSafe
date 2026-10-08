@@ -2,7 +2,7 @@
 package buildinfo
 
 // Version is the RestoreSafe application version. build.bat stamps it with
-// -ldflags "-X RestoreSafe/internal/buildinfo.Version=<version>" from
+// -ldflags "-X github.com/phsc84/restoresafe/internal/buildinfo.Version=<version>" from
 // build/versioninfo.json, so any package can record it without threading the
 // value through call signatures.
 //

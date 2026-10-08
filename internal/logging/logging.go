@@ -3,14 +3,15 @@
 package logging
 
 import (
-	"RestoreSafe/internal/buildinfo"
-	"RestoreSafe/internal/problem"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/buildinfo"
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Level represents the log verbosity.

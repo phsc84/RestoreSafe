@@ -1,20 +1,21 @@
 package view
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/interact/interacttest"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
 var planNow = time.Date(2026, 9, 30, 9, 0, 0, 0, time.Local)

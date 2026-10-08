@@ -64,6 +64,12 @@ jobs:
         run: bash scripts/ci/annotate-failures.sh test.log
       - name: Coverage floors per package
         run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+      # Each benchmark runs once, so that it keeps working; the numbers are
+      # not compared (CONTRIBUTING.md, "Benchmarks and fuzzing").
+      - name: Benchmarks run once
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 -run '^$' -bench . -benchtime 1x ./...
       - name: Total coverage
         run: go tool cover -func=cover.out | tail -n 1
       - uses: actions/upload-artifact@v7
@@ -92,3 +98,49 @@ jobs:
       - name: Report failures
         if: failure()
         run: bash scripts/ci/annotate-failures.sh test.log
+
+  fuzz:
+    name: Fuzzing
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # Each fuzz target for 30 s. A failing input lands in the package's
+      # testdata/fuzz/; download it from the artifact and commit it, so that
+      # go test runs it as a regression test from then on.
+      - name: Fuzz every target
+        env:
+          CGO_ENABLED: "0"
+        run: bash scripts/ci/fuzz.sh 30
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-failures
+          path: internal/**/testdata/fuzz/
+
+  gui:
+    name: GUI smoke test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The runner's session has a desktop, which the UI Automation of
+      # scripts\gui-test needs: the smoke test drives the real window through
+      # two backups, a restore and a verification, then every status of the
+      # Create backup page is checked.
+      - name: Smoke test and state check
+        shell: powershell
+        run: .\scripts\ci\gui-smoke.ps1 -Work "$env:RUNNER_TEMP\gui-smoke"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: gui-screenshots
+          path: |
+            ${{ runner.temp }}/gui-smoke/shots
+            ${{ runner.temp }}/gui-smoke/states

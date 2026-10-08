@@ -1,7 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
 	"archive/tar"
 	"bytes"
 	"context"
@@ -10,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
 
 	"golang.org/x/sys/windows"
 )

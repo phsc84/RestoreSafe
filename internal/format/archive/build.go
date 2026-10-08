@@ -1,10 +1,6 @@
 package archive
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/problem"
 	"archive/tar"
 	"context"
 	"crypto/sha256"
@@ -19,6 +15,11 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )
@@ -306,12 +307,20 @@ func (s *sourceReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Test hooks, nil outside tests: testHookOpen runs before a source file is
+// opened, testHookCopy after its size was read and before it is copied, so
+// that a test can delete, shrink, or grow the file at that moment.
+var testHookOpen, testHookCopy func(path string)
+
 // writeFile copies one file into the TAR stream and returns its manifest
 // entry. The file must keep its size while it is copied. Problems reading the
 // file are returned as *unreadableError; when the TAR header was already
 // written, the entry is completed with zeros so the stream stays valid, and
 // the caller marks it void. buf is the copy buffer.
 func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, progress *atomic.Int64, buf []byte) (manifest.Entry, error) {
+	if testHookOpen != nil {
+		testHookOpen(path)
+	}
 	f, err := openSource(path)
 	if err != nil {
 		return manifest.Entry{}, newUnreadable(path, err, false)
@@ -327,6 +336,9 @@ func writeFile(tw *tar.Writer, cw *countingWriter, path, rel, origin string, pro
 		return manifest.Entry{}, newUnreadable(path, err, false)
 	}
 	size := fi.Size()
+	if testHookCopy != nil {
+		testHookCopy(path)
+	}
 
 	// Flush the padding of the previous entry so the counter points exactly
 	// at this entry's header.

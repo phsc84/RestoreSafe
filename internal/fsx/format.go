@@ -1,8 +1,9 @@
 package fsx
 
 import (
-	"RestoreSafe/internal/problem"
 	"fmt"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // FormatBytesBinary formats bytes using 1024-based steps with user-friendly

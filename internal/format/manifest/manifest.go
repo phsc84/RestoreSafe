@@ -11,7 +11,6 @@
 package manifest
 
 import (
-	"RestoreSafe/internal/problem"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -19,6 +18,8 @@ import (
 	"io"
 	"path"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 // Version is the manifest format version written by this RestoreSafe version.
@@ -162,30 +163,40 @@ func (b *Builder) SkipLastDirectory(p, reason string) bool {
 // Footer returns the totals of the entries collected so far.
 func (b *Builder) Footer() Footer { return computeFooter(b.entries) }
 
-// Bytes computes the footer, validates the manifest, and returns its
-// serialized form. Validation here guarantees RestoreSafe never writes a
-// manifest it would refuse to read.
+// Bytes returns the serialized manifest; see Encode.
 func (b *Builder) Bytes() ([]byte, error) {
+	var buf bytes.Buffer
+	if err := b.Encode(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Encode computes the footer, validates the manifest, and writes its
+// serialized form to w line by line, so that the serialized manifest is never
+// held in memory as a whole. Validation here guarantees RestoreSafe never
+// writes a manifest it would refuse to read.
+func (b *Builder) Encode(w io.Writer) error {
 	m := &Manifest{Header: b.header, Entries: b.entries, Footer: computeFooter(b.entries)}
 	if err := m.Validate(); err != nil {
-		return nil, fmt.Errorf("Internal error: generated manifest is invalid: %w", err)
+		return fmt.Errorf("Internal error: generated manifest is invalid: %w", err)
 	}
 
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
+	bw := bufio.NewWriter(w)
+	enc := json.NewEncoder(bw)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(m.Header); err != nil {
-		return nil, fmt.Errorf("Failed to encode manifest header: %w", err)
+		return fmt.Errorf("Failed to encode manifest header: %w", err)
 	}
 	for _, e := range m.Entries {
 		if err := enc.Encode(e); err != nil {
-			return nil, fmt.Errorf("Failed to encode manifest entry %q: %w", e.Path, err)
+			return fmt.Errorf("Failed to encode manifest entry %q: %w", e.Path, err)
 		}
 	}
 	if err := enc.Encode(m.Footer); err != nil {
-		return nil, fmt.Errorf("Failed to encode manifest footer: %w", err)
+		return fmt.Errorf("Failed to encode manifest footer: %w", err)
 	}
-	return buf.Bytes(), nil
+	return bw.Flush()
 }
 
 func computeFooter(entries []Entry) Footer {
@@ -212,7 +223,13 @@ func computeFooter(entries []Entry) Footer {
 
 // Parse reads and validates a serialized manifest.
 func Parse(data []byte) (*Manifest, error) {
-	sc := bufio.NewScanner(bytes.NewReader(data))
+	return Decode(bytes.NewReader(data))
+}
+
+// Decode reads and validates a serialized manifest from r line by line, so
+// that the serialized manifest is never held in memory as a whole.
+func Decode(r io.Reader) (*Manifest, error) {
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
 
 	m := &Manifest{}
@@ -303,21 +320,21 @@ func (m *Manifest) Validate() error {
 		return manifestErr("missing chain ID or directory name")
 	}
 
-	seen := make(map[string]bool, len(m.Entries))
+	// One map finds both exact duplicates and paths that differ only in
+	// case; at 1,000,000 entries a second map would cost tens of MB.
 	seenFolded := make(map[string]string, len(m.Entries))
 	dirs := make(map[string]bool)
 	for _, e := range m.Entries {
 		if err := ValidatePath(e.Path); err != nil {
 			return err
 		}
-		if seen[e.Path] {
-			return manifestErr("duplicate path %q", e.Path)
-		}
 		folded := strings.ToLower(e.Path)
 		if other, ok := seenFolded[folded]; ok {
+			if other == e.Path {
+				return manifestErr("duplicate path %q", e.Path)
+			}
 			return manifestErr("paths %q and %q differ only in case and would collide on Windows", other, e.Path)
 		}
-		seen[e.Path] = true
 		seenFolded[folded] = e.Path
 
 		if parent := path.Dir(e.Path); parent != "." && !dirs[parent] {

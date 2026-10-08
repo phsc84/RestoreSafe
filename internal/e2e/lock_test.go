@@ -1,14 +1,15 @@
 package e2e
 
 import (
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/workflow/backup"
-	"RestoreSafe/internal/workflow/restore"
-	"RestoreSafe/internal/workflow/verify"
 	"context"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
 )
 
 // A restore or verification fails before its first question while another

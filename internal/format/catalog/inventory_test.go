@@ -1,12 +1,13 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func writePart(t *testing.T, dir string, e naming.BackupEntry, seq int) string {

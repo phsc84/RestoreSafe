@@ -6,8 +6,6 @@
 package main
 
 import (
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/security/yubikey"
 	"bufio"
 	"errors"
 	"fmt"
@@ -15,6 +13,9 @@ import (
 	"sort"
 	"strings"
 	"unsafe"
+
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"

@@ -1,9 +1,10 @@
 package catalog
 
 import (
-	"RestoreSafe/internal/format/naming"
 	"sort"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 // BackupRunSummary groups the complete backup sets written by one backup run.

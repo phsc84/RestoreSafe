@@ -9,7 +9,7 @@ NR == FNR {
 	next
 }
 /coverage: [0-9.]+% of statements/ {
-	pkg = $2; sub(/^RestoreSafe\//, "", pkg)
+	pkg = $2; sub(/^github\.com\/phsc84\/restoresafe\//, "", pkg)
 	match($0, /coverage: [0-9.]+%/)
 	cov[pkg] = substr($0, RSTART + 10, RLENGTH - 11) + 0
 }

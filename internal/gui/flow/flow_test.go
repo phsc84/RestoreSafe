@@ -1,11 +1,12 @@
 package flow
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // fakeDialogs answers the questions as the test scripts them.
@@ -35,7 +36,7 @@ func (f *fakeDialogs) ConfirmStart(string, func(bool, error))   {}
 func (f *fakeDialogs) ChooseUnlockMethod(_ interact.UnlockChoice, answer func(bool, []byte, error)) {
 	answer(f.recovery, f.choiceSecret, nil)
 }
-func (f *fakeDialogs) RecoveryCode(string, func(bool))                 {}
+func (f *fakeDialogs) RecoveryCode([]byte, func(bool))                 {}
 func (f *fakeDialogs) SpareYubiKey(interact.SpareQuestion, func(bool)) {}
 func (f *fakeDialogs) Password(q interact.SecretQuestion, answer func([]byte, error)) {
 	f.questions = append(f.questions, q)

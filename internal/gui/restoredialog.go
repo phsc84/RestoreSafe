@@ -1,16 +1,17 @@
 package gui
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Control IDs of the Restore window.

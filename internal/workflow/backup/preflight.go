@@ -1,18 +1,19 @@
 package backup
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/archive"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/plan"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/archive"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // backupPreflightReport describes what the backup will do: each source

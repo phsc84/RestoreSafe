@@ -1,14 +1,15 @@
 package health
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/interact"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestCheckConfigFileHealthOKForExistingFile(t *testing.T) {

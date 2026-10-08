@@ -3,22 +3,23 @@
 package verify
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/problem"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/restorepoint"
-	"RestoreSafe/internal/workflow/unlock"
 	"context"
 	"fmt"
 	"strings"
 	"sync/atomic"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
+	"github.com/phsc84/restoresafe/internal/workflow/restorepoint"
+	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
 // Request is what the user chose to verify.

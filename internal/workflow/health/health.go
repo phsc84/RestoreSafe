@@ -4,16 +4,17 @@
 package health
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/fsx"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
-	"RestoreSafe/internal/workflow/plan"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 // Injectable for tests.

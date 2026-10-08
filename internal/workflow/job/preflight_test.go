@@ -1,10 +1,11 @@
 package job
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestValidatePreflightItems_NoFailures(t *testing.T) {

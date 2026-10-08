@@ -1,11 +1,12 @@
 package flow
 
 import (
-	"RestoreSafe/internal/workflow/interact"
 	"errors"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // uiThread simulates the UI thread: it handles the bridge's notifications

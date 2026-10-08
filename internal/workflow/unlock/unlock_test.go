@@ -1,18 +1,19 @@
 package unlock
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/security/recovery"
-	"RestoreSafe/internal/security/yubikey"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/interact/interacttest"
 	"bytes"
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/recovery"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
 type unlockStub struct {
@@ -177,11 +178,11 @@ func keySetWithRecovery(t *testing.T) (*container.KeySet, []byte, recovery.Code)
 func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
 	ks, master, code := keySetWithRecovery(t)
 	other, _ := recovery.Generate()
-	typo := []byte(code.String())
+	typo := code.Display()
 	typo[0] ^= 0x01
 
 	// A typo and a code of other keys are rejected before the right code works.
-	stub := stubUnlockInputs(t, []string{string(typo), other.String(), strings.ToLower(code.String())}, 0, nil, "r")
+	stub := stubUnlockInputs(t, []string{string(typo), string(other.Display()), strings.ToLower(string(code.Display()))}, 0, nil, "r")
 	got, out, err := stub.unlock(t, ks, Options{Action: "restore", AllowRecovery: true})
 	if err != nil || !bytes.Equal(got, master) {
 		t.Fatalf("recovery unlock failed: %v (output %q)", err, out)

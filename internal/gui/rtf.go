@@ -1,11 +1,12 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Colors of the report view (RTF color table indexes). The marker symbol

@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // Scale converts device-independent pixels (DIP, 1/96 inch) to pixels at a
 // DPI; its value is the DPI.

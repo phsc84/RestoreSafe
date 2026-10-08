@@ -1,11 +1,12 @@
 package job
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
 )
 
 func TestSelectSets(t *testing.T) {

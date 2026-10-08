@@ -1,9 +1,10 @@
 package interact
 
 import (
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"errors"
+
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 // Errors of ReadPasswordConfirmed that the user can correct by

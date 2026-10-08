@@ -1,8 +1,9 @@
 package widget
 
 import (
-	"RestoreSafe/internal/gui/win32"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 func TestScale(t *testing.T) {

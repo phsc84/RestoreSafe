@@ -1,12 +1,6 @@
 package setwriter
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/archive"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/security/cryptox"
 	"bytes"
 	"context"
 	"io"
@@ -14,6 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/archive"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
 var fastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
@@ -138,5 +139,38 @@ func TestFinalizePartsRefusesToOverwrite(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(final); string(data) != "existing" {
 		t.Fatal("existing part was modified")
+	}
+}
+
+// TestWriteFailingInASecondPartRemovesAllParts stands for a full disk: the
+// write of part 2 fails after part 1 was written. Here part 2 cannot be
+// created, as a folder of its name is in the way; a full disk fails the same
+// writer. No part, temporary or final, may remain.
+func TestWriteFailingInASecondPartRemovesAllParts(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "big.bin"), bytes.Repeat([]byte("restoresafe"), 200_000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backupDir := t.TempDir()
+	entry := naming.BackupEntry{DirectoryName: "x", ChainID: "ABC123", Date: "2026-09-26"}
+	blocker := naming.PartFileName(backupDir, entry, 2) + naming.TempSuffix
+	if err := os.Mkdir(blocker, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	ks, master := newKeySet(t)
+	_, err := Write(context.Background(), Params{
+		SourceDir: src, OutputDir: backupDir, Entry: entry, RunID: "ABC123",
+		KeySet: *ks, Master: master, SplitSizeBytes: 1024 * 1024,
+	})
+	if err == nil {
+		t.Fatal("expected the write of part 2 to fail")
+	}
+	entries, _ := os.ReadDir(backupDir)
+	for _, e := range entries {
+		if e.Name() != filepath.Base(blocker) {
+			t.Errorf("left behind after the failed write: %s", e.Name())
+		}
 	}
 }

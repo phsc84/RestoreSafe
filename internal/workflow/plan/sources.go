@@ -1,12 +1,13 @@
 package plan
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/fsx"
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/fsx"
 )
 
 // Source is one configured source directory, resolved and checked.

@@ -1,14 +1,15 @@
 package health
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/workflow/interact"
-	"RestoreSafe/internal/workflow/job"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
 )
 
 // problems returns the errors and warnings of the snapshot, the most urgent

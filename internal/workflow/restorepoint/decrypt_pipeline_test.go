@@ -1,16 +1,17 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/testutil"
 	"context"
 	"errors"
 	"io"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func openFixtureSet(t *testing.T) (*testutil.BackupFixture, *container.Set, *container.SectionKeys) {

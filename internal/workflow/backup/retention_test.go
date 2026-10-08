@@ -1,13 +1,6 @@
 package backup
 
 import (
-	"RestoreSafe/internal/config"
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
-	"RestoreSafe/internal/workflow/plan"
 	"errors"
 	"fmt"
 	"os"
@@ -15,6 +8,14 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 type retentionEnv struct {

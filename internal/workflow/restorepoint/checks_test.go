@@ -1,16 +1,17 @@
 package restorepoint
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/manifest"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/security/cryptox"
-	"RestoreSafe/internal/testutil"
 	"context"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func TestVerifyOwnDataChecksTheSetsOwnFiles(t *testing.T) {

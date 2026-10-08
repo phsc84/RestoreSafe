@@ -1,6 +1,6 @@
 package widget
 
-import "RestoreSafe/internal/gui/win32"
+import "github.com/phsc84/restoresafe/internal/gui/win32"
 
 // badgePadding is the space left and right of a badge's text, in DIPs.
 const badgePadding = 7

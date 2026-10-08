@@ -3,12 +3,14 @@
 package archive
 
 import (
-	"RestoreSafe/internal/format/manifest"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"unsafe"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/problem"
 
 	"golang.org/x/sys/windows"
 )
@@ -172,4 +174,23 @@ func extendedPath(path string) string {
 		return `\\?\UNC\` + path[2:]
 	}
 	return `\\?\` + path
+}
+
+// checkNotReparsePoint refuses a folder of the restore destination that is a
+// reparse point (a junction or a symbolic link): another process could swap
+// a folder RestoreSafe created for one, to send the restored files
+// elsewhere. GetFileAttributes does not follow the last path element.
+func checkNotReparsePoint(dir string) error {
+	p, err := windows.UTF16PtrFromString(extendedPath(dir))
+	if err != nil {
+		return err
+	}
+	attrs, err := windows.GetFileAttributes(p)
+	if err != nil {
+		return problem.Errorf("Failed to check the restore folder %q: %w.", dir, err).WithRemedy("Check read permissions in the restore destination.")
+	}
+	if attrs&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+		return problem.Errorf("The restore folder %q is a link to another place (a junction or symbolic link).", dir).WithRemedy("Restore into a normal folder, and check which program changed this one.")
+	}
+	return nil
 }

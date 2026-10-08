@@ -3,11 +3,12 @@
 package interacttest
 
 import (
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/workflow/interact"
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Script is a text UI for tests: questions are text prompts whose answers
@@ -189,7 +190,7 @@ func (s *Script) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 }
 
 // ShowRecoveryCode prints the recovery code with instructions for keeping it.
-func (s *Script) ShowRecoveryCode(code string) error {
+func (s *Script) ShowRecoveryCode(code []byte) error {
 	s.println()
 	s.println("Your recovery code:")
 	s.println()

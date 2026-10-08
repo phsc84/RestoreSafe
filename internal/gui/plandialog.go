@@ -1,11 +1,12 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
-	"RestoreSafe/internal/workflow/interact"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 // Control IDs of the plan dialog.

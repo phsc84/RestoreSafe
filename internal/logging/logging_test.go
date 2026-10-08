@@ -1,13 +1,14 @@
 package logging_test
 
 import (
-	"RestoreSafe/internal/buildinfo"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/phsc84/restoresafe/internal/buildinfo"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
 func TestNewConsoleLogger(t *testing.T) {

@@ -1,8 +1,9 @@
 package widget
 
 import (
-	"RestoreSafe/internal/gui/win32"
 	"fmt"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // StepState is where a step of a trail is.

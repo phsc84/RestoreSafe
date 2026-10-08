@@ -1,12 +1,13 @@
 package gui
 
 import (
-	"RestoreSafe/internal/gui/flow"
-	"RestoreSafe/internal/gui/view"
-	"RestoreSafe/internal/gui/widget"
-	"RestoreSafe/internal/gui/win32"
 	"slices"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
 // Control IDs of the run card.

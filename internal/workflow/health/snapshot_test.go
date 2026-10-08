@@ -1,12 +1,6 @@
 package health
 
 import (
-	"RestoreSafe/internal/format/catalog"
-	"RestoreSafe/internal/format/container"
-	"RestoreSafe/internal/format/naming"
-	"RestoreSafe/internal/logging"
-	"RestoreSafe/internal/testutil/scenario"
-	"RestoreSafe/internal/workflow/interact"
 	"context"
 	"errors"
 	"io"
@@ -14,6 +8,13 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil/scenario"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func snapshotOf(t *testing.T, s scenario.Scenario) Snapshot {
@@ -266,4 +267,21 @@ func TestBaseMissingSaysWhyTheFullCantBeUsed(t *testing.T) {
 	if bases := baseMissing(infos[:1]); len(bases) != 1 || bases[0].Set != (naming.BackupEntry{}) {
 		t.Fatalf("base problems %+v", bases)
 	}
+}
+
+// TestBaseMissingNextBackupIsFull: when the full backup of a chain is gone,
+// the next backup of the folder writes a new full backup instead of a
+// differential that no restore could use.
+func TestBaseMissingNextBackupIsFull(t *testing.T) {
+	t.Parallel()
+	s := snapshotOf(t, scenario.Build(t, scenario.BaseMissing))
+	for _, f := range s.Folders {
+		if f.BackupName == "Docs" {
+			if f.Next == nil || f.Next.IsDiff() {
+				t.Fatalf("the next backup of Docs must be a full backup: %+v", f.Next)
+			}
+			return
+		}
+	}
+	t.Fatalf("no folder Docs in %+v", s.Folders)
 }
