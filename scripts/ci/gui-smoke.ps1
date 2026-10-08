@@ -56,10 +56,37 @@ argon2:
   threads: 1
 "@ | Set-Content -Encoding utf8 $config
 
+# Diagnostics when the window doesn't show: the session, the process, its
+# windows, and a screenshot of the whole desktop.
+function Show-Diagnostics {
+  . (Join-Path $gui "GuiDriver.ps1")
+  Write-Host "Session $((Get-Process -Id $PID).SessionId), user interactive: $([Environment]::UserInteractive)"
+  $p = Start-Process $exe -ArgumentList "-config=`"$config`"" -PassThru
+  Start-Sleep -Seconds 15
+  $p.Refresh()
+  if ($p.HasExited) { Write-Host "RestoreSafe exited with code $($p.ExitCode)" }
+  else {
+    Write-Host "RestoreSafe runs; main window '$($p.MainWindowTitle)' $($p.MainWindowHandle)"
+    foreach ($h in [U]::TopLevel($p.Id)) { Write-Host "  window class $([U]::Class($h)), text '$([U]::Text($h))'" }
+    Stop-Process -Id $p.Id -Force
+  }
+  Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+  $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+  Write-Host "Screen $($b.Width) x $($b.Height)"
+  $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+  [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+  New-Item -ItemType Directory -Force (Join-Path $Work "shots") | Out-Null
+  $bmp.Save((Join-Path $Work "shots\desktop.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+}
+
 $gui = Join-Path $repo "scripts\gui-test"
 & (Join-Path $gui "Smoke-BackupRestore.ps1") -Exe $exe -Config $config -Password "correct horse battery" `
   -RestoreTo (Join-Path $Work "restored") -ScreenshotDir (Join-Path $Work "shots")
-if ($LASTEXITCODE -ne 0) { Write-Host "Smoke-BackupRestore failed"; exit 1 }
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "Smoke-BackupRestore failed"
+  try { Show-Diagnostics } catch { Write-Host "Diagnostics failed: $_" }
+  exit 1
+}
 & (Join-Path $gui "Check-States.ps1") -Exe $exe -Config $config -Out (Join-Path $Work "states")
 if ($LASTEXITCODE -ne 0) { Write-Host "Check-States failed"; exit 1 }
 exit 0
