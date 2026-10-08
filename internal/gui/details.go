@@ -9,8 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/sys/windows"
 )
 
 // detailsDialog shows a report ("Check details", later "Show details") in a
@@ -33,11 +31,6 @@ const (
 	idViewerAll = 101 + iota
 	idViewerWarnings
 	idViewerOpen
-)
-
-var (
-	activeDetails      *detailsDialog
-	detailsClassExists bool
 )
 
 const detailsClass = "RestoreSafeDetails"
@@ -94,18 +87,8 @@ func (a *app) showViewer(owner win32.HWND, title string, fill func(re win32.HWND
 // openViewer shows the viewer; refilter, when set, adds the log filter, and
 // open the button that opens the file in an editor.
 func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND), refilter func(re win32.HWND, f view.LogFilter), open func()) {
-	if !detailsClassExists {
-		wc := win32.WndClassEx{
-			WndProc:    windows.NewCallback(detailsProc),
-			Instance:   win32.ModuleHandle(),
-			Cursor:     win32.ArrowCursor(),
-			Background: win32.SysColorBrush(win32.COLOR_WINDOW),
-			ClassName:  win32.UTF16(detailsClass),
-		}
-		if err := win32.RegisterClass(&wc); err != nil {
-			return
-		}
-		detailsClassExists = true
+	if err := registerClass(win32.WndClassEx{}, detailsClass); err != nil {
+		return
 	}
 	s := widget.Scale(a.dpi)
 	const style = win32.WS_POPUP | win32.WS_CAPTION | win32.WS_SYSMENU | win32.WS_THICKFRAME
@@ -147,7 +130,7 @@ func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND
 	win32.SendMessage(d.report, win32.EM_SETZOOM, uintptr(a.dpi), uintptr(win32.DpiForSystem()))
 	fill(d.report)
 	win32.SetAccessibleName(d.report, title)
-	activeDetails = d
+	handlers[hwnd] = d
 	d.layout(s)
 
 	win32.Enable(owner, false)
@@ -169,7 +152,7 @@ func (a *app) openViewer(owner win32.HWND, title string, fill func(re win32.HWND
 	win32.Enable(owner, true)
 	win32.SetForeground(owner)
 	win32.DestroyWindow(hwnd)
-	activeDetails = nil
+	delete(handlers, hwnd)
 }
 
 func (d *detailsDialog) layout(s widget.Scale) {
@@ -194,11 +177,8 @@ func (d *detailsDialog) layout(s widget.Scale) {
 	win32.SetWindowPos(d.report, area.Rest())
 }
 
-func detailsProc(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
-	d := activeDetails
-	if d == nil || d.hwnd != hwnd {
-		return win32.DefWindowProc(hwnd, msg, wparam, lparam)
-	}
+// message handles the messages of the viewer window.
+func (d *detailsDialog) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintptr {
 	switch msg {
 	case win32.WM_COMMAND:
 		if id := win32.LoWord(wparam); id == win32.IDOK || id == win32.IDCANCEL {

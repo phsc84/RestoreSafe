@@ -44,8 +44,6 @@ type credentialDialog struct {
 	linked bool
 }
 
-var activeCredential *credentialDialog
-
 // credentialAnswer is how the user closed a credential dialog.
 type credentialAnswer struct {
 	// values are the fields, read when ok; the caller zeroes masked ones.
@@ -60,7 +58,7 @@ type credentialAnswer struct {
 func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	owner := a.dialogOwner()
 	t := a.theme
-	if dw := dialogWindows[owner]; dw != nil {
+	if dw, ok := handlers[owner].(*dialogWindow); ok {
 		t = dw.theme // the Restore window, at its scale
 	}
 	win, err := newDialogWindow(t, owner, credentialClass, v.Title)
@@ -71,7 +69,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	s := t.Scale
 	pal := t.Palette
 	d := &credentialDialog{win: win, fields: v.Fields, open: true}
-	activeCredential = d
+	a.credential = d
 	var copyButton win32.HWND
 	win.onCommand = func(id uint16) {
 		switch id {
@@ -199,7 +197,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	win32.Enable(owner, true)
 	win.destroy()
 	win32.DeleteObject(d.codeFont)
-	activeCredential = nil
+	a.credential = nil
 	a.modal = 0
 	return credentialAnswer{values: d.values, ok: d.ok, link: d.linked}
 }
@@ -251,7 +249,7 @@ func (d *credentialDialog) close(ok bool) {
 // closeModal cancels the open credential dialog, if any (e.g. the
 // operation was cancelled while it waited for an answer).
 func (a *app) closeModal() {
-	if d := activeCredential; d != nil {
+	if d := a.credential; d != nil {
 		d.close(false)
 	}
 }
