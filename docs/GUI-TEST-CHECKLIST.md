@@ -153,8 +153,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | Task | Result | Notes |
 |---|---|---|
-| 1. Are your folders protected? | Open | |
-| 2. Back up; what type does Documents get, and why? | Open | |
-| 3. Documents as of last Sunday into D:\Restore | Open | |
-| 4. One file from Pictures | Open | |
-| 5. What's wrong (`BaseMissing`), what to do? | Open | |
+| 1. Are your folders protected? | Passed | Session held successfully, reported 2026-10-09. |
+| 2. Back up; what type does Documents get, and why? | Passed | |
+| 3. Documents as of last Sunday into D:\Restore | Passed | |
+| 4. One file from Pictures | Passed | |
+| 5. What's wrong (`BaseMissing`), what to do? | Passed | |

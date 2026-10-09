@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-9 done; phase 10 done except the manual checklist run, the usability session and the merge into `v2` |
+| Status | Agreed 2026-09-30; phases 0-9 done; phase 10 done except the manual checklist run. The work is on `v2`. |
 | Implements | [SPEC-gui.md](SPEC-gui.md) |
-| Branch | `gui-redesign`, from `v2` after the pending work is committed; merged back into `v2` before the 2.0.0 release |
+| Branch | `gui-redesign`, from `v2` after the pending work is committed; the work is now on `v2` |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
 
 ## 1. Goals
@@ -250,7 +250,8 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **10c:** pre-run of `docs/GUI-TEST-CHECKLIST.md` at 150 % (scripts and scripted walks), with a list of known differences from the spec to accept or change.
 - **10d:** README (usage, screenshots from a neutral demo setup), CHANGELOG, config sample.
 - **10e:** the known differences decided and carried out (6g).
-- Open: when the GUI refinement is finished, recreate all screenshots (README, `docs/images`) and all ASCII mockups in `docs/SPEC-gui.md` from the final UI; until then they may lag behind the code (e.g. the Overview's "Last backup" mockup still shows a duration). The manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast), the usability session, then the merge into `v2`.
+- **10f:** the usability session, held successfully. The screenshots (README, `docs/images`) and the wireframes in `docs/SPEC-gui.md` recreated from the final UI (2026-10-09).
+- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast).
 
 ## 6g. Known differences (decided 2026-10-06)
 

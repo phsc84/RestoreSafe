@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); implemented on branch `gui-redesign`. Open before the release: the manual checklist run, the usability session, and the merge into `v2` ([PLAN-gui-redesign.md](PLAN-gui-redesign.md)). |
+| Status | Specified 2026-09-30 (status-first redesign); implemented on `v2`. Open before the release: the manual checklist run ([PLAN-gui-redesign.md](PLAN-gui-redesign.md)). |
 | Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
 | Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
@@ -52,7 +52,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 | Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Restore backup (7), Settings (10) |
 | Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Backup plan (6), Restore backup (7) |
 | Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Create backup (5) |
-| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero and Check details (5) |
+| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero (5), problem lines on Restore backup (7), folder and backup directory status on Settings (10) |
 | Exclude patterns (global), `on_unreadable_file`, split size, Argon2 parameters, log level | Settings (10) |
 | One log file per run in the backup directory; restore and verify append to the log of the run they read | Log window of a run (BK-5) |
 | Several configurations via `-config` | Title bar, Settings (10) |
@@ -90,7 +90,7 @@ This document specifies RestoreSafe's window application: a status-first interfa
 - Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
 - Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings**. The sidebar names the pages by their action. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
 - Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons, as today.
-- Status bar: current activity on the left ("Ready", "Checking…", "Backing up Documents · 62%"). On the right: the backup directory's free space on Create backup and Settings; the number of runs and total size on Restore backup.
+- Status bar: a strip on the secondary surface without text. What is going on shows on the page itself (hero, progress card, Refresh disabled while a check runs); the free space is on the backup directory cards, the runs on Restore backup.
 - While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
 
 ### 3.3 Visual language
@@ -113,7 +113,7 @@ The implementation may use the user's Windows accent color instead of the accent
 
 | Element | Size at 96 dpi |
 |---|---|
-| Body text | 13 px regular. Secondary and table text 12 px. Captions and status bar 11 px. |
+| Body text | 13 px regular. Secondary and table text 12 px. Captions 11 px. |
 | Hero title, page title | 20 px and 18 px, semibold |
 | Spacing grid | 4 px. Content padding 16 px top and bottom, 18 px left and right. Gap between cards 10 to 12 px. |
 | Corner radius | Cards 8 px, controls and badges 4 px |
@@ -135,7 +135,7 @@ The implementation may use the user's Windows accent color instead of the accent
 | Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
 | Password fields | Edit with `ES_PASSWORD`, read and wiped as in 13.1 |
 | Log window | Read-only rich edit (`MSFTEDIT_CLASS`, as today) with a severity filter |
-| Health check details | The existing report view (rich edit) in a dialog |
+| Show details (plans, results) | The existing report view (rich edit) in a dialog |
 | Backup plan, Restore window | Modal dialogs that close on Start, no property sheets |
 | Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` (existing) |
 
@@ -153,7 +153,7 @@ The hero renders one state. Priority: Running, then Error, then Warning, then Pr
 
 **Not a warning:** a YubiKey that isn't connected (people keep it on their key ring; it's shown on the Keys card and asked for when needed), 1.x backups and leftover `.tmp` files (shown as information lines on Restore backup), and "the next backup creates new keys" (shown on the Keys card and in the backup plan). Amber that can't be cleared by the user trains them to ignore amber.
 
-If several Error or Warning triggers apply, the hero shows the most urgent one (order as listed) with its fix action. The sub line ends with "and N more problems"; "Check details" lists all of them.
+If several Error or Warning triggers apply, the hero shows the most urgent one (order as listed) with its fix action. The sub line ends with "and N more problems"; the next one takes the hero once the first is fixed. Problems of existing backups are listed on Restore backup (BK-6), the state of each folder and of the backup directory on Settings (ST-3, ST-4).
 
 The hero on Create backup leaves out the problems of existing backups: a missing or incomplete full backup, an incomplete set, and an incomplete set newer than the newest complete one. They don't keep a backup from running, and the Restore backup page lists them (BK-6). Without other problems, the hero is neutral: "Ready to back up" with the facts of Protected and **Back up now…**. It isn't Protected, since a backup can't be restored.
 
@@ -186,31 +186,38 @@ The plan comes from the workflow (`ShowBackupPlan`, `ShowRestorePlan`, `ShowVeri
 
 Purpose: answer "are my folders safe?" and start a backup.
 
-**Figure 5.1: Create backup, state Protected.** The window frame shown here applies to all main-window wireframes.
+**Figure 5.1: Create backup, state Protected.** The window frame shown here applies to all main-window wireframes; the strip at the bottom is the status bar. `════` is a splitter.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ RestoreSafe 2.0.0                                                                      _    [ ]    x │
-├──────────────┬───────────────────────────────────────────────────────────────────────────────────────┤
-│              │ (ok)  Your folders are protected                                  [ > Back up now... ] │
-│ > Overview   │       3 folders · Last backup today, 09:12 · Check details                            │
-│   Backups    │                                                                                       │
-│   Settings   │ ┌─ Folders (3) ───────────────────────── Details ┐ ┌─ \\NAS\Backup\RestoreSafe ──────┐ │
-│              │ │ Documents   today, 09:12   DIFF 3   next: DIFF │ │ 530 of 900 GB used              │ │
-│              │ │ Projects    today, 09:12   DIFF 3   next: DIFF │ │ [#######=============---------] │ │
-│              │ │ Pictures    today, 09:12   DIFF 6   next: FULL │ │ # Backups 186 GB  = Other 344 GB│ │
-│              │ └────────────────────────────────────────────────┘ │ - Free 370 GB                   │ │
-│              │                                                    │ A full backup of all folders    │ │
-│              │                                                    │ needs about 96 GB               │ │
-│              │                                                    └─────────────────────────────────┘ │
-│              │ ┌─ Last backup ────────────────────── Show backups ┐ ┌─ Keys ─────────────────────────┐ │
-│              │ │ (ok) Today, 09:12 · 3 folders · 3.4 GB · 4 min   │ │ Password + YubiKey             │ │
-│              │ │      Documents  DIFF 3  based on FULL of 1 Sep   │ │ 2 YubiKeys · recovery code     │ │
-│              │ │      Projects   DIFF 3  based on FULL of 1 Sep   │ │ Created 1 Sep 2026             │ │
-│              │ │      Pictures   DIFF 6  based on FULL of 3 Aug   │ │ (i) YubiKey not connected      │ │
-│              │ └──────────────────────────────────────────────────┘ └────────────────────────────────┘ │
-├──────────────┴───────────────────────────────────────────────────────────────────────────────────────┤
-│ Ready                                                                  370 GB free in backup directory │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ Create backup  [ Refresh ]                                                        │
+│ > Create backup  │                                                                                   │
+│   Restore backup │ (ok)  Your folders are protected                               [ Back up now... ] │
+│   Settings       │       3 folders · Last backup today, 09:12                                        │
+│                  │                                                                                   │
+│                  │ ┌─ Folders to back up ──────────────────────────────────────────────────────────┐ │
+│                  │ │ Folder                                      Last backup           Next backup │ │
+│                  │ ├───────────────────────────────────────────────────────────────────────────────┤ │
+│                  │ │ Documents                                   today, 09:12          DIFF        │ │
+│                  │ │ Projects                                    today, 09:12          DIFF        │ │
+│                  │ │ Pictures                                    today, 09:12          FULL        │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │                                       ════                                        │
+│                  │ ┌─ Backup directory ────────────────────────────────────────────────────────────┐ │
+│                  │ │ \\NAS\Backup\RestoreSafe                                530 GB of 900 GB used │ │
+│                  │ │ [###############==========================----------------------------------] │ │
+│                  │ │ Backups 186 GB             Other 344 GB               Free 370 GB             │ │
+│                  │ │                                                                               │ │
+│                  │ │ A full backup of all folders needs about 96 GB                                │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ Keys ────────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ Password + YubiKey                                  (i) YubiKey not connected │ │
+│                  │ │ Created 1 Sep · 2 YubiKeys · recovery code                                    │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -219,71 +226,80 @@ Purpose: answer "are my folders safe?" and start a backup.
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ RestoreSafe 2.0.0                                                                      _    [ ]    x │
-├──────────────┬───────────────────────────────────────────────────────────────────────────────────────┤
-│              │ ┌───────────────────────────────────────────────────────────────────────────────────┐ │
-│ > Overview   │ │ Backing up                                                             [ Cancel ] │ │
-│   Backups    │ │                                                                                   │ │
-│   Settings   │ │ v Unlock keys  >  [Back up 2 of 3]  >  Verify  >  Clean up                        │ │
-│              │ │ Projects · differential                                                           │ │
-│              │ │ [################################################-----------------------------]   │ │
-│              │ │ 0.7 of about 1.1 GB · 86 MB/s                                                     │ │
-│              │ │                                                                        Show log   │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-│              │                                                                                       │
-│              │ ┌─ Folders (3) ──────────────────────────────────┐ ┌─ \\NAS\Backup\RestoreSafe ──────┐ │
-│              │ │ (ok) Documents   DIFF 4   Done, 0.2 GB         │ │ ...                             │ │
-│              │ │ ( )  Projects    DIFF 4   Backing up, 62%      │ │                                 │ │
-│              │ │ ( )  Pictures    FULL     Waiting              │ │                                 │ │
-│              │ └────────────────────────────────────────────────┘ └─────────────────────────────────┘ │
-├──────────────┴───────────────────────────────────────────────────────────────────────────────────────┤
-│ Backing up Projects · 62%                                              370 GB free in backup directory │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ Create backup  [ Refresh ]                                                        │
+│ > Create backup  │                                                                                   │
+│   Restore backup │ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│   Settings       │ │ Backing up                                                         [ Cancel ] │ │
+│                  │ │                                                                               │ │
+│                  │ │ v Unlock keys  >  [Back up 2 of 3]  >  Verify  >  Clean up                    │ │
+│                  │ │ Projects · differential 4                                                     │ │
+│                  │ │ [###############################################----------------------------] │ │
+│                  │ │ 0.7 GB of 1.1 GB · 86 MB/s                                           Show log │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ Folders to back up ──────────────────────────────────────────────────────────┐ │
+│                  │ │ Folder                    Type        Status                                  │ │
+│                  │ ├───────────────────────────────────────────────────────────────────────────────┤ │
+│                  │ │ Documents                 DIFF 4      Done, 210 MB                            │ │
+│                  │ │ Projects                  DIFF 4      Backing up, 62%                         │ │
+│                  │ │ Pictures                  FULL        Waiting                                 │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │                                       ════                                        │
+│                  │ ┌─ Backup directory ────────────────────────────────────────────────────────────┐ │
+│                  │ │ ...                                                                           │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 5.3: Hero variants.**
+**Figure 5.3: Hero variants.** The hero has no border; the boxes only separate the variants.
 
 ```text
-┌─ Warning: overdue ────────────────────────────────────────────────────────────────┐
-│ (!)  Your last backup is 9 days old                           [ > Back up now... ] │
-│      Your reminder limit is 7 days · Last backup Mon, 21 Sep, 18:20               │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌─ Warning: skipped files ──────────────────────────────────────────────────────────┐
-│ (!)  2 files in Documents weren't backed up                   [ > Back up now... ] │
-│      They couldn't be read. Older backups of Documents are kept until a backup    │
-│      without skipped files succeeds. · Check details                              │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌─ Error: backup directory ─────────────────────────────────────────────────────────┐
-│ (x)  The backup directory isn't reachable                       [ Check again ]   │
-│      \\NAS\Backup\RestoreSafe didn't respond. Check the network connection.       │
-│      · Show details                                                               │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌─ Error: full backup missing ──────────────────────────────────────────────────────┐
-│ (x)  4 backups of Documents can't be restored                [ Show backups ]     │
-│      Their full backup of 1 Sep (chain ABC123) is missing or incomplete.          │
-│      Restore its FULL files from your copy, or delete the DIFF files of ABC123.   │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌─ Error: source folder ────────────────────────────────────────────────────────────┐
-│ (x)  E:\Photos can't be found                                    [ Check again ]  │
-│      Connect the drive, or remove the folder from config.yaml.  [ Edit config ]   │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌─ Empty ───────────────────────────────────────────────────────────────────────────┐
-│ ( )  Create your first backup                                 [ > Back up now... ] │
-│      3 folders to \\NAS\Backup\RestoreSafe. RestoreSafe creates your keys first.  │
-└───────────────────────────────────────────────────────────────────────────────────┘
+┌─ Warning: overdue ──────────────────────────────────────────────────────────────────┐
+│ (!)  Your last backup is 9 days old                              [ Back up now... ] │
+│      Your reminder limit is 7 days · Last backup Mon 21 Sep, 18:20                  │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Warning: skipped files ────────────────────────────────────────────────────────────┐
+│ (!)  2 files in Documents weren't backed up                      [ Back up now... ] │
+│      They couldn't be read. Older backups of Documents are kept until a backup      │
+│      without skipped files succeeds.                                                │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: backup directory ───────────────────────────────────────────────────────────┐
+│ (x)  The backup directory isn't reachable                           [ Check again ] │
+│      \\NAS\Backup\RestoreSafe doesn't respond. Check the drive or the network       │
+│      connection.                                                                    │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: source folder ──────────────────────────────────────────────────────────────┐
+│ (x)  E:\Photos can't be found                      [ Check again ]  [ Edit config ] │
+│      Connect the drive, or remove the folder from config.yaml.                      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: verification found damage ──────────────────────────────────────────────────┐
+│ (x)  A backup of Documents is damaged                            [ Back up now... ] │
+│      The verification found an error. Create a new backup, and don't rely on the    │
+│      damaged one.                                                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: a backup can't be restored (Restore backup lists it) ─────────────────────┐
+│ ( )  Ready to back up                                            [ Back up now... ] │
+│      3 folders · Last backup today, 09:12                                           │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Empty ─────────────────────────────────────────────────────────────────────────────┐
+│ ( )  Create your first backup                                    [ Back up now... ] │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Requirements
 
 | ID | Requirement |
 |---|---|
-| OV-1 | The hero shows the state from 3.5. The title is a short statement; the sub line carries facts and ends with the link "Check details", which opens the full health check report (the existing report view) in a dialog with **Check again** and **Close**. Each Warning and Error variant offers exactly one primary fix action; Error may add one secondary action. |
+| OV-1 | The hero shows the state from 3.5. The title is a short statement; the sub line carries facts (Empty has none). The hero has no link to the full health check report: it names the most urgent problem and its fix, and the pages show the rest (3.5). Each Warning and Error variant offers exactly one primary fix action; Error may add one secondary action. |
 | OV-2 | "Back up now…" opens the backup plan (6.1). When the health check blocks a backup (`health.Result.BlocksBackup`), the hero names the reason and offers its fix actions (OV-1) instead of **Back up now…**, and `Ctrl+B` does nothing: a disabled button next to them would be a third action that does nothing. There is no split button: the full-backup and new-keys overrides are offered in the plan, next to the reason for the planned type. |
-| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (2.0 spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. "Details" opens Settings at the folder list. |
+| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (2.0 spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. The paths and their state are on Settings (ST-3). |
 | OV-4 | The backup directory card shows the path, a segmented bar (backups, other data, free) and a legend. Backups is the size of all 2.0 set parts in the directory; Other is used space minus Backups; Free comes from the file system. Each segment's tooltip shows exact bytes. The last line estimates a new full backup of all folders as the sum of each folder's newest full backup (trailer data length). |
 | OV-5 | The page shows only what a backup needs: the type, size and base of existing sets, and the size of runs, are on Restore backup. Below the folders, the Folders card says when the newest backup failed or was cancelled ("The backup of today, 09:12 failed; the Restore backup page has its log."), which the folders' dates alone don't show. |
 | OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode`, spare YubiKey, recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys." |
 | OV-7 | The page starts with its title "Create backup", like Restore backup; the hero or the progress and result cards sit below it. While a backup runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. A restore or verification shows these cards on the Restore backup page instead (BK-8, RW-9); meanwhile the hero stays, with "Back up now…" disabled. |
-| OV-8 | The health check runs at start, after each operation, on **Check again**, on **Refresh** (next to the page title on Create backup and Restore backup, centered on it; disabled while a check or an operation runs), on `F5`, and when the window is activated and the last check is older than 5 minutes. It runs on a worker goroutine; the hero keeps the last state and shows "Checking…" in its sub line meanwhile. A check never blocks the UI thread, even when the backup directory is an unreachable network share. |
+| OV-8 | The health check runs at start, after each operation, on **Check again**, on **Refresh** (next to the page title on Create backup and Restore backup, centered on it; disabled while a check or an operation runs), on `F5`, and when the window is activated and the last check is older than 5 minutes. It runs on a worker goroutine; the hero keeps the last state meanwhile, and Refresh is disabled. Until the first check has finished, the hero reads "Checking your backups…". A check never blocks the UI thread, even when the backup directory is an unreachable network share. |
 
 ## 6. Backup plan and run
 
@@ -294,30 +310,30 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 **Figure 6.1: Backup plan.**
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Back up                                                                [x] │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Back up 3 folders to \\NAS\Backup\RestoreSafe                              │
-│                                                                            │
-│ ┌────────────────────────────────────────────────────────────────────────┐ │
-│ │ Folder      Backup type          Why                        About      │ │
-│ ├────────────────────────────────────────────────────────────────────────┤ │
-│ │ Documents   Differential (DIFF 4) Full of 1 Sep is 29 days   0.2 GB    │ │
-│ │ Projects    Differential (DIFF 4) Full of 1 Sep is 29 days   1.1 GB    │ │
-│ │ Pictures    Full                 Last differential was 57%   54 GB     │ │
-│ │                                  of its full (limit 50%)               │ │
-│ └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                            │
-│ Space        About 55 GB needed · 370 GB free                   (ok)       │
-│ Unlock       One YubiKey touch, then your password                          │
-│ Afterwards   Verify each new backup. Remove Pictures chain of 6 Jul        │
-│              (full + 5 differentials, 41 GB). > Show what's removed        │
-│                                                                            │
-│ (i) Differential sizes are estimates; moved or renamed files are stored    │
-│     again. > Show details                                                  │
-├────────────────────────────────────────────────────────────────────────────┤
-│ [ Full backup instead ]  [ New keys + full backup... ]  [ Start ] [Cancel] │
-└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Back up                                                                  [x] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Back up 3 folders to \\NAS\Backup\RestoreSafe                                │
+│                                                                              │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ Folder      Type     Why                                           About │ │
+│ ├──────────────────────────────────────────────────────────────────────────┤ │
+│ │ Documents   DIFF 4   Based on the full backup of 1 Sep            210 MB │ │
+│ │ Projects    DIFF 4   Based on the full backup of 1 Sep            1.1 GB │ │
+│ │ Pictures    FULL     Full backup is 31 days old (limit 30)         54 GB │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│                                     ════                                     │
+│ Space        (ok) About 55 GB needed, up to 56 GB · 370 GB free              │
+│ Unlock       One YubiKey touch, then your password                           │
+│ Afterwards   Verify each new backup. If the backup succeeds, remove 6 old    │
+│              backups (41 GB). Show what's removed                            │
+│                                                                              │
+│ (i) Differential sizes are estimates; moved or renamed files are stored      │
+│     again.                                                                   │
+│ Show details                                                                 │
+│                                                                              │
+│ [ Full backup instead ]  [ New keys + full backup... ] [ Start ]  [ Cancel ] │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Figure 6.2: Confirm new keys.** (`TaskDialog`)
@@ -326,14 +342,14 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 ┌────────────────────────────────────────────────────────────────┐
 │ (!)  Create new keys?                                          │
 │      Every folder gets a full backup, locked with a new        │
-│      password, YubiKey registration and recovery code. Your    │
-│      old password and recovery code keep opening your older    │
-│      backups, but not the new ones.                            │
+│      password, a new YubiKey registration and a new recovery   │
+│      code. Your current keys keep opening your older backups,  │
+│      but not the new ones.                                     │
 │                                                                │
 │      Use this to change your password, replace a lost          │
 │      YubiKey, or get a new recovery code.                      │
 ├────────────────────────────────────────────────────────────────┤
-│                          [ Keep current keys ]  [ Create keys ]│
+│                         [ Keep current keys ]  [ Create keys ] │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -375,24 +391,25 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 **Figure 6.4: Result cards.**
 
 ```text
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (ok)  3 folders backed up                   [ Show log ] [ Open folder ] [ Done ] │
-│       3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).                   │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (!)  3 folders backed up with 2 warnings    [ Show log ] [ Open folder ] [ Done ] │
-│      2 files in Documents were in use and weren't backed up. Old backups of       │
-│      Documents are kept.                                                          │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ (x)  Backup failed                          [ Show log ] [ Open folder ] [ Done ] │
-│      Projects: the backup directory ran out of space. Documents was backed up;    │
-│      the unfinished Projects backup was removed. > Show details                   │
-└───────────────────────────────────────────────────────────────────────────────────┘
-┌───────────────────────────────────────────────────────────────────────────────────┐
-│ ( )  Backup cancelled                                    [ Open folder ] [ Done ] │
-│      Documents was backed up. The unfinished Projects backup was removed.         │
-└───────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ (ok)  3 folders backed up                   [ Show log ]  [ Open folder ]  [ Done ] │
+│       3.4 GB in 4 min. Verified. Removed 6 old backups (41 GB).                     │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ (!)  3 folders backed up with 2 warnings    [ Show log ]  [ Open folder ]  [ Done ] │
+│      2 files in Documents couldn't be read and weren't backed up. Older             │
+│      backups of Documents are kept.                                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ (x)  Backup failed                          [ Show log ]  [ Open folder ]  [ Done ] │
+│      The backup directory ran out of space. Documents was backed up. The            │
+│      unfinished Projects backup was removed. No old backups were removed.           │
+│      Show details                                                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ ( )  Backup cancelled                       [ Show log ]  [ Open folder ]  [ Done ] │
+│      Documents was backed up. The unfinished Projects backup was removed.           │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 | ID | Requirement |
@@ -423,27 +440,27 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ RestoreSafe 2.0.0                                                                      _    [ ]    x │
-├──────────────┬───────────────────────────────────────────────────────────────────────────────────────┤
-│              │ Backups                                                     [ All folders v ]         │
-│   Overview   │                                                                                       │
-│ > Backups    │ ┌───────────────────────────────────────────────────────────────────────────────────┐ │
-│   Settings   │ │ (i) If your next backup succeeds, it removes 6 backups (41 GB): Pictures: full   │ │
-│              │ │     backup of 6 Jul and 5 differentials, 41 GB.                                   │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-│              │ ┌───────────────────────────────────────────────────────────────────────────────────┐ │
-│              │ │   Folder        Type      Based on         Size     Chain    Status               │ │
-│              │ ├───────────────────────────────────────────────────────────────────────────────────┤ │
-│              │ │ v Today, 09:12 · 3 folders · 3.4 GB · (!) 1 warning                     Show log  │ │
-│              │ │ >   Documents   DIFF 3    FULL of 1 Sep    0.2 GB   ABC123   (!) 1 skipped file   │ │
-│              │ │     Projects    DIFF 3    FULL of 1 Sep    1.1 GB   ABC123   (ok) Complete         │ │
-│              │ │     Pictures    DIFF 6    FULL of 3 Aug    2.1 GB   KLM456   (ok) Verified 09:16   │ │
-│              │ │ > Sun 27 Sep, 20:05 · 3 folders · 1.9 GB                                Show log  │ │
-│              │ │ > Tue 1 Sep, 17:45 · 3 folders · 96 GB · new keys                       Show log  │ │
-│              │ ├───────────────────────────────────────────────────────────────────────────────────┤ │
-│              │ │ Documents, differential 3 of today             [ Restore... ]  [ Verify... ]      │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-├──────────────┴───────────────────────────────────────────────────────────────────────────────────────┤
-│ Ready                                                                           12 runs · 186 GB     │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ Restore backup  [ Refresh ]                                     [ All folders v ] │
+│   Create backup  │                                                                                   │
+│ > Restore backup │ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│   Settings       │ │ (i) If your next backup succeeds, it removes 6 old backups (41 GB): Pictures: │ │
+│                  │ │     full backup of 6 Jul and 5 differentials, 41 GB.                          │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│                  │ │   Folder      Type     Based on          Size  Chain    Status                │ │
+│                  │ ├───────────────────────────────────────────────────────────────────────────────┤ │
+│                  │ │ v Today, 09:12 · 3 folders · 3.4 GB · 1 warning                      Show log │ │
+│                  │ │   Documents   DIFF 3   FULL of 1 Sep   210 MB  ABC123   1 skipped file        │ │
+│                  │ │   Projects    DIFF 3   FULL of 1 Sep   1.1 GB  ABC123   Complete              │ │
+│                  │ │   Pictures    DIFF 6   FULL of 3 Aug   2.1 GB  KLM456   Verified today, 09:16 │ │
+│                  │ │ > Sun 27 Sep, 20:05 · 3 folders · 1.9 GB                             Show log │ │
+│                  │ │ > Tue 1 Sep, 17:45 · 3 folders · 96 GB · new keys                    Show log │ │
+│                  │ │                                                                               │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ Backup of today, 09:12 (3 folders)                  [ Restore... ]  [ Verify... ] │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -468,28 +485,28 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 **Figure 7.3: Verify.** Laid out and worded like the backup plan (figure 6.1).
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Verify                                                                 [x] │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Verify 3 folders from the backup of today, 09:12                           │
-│                                                                            │
-│ ┌────────────────────────────────────────────────────────────────────────┐ │
-│ │ Folder                                       Type          About       │ │
-│ ├────────────────────────────────────────────────────────────────────────┤ │
-│ │ Documents                                    DIFF 3        38 GB       │ │
-│ │ Projects                                     DIFF 3        5 GB        │ │
-│ │ Pictures                                     DIFF 6        54 GB       │ │
-│ └────────────────────────────────────────────────────────────────────────┘ │
-│                                                                            │
-│ Read         About 97 GB to read · nothing is written                      │
-│ Unlock       One YubiKey touch, then your password, or recovery code       │
-│                                                                            │
-│ (i) Every file is decrypted and checked against its checksum.              │
-│     Differentials are read with their full backups of 1 Sep.               │
-│ Show details                                                               │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                     [ Start ]  [ Cancel ]  │
-└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Verify                                                                   [x] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Verify 3 folders from the backup of today, 09:12                             │
+│                                                                              │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │ Folder                                            Type             About │ │
+│ ├──────────────────────────────────────────────────────────────────────────┤ │
+│ │ Documents                                         DIFF 3           38 GB │ │
+│ │ Projects                                          DIFF 3          5.0 GB │ │
+│ │ Pictures                                          DIFF 6           54 GB │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│                                     ════                                     │
+│ Read         About 97 GB to read · nothing is written                        │
+│ Unlock       One YubiKey touch, then your password, or recovery code         │
+│                                                                              │
+│ (i) Every file is decrypted and checked against its checksum.                │
+│     Differentials are read with their full backups of 1 Sep and 3 Aug.       │
+│ Show details                                                                 │
+│                                                                              │
+│                                                        [ Start ]  [ Cancel ] │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Requirements
@@ -518,83 +535,75 @@ Its layout and wording follow the backup plan dialog: a heading that says what h
 **Figure 8.1: Restore.**
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Restore                                                                [x] │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Restore 2 folders from the backup of today, 09:12                          │
-│                                                                            │
-│ To           [D:\Restore                                 ]  [ Browse... ]  │
-│              Restore into the backup directory                             │
-│                                                                            │
-│ ┌────────────────────────────────────────────────────────────────────────┐ │
-│ │ Folder                       Type      About      Check                │ │
-│ ├────────────────────────────────────────────────────────────────────────┤ │
-│ │ [x] Documents                DIFF 3    38 GB      New folder           │ │
-│ │ [ ] Projects                 DIFF 3    1 GB       -                    │ │
-│ │ [x] Pictures                 DIFF 6    54 GB      Already exists       │ │
-│ └────────────────────────────────────────────────────────────────────────┘ │
-│                                  ═════                                     │
-│ Space        (ok) About 92 GB needed · 212 GB free                         │
-│ Unlock       One YubiKey touch, then your password, or recovery code       │
-│                                                                            │
-│ (i) Whole folders are restored, and every file is checked against its      │
-│     checksum. To get a single file back, restore its folder to a new       │
-│     place and copy the file.                                               │
-│ (!) Projects can't be restored: its full backup is missing.                │
-│ (x) Choose another place, or rename or move the folder that already        │
-│     exists.                                                                │
-│ Show details                                                               │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                     [ Start ]  [ Cancel ]  │
-└────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Restore                                                                  [x] │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ Restore 2 folders from the backup of today, 09:12                            │
+│                                                                              │
+│ To           [ D:\Restore                                   ]  [ Browse... ] │
+│              Restore into the backup directory                               │
+│                                                                              │
+│ ┌──────────────────────────────────────────────────────────────────────────┐ │
+│ │     Folder                        Type        About    Check             │ │
+│ ├──────────────────────────────────────────────────────────────────────────┤ │
+│ │ [x] Documents                     DIFF 3      38 GB    New folder        │ │
+│ │ [ ] Projects                      DIFF 3      1.0 GB   -                 │ │
+│ │ [x] Pictures                      DIFF 6      54 GB    Already exists    │ │
+│ └──────────────────────────────────────────────────────────────────────────┘ │
+│                                     ════                                     │
+│ Space        (ok) About 92 GB needed · 212 GB free                           │
+│ Unlock       One YubiKey touch, then your password, or recovery code         │
+│                                                                              │
+│ (i) Whole folders are restored, and every file is checked against its        │
+│     checksum. To get a single file back, restore its folder to a new         │
+│     place and copy the file.                                                 │
+│ (!) Projects can't be restored: its full backup is missing.                  │
+│ (x) Choose another place, or rename or move the folder that already          │
+│     exists.                                                                  │
+│ Show details                                                                 │
+│                                                                              │
+│                                                        [ Start ]  [ Cancel ] │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.2: Restore progress, and cancel.**
+**Figure 8.2: Restore progress at the top of the Restore backup page (RW-9), and cancel.**
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ Restore                                                                [x] │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Restoring                                                                  │
-│ v Unlock keys  >  [Restore 1 of 2]                                         │
-│ Documents · differential 3, with its full backup of 1 Sep                  │
-│ [###############################-----------------------------------------] │
-│ 14 of about 38 GB · 92 MB/s                                                │
-├────────────────────────────────────────────────────────────────────────────┤
-│                                                                 [ Cancel ] │
-└────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ Restoring                                                                [ Cancel ] │
+│                                                                                     │
+│ v Unlock keys  >  [Restore 1 of 2]                                                  │
+│ Documents · differential 3, with its full backup of 1 Sep                           │
+│ [##############################---------------------------------------------------] │
+│ 14 GB of 38 GB · 92 MB/s                                                   Show log │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────┐
 │ (!)  Cancel this restore?                                      │
-│      Folders restored so far are kept. D:\Restore\Documents    │
-│      stays incomplete; don't use it as a full copy.            │
+│      Folders restored so far are kept. The folder being        │
+│      restored now stays incomplete; don't use it as a full     │
+│      copy.                                                     │
 ├────────────────────────────────────────────────────────────────┤
-│                           [ Keep restoring ]  [ Cancel restore ]│
+│                         [ Keep restoring ]  [ Cancel restore ] │
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 8.3: Restore results.**
+**Figure 8.3: Restore results** (result cards on the Restore backup page).
 
 ```text
-┌──────────────────────────────────────────────────────────────────┐
-│ (ok)  2 folders restored                                         │
-│       About 92 GB to D:\Restore in 18 min.                       │
-│       Every file matched its checksum.                           │
-│                                                                  │
-│ (!)   Documents: 2 files aren't in this backup. They couldn't be │
-│       read when the backup was made; the log names them.         │
-│                                                                  │
-│                   [ Show log ]  [ Open folder ]  [ Close ]       │
-└──────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────┐
-│ (x)  Restore incomplete                                          │
-│      Documents: a file didn't match its checksum, so the restore │
-│      stopped. D:\Restore\Documents is incomplete; don't use it   │
-│      as a full copy. Pictures wasn't restored.                   │
-│      Verify this backup, or restore from an older one.           │
-│      > Show details                                              │
-│                   [ Show log ]  [ Open folder ]  [ Close ]       │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ (ok)  2 folders restored                    [ Show log ]  [ Open folder ]  [ Done ] │
+│       About 92 GB to D:\Restore in 18 min. Every file matched its checksum.         │
+│       Documents: 2 files aren't in this backup. They couldn't be read when the      │
+│       backup was made; the log names them.                                          │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│ (x)  Restore incomplete                     [ Show log ]  [ Open folder ]  [ Done ] │
+│      A file in Documents didn't match its checksum.                                 │
+│      D:\Restore\Documents is incomplete; don't use it as a full copy.               │
+│      Pictures wasn't restored. Verify this backup, or restore from an older one.    │
+│      Show details                                                                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Requirements
@@ -623,35 +632,35 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 ┌────────────────────────────────────────────────────┐
 │ Unlock your backups                            [x] │
 ├────────────────────────────────────────────────────┤
-│ Enter the password for the keys of 1 Sep 2026.     │
+│ Enter the password of your backups.                │
 │                                                    │
 │ Password  [•••••••••••••          ]                │
 │ (!) Wrong password. 2 attempts left.               │
 │                                                    │
-│ > Use your recovery code instead                   │
-├────────────────────────────────────────────────────┤
-│                              [ Unlock ] [ Cancel ] │
+│ Use your recovery code instead                     │
+│                                                    │
+│                             [ Unlock ]  [ Cancel ] │
 └────────────────────────────────────────────────────┘
 ```
 
 **Figure 9.2: New keys, password.**
 
 ```text
-┌────────────────────────────────────────────────────┐
-│ Create your keys  ·  Step 1 of 2               [x] │
-├────────────────────────────────────────────────────┤
-│ Choose a password for your backups.                │
-│ At least 12 characters. You need it for every      │
-│ backup and every restore.                          │
-│                                                    │
-│ Password         [•••••••••••••••        ]         │
-│ Confirm password [•••••••••••••••        ]         │
-│                                                    │
-│ Steps: password > register YubiKey and spare >    │
-│        recovery code                               │
-├────────────────────────────────────────────────────┤
-│                              [ Next ]  [ Cancel ]  │
-└────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ Create your keys · Step 1 of 2                       [x] │
+├──────────────────────────────────────────────────────────┤
+│ Choose a password for your backups.                      │
+│ At least 12 characters. You need it for every backup     │
+│ and every restore.                                       │
+│                                                          │
+│ Password          [•••••••••••••••        ]              │
+│ Confirm password  [•••••••••••••••        ]              │
+│                                                          │
+│ Steps: password › register your YubiKey › register your  │
+│ spare YubiKey › recovery code                            │
+│                                                          │
+│                                     [ Next ]  [ Cancel ] │
+└──────────────────────────────────────────────────────────┘
 ```
 
 **Figure 9.3: Recovery code** (static control, can't be selected; **Copy** copies the whole code, 13.3).
@@ -689,41 +698,49 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ RestoreSafe 2.0.0 · home-backup.yaml                                                   _    [ ]    x │
-├──────────────┬───────────────────────────────────────────────────────────────────────────────────────┤
-│              │ Settings                                                                              │
-│   Overview   │ ┌─ Configuration file ──────────────────────────────────────────────────────────────┐ │
-│   Backups    │ │ D:\Configs\home-backup.yaml                   [ Edit config.yaml ]  [ Reload ]    │ │
-│ > Settings   │ │ (i) After saving your changes in the editor, click Reload.                        │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-│              │ ┌─ Folders to back up ──────────────────────────────────────────────────────────────┐ │
-│              │ │ Name        Path                              Status                              │ │
-│              │ │ Documents   C:\Users\phs\Documents            (ok) Found                          │ │
-│              │ │ Projects    D:\Projects                       (ok) Found                          │ │
-│              │ │ Pictures    E:\Photos                         (x) Not found                       │ │
-│              │ │ Leave out   *.tmp, ~$*, Thumbs.db, node_modules (all folders)                     │ │
-│              │ │ Unreadable files   Stop the backup of that folder                                 │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-│              │ ┌─ Backup directory ────────────────────────────────────────────────────────────────┐ │
-│              │ │ \\NAS\Backup\RestoreSafe        (ok) Reachable, 370 GB free   [ Open in Explorer ]│ │
-│              │ │ Split files at 4 GB                                                               │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-│              │ ┌─ Full and differential ─────────────────┐ ┌─ Retention ───────────────────────────┐ │
-│              │ │ Differential backups   On               │ │ Keep 3 chains per folder              │ │
-│              │ │ New full backup after  30 days          │ │ Keep all differentials of a chain     │ │
-│              │ │ or when a differential reaches 50% of   │ │ Runs after each successful backup     │ │
-│              │ │ its full backup                         │ │                                       │ │
-│              │ └─────────────────────────────────────────┘ └───────────────────────────────────────┘ │
-│              │ ┌─ Checks ────────────────────────────────┐ ┌─ Keys and unlocking ──────────────────┐ │
-│              │ │ Verify each backup after it's written   │ │ Password + YubiKey                    │ │
-│              │ │   Off                                   │ │ Spare YubiKey: on · Recovery code: on │ │
-│              │ │ Remind me after 7 days without backup   │ │ New passwords: at least 12 characters │ │
-│              │ └─────────────────────────────────────────┘ │ > Key derivation (Argon2id)           │ │
-│              │                                             └───────────────────────────────────────┘ │
-│              │ ┌─ Logging ─────────────────────────────────────────────────────────────────────────┐ │
-│              │ │ Log level   Info · I/O diagnostics off                                            │ │
-│              │ └───────────────────────────────────────────────────────────────────────────────────┘ │
-├──────────────┴───────────────────────────────────────────────────────────────────────────────────────┤
-│ Ready                                                                  370 GB free in backup directory │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ Settings                                                                          │
+│   Create backup  │                                                                                   │
+│   Restore backup │ ┌─ Configuration file ──────────────────────────────────────────────────────────┐ │
+│ > Settings       │ │ D:\Configs\home-backup.yaml                  [ Edit config.yaml ]  [ Reload ] │ │
+│                  │ │ After saving your changes in the editor, click Reload.                        │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ Folders to back up ──────────────────────────────────────────────────────────┐ │
+│                  │ │ Folder        Path                                           Status           │ │
+│                  │ ├───────────────────────────────────────────────────────────────────────────────┤ │
+│                  │ │ Documents     C:\Users\Alex\Documents                        Found            │ │
+│                  │ │ Projects      D:\Projects                                    Found            │ │
+│                  │ │ Pictures      E:\Photos                                      Not found        │ │
+│                  │ │                                                                               │ │
+│                  │ │ Leave out          *.tmp, ~$*, Thumbs.db, node_modules                        │ │
+│                  │ │ Unreadable files   Stop the backup of that folder                             │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │                                       ════                                        │
+│                  │ ┌─ Backup directory ────────────────────────────────────────────────────────────┐ │
+│                  │ │ \\NAS\Backup\RestoreSafe    (ok) Reachable, 370 GB free  [ Open in Explorer ] │ │
+│                  │ │ Split files        At 4.0 GB                                                  │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ Full and differential ──────────────┐ ┌─ Retention ──────────────────────────┐ │
+│                  │ │ Differential backups  On             │ │ Keep           3 chains per folder   │ │
+│                  │ │ New full backup after 30 days        │ │ Differentials  All of a chain        │ │
+│                  │ │ or when               a differential │ │ Runs after each successful backup;   │ │
+│                  │ │                       reaches 50% of │ │ skipped after a failed verification  │ │
+│                  │ │                       its full       │ │ or when the newest backup has        │ │
+│                  │ │                       backup         │ │ skipped files.                       │ │
+│                  │ └──────────────────────────────────────┘ └──────────────────────────────────────┘ │
+│                  │ ┌─ Checks ─────────────────────────────┐ ┌─ Keys and unlocking ─────────────────┐ │
+│                  │ │ Verify each backup    Off            │ │ Unlock with    Password + YubiKey    │ │
+│                  │ │ after it's written                   │ │ Spare YubiKey  On                    │ │
+│                  │ │ Reminder              After 7 days   │ │ Recovery code  On                    │ │
+│                  │ │                       without a      │ │ New passwords  At least 12           │ │
+│                  │ │                       backup         │ │                characters            │ │
+│                  │ │                                      │ │ Key derivation (Argon2id)            │ │
+│                  │ └──────────────────────────────────────┘ └──────────────────────────────────────┘ │
+│                  │ ┌─ Logging ─────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ Log level          Info                                                       │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -737,7 +754,7 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 | ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0; when `retention_keep` is missing from the file, the value adds "(the default; 3 chains recommended)"), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
 | ST-7 | Checks: `verify_after_backup`; the reminder limit (decision 2). |
 | ST-8 | Keys and unlocking: authentication mode in words, spare YubiKey, recovery code, minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." |
-| ST-9 | Logging: `log_level`, `io_diagnostics`. |
+| ST-9 | Logging: `log_level` (debug includes the I/O diagnostics of a backup). |
 | ST-10 | Missing settings (decision 9): when the file lacks settings that have a default (11.6), a (i) line on the configuration card names their keys, "3 settings aren't in config.yaml, so their defaults apply: reminder_days, recovery_code, differential.", with **Add to config.yaml**. It saves a copy of the file next to it (`<name>.<yyyy-mm-dd_hhmmss>.bak`), adds each missing setting with its default value and its explanation from `config-SAMPLE.yaml`, and reloads (ST-2). Settings of a block that exists already (`differential`, `argon2`) are added at the end of that block, all others at the end of the file under one comment line that says when they were added. Lines already in the file are not changed. Nothing is written unless the user clicks; the button is disabled while an operation runs. Afterwards a line names the copy until the next Reload; a file that can't be written keeps the configuration in use and shows the error as ST-2 does. |
 
 ## 11. Workflow interface
@@ -765,7 +782,7 @@ type Snapshot struct {
     Storage   Storage            // Known, TotalBytes, FreeBytes, BackupBytes, FullEstimate
     Keys      KeysSummary        // Exists, Created, Methods, SpareYubiKey, RecoveryCode, YubiKeyConnected *bool, NewKeysReason
     Retention []catalog.SetInfo  // what the next backup removes if it succeeds (11.3)
-    Check     Result             // the health check: "Check details" and what it blocks
+    Check     Result             // the health check: what it blocks
     Checked   time.Time
 }
 
@@ -792,7 +809,7 @@ A problem carries its code and the facts that describe it, not sentences: the wo
 
 `health.Checker` takes snapshots at most one at a time. A caller waits only until its context ends (`health.SnapshotTimeout`, 5 seconds) and then gets a snapshot that reports the backup directory as not responding; a snapshot still blocked in a system call keeps running, and later callers wait for it instead of starting another.
 
-`health.Result` keeps its items for the report view ("Check details"); every warning and error item carries a code (11.8).
+`health.Result` keeps its items; every warning and error item carries a code (11.8). The GUI doesn't show the full report: the hero and the pages show the problems (OV-1).
 
 ### 11.2 Structured plans
 
@@ -835,7 +852,7 @@ A function that loads and validates the configuration again, returning the same 
 
 `config.Load` is strict about names and lenient about omissions (decision 9):
 
-- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. Every key of RestoreSafe 1.x is still a 2.0 key, so 1.x files don't fail on this.
+- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. 2.0 isn't compatible with 1.x configuration files: a key 2.0 no longer has (`io_diagnostics`, 2.0 spec 12) is an unknown key too, and the error tells the user to remove it.
 - **Missing keys use their defaults** and are listed in `Config.MissingKeys` in the order of `config-SAMPLE.yaml`. A block that is missing entirely is listed by its name (`differential`), single missing keys of a block by their path (`differential.max_size_percent`). `source_directories` and `backup_directory` have no default and stay required.
 - `config.AddMissing(path, now)` writes them (ST-10). It reads the file again, builds the new text, and writes it only when the new text loads, lists no missing keys and gives the same effective configuration as before, so adding defaults can never change what RestoreSafe does. The comments come from `config-SAMPLE.yaml`, embedded in the executable; the values are the defaults of `config`, not the sample's (the sample keeps 3 chains, the default is to keep all). A file in YAML flow style (`{ … }`) is refused with a remedy to add the settings by hand. The new file replaces the old one by rename, keeping its line endings.
 
@@ -909,7 +926,7 @@ Carried over from the first GUI; unchanged unless noted.
 | Package | Content |
 |---|---|
 | `cmd/restoresafe` | Starts the GUI (section 14). |
-| `internal/gui` | Composition root and Win32 screens: `Run`, the app, the message loop, the shell (sidebar, status bar), one file per page and dialog. Page files only render views and forward input. |
+| `internal/gui` | Composition root and Win32 screens: `Run`, the app, the message loop, the shell (sidebar, status bar strip), one file per page and dialog. Page files only render views and forward input. |
 | `internal/gui/flow` | Operation lifecycle without Win32: the bridge (12.2), the `interact.UI` implementation (questions go to a `Dialogs` interface the `gui` package implements), the state machine of section 4, the speed. |
 | `internal/gui/view` | View models without Win32: plain functions from snapshot, plans and state to what each page and dialog shows; every user-visible string (`strings.go`) and all formatting (`format.go`). |
 | `internal/gui/widget` | Reusable Win32 controls and the theme: palette and metrics (3.3), fonts and glyphs, DIP scaling, layout helper, card and hero containers, badges, bars, step trail, sidebar, list view with groups. Knows nothing about backups. |
@@ -1017,7 +1034,7 @@ The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set 
 | Area | Requirement |
 |---|---|
 | Threading | As 12.2: the UI thread only handles messages and painting; workflows, health checks, status and plan computation run on goroutines; results reach the UI through `PostMessage`. No file, network or workflow call on the UI thread. |
-| Responsiveness | The window opens in under 1 second with the last content shown as "Checking…" until the first status arrives. The Restore backup page handles 1,000 sets without noticeable lag. Progress redraws at most four times per second and never flickers. |
+| Responsiveness | The window opens in under 1 second with the hero reading "Checking your backups…" until the first status arrives. The Restore backup page handles 1,000 sets without noticeable lag. Progress redraws at most four times per second and never flickers. |
 | Secrets | As section 13: masked edits, buffers zeroed, no Go strings for passwords, no task dialogs for codes, nothing written to disk or to the log. |
 | Accessibility | All functions reachable by keyboard with a logical tab order and visible focus; access keys on all buttons, unique per page and dialog. Controls on hidden pages are disabled, so their access keys can't fire. Text is in standard controls; painted controls (step trail, badges, bars) set an accessible name (3.4), so the hero's title and the current step are read out. Contrast at least 4.5:1 for text. Status never conveyed by color alone. Works in high contrast; switching it on or off rebuilds the pages at once, while a dialog open at that moment keeps its colors until it closes. |
 | DPI | Verified at 100%, 125%, 150% and 200%, and when moving between monitors with different scaling. |
