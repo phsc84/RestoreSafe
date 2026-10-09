@@ -19,7 +19,7 @@ import (
 
 // runBackupDirectory writes one full set of a small source and returns the
 // log content.
-func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string, string) {
+func runBackupDirectory(t *testing.T, level string) (string, string) {
 	t.Helper()
 	tempRoot := t.TempDir()
 	sourceDir := filepath.Join(tempRoot, "source")
@@ -36,7 +36,7 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 	}
 
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
-	cfg := &config.Config{SplitSizeMB: 1, IODiagnostics: ioDiagnostics}
+	cfg := &config.Config{SplitSizeMB: 1}
 	entry := naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
 	op := &operation{cfg: cfg, log: logger, backupDir: backupDir, runID: "ORD123", keySet: ks, master: master}
 	_, backupErr := op.backupDirectory(context.Background(), nil, sourceDir, entry, nil)
@@ -53,7 +53,7 @@ func runBackupDirectory(t *testing.T, level string, ioDiagnostics bool) (string,
 }
 
 func TestBackupDirectoryWritesCompleteSet(t *testing.T) {
-	_, backupDir := runBackupDirectory(t, "info", false)
+	_, backupDir := runBackupDirectory(t, "info")
 	info := catalog.InspectSet(backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
 	if !info.Complete() {
 		t.Fatalf("expected a complete set, got %v", info.Err)
@@ -61,14 +61,14 @@ func TestBackupDirectoryWritesCompleteSet(t *testing.T) {
 }
 
 func TestBackupDirectoryLogsTarCreationAtDebugLevel(t *testing.T) {
-	logContent, _ := runBackupDirectory(t, "debug", false)
+	logContent, _ := runBackupDirectory(t, "debug")
 	if !strings.Contains(logContent, "Starting TAR creation and encryption for:") {
 		t.Fatalf("expected TAR creation debug line in log, got: %q", logContent)
 	}
 }
 
-func TestBackupDirectoryLogsIODiagnosticsWhenEnabled(t *testing.T) {
-	logContent, _ := runBackupDirectory(t, "debug", true)
+func TestBackupDirectoryLogsIODiagnosticsAtDebugLevel(t *testing.T) {
+	logContent, _ := runBackupDirectory(t, "debug")
 	if !strings.Contains(logContent, "I/O diagnostics") {
 		t.Fatalf("expected I/O diagnostics lines in log, got: %q", logContent)
 	}
@@ -78,7 +78,7 @@ func TestBackupDirectoryLogsIODiagnosticsWhenEnabled(t *testing.T) {
 }
 
 func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
-	logContent, _ := runBackupDirectory(t, "info", false)
+	logContent, _ := runBackupDirectory(t, "info")
 
 	partIdx := strings.Index(logContent, "Part 001: [source]_ORD123_2026-03-18_FULL-001.enc")
 	createdIdx := strings.Index(logContent, "Created: 1 part file(s)")
@@ -90,6 +90,9 @@ func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
 	}
 	if !strings.Contains(logContent, "Backed up: 1 file(s), 0 directory(s)") {
 		t.Fatalf("expected file summary in log, got: %q", logContent)
+	}
+	if strings.Contains(logContent, "I/O diagnostics") {
+		t.Fatalf("did not expect I/O diagnostics at info level, got: %q", logContent)
 	}
 }
 

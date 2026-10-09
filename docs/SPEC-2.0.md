@@ -527,7 +527,7 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 
 ## 12. Configuration
 
-New and changed keys (all other 1.x keys keep their meaning):
+New and changed keys (the other 1.x keys keep their meaning, except the removed `io_diagnostics` below):
 
 ```yaml
 # Number of backup chains (a full backup plus its differential backups) kept per
@@ -572,6 +572,8 @@ differential:
 ```
 
 Changing `authentication_mode`, `yubikey_spare`, or `recovery_code` requires new keys; the next backup announces this in the preflight and creates full backups.
+
+Removed: `io_diagnostics`. `log_level: "debug"` includes the I/O diagnostics of a backup (progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes). 2.0 doesn't promise to load a 1.x configuration file: a file that still contains `io_diagnostics` fails with an unknown key (GUI spec 11.6), and users start from the new `config-SAMPLE.yaml`.
 
 ## 13. Optional future enhancements (not part of 2.0)
 

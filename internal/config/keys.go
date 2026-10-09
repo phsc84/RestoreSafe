@@ -37,7 +37,6 @@ var settings = []setting{
 	{"exclude", "[]"},
 	{"on_unreadable_file", strconv.Quote(OnUnreadableFail)},
 	{"log_level", `"info"`},
-	{"io_diagnostics", "false"},
 	{"verify_after_backup", "false"},
 	{"reminder_days", strconv.Itoa(DefaultReminderDays)},
 	{"authentication_mode", strconv.Itoa(int(AuthModePassword))},

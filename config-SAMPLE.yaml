@@ -63,12 +63,11 @@ exclude: []
 #            of that directory until a backup without skipped files succeeds
 on_unreadable_file: "fail"
 
-# Log level: "info" (default) or "debug" (verbose output)
+# Log level: "info" (default) or "debug" (verbose output). "debug" also logs
+# I/O diagnostics of a backup: progress every 2 seconds, a warning when no data
+# moves for 10 seconds, write calls and the size of every part file. Use it
+# for storage troubleshooting.
 log_level: "info"
-
-# Additional I/O diagnostics in debug log/console (write calls, average write size).
-# Enable this only for storage or write-amplification troubleshooting.
-io_diagnostics: false
 
 # Verify the backup immediately after it is written.
 # Re-reads and decrypts the new .enc parts (no extra password/YubiKey prompt)

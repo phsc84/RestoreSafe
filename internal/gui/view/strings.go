@@ -182,8 +182,8 @@ const (
 	newKeysNo              = "Keep current keys"
 )
 
-// Progress card, Folders card while running, status bar and cancel
-// dialogs (GUI spec 6.2, 6.4).
+// Progress card, Folders card while running and cancel dialogs (GUI spec
+// 6.2, 6.4).
 const (
 	titleBackingUp         = "Backing up"
 	titleRestoring         = "Restoring"
@@ -504,7 +504,6 @@ const (
 	argon2Note          = "Changes apply to new keys only."
 	cardLogging         = "Logging"
 	settingLogLevel     = "Log level"
-	settingIODiag       = "I/O diagnostics"
 	settingOn           = "On"
 	settingOff          = "Off"
 	folderFound         = "Found"

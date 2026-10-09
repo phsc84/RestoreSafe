@@ -187,7 +187,6 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 
 	p.Logging = SettingsCard{Title: cardLogging, Rows: []Setting{
 		{Label: settingLogLevel, Value: capitalize(cfg.LogLevel), Key: "log_level"},
-		{Label: settingIODiag, Value: onOff(cfg.IODiagnostics), Key: "io_diagnostics"},
 	}}
 	return p
 }
