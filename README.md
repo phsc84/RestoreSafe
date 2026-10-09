@@ -5,10 +5,11 @@
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
 [![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go)](https://go.dev/dl/)
 
-RestoreSafe is a standalone Windows 64-bit backup tool that backs up your directories into encrypted, split archive files, with password protection and optional YubiKey 2FA. It creates full and differential backups automatically, checks every restored file against its checksum, and needs nothing but `RestoreSafe.exe` to back up, verify, and restore.
+RestoreSafe is a standalone Windows 64-bit tool that turns your directories into encrypted, tamper-evident backups you can store anywhere - on an external drive, a NAS, or in any cloud storage - without trusting that place. Nobody who gets hold of your backup files can read them, and nobody can change them without RestoreSafe noticing. Backups are locked with a password and optional YubiKey 2FA. RestoreSafe creates full and differential backups automatically, checks every restored file against its checksum, and needs nothing but `RestoreSafe.exe` to back up, verify, and restore.
 
 ## Table of Contents
 
+- [More than a copy of your files](#more-than-a-copy-of-your-files)
 - [Screenshots](#screenshots)
 - [Features](#features)
 - [Installation & Configuration](#installation--configuration)
@@ -20,6 +21,19 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 - [Known limitations](#known-limitations)
 - [YubiKey setup](#yubikey-setup)
 - [Development setup](#development-setup)
+
+## More than a copy of your files
+
+A plain copy of your files is only as safe as the place where it lies. RestoreSafe makes the backup itself safe, so the place no longer matters:
+
+- **Stolen or leaked backups are useless.** File contents, file names, folders, sizes, and times are encrypted with AES-256-GCM. A thief, a cloud provider, or anyone with access to your cloud account sees only encrypted `.enc` files (see [What is not encrypted](#what-is-not-encrypted) for the few readable details). To open them, they need one of your unlock methods: your password, your YubiKey, or your recovery code.
+- **Guessing your password is expensive.** Argon2id key derivation makes every password guess cost time and memory, and with a YubiKey a password alone is not enough.
+- **Tampering is detected.** Every part of a backup is authenticated: the encrypted data, the locked boxes with the master key, the header, and the order and completeness of the data. Someone who modifies, swaps, reorders, or cuts off any part of a backup file - or a disk or upload error that does - cannot produce a backup that RestoreSafe accepts. Restore and verify stop and report the damage instead of giving you altered files.
+- **Every file is checked.** Each backup contains an encrypted list of all its files with their SHA-256 checksums. Restore and verify check every file against it, so you know that what you get back is exactly what you backed up.
+- **Restores can't be redirected.** A restore stops when its destination, or a folder in it, is a link to another place, so no other program can make RestoreSafe write your files somewhere else. Links inside a backup are never recreated.
+- **Your backups stay yours.** RestoreSafe needs no account, no server, and no internet connection. It only reads your folders and writes `.enc` files; where you keep them is up to you.
+
+What RestoreSafe cannot do is stop someone with access to your backup files from deleting them, or ransomware from encrypting them a second time. It detects that a backup was damaged, but it can't repair it. Keep at least one copy of your backups where such software can't reach it, for example on an external drive that you disconnect after the backup, or in cloud storage that keeps older versions of your files.
 
 ## Screenshots
 
@@ -55,6 +69,7 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 ### Security
 - AES-256-GCM encryption of the file contents and of the names, sizes and times of the backed-up files (see [What is not encrypted](#what-is-not-encrypted))
+- Tamper detection: the data, the key boxes, the header, and the order and completeness of every backup are authenticated; a modified backup is reported as damaged and never restored as if it were intact
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
 - Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
