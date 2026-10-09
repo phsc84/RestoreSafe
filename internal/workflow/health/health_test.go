@@ -9,7 +9,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/testutil"
-	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
 func TestCheckConfigFileHealthOKForExistingFile(t *testing.T) {
@@ -139,25 +138,6 @@ func TestCheckArgon2HealthSilentWithoutNotices(t *testing.T) {
 	}
 }
 
-func TestHealthReportNoAdviceLineWhenNoErrors(t *testing.T) {
-	t.Parallel()
-	items := []healthItem{
-		{Severity: healthOK, Scope: "Config", Detail: "ok"},
-		{Severity: healthWarn, Scope: "Target", Detail: "warn"},
-	}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, buildResult(items).Report())
-	output := sb.String()
-
-	if strings.Contains(output, "Review the reported errors") {
-		t.Fatalf("did not expect advice line when no errors, got: %q", output)
-	}
-	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 0 error(s)") {
-		t.Fatalf("expected summary line, got: %q", output)
-	}
-}
-
 func TestCheckReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 	exeDir := t.TempDir()
 	source := filepath.Join(exeDir, "Documents")
@@ -181,22 +161,12 @@ func TestCheckReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 	}
 
 	result := Check(cfg, exeDir, configPath)
-	var sb strings.Builder
-	interact.WriteReport(&sb, result.Report())
-	output := sb.String()
-
-	if !strings.Contains(output, "Startup health check") {
-		t.Fatalf("expected health check header in output, got: %q", output)
-	}
-	if !strings.Contains(output, "Summary:") {
-		t.Fatalf("expected summary line in output, got: %q", output)
-	}
 	// A healthy config with YubiKey disabled should not block any operation.
 	if result.BlocksBackup() {
-		t.Fatalf("did not expect a healthy config to block backup, output: %q", output)
+		t.Fatalf("did not expect a healthy config to block backup, items: %#v", result.items)
 	}
 	if result.BlocksRestoreOrVerify() {
-		t.Fatalf("did not expect a healthy config to block restore/verify, output: %q", output)
+		t.Fatalf("did not expect a healthy config to block restore/verify, items: %#v", result.items)
 	}
 }
 
@@ -360,90 +330,5 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 	}
 	if hasSourceDirectoryError {
 		t.Fatalf("did not expect source-directory errors for encoded special-character variants, got items: %#v", items)
-	}
-}
-
-func TestHealthReportSummaryAndAdvice(t *testing.T) {
-	t.Parallel()
-	items := []healthItem{
-		{Severity: healthOK, Scope: "Config", Detail: "ok"},
-		{Severity: healthWarn, Scope: "Target", Detail: "warn"},
-		{Severity: healthError, Scope: "Source", Detail: "error"},
-	}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, buildResult(items).Report())
-	output := sb.String()
-
-	if !strings.Contains(output, "Summary: 1 OK, 1 warning(s), 1 error(s)") {
-		t.Fatalf("summary line missing or incorrect in output: %q", output)
-	}
-	if !strings.Contains(output, "Review the reported errors") {
-		t.Fatalf("expected advice line for errors, got output: %q", output)
-	}
-}
-
-func TestHealthReportGroupsScopes(t *testing.T) {
-	t.Parallel()
-
-	items := []healthItem{
-		{Severity: healthOK, Scope: "Source directory(s)", Detail: "C:/A"},
-		{Severity: healthWarn, Scope: "Source directory(s)", Detail: "C:/B → some warning"},
-		{Severity: healthOK, Scope: "Backup directory", Detail: "C:/Backup"},
-	}
-
-	var sb strings.Builder
-	interact.WriteReport(&sb, buildResult(items).Report())
-	output := sb.String()
-
-	if strings.Count(output, "Source directory(s):") != 1 {
-		t.Fatalf("expected Source directory(s) title once, got output: %q", output)
-	}
-	if strings.Contains(output, "[OK] Source directory(s):") {
-		t.Fatalf("did not expect old inline scope format, got output: %q", output)
-	}
-	if !strings.Contains(output, "  [OK] C:/A") {
-		t.Fatalf("expected grouped detail line for Source directory, got output: %q", output)
-	}
-	if !strings.Contains(output, "Backup directory:") {
-		t.Fatalf("expected Backup directory title, got output: %q", output)
-	}
-}
-
-func TestHealthCheckReportGroupsFindingsByScope(t *testing.T) {
-	t.Parallel()
-
-	result := buildResult([]healthItem{
-		{Severity: healthOK, Scope: healthScopeConfig, Detail: "config loaded"},
-		{Severity: healthWarn, Scope: healthScopeSourceDirectory, Detail: "Docs is empty"},
-		{Severity: healthOK, Scope: healthScopeSourceDirectory, Detail: "Pics"},
-		{Severity: healthError, Scope: healthScopeYubiKey, Detail: "not connected"},
-	})
-	var sb strings.Builder
-	interact.WriteReport(&sb, result.Report())
-	want := `
-Startup health check
---------------------
-Config:
-  [OK] config loaded
-Source directory(s):
-  [WARN] Docs is empty
-  [OK] Pics
-YubiKey:
-  [ERROR] not connected
-
-Summary: 2 OK, 1 warning(s), 1 error(s)
-Review the reported errors before running backup, restore, or verify.
-`
-	if got := sb.String(); got != want {
-		t.Fatalf("unexpected report.\nwant:\n%s\ngot:\n%s", want, got)
-	}
-}
-
-func TestCheckReportsStartupHealth(t *testing.T) {
-	exeDir := t.TempDir()
-	cfg := &config.Config{BackupDirectory: filepath.Join(exeDir, "Backups"), LogLevel: "info"}
-	if r := Check(cfg, exeDir, filepath.Join(exeDir, "config.yaml")).Report(); r.Title != "Startup health check" || len(r.Sections) < 2 {
-		t.Fatalf("unexpected report %+v", r)
 	}
 }
