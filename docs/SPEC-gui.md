@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); implemented on `v2`. Open before the release: the manual checklist run ([PLAN-gui-redesign.md](PLAN-gui-redesign.md)). |
+| Status | Specified 2026-09-30 (status-first redesign); implemented on `v2`; the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
 | Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
 | Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
@@ -1106,7 +1106,7 @@ They run on every release candidate at 100% and 150% scaling.
 
 ### 16.5 Manual tests
 
-[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It records the status of the last run.
+[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
 
 ### 16.6 Usability session
 
@@ -1126,7 +1126,7 @@ The redesign ships with 2.0.0 only when:
 
 - `go test ./...` passes, including `internal/architecture` and `internal/e2e`;
 - `Check-States.ps1` and `Smoke-BackupRestore.ps1` pass at 100% and 150%;
-- every row of the checklist is Passed or explicitly accepted with a reason in the checklist;
+- every row of the checklist is tested by hand, or accepted with a reason;
 - the usability session found no task that failed.
 
 ## 17. Acceptance criteria and build order

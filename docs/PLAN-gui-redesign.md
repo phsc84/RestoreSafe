@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-09-30; phases 0-9 done; phase 10 done except the manual checklist run. The work is on `v2`. |
+| Status | **Done 2026-10-09.** Agreed 2026-09-30; phases 0-10 done, including the manual checklist run. The work is on `v2`; this plan is deleted after the 2.0.0 release (section 9). |
 | Implements | [SPEC-gui.md](SPEC-gui.md) |
 | Branch | `gui-redesign`, from `v2` after the pending work is committed; the work is now on `v2` |
 | Scope | The new window application and the workflow additions it needs. No change to the backup format, keys, or what a backup, restore, or verify does. |
@@ -251,7 +251,7 @@ Phases 1–4 change no pixel of the first GUI, so they can be reviewed as pure w
 - **10d:** README (usage, screenshots from a neutral demo setup), CHANGELOG, config sample.
 - **10e:** the known differences decided and carried out (6g).
 - **10f:** the usability session, held successfully. The screenshots (README, `docs/images`) and the wireframes in `docs/SPEC-gui.md` recreated from the final UI (2026-10-09).
-- Open: the manual checklist run (100 %, 125 %, 200 %, several monitors, YubiKeys, Narrator, high contrast).
+- **10g:** the manual checklist run (100 % to 200 %, YubiKeys, Narrator, high contrast) passed on 2026-10-09; moving between monitors is Accepted (one monitor; a scaling change while running tested instead). Tester: phsc84, Windows 11 Pro 10.0.26200, one 4K monitor, a primary and a spare YubiKey; pre-run by Claude on 2026-10-02 at 150 %.
 
 ## 6g. Known differences (decided 2026-10-06)
 
@@ -262,7 +262,7 @@ Found in the pre-run (10c); listed in `docs/GUI-TEST-CHECKLIST.md` under "Known 
 | D1 | OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results show the files "not in this backup", not the "older version" (stale) files. | The backup writes no fact for skipped and stale files (11.4); add one, read it in `logging/facts.go`, and offer "Show files" on the result card and in the wizard's result. | **Change** (wording) and **Accept** (no list): skipped and stale counted apart in the `set` fact; a restore writes a `restore` fact per set (it wrote none, so the restore result showed these lines only in the tests); the result says "restored in an older version from <date>" and the restore log names the stale files too. No "Show files": the log names every file. |
 | D2 | OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | Either show the disabled button with the reason next to the fix actions, or change OV-2 to what the code does. | **Accept**: OV-2 changed to what the code does (OV-1 allows one primary and one secondary action). |
 | D3 | BR-1 | During a backup, the Folders card shows "Done, <size>" with the size of the folder read, not of the set written; for a differential it is much larger than the size on the Restore backup page. | Report the written set size (`setwriter.Result`) when a folder finishes, and show that; or label the read size as such. | **Change**: the last progress report of a folder carries `Progress.Written`, the size of the set; the run machine keeps it for the Folders card. The requirement is BR-4. |
-| D4 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. | The password question carries no key set; pass its creation date with the question (fits refactoring 2.0 RF-26, typed questions). | **Accept** until RF-26: the notice above the field names the backup and the keys' date. CR-1 changed; RF-26 notes it. |
+| D4 | CR-1 | The unlock dialog does not name the key set by its date; when a selection spans older keys, the workflow's notice above the field says which keys. | The password question carries no key set; pass its creation date with the question (fits refactoring 2.0 RF-26, typed questions). | **Accept** until RF-26: the notice above the field names the backup and the keys' date. CR-1 changed; RF-26 notes it. Done by RF-26 (`interact.OtherKeys`). |
 | D5 | RW-1 | The wizard is resizable; its progress page leaves empty space below the card. | Lay out the progress page to fill the height (as the Overview's run card does), or fix the wizard's size while it runs. | **Change**: the run card fills the wizard's page and centres its content when it is taller than the content. |
 | D6 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | Forward the theme change to the open plan, credential and details dialogs and restyle them like the pages. | **Accept**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
 | D7 | 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated (its hash is part of every chunk's AAD). | Nothing reasonable: a script that edits the date breaks the backup's authentication. The checklist already tests it with a backup from the day before (decision 9). | **Accept**. |
