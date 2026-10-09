@@ -15,6 +15,9 @@ type VerifyPlanView struct {
 	Read    PlanLine
 	Unlock  PlanLine
 	Note    string
+	// Hidden says that the folder filter left folders of the backup out; ""
+	// when it left none.
+	Hidden  string
 	Issues  []IssueLine
 	Details Button
 	// Start is nil when an issue blocks the verification.
@@ -23,8 +26,9 @@ type VerifyPlanView struct {
 }
 
 // VerifyPlanOf words the plan the workflow made of the selection; what
-// names it ("today, 09:12").
-func VerifyPlanOf(p interact.VerifyPlan, what string, now time.Time) VerifyPlanView {
+// names it ("today, 09:12"), and hidden counts the sets of the backup the
+// folder filter left out.
+func VerifyPlanOf(p interact.VerifyPlan, what string, hidden int, now time.Time) VerifyPlanView {
 	v := VerifyPlanView{
 		Heading: fmt.Sprintf(verifyHeading, folderPhrase(len(p.Sets)), what),
 		Folders: Table{Name: PlanColumnFolder, Columns: []Column{
@@ -35,6 +39,12 @@ func VerifyPlanOf(p interact.VerifyPlan, what string, now time.Time) VerifyPlanV
 		Note:    verifyNote(p, now),
 		Details: Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true},
 		Cancel:  Button{Text: buttonCancel, Action: ActionCancel, Enabled: true},
+	}
+	switch {
+	case hidden == 1:
+		v.Hidden = verifyHiddenOne
+	case hidden > 1:
+		v.Hidden = fmt.Sprintf(verifyHidden, hidden)
 	}
 	for _, s := range p.Sets {
 		b := badgeOf(s.Set)

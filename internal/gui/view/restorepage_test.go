@@ -171,6 +171,30 @@ func TestRestorePageSelection(t *testing.T) {
 	if len(bar.Sets) != 1 || bar.Sets[0] != set || !strings.Contains(bar.Text, ", full backup of ") {
 		t.Fatalf("set selection %+v", bar)
 	}
+	// The folder filter narrows the run to its folder: Restore checks only
+	// that folder, and Verify does not claim the whole backup.
+	sc := scenario.Build(t, scenario.Protected)
+	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
+	pics := RestorePageOf(&s, sc.Config, nil, "Pics", sc.Now)
+	g = pics.Groups[0]
+	bar = SelectionOf(pics, g.RunID, "")
+	if g.Hidden != 1 || bar.Hidden != 1 || len(bar.Sets) != 1 || bar.Whole || !bar.Verify.Enabled {
+		t.Fatalf("filtered run selection %+v", bar)
+	}
+	choices := RestoreFoldersOf(&s, g.RunID)
+	var sets []naming.BackupEntry
+	for _, c := range choices {
+		if c.Set.String() == bar.Sets[0] {
+			sets = append(sets, c.Set)
+		}
+	}
+	checked := Preselected(choices, sets)
+	if got := Chosen(choices, checked); len(choices) != 2 || len(got) != 1 || got[0].DirectoryName != "Pics" {
+		t.Fatalf("preselected %v of %+v", got, choices)
+	}
+	if p.Groups[0].Hidden != 0 {
+		t.Fatal("All folders filters nothing")
+	}
 
 	bm, _, _ := restorePageOf(t, scenario.BaseMissing)
 	var docs BackupRow
@@ -225,7 +249,7 @@ func TestVerifyPlan(t *testing.T) {
 		Bytes:  97 << 30,
 		Unlock: interact.UnlockPlan{Password: true, YubiKey: true},
 	}
-	v := VerifyPlanOf(p, "today, 09:12", now)
+	v := VerifyPlanOf(p, "today, 09:12", 0, now)
 	if v.Heading != "Verify 2 folders from the backup of today, 09:12" || v.Start == nil || v.Start.Text != "&Start" || v.Cancel.Text != "Cancel" {
 		t.Fatalf("plan %+v", v)
 	}
@@ -239,14 +263,23 @@ func TestVerifyPlan(t *testing.T) {
 	if v.Note != "Every file is decrypted and checked against its checksum. Differentials are read with their full backup of 1 Sep." {
 		t.Fatalf("note %q", v.Note)
 	}
+	if v.Hidden != "" {
+		t.Fatalf("no folder filtered out: %q", v.Hidden)
+	}
+	if got := VerifyPlanOf(p, "today, 09:12", 1, now).Hidden; got != "The folder filter on Restore backup hides 1 other folder of this backup. Choose All folders to verify it too." {
+		t.Fatalf("one folder filtered out: %q", got)
+	}
+	if got := VerifyPlanOf(p, "today, 09:12", 2, now).Hidden; got != "The folder filter on Restore backup hides 2 other folders of this backup. Choose All folders to verify them too." {
+		t.Fatalf("two folders filtered out: %q", got)
+	}
 	two := p
 	two.Sets = append([]interact.SetPlan{{Set: naming.BackupEntry{DirectoryName: "Music", ChainID: "GHI789", Date: "2026-09-30", DiffNumber: 1}, Base: naming.BackupEntry{DirectoryName: "Music", ChainID: "GHI789", Date: "2026-09-01"}}}, p.Sets...)
-	if got := VerifyPlanOf(two, "today", now).Note; got != "Every file is decrypted and checked against its checksum. Differentials are read with their full backups of 1 Sep." {
+	if got := VerifyPlanOf(two, "today", 0, now).Note; got != "Every file is decrypted and checked against its checksum. Differentials are read with their full backups of 1 Sep." {
 		t.Fatalf("two full backups of one day: %q", got)
 	}
 	p.Sets[0].Problem, p.Sets[0].Remedy = "Full backup missing.", "Restore it from your copy."
 	p.Issues = []interact.Issue{{Status: interact.StatusError, Text: "Full backup missing.", Remedy: "Restore it from your copy."}}
-	v = VerifyPlanOf(p, "today, 09:12", now)
+	v = VerifyPlanOf(p, "today, 09:12", 0, now)
 	if v.Start != nil || len(v.Issues) != 1 || v.Issues[0].Tone != ToneError || v.Folders.Rows[0].Cells[0].Tone != ToneError {
 		t.Fatalf("a blocked plan %+v", v)
 	}

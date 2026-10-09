@@ -47,7 +47,6 @@ differential:
 exclude: []
 on_unreadable_file: "fail"
 log_level: "info"
-io_diagnostics: false
 verify_after_backup: true
 reminder_days: 7
 authentication_mode: 1

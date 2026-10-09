@@ -182,8 +182,8 @@ const (
 	newKeysNo              = "Keep current keys"
 )
 
-// Progress card, Folders card while running, status bar and cancel
-// dialogs (GUI spec 6.2, 6.4).
+// Progress card, Folders card while running and cancel dialogs (GUI spec
+// 6.2, 6.4).
 const (
 	titleBackingUp         = "Backing up"
 	titleRestoring         = "Restoring"
@@ -388,6 +388,8 @@ const (
 	verifyReadsBase     = "Differentials are read with their full backup of %s."
 	verifyReadsBasesOf  = "Differentials are read with their full backups of %s."
 	verifyReadsBases    = "Differentials are read with their full backups."
+	verifyHiddenOne     = "The folder filter on Restore backup hides 1 other folder of this backup. Choose All folders to verify it too."
+	verifyHidden        = "The folder filter on Restore backup hides %d other folders of this backup. Choose All folders to verify them too."
 	logTitleFile        = "Log (%s)"
 	logTitleOf          = "Log of %s (%s)"
 	linkRunLog          = "Show log"
@@ -502,7 +504,6 @@ const (
 	argon2Note          = "Changes apply to new keys only."
 	cardLogging         = "Logging"
 	settingLogLevel     = "Log level"
-	settingIODiag       = "I/O diagnostics"
 	settingOn           = "On"
 	settingOff          = "Off"
 	folderFound         = "Found"

@@ -35,9 +35,9 @@ While it runs, the page shows the steps, the progress, and the speed; the Folder
 
 <img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress on the Create backup page">
 
-The **Restore backup** page lists every backup run with its folders, types, sizes, and status, and the log of the selected run; Restore and Verify act on the selected run or folder:
+The **Restore backup** page lists every backup run with its folders, types, sizes, and status, and a link to each run's log; Restore and Verify act on the selected run:
 
-<img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Restore backup page with runs, backup sets, and the log">
+<img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Restore backup page with runs and backup sets">
 
 Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
 
@@ -58,11 +58,13 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
 - Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
+- A restore stops when its destination folder, or a folder in it, is a link to another place (a junction or symbolic link), so that no other program can redirect the restored files
 
 ### Reliability
 - Every backup contains an encrypted manifest: the list of all files with their checksums; restore and verify check each file against it
 - A backup appears under its final file names only when it is complete; an interrupted backup never looks like a valid backup
 - Startup health check: validates directories, YubiKey, keys, and the structural integrity of existing backups at launch
+- Two RestoreSafe windows with the same backup directory don't get in each other's way: a restore or verification does not start while a backup runs (whose cleanup could delete the files it reads), and a backup does not start while a restore or verification runs; restores and verifications may run at the same time. A backup directory where RestoreSafe can't create its lock file can't be backed up into; a restore from it shows a warning instead
 - Streaming pipeline: low CPU/RAM footprint
 - Optional post-backup verification (`verify_after_backup: true`): each new backup is re-read and checked right after it is written
 
@@ -150,13 +152,14 @@ RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created b
 - Keep a copy of RestoreSafe 1.0.2 as long as you keep 1.x backups; you need it to restore them.
 - 2.0 never modifies or deletes 1.x backup files (`[Name]_DATE_ID-001.enc`, `.challenge`) or their log files, even in the same backup directory. The startup health check reports them as a reminder.
 - Delete the 1.x backups yourself once your 2.0 backups are in place and verified.
+- Start from the new `config-SAMPLE.yaml`. RestoreSafe 2.0 refuses settings it doesn't know: a 1.x `config.yaml` with `io_diagnostics` doesn't load until you remove that line (`log_level: "debug"` now includes the I/O diagnostics).
 
 ## Usage
 
 Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`:
 
 - **Create backup** - whether your folders are protected, and **Back up now…**. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. Below: your folders with the date of their newest backup and the type of the next one (and a note when the last backup failed or was cancelled); the backup directory and its free space; and your keys.
-- **Restore backup** - every backup run with its backup sets, the log of the selected run, and **Restore…** and **Verify…**. Click a folder to act on that folder, or the date of a run to act on all its folders.
+- **Restore backup** - every backup run with its backup sets and a **Show log** link, and **Restore…** and **Verify…** for the selected run. Clicking a run or any of its folders selects the run; to act on a single folder, choose it in the folder filter at the top.
 - **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
 
 RestoreSafe checks your backups when it starts, after every operation, with **Refresh** (on Create backup and Restore backup) or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
@@ -174,7 +177,7 @@ Then enter your password and/or confirm the Windows Security prompt of your Yubi
 While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, and the speed; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
 
 ### Restore a backup
-On the Restore backup page, select a backup run or one of its folders and click **Restore…** (or double-click it). The Restore window shows that run's folders:
+On the Restore backup page, select a backup run and click **Restore…** (or double-click it). The Restore window shows that run's folders, all checked; when the folder filter shows one folder, only that folder is checked:
 
 - **To** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet.
 - The folders, with their type, size, and whether the new folder can be created. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
@@ -185,7 +188,7 @@ The window checks your choices while you make them. Nothing is written before yo
 Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically (**Show details** lists it). Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
 
 ### Verify a backup
-On the Restore backup page, select a backup run or one of its folders and click **Verify…**. The Verify window shows the folders, how much is read, and how you unlock them; click **Start**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The progress and then the result appear at the top of the page, and the Status column shows the result ("Verified" or "Damaged") for each backup set.
+On the Restore backup page, select a backup run and click **Verify…**; it verifies all folders of the run, or only the one the folder filter shows. The Verify window shows the folders, how much is read, and how you unlock them; click **Start**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The progress and then the result appear at the top of the page, and the Status column shows the result ("Verified" or "Damaged") for each backup set.
 
 ### Excluding files and unreadable files
 Use `exclude` in `config.yaml` to leave out files and directories (case-insensitive):
@@ -197,7 +200,7 @@ Use `exclude` in `config.yaml` to leave out files and directories (case-insensit
 | `/Cache` or `Projects/*/build` | A path from the source directory root (patterns containing `/`) |
 | `logs/` | Directories named `logs` only (trailing `/`) |
 
-A file that cannot be read (for example a mail archive locked by an open mail program) aborts the backup by default (`on_unreadable_file: fail`). With `on_unreadable_file: skip`, RestoreSafe backs up everything else, lists the file as a warning, and keeps your older backups of that directory until a backup without skipped files succeeds. In a differential, a changed file that cannot be read keeps its older version from the full backup. Files deleted while the backup runs are simply not included.
+A file that cannot be read (for example a mail archive locked by an open mail program) aborts the backup by default (`on_unreadable_file: fail`). With `on_unreadable_file: skip`, RestoreSafe backs up everything else, lists the file as a warning, and keeps your older backups of that directory until a backup without skipped files succeeds. In a differential, a changed file that cannot be read keeps its older version from the full backup. Files deleted while the backup runs are simply not included. A file that another program holds locked counts as unreadable also when RestoreSafe runs as administrator, so it is never copied while it may be changing.
 
 ## Full and differential backups
 

@@ -7,10 +7,10 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/setwriter"
 )
 
-// logPartSummary logs the parts of a set and, with io_diagnostics, how the
+// logPartSummary logs the parts of a set and, at debug level, how the
 // encrypted data was written (counters) and the size of every part.
 func (o *operation) logPartSummary(parts []string, directoryName string, counters setwriter.Counters) {
-	if o.cfg.IODiagnostics {
+	if o.log.DebugEnabled() {
 		avgEncryptWriteKB := 0.0
 		if calls := counters.Calls.Load(); calls > 0 {
 			avgEncryptWriteKB = float64(counters.Out.Load()) / float64(calls) / 1024

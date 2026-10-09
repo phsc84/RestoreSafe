@@ -82,56 +82,10 @@ func buildResult(items []healthItem) Result {
 	return Result{errorScopes: scopes, items: items}
 }
 
-// Check performs the startup health check without printing it; the
-// result's Report describes the findings.
+// Check performs the startup health check; BlocksBackup and
+// BlocksRestoreOrVerify decide what its findings block.
 func Check(cfg *config.Config, exeDir, configPath string) Result {
 	return buildResult(inspect(cfg, exeDir, configPath).items)
-}
-
-// Report describes the findings as a report: one heading per checked scope
-// with its items, then the summary. The findings are items, not issues;
-// BlocksBackup and BlocksRestoreOrVerify decide what they block.
-func (r Result) Report() interact.Report {
-	var checks []interact.Row
-	scopeRows := make(map[string][]interact.Row)
-	var scopes []string
-	okCount, warnCount, errorCount := 0, 0, 0
-	for _, item := range r.items {
-		switch item.Severity {
-		case healthOK:
-			okCount++
-		case healthWarn:
-			warnCount++
-		case healthError:
-			errorCount++
-		}
-		row := interact.Item(healthStatus(item.Severity), item.Detail)
-		if _, seen := scopeRows[item.Scope]; !seen {
-			scopes = append(scopes, item.Scope)
-		}
-		scopeRows[item.Scope] = append(scopeRows[item.Scope], row)
-	}
-	for _, scope := range scopes {
-		checks = append(checks, interact.Heading(scope))
-		checks = append(checks, scopeRows[scope]...)
-	}
-
-	summary := []interact.Row{interact.Note(fmt.Sprintf("Summary: %d OK, %d warning(s), %d error(s)", okCount, warnCount, errorCount))}
-	if errorCount > 0 {
-		summary = append(summary, interact.Note("Review the reported errors before running backup, restore, or verify."))
-	}
-	return interact.Report{Title: "Startup health check", Sections: []interact.Section{{Rows: checks}, {Rows: summary}}}
-}
-
-func healthStatus(severity healthSeverity) interact.Status {
-	switch severity {
-	case healthOK:
-		return interact.StatusOK
-	case healthWarn:
-		return interact.StatusWarn
-	default:
-		return interact.StatusError
-	}
 }
 
 // inspection is what the health check read, once, for the findings and for

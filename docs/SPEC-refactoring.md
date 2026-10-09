@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Living; first used for [PLAN-refactoring-2.0.md](PLAN-refactoring-2.0.md) |
+| Status | Living; the current round is in [PLAN-refactoring.md](PLAN-refactoring.md) |
 | Applies to | Every refactoring round of RestoreSafe: structure, dead and legacy code, performance, security hardening, tests, tooling, build, and docs |
 | Not for | New features and changes to what the program does for the user; those get their own spec |
 
@@ -10,11 +10,11 @@
 
 Technical debt grows with every feature. A refactoring round pays it down on purpose instead of in passing: measure the code, review it against a fixed checklist, write down what is worth changing, change it in a safe order, and measure again.
 
-This document says how a round works. Each round has its own plan, `docs/PLAN-refactoring-<release>.md`, named after the release it follows. The plan holds the findings and their state; this document holds what stays the same from round to round.
+This document says how a round works. The plan of the current round is always `docs/PLAN-refactoring.md`; a new round replaces its content, and git history keeps the earlier rounds. Item IDs (`RF-n`) count on across rounds, so an ID cited in code or a commit never means two things: the next round starts at the number after the last one used. The plan holds the findings and their state; this document holds what stays the same from round to round.
 
 **When to start a round:**
 
-- after each major or minor release (2.0.0, 2.1.0, ...), once the release fixes are out;
+- after each major or minor release (2.0.0, 2.1.0, ...): the plan is created right after the release, with the previous round's carried-over items (section 8), so nothing waits in a deleted plan; the review and the work follow once the release fixes are out;
 - earlier when a signal says so: CI got noticeably slower, a coverage floor was lowered to let a change through, `deadcode` or staticcheck report new findings, a file passed the size limits of section 5.1, or a feature took much longer than it should because of the code around it.
 
 At most one round is open at a time. A round that can't finish before the next release is cut down to what it finished; the rest moves to the next round (section 8).
@@ -112,6 +112,8 @@ For each area: what to look at, and how to find it. Not every point yields an it
 - The format fixtures restore bit-exact.
 - The GUI scripts in `scripts/gui-test` still find every control (`ids_test.go`) and run.
 - The manual checklist (`docs/GUI-TEST-CHECKLIST.md`) has no row that a script could cover instead.
+- Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference.
+- A check that only a person can do (Process Monitor, real hardware) names who does it and before which release, in the item itself; otherwise it stays open unnoticed (refactoring 2.0 RF-52).
 
 ### 5.6 Tooling, build and CI
 
@@ -154,9 +156,10 @@ IDs restart at RF-1 in every round and are grouped by area (e.g. RF-1x tests, RF
 A round is done when every P1 and P2 item is done or dropped with a reason, and the round's own "Done when" list holds. Then:
 
 1. Run the baseline (section 4) once more and record it as the round's result in the plan.
-2. Copy the unfinished P3 items, with their evidence re-checked, into a "Carried over" section at the end of the plan; the next round starts from there.
+2. Copy the unfinished items (P3, and parts of P1 or P2 items that were explicitly deferred), with their evidence re-checked, into a "Carried over" section at the end of the plan; the next round starts from there.
 3. Update this document with what the round taught: a new checklist point for a kind of finding the checklist missed, a new standing constraint, a better command.
-4. Mark the plan "Done <date>" in `docs/README.md`. Delete it once the next release is out: git history keeps it, and the next round's plan carries its baseline and carried-over items forward.
+4. Mark the plan "Done <date>" in `docs/README.md`.
+5. Right after the next release, replace the content of `PLAN-refactoring.md` with the next round's plan from the template (section 9), with this round's result as its first baseline column and its carried-over items, which keep their IDs.
 
 ## 9. Template for a round's plan
 

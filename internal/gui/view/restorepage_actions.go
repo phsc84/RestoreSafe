@@ -14,9 +14,12 @@ type ActionBar struct {
 	// Sets are the selected sets that can be restored or verified.
 	Sets []string
 	// What names the selection in a question: "today, 09:12"; Whole is set
-	// when Sets are every folder of that backup.
+	// when Sets are every folder of that backup, which the folder filter
+	// can hide.
 	What  string
 	Whole bool
+	// Hidden counts the sets of the selected run the folder filter hides.
+	Hidden int
 }
 
 // SelectionOf words the selection: a set (set != "") or a whole run.
@@ -45,7 +48,8 @@ func SelectionOf(p RestorePage, runID naming.BackupID, set string) ActionBar {
 					unusable = row.Reason
 				}
 			}
-			bar.Whole = unusable == ""
+			bar.Hidden = g.Hidden
+			bar.Whole = unusable == "" && g.Hidden == 0
 			return enable(bar, unusable)
 		}
 		for _, row := range g.Rows {

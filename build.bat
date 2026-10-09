@@ -15,7 +15,8 @@ set DIST_DIR=dist
 set SANDBOX_DIR=sandbox
 
 echo [BUILD] Check dependencies...
-go mod verify
+REM Only the success line goes to stdout; mismatches still print on stderr.
+go mod verify >nul
 if errorlevel 1 (
     echo [ERROR] go mod verify failed: the module cache does not match go.sum
     exit /b 1

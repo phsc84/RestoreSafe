@@ -155,12 +155,15 @@ func (l *Logger) Info(format string, args ...any) {
 
 // Debug logs a debug message (only written at LevelDebug).
 func (l *Logger) Debug(format string, args ...any) {
-	if l == nil {
-		return
-	}
-	if l.level >= LevelDebug {
+	if l.DebugEnabled() {
 		l.write("DEBUG", format, args...)
 	}
+}
+
+// DebugEnabled reports whether debug messages are written, so that callers
+// can skip collecting what only a debug log shows.
+func (l *Logger) DebugEnabled() bool {
+	return l != nil && l.level >= LevelDebug
 }
 
 // Warn logs a warning message.

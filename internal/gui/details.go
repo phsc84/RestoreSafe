@@ -12,7 +12,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// detailsDialog shows a report ("Check details", later "Show details") in a
+// detailsDialog shows a report ("Show details" of a plan or result) in a
 // resizable modal window with a Close button.
 type detailsDialog struct {
 	hwnd, report, close win32.HWND

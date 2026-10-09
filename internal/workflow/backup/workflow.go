@@ -354,7 +354,7 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 	var inBytes, outBytes, outWriteCalls atomic.Int64
 	counters := setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
 	var progressLog *logging.Logger
-	if o.cfg.IODiagnostics {
+	if o.log.DebugEnabled() {
 		progressLog = o.log
 	}
 	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)

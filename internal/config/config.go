@@ -85,7 +85,6 @@ type Config struct {
 	SplitSizeMB        int64        `yaml:"split_size_mb"`
 	RetentionKeep      int          `yaml:"retention_keep"`
 	LogLevel           string       `yaml:"log_level"`
-	IODiagnostics      bool         `yaml:"io_diagnostics"`
 	VerifyAfterBackup  bool         `yaml:"verify_after_backup"`
 	ReminderDays       *int         `yaml:"reminder_days"`
 	AuthenticationMode AuthMode     `yaml:"authentication_mode"`

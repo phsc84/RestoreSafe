@@ -221,6 +221,12 @@ func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (ui
 			return p.OnNotify(hdr), true
 		}
 		return 0, true
+	case win32.WM_SIZE:
+		// A card's border follows its size: without a full repaint, a card
+		// that grows keeps its old bottom edge, one that shrinks loses it.
+		if p.style.Card {
+			win32.Invalidate(hwnd)
+		}
 	case win32.WM_VSCROLL:
 		p.scrollBy(wparam)
 		return 0, true

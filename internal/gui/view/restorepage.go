@@ -73,6 +73,8 @@ type RunGroup struct {
 	// Expanded is set for the newest run.
 	Expanded bool
 	Rows     []BackupRow
+	// Hidden counts the sets of the run the folder filter hides.
+	Hidden int
 	// LogPath is the run's log, "" when there is none.
 	LogPath string
 	// When is the run's date in words, for the selection and the log title.
@@ -254,6 +256,8 @@ func groupsOf(s *health.Snapshot, r *flow.Run, folder string, now time.Time) []R
 				bytes += info.SizeBytes
 				if folder == AllFolders || info.Entry.DirectoryName == folder {
 					g.Rows = append(g.Rows, rowOf(s, info, r, now))
+				} else {
+					g.Hidden++
 				}
 			}
 		}

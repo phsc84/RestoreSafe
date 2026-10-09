@@ -99,9 +99,11 @@ type app struct {
 	// logText is what the operation wrote, for "Show log".
 	logText strings.Builder
 	// verifyWhat names the verified selection; verifyWhole is set when it is
-	// every folder of that backup.
-	verifyWhat  string
-	verifyWhole bool
+	// every folder of that backup; verifyHidden counts the sets of that
+	// backup the folder filter left out.
+	verifyWhat   string
+	verifyWhole  bool
+	verifyHidden int
 
 	// The shell of the new interface.
 	shell shell

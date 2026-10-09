@@ -112,7 +112,11 @@ The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, 
 
 ## 5. CHANGELOG.md
 
-[CHANGELOG.md](CHANGELOG.md) is written for users. A change they notice adds an entry under the unreleased version in the same commit: a new or changed feature, a changed text or behaviour, a fixed bug. Internal changes (refactoring, tests, CI) get no entry. At a release, the unreleased section gets its version number and date.
+[CHANGELOG.md](CHANGELOG.md) is written for users. A change they notice adds an entry under the unreleased version in the same commit: a new or changed feature, a changed text or behaviour, a fixed bug. Keep entries short and say what changes for the user; explanations and details go in the README. Internal changes (refactoring, tests, CI) get no entry.
+
+A dependency of the program also gets an entry, under **Dependencies**: a new Go version, and a module added, updated, replaced or removed that is built into `RestoreSafe.exe`. For a tool that protects encrypted backups, technical users want to know which Go and crypto versions a release ships with. Tools that only build or check the code (the `tool` block of `go.mod`) get no entry.
+
+At a release, the unreleased section gets its version number and date.
 
 ## 6. Rules of the code
 

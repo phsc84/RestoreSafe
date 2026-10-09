@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed 2026-10-06; Phases A and B done 2026-10-07 (open in B: the Process Monitor check of RF-52), Phase C done 2026-10-08; phases D and E done 2026-10-08 except RF-62, which waits for the 2.0.0 release (13.1), and the optional coverage targets of RF-40; all open questions answered |
+| Status | **Done 2026-10-09** (section 17). Proposed 2026-10-06; Phases A and B done 2026-10-07, Phase C done 2026-10-08, phases D and E done 2026-10-08; all open questions answered. What is left is in section 18: the Process Monitor check of RF-52 and RF-62 before and after the 2.0.0 release, the coverage targets of RF-40 for the next round |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1, B: #2, C: #3, D and E: #4); CI runs on each push to the pull request |
@@ -12,7 +12,7 @@
 
 RestoreSafe 2.0 is functionally complete and well layered: `internal/architecture` enforces the import rules, the view logic is plain Go, and most packages below the GUI have 75-95 % test coverage. This first refactoring round lists what an expert review of the code found worth changing before the codebase grows further, and in which order to change it.
 
-Items follow the format and priorities (P1-P3) of SPEC-refactoring section 6. Their IDs (`RF-n`) are unique within this round; elsewhere, cite them as "refactoring 2.0 RF-n".
+Items follow the format and priorities (P1-P3) of SPEC-refactoring section 6. Their IDs (`RF-n`) are unique across rounds (SPEC-refactoring section 1); code and commits cite them as "refactoring 2.0 RF-n".
 
 ## 2. Baseline (measured 2026-10-06)
 
@@ -306,7 +306,7 @@ docs/
 ├── SPEC-2.0.md              living: format and behaviour
 ├── SPEC-gui.md              living: the window
 ├── SPEC-refactoring.md      how a refactoring round works
-├── PLAN-refactoring-2.0.md  this round, until done
+├── PLAN-refactoring.md      the current round
 ├── GUI-TEST-CHECKLIST.md
 └── images/
 ```
@@ -320,6 +320,7 @@ Done 2026-10-08: the README row of `retention_keep` names both values; every oth
 
 **RF-64 (P3) Add a CLAUDE.md / contributor note.** One page: the layer rules, the commands (`go build`, `go vet`, `go test`, `go tool staticcheck`), the standing constraints of SPEC-refactoring section 2, the error convention of RF-25, and the commit style. It replaces the parts of the private DEVELOPMENT.md that a contributor needs.
 Done for the contributor note: [CONTRIBUTING.md](../CONTRIBUTING.md) describes branches, commits, pull requests, CI and its coverage floors, CHANGELOG entries, the rules of the code, and releases; the README and DEVELOPMENT.md link to it. Open: whether a CLAUDE.md is still worth having next to it, and the error convention once RF-25 is decided.
+Closed 2026-10-09: CONTRIBUTING.md section 6 has the error convention (`problem.Error` with its remedy). No CLAUDE.md: it would repeat CONTRIBUTING.md, and two copies drift apart.
 
 ## 13. Phases
 
@@ -389,3 +390,35 @@ These are the owner's decisions; the spec works with either answer. Answered 202
 - README, CHANGELOG, and the docs layout match the code.
 
 Then close the round as SPEC-refactoring section 8 describes.
+
+## 17. Result (measured 2026-10-09, `refactor-2.0` at `a5986bb`)
+
+| Measure | Value |
+|---|---|
+| Tracked files / Go lines | 337 / 44,303 |
+| Largest production files | `security/yubikey/fido2.go` 908, `gui/view/strings.go` 516, `format/archive/build.go` 504, `gui/win32/listview.go` 496, `gui/view/result.go` 485 |
+| Go toolchain | go 1.27.2 |
+| `go vet`, `gofmt -l`, staticcheck, `deadcode -test` | nothing reported |
+| `govulncheck` | 0 called, 0 imported; 1 in a required module (`x/crypto/openpgp`, not imported) |
+| `go test ./...` | passes, including the 2.0.0 format fixtures; race and fuzzing pass in CI |
+| Markers (`TODO`, `FIXME`, `XXX`, `HACK`) | none |
+| Coverage, total | 54.5 % (baseline 46.1 %) |
+
+Coverage by package: cryptox 89.1, recovery 94.0, yubikey 36.4; config 92.6, logging 88.5, problem 100; manifest 92.6, naming 92.5, container 85.5, setwriter 85.2, catalog 81.2, archive 78.1; fsx 82.7; health 95.1, plan 93.3, restorepoint 90.9, unlock 84.7, job 84.3, backup 83.3, restore 79.1, interact 78.3, verify 73.2; gui/view 91.0, gui/flow 77.0, gui/widget 73.6, gui/win32 10.4, gui 2.0; cmd/restoresafe 33.3.
+
+Done when (section 16): every P1 and P2 item is done, decided or dropped with its reason, except the two manual or release-bound steps of section 18. CI runs every listed check. The fixtures restore bit-exact. `deadcode` reports nothing and `gui/flow` matches no workflow text. One file in `internal/gui` is over 500 lines: `view/strings.go` (516), the table of the window's texts; splitting a list of constants would make texts harder to find, so it stays whole. The manual GUI checklist passed on 2026-10-09 at `a5986bb`.
+
+## 18. Carried over
+
+Before the 2.0.0 release:
+
+- **RF-52 (P1)**, the check by hand, by the owner: run `RestoreSafe.exe` from a folder of its own under Process Monitor (filter: process name `RestoreSafe.exe`, path ends with `.dll`) and confirm that no DLL is looked up in that folder. The code change is done (`d11617c`).
+
+Right after the 2.0.0 release, in one commit (SPEC-refactoring section 8, step 5):
+
+- Replace the content of this file with the next round's plan from the template, with section 17 as its first baseline column and the item below; its new items start at RF-65.
+- **RF-62 (P2)**: delete PLAN-gui-redesign.md, remove GUI spec 17.2 and the plan link in GUI spec 11, and update the index in docs/README.md.
+
+To the next round:
+
+- **RF-40 (P1)**, the coverage targets (the floors are enforced). Below the target on 2026-10-09: cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.6 (85 each), yubikey 36.4 (60). Start with verify and restore, which decide whether damage is reported.

@@ -60,6 +60,9 @@ func (tb *table) set(v view.Table) {
 		tb.sig, tb.rowsSig, tb.fitted = sig, "\x01", 0
 	}
 	tb.v = v
+	// New columns are fitted at once: a card that keeps its size doesn't
+	// place the table again.
+	tb.fit()
 	rowsSig := ""
 	for _, r := range v.Rows {
 		if len(r.Cells) > 0 {
