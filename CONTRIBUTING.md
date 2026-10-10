@@ -19,7 +19,7 @@ GitHub enforces this for `main` with the ruleset in [.github/rulesets/release-br
 - the branch cannot be force-pushed or deleted;
 - no approval is required (GitHub does not let anyone approve their own pull request).
 
-The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. `dev` and the other branches are not protected.
+The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -ExecutionPolicy Bypass -File scripts\apply-rulesets.ps1` (Windows blocks scripts by default; the bypass applies to that run only), which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. `dev` and the other branches are not protected.
 
 Stay on `dev` for daily work. To bring your local `main` up to date without leaving it, run `git fetch origin main:main` (it only moves `main` forward, so it cannot lose anything). Switch to `main` (`git switch main`) only to build exactly what is released, and switch back afterwards: a commit made on `main` cannot be pushed.
 
