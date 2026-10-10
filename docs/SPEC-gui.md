@@ -36,7 +36,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 
 **Goal:** a user sees at a glance whether their folders are protected, starts a backup with one click, understands what RestoreSafe will do before it does it, and gets folders back without reading a report.
 
-**In scope:** Create backup page, backup plan and run, Restore backup page (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
+**In scope:** Create backup page, backup plan and run, Restore backup page (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the data the workflows provide for the UI (section 11).
 
 **Out of scope, permanently** (core spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
@@ -76,11 +76,11 @@ This document specifies RestoreSafe's window application, a status-first interfa
 | Item | Requirement |
 |---|---|
 | OS | Windows 11. YubiKey needs 22H2 or later (unchanged). |
-| Common Controls | Version 6 via the existing manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
-| DPI | `PerMonitorV2` (existing). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
+| Common Controls | Version 6 via the application manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
+| DPI | `PerMonitorV2` (application manifest). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
 | Text | UTF-16 (`W` APIs) throughout. |
 | Theme | Light only in 2.0.0. Dark mode follows in 2.1.0 (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
-| Fonts | Segoe UI Variable Text (fallback: the system message font, as today) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
+| Fonts | Segoe UI Variable Text (fallback: the system message font) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
 | State | RestoreSafe is portable and keeps no state outside the backup directory. The UI stores nothing: no registry, no settings file, no remembered window position or column widths. |
 
 ### 3.2 Window and navigation
@@ -89,7 +89,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 - Title: `RestoreSafe <version>`. When the configuration isn't the default `config.yaml` next to the exe, the title adds the file name: `RestoreSafe 2.0.0 · home-backup.yaml`.
 - Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
 - Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings**. The sidebar names the pages by their action. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
-- Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons, as today.
+- Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons.
 - Status bar: a strip on the secondary surface without text. What is going on shows on the page itself (hero, progress card, Refresh disabled while a check runs); the free space is on the backup directory cards, the runs on Restore backup.
 - While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
 
@@ -134,10 +134,10 @@ The implementation may use the user's Windows accent color instead of the accent
 | Progress bars | `msctls_progress32` (`PBS_SMOOTH`, marquee while the total is unknown and while keys are unlocked), plus taskbar progress via `ITaskbarList3` |
 | Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
 | Password fields | Edit with `ES_PASSWORD`, read and wiped as in 13.1 |
-| Log window | Read-only rich edit (`MSFTEDIT_CLASS`, as today) with a severity filter |
-| Show details (plans, results) | The existing report view (rich edit) in a dialog |
+| Log window | Read-only rich edit (`MSFTEDIT_CLASS`) with a severity filter |
+| Show details (plans, results) | The report view (rich edit) in a dialog |
 | Backup plan, Restore window | Modal dialogs that close on Start, no property sheets |
-| Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` (existing) |
+| Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` |
 
 ### 3.5 Application state
 
@@ -170,7 +170,7 @@ The hero on Create backup leaves out the problems of existing backups: a missing
 
 ## 4. Operation lifecycle
 
-This section connects the screens. Every operation follows the same five steps; the workflow drives them through `interact.UI` exactly as today.
+This section connects the screens. Every operation follows the same five steps; the workflow drives them through `interact.UI`.
 
 | Step | Backup | Restore | Verify |
 |---|---|---|---|
@@ -746,7 +746,7 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 
 | ID | Requirement |
 |---|---|
-| ST-1 | Configuration file: the loaded path, **Edit config.yaml** (opens it in its default application, `ShellExecuteW` as today) and **Reload**. |
+| ST-1 | Configuration file: the loaded path, **Edit config.yaml** (opens it in its default application, `ShellExecuteW`) and **Reload**. |
 | ST-2 | **Reload** reads the file again, validates it and runs the health check; on success every page shows the new values. A file that doesn't load keeps the previous configuration and shows the error with its line and remedy on this card (the app keeps running). Reload is disabled while an operation runs. This replaces "restart RestoreSafe" (section 11.6). |
 | ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, core spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. A splitter below the card sets the table's height, as on Create backup (OV-3). |
 | ST-4 | Backup directory: path, reachability and free space (from the health check), split size, **Open in Explorer**. |
@@ -878,7 +878,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 
 | Code | Severity | Message (UI) | Hint and action |
 |---|---|---|---|
-| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start (as today); after Reload on the Settings card. Includes unknown keys (11.6). |
+| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start; after Reload on the Settings card. Includes unknown keys (11.6). |
 | `BACKUP_DIR_UNREACHABLE` | Error | The backup directory isn't reachable | Check the drive or network connection. Actions: Check again, Edit config. |
 | `BACKUP_DIR_NOT_WRITABLE` | Error | RestoreSafe can't write to the backup directory | Check the permissions. Action: Open in Explorer. |
 | `SOURCE_MISSING` | Error | A folder to back up can't be found | Connect the drive, or remove the folder from config.yaml. Actions: Check again, Edit config. |
@@ -1055,10 +1055,10 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 
 - **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → CreatePage`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → RestorePage`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
 - **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side.
-- **Clock and file system.** The status model, the view models and the speed and time-left calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
-- **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the existing `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
+- **Clock and file system.** The status model, the view models and the speed calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
+- **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
 
-### 16.2 Workflow additions (Go tests, `go test ./...`)
+### 16.2 Workflow data for the UI (Go tests, `go test ./...`)
 
 | Area | Tests | Covers |
 |---|---|---|
@@ -1086,7 +1086,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
 | Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (This test once found a real defect: a hidden page's access key started a backup.) | 15 |
 | Layout | Every page and dialog at its minimum and default size at 96, 120, 144 and 192 dpi: no control overlaps another or leaves the client area, and every text fits its measured width. | 3.2, 15 |
-| Bridge and secrets | The existing bridge tests (questions answered exactly once, cancellation, output order, progress coalescing) and secret tests (buffers zeroed) stay and are extended to the plan messages. | 12.2, 13 |
+| Bridge and secrets | The bridge tests (questions answered exactly once, cancellation, output order, progress coalescing, plan messages) and secret tests (buffers zeroed). | 12.2, 13 |
 
 ### 16.4 Window automation (`scripts/gui-test`)
 

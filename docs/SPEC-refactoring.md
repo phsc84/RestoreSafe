@@ -44,7 +44,7 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 
 ## 4. Baseline
 
-Run on a clean checkout of the round's starting commit and record the results in the plan. Once CI runs these (refactoring 2.0 RF-1), its output for that commit is the baseline. The tools are pinned in `go.mod` (refactoring 2.0 RF-2); until then, use `go run <module>@<version>`.
+Run on a clean checkout of the round's starting commit and record the results in the plan. Where CI runs a measure, its output for that commit is the baseline. The tools are pinned in `go.mod`.
 
 | Measure | Command | Record |
 |---|---|---|

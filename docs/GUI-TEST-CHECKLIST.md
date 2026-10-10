@@ -6,20 +6,6 @@ Test on a real Windows 11 machine, after `go test ./...` and the scripts in [scr
 
 CI runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` on every pull request (job **GUI smoke test**, [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1)), at 100 % on the runner's 1024 × 768 desktop. A run at 150 % is manual.
 
-## Known differences from the spec
-
-Decided on 2026-10-06; the spec matches the code in each case, so none of them is a defect.
-
-| Spec | Difference | Decision |
-|---|---|---|
-| OV-1, RW-8 | "Show files" for skipped files is not there: the run's log names the files. Restore results showed stale files as "not in this backup", and only in the tests: a restore wrote no fact. | **Changed** in part: the backup records skipped and stale files apart, a restore records both per set, and the result card says "not in this backup" and "restored in an older version from <date>". **Accepted**: no "Show files"; the log names every file, and the result's Show log filters it. |
-| OV-2 | When the check blocks a backup (e.g. a missing folder), the hero offers its fix actions (Check again, Edit config) instead of a disabled **Back up now…**; `Ctrl+B` does nothing then. | **Accepted**: OV-1 allows one primary and one secondary action; a disabled third button adds nothing the hero doesn't say. OV-2 changed. |
-| BR-4 | During a backup, the Folders card showed "Done, <size>" with the size of the folder read, not of the set written. | **Changed**: it shows the size of the set written, as the Restore backup page does. |
-| CR-1 | The unlock dialog did not name the key set by its date; the workflow's notice above the field said which backup and the keys' date. | **Changed** by refactoring 2.0 RF-26: the question carries the other keys and their creation date (`interact.OtherKeys`), and the dialog's notice shows them. CR-1 changed. |
-| RW-1 | The restore window is resizable; its progress page left empty space below the card. | **Changed**: the card fills the page and centres its content. |
-| 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | **Accepted**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
-| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: test it with a backup from the day before. |
-
 ## 1. Status and Create backup page
 
 For each condition: prepare it, start RestoreSafe, compare the hero with figure 5.3 and the requirement, and use its fix action.
