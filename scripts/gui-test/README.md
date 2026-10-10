@@ -12,6 +12,7 @@ Controls are found by their control ID, which is also their UI Automation `Autom
 | `Check-States.ps1` | For every condition: makes it, starts RestoreSafe, compares the hero's title and primary action with the expected ones, saves a screenshot. Exit code 0 when all match. |
 | `Accessibility.ps1` | Library: `Show-Accessibility` (role, name, AutomationId, access key of every control, as screen readers see them), `Test-AccessKeys`. As a check: walks the pages, the Create backup window and the wizard and reports buttons without access keys and duplicate access keys, and labels that lie over a control (a label with a tooltip takes the clicks of a button under it). |
 | `Screenshot.ps1` | Starts RestoreSafe and saves a screenshot cropped to the visible frame, optionally scaled (the README screenshots use `-Scale 0.667` at 150 %). |
+| `Screenshot-Windows.ps1` | The README screenshots of the Create backup and Restore backup windows: a full backup, then the Create backup window of the differentials (each source folder gets a copy of its newest file, removed at the end), then the Restore backup window on the newest run. Needs a password-only configuration whose backup directory doesn't exist yet; restores nothing. |
 
 ## Examples
 
@@ -34,6 +35,11 @@ $cfg = "C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"
 
 # Screenshot of the Create backup page for the README.
 .\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\create-backup.png -Scale 0.667
+
+# Screenshots of the Create backup and Restore backup windows for the README
+# (a configuration whose backup directory doesn't exist yet).
+.\Screenshot-Windows.ps1 -Exe $exe -Config C:\dev\RestoreSafe\sandbox\readme-demo\config.yaml `
+    -Password "correct horse battery" -OutDir ..\..\docs\images
 ```
 
 The release gate (spec 16.7) runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` at 100 % and 150 % display scaling.

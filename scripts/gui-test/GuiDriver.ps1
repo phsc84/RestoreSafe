@@ -32,6 +32,7 @@ public static class U {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint f);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   // Window caption or static text; for edit controls of another process use EditText.
   public static string Text(IntPtr h) { var s = new StringBuilder(1024); GetWindowText(h, s, 1024); return s.ToString(); }
@@ -222,6 +223,26 @@ function Shot($hwnd, [string]$path) {
   $hdc = $g.GetHdc(); [U]::PrintWindow($hwnd, $hdc, 2) | Out-Null; $g.ReleaseHdc($hdc)
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
+}
+
+# Save-Shot saves a PNG of the window cropped to its visible frame, without
+# the invisible resize border (DWMWA_EXTENDED_FRAME_BOUNDS = 9), and scaled
+# (0.667 for the README screenshots, taken at 150 %).
+function Save-Shot($hwnd, [string]$path, [double]$scale = 1.0) {
+  $raw = [System.IO.Path]::GetTempFileName() + ".png"
+  Shot $hwnd $raw
+  $wr = New-Object U+RECT; [U]::GetWindowRect($hwnd, [ref]$wr) | Out-Null
+  $fr = New-Object U+RECT; [U]::DwmGetWindowAttribute($hwnd, 9, [ref]$fr, 16) | Out-Null
+  $src = [System.Drawing.Image]::FromFile($raw)
+  $crop = New-Object System.Drawing.Rectangle ($fr.L - $wr.L), ($fr.T - $wr.T), ($fr.R - $fr.L), ($fr.B - $fr.T)
+  $w = [int]($crop.Width * $scale); $h = [int]($crop.Height * $scale)
+  $dst = New-Object System.Drawing.Bitmap $w, $h
+  $g = [System.Drawing.Graphics]::FromImage($dst)
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $g.DrawImage($src, (New-Object System.Drawing.Rectangle 0, 0, $w, $h), $crop, [System.Drawing.GraphicsUnit]::Pixel)
+  $dst.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose(); $dst.Dispose(); $src.Dispose(); Remove-Item $raw
+  "Saved $path (${w}x${h})"
 }
 
 # Test-Overlaps returns the visible labels of $parent that lie over a
