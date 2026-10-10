@@ -4,7 +4,7 @@ What to test by hand in the window: the manual part of the GUI test plan ([SPEC-
 
 Test on a real Windows 11 machine, after `go test ./...` and the scripts in [scripts/gui-test](../scripts/gui-test/README.md) have passed. Use test configurations and directories in `sandbox\`, never your real backups; `New-TestCondition.ps1` prepares the conditions named below.
 
-CI runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` on every pull request (job **GUI smoke test**, [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1)), at 100 % on the runner's 1024 × 768 desktop. A run at 150 % is manual.
+CI runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` on every pull request (job **gui: smoke test**, [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1)), at 100 % on the runner's 1024 × 768 desktop. A run at 150 % is manual.
 
 ## 1. Status and Create backup page
 

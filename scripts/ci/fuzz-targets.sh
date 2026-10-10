@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: fuzz.sh [seconds per target, default 30]
+# Usage: fuzz-targets.sh [seconds per target, default 30]
 # Runs every fuzz target of the module for a while, one after the other (go
 # test fuzzes one target per run). A failing input is saved by go test under
 # the package's testdata/fuzz/<target>/; commit it as a regression test.

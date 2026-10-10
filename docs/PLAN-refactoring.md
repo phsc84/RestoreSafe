@@ -41,7 +41,7 @@ The standing constraints of SPEC-refactoring section 2 apply. The format fixture
 
 ## 4. Quality assurance
 
-**RF-40 (P1) Coverage targets per package** (carried over from the round of 2.0). CI enforces a floor per package (`scripts/ci/coverage-floors.txt`, checked by `check-coverage-floors.sh`); the targets set in the round of 2.0 are not reached everywhere. Below the target on 2026-10-09: cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.6 (85 each), yubikey 36.4 (60; everything except the WebAuthn calls, behind the `fido2MakeCredFn`/`fido2GetHmacFn` seams).
+**RF-40 (P1) Coverage targets per package** (carried over from the round of 2.0). CI enforces a floor per package (`scripts/ci/test-coverage-floors.txt`, checked by `test-coverage-floors.sh`); the targets set in the round of 2.0 are not reached everywhere. Below the target on 2026-10-09: cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.6 (85 each), yubikey 36.4 (60; everything except the WebAuthn calls, behind the `fido2MakeCredFn`/`fido2GetHmacFn` seams).
 Change: tests for the error paths first, starting with verify and restore, which decide whether damage is reported; raise each floor to its target once it is reached. Re-check the numbers at this round's baseline.
 Acceptance: every package at or above its target, and the floors in CI raised to match.
 

@@ -17,21 +17,21 @@ A push to any other branch without a PR runs nothing.
 
 Five jobs run in parallel, each on its own runner; together they take about eight minutes, the fuzzing job the longest. A pull request into `main` can be merged only when all five are green ([.github/rulesets/release-branch.json](../.github/rulesets/release-branch.json), CONTRIBUTING.md section 1).
 
-| Job | Checks | Section |
-|---|---|---|
-| Format, vet, build, static analysis | formatting, `go vet`, the release build, staticcheck, known vulnerabilities; reports dead code | 3 |
-| Tests and coverage | `go test`, the coverage floor of each package, every benchmark once | 4 |
-| Race detector | `go test -race` | 5 |
-| Fuzzing | every fuzz target for 30 seconds | 6 |
-| GUI smoke test | backups, a restore and a verification through the real window, and every status of the Create backup page | 7 |
+| ID | Job (as GitHub shows it) | Checks | Scripts in `scripts/ci/` | Section |
+|---|---|---|---|---|
+| `static` | static: format, vet, build, analysis | formatting, `go vet`, the release build, staticcheck, known vulnerabilities; reports dead code | none | 3 |
+| `test` | test: tests and coverage | `go test`, the coverage floor of each package, every benchmark once | `test-coverage-floors.sh`, `test-coverage-floors.txt`, `shared-annotate-failures.sh` | 4 |
+| `race` | race: race detector | `go test -race` | `shared-annotate-failures.sh` | 5 |
+| `fuzz` | fuzz: fuzzing | every fuzz target for 30 seconds | `fuzz-targets.sh` | 6 |
+| `gui` | gui: smoke test | backups, a restore and a verification through the real window, and every status of the Create backup page | `gui-smoke.ps1` | 7 |
 
-The release build stays `CGO_ENABLED=0`; only the race detector needs cgo.
+The ID is the job's key in `ci.yml` and the prefix of its name and of its scripts (section 8). The release build stays `CGO_ENABLED=0`; only the race detector needs cgo.
 
 ### Reading a result
 
 - On the pull request: the list of checks at the bottom of the **Conversation** tab, or the **Checks** tab. A red check has **Details**, which opens the log of that job.
 - All runs of the repository: the **Actions** tab. Each run belongs to one commit; each job shows every step with its full output.
-- When a test fails or a race is found, the job adds an **annotation** with the failing lines ([scripts/ci/annotate-failures.sh](../scripts/ci/annotate-failures.sh)), shown at the top of the run and on the PR, so the long log is rarely needed. A package below its coverage floor gets one as well.
+- When a test fails or a race is found, the job adds an **annotation** with the failing lines ([scripts/ci/shared-annotate-failures.sh](../scripts/ci/shared-annotate-failures.sh)), shown at the top of the run and on the PR, so the long log is rarely needed. A package below its coverage floor gets one as well.
 - Fuzzing, the GUI smoke test and the tests upload files as **artifacts** (failing inputs, screenshots, `cover.out`). They are listed at the bottom of the run's summary page.
 - In the terminal:
 
@@ -54,7 +54,7 @@ The same steps for every job; sections 3 to 7 add what is particular to each.
 
 A job can turn red on `dev` without a change of yours: govulncheck learns of new vulnerabilities (section 3), and the fuzzer can find an input that no run found before (section 6). Fix it like any other failure; a release cannot be merged into `main` until it is green.
 
-## 3. Format, vet, build, static analysis
+## 3. static: format, vet, build, analysis
 
 | Step | Fails when | Locally |
 |---|---|---|
@@ -74,12 +74,12 @@ The tools are pinned in the `tool` block of `go.mod`; nothing to install.
   - Without a fixed version yet: avoid the vulnerable call if the code can, or wait for the fix; the job stays red until then.
 - **deadcode.** Read the report now and then. A function that stays unreachable after the commit that should have used it is deleted. It never fails the job, because a function added in one commit may get its caller in the next.
 
-## 4. Tests and coverage
+## 4. test: tests and coverage
 
 | Step | Fails when | Locally |
 |---|---|---|
 | go test | a test fails | `go test ./...` |
-| Coverage floors per package | a package falls below its floor in [scripts/ci/coverage-floors.txt](../scripts/ci/coverage-floors.txt), or is not measured | see "Coverage floors" below |
+| Coverage floors per package | a package falls below its floor in [scripts/ci/test-coverage-floors.txt](../scripts/ci/test-coverage-floors.txt), or is not measured | see "Coverage floors" below |
 | Benchmarks run once | a benchmark fails | `go test -run '^$' -bench . -benchtime 1x ./...` |
 | Total coverage | never; prints the total | `go tool cover -func=cover.out` |
 
@@ -97,11 +97,11 @@ go test -count=1 -v -run '^TestName$' ./internal/workflow/backup
 
 ```bash
 go test -count=1 -cover ./... > test.log
-bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+bash scripts/ci/test-coverage-floors.sh scripts/ci/test-coverage-floors.txt test.log
 ```
 
 - **Below its floor:** a change added code without tests, or removed tests. Add tests for the new code. To see which lines are not covered: `go test -coverprofile=c.out ./internal/format/naming`, then `go tool cover -html=c.out`.
-- **Not measured:** the package was renamed, moved or deleted. Change its line in `coverage-floors.txt` in the same commit.
+- **Not measured:** the package was renamed, moved or deleted. Change its line in `test-coverage-floors.txt` in the same commit.
 - A floor is raised when a package's coverage has risen for good. It is never lowered just to let a change through; a lower floor needs a reason in the refactoring plan ([PLAN-refactoring.md](PLAN-refactoring.md)).
 
 **A failing benchmark** is a broken benchmark, not a slow one: CI runs each once and does not compare numbers. Run it alone with `go test -run '^$' -bench '^BenchmarkName$' -benchtime 1x ./internal/security/cryptox`.
@@ -114,7 +114,7 @@ go test -count=10 -run '^$' -bench . ./internal/security/cryptox ./internal/form
 go run golang.org/x/perf/cmd/benchstat@latest old.txt new.txt
 ```
 
-## 5. Race detector
+## 5. race: race detector
 
 `go test -race ./...` with cgo and the runner's gcc, with a timeout of 45 minutes. It fails when a test fails, or when two goroutines access the same data without synchronisation and one of them writes ("data race").
 
@@ -134,16 +134,16 @@ Without a gcc, push and let CI run it.
 - A race is found only when both accesses happen in a run, so a race can show once and not again. It is still a race; the report has the two lines.
 - A test that fails under `-race` but not without it, without a race report, is usually too slow: the race detector makes code several times slower. A test that waits a fixed time should wait for the event instead.
 
-## 6. Fuzzing
+## 6. fuzz: fuzzing
 
 Fuzzing tests a parser with random inputs. Starting from the seed inputs of a target, the fuzzer changes bytes, cuts and repeats parts, thousands of times per second, and fails when the target finds an input that breaks its property: a panic, a hang, or a check of the target (e.g. "decoding what was encoded gives the same").
 
-Every parser of bytes that can come from a backup directory or a file has a fuzz target (`func FuzzX(f *testing.F)`): the container header, trailer and set, the chunk stream, the manifest and its paths, part and log file names, YubiKey challenge data, recovery codes, and `config.yaml`. A new parser of such bytes gets a target in the same commit. [scripts/ci/fuzz.sh](../scripts/ci/fuzz.sh) finds every target by itself and fuzzes each for 30 seconds.
+Every parser of bytes that can come from a backup directory or a file has a fuzz target (`func FuzzX(f *testing.F)`): the container header, trailer and set, the chunk stream, the manifest and its paths, part and log file names, YubiKey challenge data, recovery codes, and `config.yaml`. A new parser of such bytes gets a target in the same commit. [scripts/ci/fuzz-targets.sh](../scripts/ci/fuzz-targets.sh) finds every target by itself and fuzzes each for 30 seconds.
 
 **Locally:**
 
 ```powershell
-bash scripts/ci/fuzz.sh 30                                                     # every target, seconds each
+bash scripts/ci/fuzz-targets.sh 30                                             # every target, seconds each
 go test -run '^$' -fuzz '^FuzzOpen$' -fuzztime 5m ./internal/format/container  # one target, longer
 ```
 
@@ -158,7 +158,7 @@ go test -run '^$' -fuzz '^FuzzOpen$' -fuzztime 5m ./internal/format/container  #
 
 A failure without a saved input (the fuzzer reports that its process hung or ran out of memory) is reproduced by fuzzing that target locally until it fails; Go then saves the input.
 
-## 7. GUI smoke test
+## 7. gui: smoke test
 
 [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1) builds `RestoreSafe.exe` with its resources, makes a fresh setup (two source folders, a password-only configuration with a recovery code), and runs two scripts of [scripts/gui-test](../scripts/gui-test/README.md) on the runner's desktop:
 
@@ -186,4 +186,5 @@ It writes only under `-Work`. To check only some conditions, run `Check-States.p
 
 - **Actions.** The workflow uses GitHub's own actions (`actions/checkout`, `actions/setup-go`, `actions/upload-artifact`) at a major version (`@v7`). When GitHub warns about an outdated version (e.g. the Node.js runtime), read the action's release notes on its GitHub page (e.g. github.com/actions/checkout/releases) and update the major version.
 - **Go version.** CI takes it from `go.mod` (`go-version-file`), so the `go` line of `go.mod` is the only place to change it: `go mod edit -go=<version>`, then `go get -u ./...`, `go get tool` and `go mod tidy`.
-- **A new job.** Add it to `ci.yml`, to the table in section 1 and a section of its own here, and its name to the required checks in `release-branch.json`; then apply the ruleset (CONTRIBUTING.md section 1). The name in the ruleset must be the job's `name:` exactly.
+- **Names.** Each job has a short ID: its key in `ci.yml` (`static`, `test`, `race`, `fuzz`, `gui`). The job's `name:` starts with the ID and a colon (`test: tests and coverage`), and every file in `scripts/ci/` starts with the ID of the job that uses it and a hyphen (`test-coverage-floors.sh`). A script used by more than one job starts with `shared-` instead, and the table in section 1 lists it for each of them.
+- **A new job.** Give it an ID and a name as above. Add it to `ci.yml`, to the table in section 1 and a section of its own here, and its name to the required checks in `release-branch.json`; then apply the ruleset (CONTRIBUTING.md section 1). The name in the ruleset must be the job's `name:` exactly; renaming a job means changing the ruleset in the same commit and applying it.

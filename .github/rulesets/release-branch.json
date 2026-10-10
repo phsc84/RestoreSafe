@@ -28,11 +28,11 @@
       "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "Format, vet, build, static analysis", "integration_id": 15368 },
-          { "context": "Tests and coverage", "integration_id": 15368 },
-          { "context": "Race detector", "integration_id": 15368 },
-          { "context": "Fuzzing", "integration_id": 15368 },
-          { "context": "GUI smoke test", "integration_id": 15368 }
+          { "context": "static: format, vet, build, analysis", "integration_id": 15368 },
+          { "context": "test: tests and coverage", "integration_id": 15368 },
+          { "context": "race: race detector", "integration_id": 15368 },
+          { "context": "fuzz: fuzzing", "integration_id": 15368 },
+          { "context": "gui: smoke test", "integration_id": 15368 }
         ]
       }
     }

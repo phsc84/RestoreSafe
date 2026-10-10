@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: annotate-failures.sh <go test output>
+# Usage: shared-annotate-failures.sh <go test output>
 # Reports the failing tests and data races of a go test log as one GitHub
 # error annotation, so they show on the pull request without opening the log.
 log=$1

@@ -16,8 +16,8 @@ defaults:
     shell: bash
 
 jobs:
-  check:
-    name: Format, vet, build, static analysis
+  static:
+    name: "static: format, vet, build, analysis"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +46,7 @@ jobs:
         run: go tool deadcode -test ./...
 
   test:
-    name: Tests and coverage
+    name: "test: tests and coverage"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -61,9 +61,9 @@ jobs:
           go test -count=1 -coverprofile=cover.out ./... 2>&1 | tee test.log
       - name: Report failures
         if: failure()
-        run: bash scripts/ci/annotate-failures.sh test.log
+        run: bash scripts/ci/shared-annotate-failures.sh test.log
       - name: Coverage floors per package
-        run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+        run: bash scripts/ci/test-coverage-floors.sh scripts/ci/test-coverage-floors.txt test.log
       # Each benchmark runs once, so that it keeps working; the numbers are
       # not compared (docs/CI.md section 4).
       - name: Benchmarks run once
@@ -78,7 +78,7 @@ jobs:
           path: cover.out
 
   race:
-    name: Race detector
+    name: "race: race detector"
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -97,10 +97,10 @@ jobs:
           go test -count=1 -race -timeout 45m ./... 2>&1 | tee test.log
       - name: Report failures
         if: failure()
-        run: bash scripts/ci/annotate-failures.sh test.log
+        run: bash scripts/ci/shared-annotate-failures.sh test.log
 
   fuzz:
-    name: Fuzzing
+    name: "fuzz: fuzzing"
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -114,7 +114,7 @@ jobs:
       - name: Fuzz every target
         env:
           CGO_ENABLED: "0"
-        run: bash scripts/ci/fuzz.sh 30
+        run: bash scripts/ci/fuzz-targets.sh 30
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -122,7 +122,7 @@ jobs:
           path: internal/**/testdata/fuzz/
 
   gui:
-    name: GUI smoke test
+    name: "gui: smoke test"
     runs-on: windows-latest
     timeout-minutes: 30
     steps:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Usage: check-coverage-floors.sh <floors file> <go test -cover output>
+# Usage: test-coverage-floors.sh <floors file> <go test -cover output>
 # Compares the coverage go test printed per package with the floors and
 # fails when a package is below its floor or was not measured.
 awk '
