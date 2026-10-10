@@ -57,7 +57,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-5 | "Show log" at the right of each run's header, and in the context menu, opens the run's log window: title with date and file, filter ("No warnings or errors in this log." when there are none), **Open in Editor**, **Close**; no link on a group of incomplete sets; no log pane below the list, and a small window gives the page a scroll bar | |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | `New-TestCondition.ps1` |
 | BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | |
-| BK-7a | Verify window and Create backup window side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | `Screenshot.ps1` |
+| BK-7a | Verify window and Create backup window side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | `Smoke-BackupRestore.ps1 -ScreenshotDir` |
 | BK-7a | The splitter below the table makes it taller and shorter, not below its rows (at most three); the window grows and shrinks with it, up to the height of the screen | |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | The smoke test verifies a set. |
 | BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | `New-TestCondition.ps1` |
@@ -69,7 +69,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Hints |
 |---|---|---|
-| RW-1 | Restore backup window and Create backup window side by side: same width, same order (heading, table, Space, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; `Enter` starts, `Esc` and Cancel close without writing anything; the window fits its content until it is resized | `Screenshot.ps1` |
+| RW-1 | Restore backup window and Create backup window side by side: same width, same order (heading, table, Space, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; `Enter` starts, `Esc` and Cancel close without writing anything; the window fits its content until it is resized | `Smoke-BackupRestore.ps1 -ScreenshotDir` |
 | RW-3 | Restore… on a run, also with one of its folders clicked: the window opens on that run, its heading names the run's date and the number of checked folders, all restorable folders are checked | |
 | RW-4 | "Restore into the backup directory" fills the path with backslashes, like Browse…, and the restore into it works | |
 | RW-5 | Folder, Type, About and Check columns; a folder whose full backup is missing (`BaseMissing`) is disabled and named in the warning line; an unchecked folder shows "-" | |
@@ -112,7 +112,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Hints |
 |---|---|---|
-| 3.3 | A screenshot of every page and dialog (`Screenshot.ps1`) reviewed against GUI spec 3.3 (colours, spacing, fonts) and the wireframes | |
+| 3.3 | A screenshot of every page and dialog (`Smoke-BackupRestore.ps1 -ScreenshotDir`, `Check-States.ps1`; the Settings page by hand) reviewed against GUI spec 3.3 (colours, spacing, fonts) and the wireframes | |
 | 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | |
 | 15 | Moving the window between monitors with different scaling | Without a second monitor: change the scaling in Windows settings while RestoreSafe runs, with the main window and a dialog open; Windows sends the same `WM_DPICHANGED`. |
 | 3.2 | Minimum window size: nothing overlaps, all buttons visible | |

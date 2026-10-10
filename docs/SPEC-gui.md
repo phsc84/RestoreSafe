@@ -1096,8 +1096,8 @@ The PowerShell scripts drive the real window. They find controls by `AutomationI
 |---|---|
 | `New-TestCondition.ps1` | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
 | `Check-States.ps1` | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
-| `Smoke-BackupRestore.ps1` | Back up through the Create backup window, restore one folder of the newest run through the Restore backup window, verify the run; compare the restored files with the sources. |
-| `Screenshot.ps1` | One screenshot per page and dialog, for the visual review against 3.3 and the wireframes (16.5), and for the README. |
+| `Smoke-BackupRestore.ps1` | Back up through the Create backup window, restore one folder of the newest run through the Restore backup window, verify the run; compare the restored files with the sources. Optionally a screenshot of every step, for the visual review against 3.3 and the wireframes (16.5). |
+| `README-Screenshots.ps1` | The five screenshots of the README: the backup while it runs, the Create backup window, the Create backup page, the Restore backup page and the Restore backup window. |
 | `Accessibility.ps1` | Role, name, `AutomationId` and access key of every control on every page and dialog. |
 
 They run on every release candidate at 100% and 150% scaling.
