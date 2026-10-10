@@ -2,9 +2,9 @@
 REM ============================================================
 REM  RestoreSafe development build
 REM  Compiles sandbox\RestoreSafe.exe for manual testing, with
-REM  the same resources, flags and version as build.bat. It
+REM  the same resources, flags and version as build-release.bat. It
 REM  doesn't touch dist\: the release archive and its checksum
-REM  are left as they are. Releases are built with build.bat.
+REM  are left as they are. Releases are built with build-release.bat.
 REM ============================================================
 
 setlocal
@@ -36,7 +36,7 @@ set GOOS=windows
 set GOARCH=amd64
 set CGO_ENABLED=0
 
-REM The same command as in build.bat; keep them equal.
+REM The same command as in build-release.bat; keep them equal.
 go build -trimpath -ldflags="-s -w -H=windowsgui -X github.com/phsc84/restoresafe/internal/buildinfo.Version=%VERSION%" -o "%SANDBOX_DIR%\RestoreSafe.exe" ./cmd/restoresafe
 if errorlevel 1 (
     echo [ERROR] Compilation failed

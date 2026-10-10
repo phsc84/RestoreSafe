@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  RestoreSafe build script
+REM  RestoreSafe release build
 REM  Builds dist\RestoreSafe-<version>.zip with dist\SHA256SUMS.txt
 REM  and moves the compiled RestoreSafe.exe to sandbox\ for manual
 REM  testing. It changes no tracked file, and the same commit gives

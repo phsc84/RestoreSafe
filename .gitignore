@@ -1,7 +1,7 @@
 # Local settings
 .gitconfig
 
-# Build output (build.bat) and generated resources
+# Build output (build-release.bat, build-dev.bat) and generated resources
 /dist/
 resource.syso
 *.exe

@@ -16,7 +16,7 @@ $exe = Join-Path $Work "RestoreSafe.exe"
 Push-Location $repo
 try {
   # The manifest in the resources selects Common Controls 6, which the
-  # window needs; resource.syso is generated, as by build.bat.
+  # window needs; resource.syso is generated, as by build-release.bat.
   go tool goversioninfo -64 -o cmd/restoresafe/resource.syso build/versioninfo.json
   if ($LASTEXITCODE -ne 0) { throw "goversioninfo failed" }
   go build -trimpath -ldflags="-H=windowsgui" -o $exe ./cmd/restoresafe

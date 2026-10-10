@@ -119,7 +119,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 - CI runs every measurement of section 4 that is cheap enough, and fails on regressions.
 - Go version and dependencies: update to the current Go release and dependency versions (`go get -u ./...`, then `go mod tidy`), unless an item says why not.
-- `build.bat` (or its successor) changes no tracked file and gives the same exe for the same commit.
+- `build-release.bat` (or its successor) changes no tracked file and gives the same exe for the same commit.
 - Line endings: `.gitattributes` covers every file type in the repository.
 
 ### 5.7 Documentation

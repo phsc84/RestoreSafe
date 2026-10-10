@@ -458,7 +458,7 @@ Branches, commits, pull requests, and the rules every change keeps are in [docs/
 ### Build
 
 ```bat
-build.bat
+build-release.bat
 ```
 
 This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
@@ -476,7 +476,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 | `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
 | `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
 | `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
-| `build` | Icon, application manifest, and version information embedded by `build.bat` |
+| `build` | Icon, application manifest, and version information embedded by `build-release.bat` and `build-dev.bat` |
 | `docs` | Specifications and the GUI test checklist |
 | `scripts/gui-test` | PowerShell UI automation: smoke test, status conditions, access keys (see its README) |
 
