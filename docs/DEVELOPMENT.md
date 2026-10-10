@@ -357,7 +357,7 @@ Or on the web: https://github.com/phsc84/RestoreSafe/releases, "Draft a new rele
 ### Step 5 – Test the draft, then publish
 
 1. Open the draft on https://github.com/phsc84/RestoreSafe/releases and check the notes: links and the screenshot work once the tag is pushed.
-2. Download the ZIP and `SHA256SUMS.txt` from the draft into an empty folder, check the checksum with the README's command, extract, and start RestoreSafe (SmartScreen asks once).
+2. Download the ZIP and `SHA256SUMS.txt` from the draft into an empty folder, check the checksum with the README's command, extract, and start RestoreSafe (SmartScreen may ask once; it stays silent when the file already has reputation or the extractor dropped the Mark of the Web).
 3. Make one backup and one restore with a test configuration.
 4. Publish: `gh release edit v2.1.0 --draft=false`, or "Publish release" on the web.
 
