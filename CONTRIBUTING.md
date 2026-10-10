@@ -15,7 +15,7 @@ An urgent fix while `dev` holds work that is not ready for a release goes on a s
 GitHub enforces this for `main` with the ruleset in [.github/rulesets/release-branch.json](.github/rulesets/release-branch.json), for everyone including the owner:
 
 - a direct push is rejected; changes arrive through a pull request only;
-- a pull request can be merged only when the three CI jobs are green;
+- a pull request can be merged only when all five CI jobs are green;
 - the branch cannot be force-pushed or deleted;
 - no approval is required (GitHub does not let anyone approve their own pull request).
 

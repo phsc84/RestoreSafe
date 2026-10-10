@@ -30,7 +30,9 @@
         "required_status_checks": [
           { "context": "Format, vet, build, static analysis", "integration_id": 15368 },
           { "context": "Tests and coverage", "integration_id": 15368 },
-          { "context": "Race detector", "integration_id": 15368 }
+          { "context": "Race detector", "integration_id": 15368 },
+          { "context": "Fuzzing", "integration_id": 15368 },
+          { "context": "GUI smoke test", "integration_id": 15368 }
         ]
       }
     }
