@@ -102,7 +102,9 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe and extract it to any directory on your computer.
 
-   RestoreSafe is not signed with a paid code-signing certificate, so when you start it for the first time Windows may show "Windows protected your PC" (SmartScreen, "unknown publisher"). Click **More info**, then **Run anyway**.
+   RestoreSafe is not signed with a paid code-signing certificate, so when you start it for the first time Windows may show "Windows protected your PC" (SmartScreen, "unknown publisher"). Click **More info**, then **Run anyway**. Windows asks only on the first start of a downloaded version.
+
+   On Windows 11 with **Smart App Control** turned on, Windows may block RestoreSafe without offering **Run anyway**. Smart App Control allows only programs that are signed or known to Microsoft. To run RestoreSafe, turn it off in Windows Security → App & browser control → Smart App Control settings. On older Windows 11 versions it can only be turned on again by reinstalling Windows.
 
    Optional, for checking that the download is unchanged: download `SHA256SUMS.txt` of the same release into the same folder as the ZIP and run this in PowerShell there (it prints `True`):
 
