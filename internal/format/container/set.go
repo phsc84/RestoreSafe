@@ -1,0 +1,256 @@
+package container
+
+import (
+	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/phsc84/restoresafe/internal/format/manifest"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+)
+
+// Section IDs, part of every chunk's associated data.
+const (
+	sectionData     = byte(0x01)
+	sectionManifest = byte(0x02)
+)
+
+// readBufferSize is the read-ahead used when streaming a section from disk.
+const readBufferSize = 4 * 1024 * 1024
+
+func sectionAAD(headerHash []byte, section byte) []byte {
+	aad := make([]byte, 0, len(headerHash)+1)
+	aad = append(aad, headerHash...)
+	return append(aad, section)
+}
+
+// WriteResult describes a set written by Write.
+type WriteResult struct {
+	Trailer   Trailer
+	TotalSize int64
+	// ManifestSHA256 is the hex SHA-256 of the plaintext manifest; a
+	// differential records its base's value in base_manifest_sha256.
+	ManifestSHA256 string
+}
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countingWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// Write writes a complete set to dst: header, data section (encrypting data
+// until EOF), manifest section, and trailer. manifestFn is called after data
+// is fully consumed and must write the serialized manifest to its writer.
+// splitSize is the part size of the split writer behind dst, used to record
+// the part count in the trailer (<= 0 means a single part).
+func Write(dst io.Writer, h *Header, master []byte, splitSize int64, data io.Reader, manifestFn func(io.Writer) error) (*WriteResult, error) {
+	encoded, err := h.Encode()
+	if err != nil {
+		return nil, err
+	}
+	headerHash := HashHeader(encoded)
+	keys, err := DeriveSectionKeys(master, headerHash)
+	if err != nil {
+		return nil, err
+	}
+	defer keys.Zero()
+
+	cw := &countingWriter{w: dst}
+	if _, err := cw.Write(encoded); err != nil {
+		return nil, fmt.Errorf("Failed to write backup header: %w", err)
+	}
+
+	dataOffset := cw.n
+	if err := cryptox.EncryptStream(cw, data, keys.Data, sectionAAD(headerHash, sectionData)); err != nil {
+		return nil, err
+	}
+	dataLength := cw.n - dataOffset
+
+	manifestOffset := cw.n
+	sum, err := encryptManifest(cw, manifestFn, keys.Manifest, sectionAAD(headerHash, sectionManifest))
+	if err != nil {
+		return nil, err
+	}
+	manifestLength := cw.n - manifestOffset
+
+	total := cw.n + TrailerLen
+	parts := int64(1)
+	if splitSize > 0 {
+		parts = (total + splitSize - 1) / splitSize
+	}
+	trailer := Trailer{
+		DataOffset:     dataOffset,
+		DataLength:     dataLength,
+		ManifestOffset: manifestOffset,
+		ManifestLength: manifestLength,
+		PartCount:      int(parts),
+	}
+	if _, err := cw.Write(trailer.Encode()); err != nil {
+		return nil, fmt.Errorf("Failed to write backup trailer: %w", err)
+	}
+	return &WriteResult{Trailer: trailer, TotalSize: cw.n, ManifestSHA256: sum}, nil
+}
+
+// errManifestStopped ends the other side of a manifest pipe when one side
+// stopped early.
+var errManifestStopped = errors.New("manifest stream stopped")
+
+// encryptManifest streams what manifestFn writes through a pipe into
+// EncryptStream and hashes it on the way, so that the serialized manifest is
+// never held in memory as a whole (SPEC-2.0 section 5.3). It returns the hex
+// SHA-256 of the plaintext manifest.
+func encryptManifest(dst io.Writer, manifestFn func(io.Writer) error, key, aad []byte) (string, error) {
+	pr, pw := io.Pipe()
+	hash := sha256.New()
+	fnErr := make(chan error, 1)
+	go func() {
+		err := manifestFn(io.MultiWriter(hash, pw))
+		pw.CloseWithError(err) //nolint:errcheck // always nil
+		fnErr <- err
+	}()
+
+	encErr := cryptox.EncryptStream(dst, pr, key, aad)
+	pr.CloseWithError(errManifestStopped) //nolint:errcheck // always nil; ends manifestFn when EncryptStream failed
+	if err := <-fnErr; err != nil && !errors.Is(err, errManifestStopped) {
+		return "", err
+	}
+	if encErr != nil {
+		return "", fmt.Errorf("Failed to write backup manifest: %w", encErr)
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// Set is an opened, structurally checked backup set.
+type Set struct {
+	Paths      []string
+	Header     *Header
+	HeaderHash []byte
+	Trailer    Trailer
+	parts      *partsReader
+}
+
+// Open reads the header and trailer of the set formed by paths (in part
+// order) and checks the set's structure. It needs no key. A set whose trailer
+// is missing or inconsistent returns an *ErrIncomplete error.
+func Open(paths []string) (*Set, error) {
+	if len(paths) == 0 {
+		return nil, incompleteErr("no part files found")
+	}
+	pr, err := newPartsReader(paths)
+	if err != nil {
+		return nil, err
+	}
+	s, err := openParts(pr, paths)
+	if err != nil {
+		pr.Close() //nolint:errcheck
+		return nil, err
+	}
+	return s, nil
+}
+
+func openParts(pr *partsReader, paths []string) (*Set, error) {
+	h, encoded, trailer, err := readStructure(pr, pr.Size(), len(paths))
+	if err != nil {
+		return nil, err
+	}
+	return &Set{Paths: paths, Header: h, HeaderHash: HashHeader(encoded), Trailer: trailer, parts: pr}, nil
+}
+
+// readStructure reads and checks the header and trailer of a set of size
+// bytes in parts part files.
+func readStructure(r io.ReaderAt, size int64, parts int) (*Header, []byte, Trailer, error) {
+	h, encoded, err := ReadHeader(io.NewSectionReader(r, 0, size))
+	if err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	if size < int64(len(encoded))+TrailerLen {
+		return nil, nil, Trailer{}, incompleteErr("file is too short")
+	}
+	raw := make([]byte, TrailerLen)
+	if _, err := r.ReadAt(raw, size-TrailerLen); err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	trailer, err := DecodeTrailer(raw)
+	if err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	if err := trailer.check(int64(len(encoded)), size, parts); err != nil {
+		return nil, nil, Trailer{}, err
+	}
+	return h, encoded, trailer, nil
+}
+
+// Close releases the open part file handle.
+func (s *Set) Close() error {
+	if s == nil || s.parts == nil {
+		return nil
+	}
+	return s.parts.Close()
+}
+
+// SectionKeys derives this set's section keys from the key set master key.
+func (s *Set) SectionKeys(master []byte) (*SectionKeys, error) {
+	return DeriveSectionKeys(master, s.HeaderHash)
+}
+
+func (s *Set) sectionReader(offset, length int64) io.Reader {
+	return bufio.NewReaderSize(io.NewSectionReader(s.parts, offset, length), readBufferSize)
+}
+
+// ReadManifest decrypts, parses, and validates the manifest section and checks
+// it against the set header. It also returns the hex SHA-256 of the plaintext
+// manifest. The manifest streams from decryption into the parser, so that the
+// serialized manifest is never held in memory as a whole.
+func (s *Set) ReadManifest(keys *SectionKeys) (*manifest.Manifest, string, error) {
+	pr, pw := io.Pipe()
+	hash := sha256.New()
+	decErr := make(chan error, 1)
+	go func() {
+		err := cryptox.DecryptStream(io.MultiWriter(hash, pw), s.sectionReader(s.Trailer.ManifestOffset, s.Trailer.ManifestLength), keys.Manifest, sectionAAD(s.HeaderHash, sectionManifest))
+		pw.CloseWithError(err) //nolint:errcheck // always nil
+		decErr <- err
+	}()
+
+	m, parseErr := manifest.Decode(pr)
+	pr.CloseWithError(errManifestStopped) //nolint:errcheck // always nil; ends the decryption when Decode stopped early
+	// A decryption error comes first: the parser then saw only a cut-off
+	// manifest.
+	if err := <-decErr; err != nil && !errors.Is(err, errManifestStopped) {
+		return nil, "", sectionErr("manifest", err)
+	}
+	if parseErr != nil {
+		return nil, "", parseErr
+	}
+	h := s.Header
+	mh := m.Header
+	if mh.SetType != h.SetType || mh.ChainID != h.ChainID || mh.DiffNumber != h.DiffNumber || mh.DirectoryName != h.DirectoryName {
+		return nil, "", problem.New("Backup manifest does not match its set header.").WithRemedy("Use an unmodified backup created by RestoreSafe.")
+	}
+	return m, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// DecryptData streams the decrypted data section (a TAR stream) to dst.
+func (s *Set) DecryptData(keys *SectionKeys, dst io.Writer) error {
+	err := cryptox.DecryptStream(dst, s.sectionReader(s.Trailer.DataOffset, s.Trailer.DataLength), keys.Data, sectionAAD(s.HeaderHash, sectionData))
+	if err != nil {
+		return sectionErr("data", err)
+	}
+	return nil
+}
+
+func sectionErr(section string, err error) error {
+	if errors.Is(err, cryptox.ErrCorrupted) {
+		return problem.Errorf("%w in the %s section.", cryptox.ErrCorrupted, section).WithRemedy("The backup files were damaged or modified; use another backup or a copy of these files.")
+	}
+	return err
+}

@@ -4,6 +4,41 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-10
+
+**Breaking change:** RestoreSafe 2.0 uses a new backup format. It cannot restore backups created by 1.x, and 1.x cannot restore 2.0 backups. Keep RestoreSafe 1.0.2 to restore your 1.x backups; 2.0 never modifies or deletes them. Start from the new `config-SAMPLE.yaml`. See "Updating from RestoreSafe 1.x to 2.0" in the README.
+
+**Breaking change:** a 1.x `config.yaml` doesn't load if it contains `io_diagnostics`: the setting is gone, and RestoreSafe 2.0 refuses settings it doesn't know. Remove the line; `log_level: "debug"` now includes the I/O diagnostics.
+
+### Added
+- Windows application instead of the console menu. **Create backup** shows whether your folders are protected, **Restore backup** lists every backup run with its log, **Settings** shows the configuration and reloads it. Every backup, restore and verification shows its plan first, then its progress (with Cancel) and the result per folder. Works with the keyboard, screen readers, display scaling and high contrast.
+- Differential backups, chosen automatically per folder and shown before the backup starts; **Full backup instead** forces a full backup. Settings in the new `differential` section.
+- Restore and verify check every file against its SHA-256 checksum, from an encrypted manifest in every backup. Verify used to check only the archive structure.
+- Restore of creation and modification times and of the read-only, hidden and system attributes.
+- Spare YubiKey (`yubikey_spare`) and recovery code (`recovery_code`). **New keys + full backup…** changes the password or replaces a lost YubiKey; older backups keep opening with the old credentials.
+- New settings: `exclude`, `on_unreadable_file`, `reminder_days`, `password_min_length`.
+- The startup check reports incomplete backups, differentials whose full backup is missing, leftovers of interrupted backups, and 1.x backups.
+
+### Changed
+- The console menu is gone. `-config=<absolute path>` still selects another configuration.
+- New file names: `[Directory]_ID_DATE_FULL-001.enc` and `[Directory]_ID_DATE_DIFFnnn-001.enc`; a full backup and its differentials share the ID. No more `.challenge` files.
+- `retention_keep` counts backup chains (a full backup with its differentials); a chain is always deleted as a whole.
+- A backup asks for the password once and needs one YubiKey touch.
+- An interrupted backup never looks like a valid one.
+- Two RestoreSafe windows with the same backup directory no longer get in each other's way.
+- A restore refuses a destination that is a junction or symbolic link.
+- Restoring to a network share is more than twice as fast.
+
+### Removed
+- The `io_diagnostics` setting: `log_level: "debug"` includes the I/O diagnostics of a backup.
+- Local staging in the temp directory: it was slower in every measured case, and the temp directory no longer needs space for a copy of the backup.
+
+### Dependencies
+- Go 1.27.2 (was 1.26.7).
+- `golang.org/x/crypto` 0.57.0 (was 0.55.0), `golang.org/x/sys` 0.48.0 (was 0.47.0).
+- YAML: the maintained `go.yaml.in/yaml/v3` 3.0.5 instead of the archived `gopkg.in/yaml.v3`.
+- `golang.org/x/term` is no longer used.
+
 ## [1.0.2] - 2026-08-22
 
 ### Changed

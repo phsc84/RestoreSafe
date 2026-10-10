@@ -1,0 +1,232 @@
+package gui
+
+import (
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/widget"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+)
+
+// shell is the new interface around the pages: the sidebar, the status bar
+// and the pages (GUI spec 3.2).
+type shell struct {
+	sidebar  *widget.Sidebar
+	status   *widget.Panel
+	create   *createPage
+	restore  *restorePage
+	settings *settingsPage
+}
+
+// sidebarGlyphs are the icons of the pages, in the order of view.Navigation.
+var sidebarGlyphs = []widget.Glyph{widget.GlyphArchive, widget.GlyphHistory, widget.GlyphSettings}
+
+func (a *app) createShell() error {
+	t := a.theme
+	var items []widget.SidebarItem
+	for i, name := range view.Navigation() {
+		items = append(items, widget.SidebarItem{Glyph: sidebarGlyphs[i], Text: name})
+	}
+	sidebar, err := widget.NewSidebar(t, a.hwnd, idSidebar, items)
+	if err != nil {
+		return err
+	}
+	sidebar.OnSelect = a.showPage
+	a.shell.sidebar = sidebar
+
+	status, err := widget.NewPanel(t, a.hwnd, idStatus, widget.PanelStyle{Back: t.Palette.SurfaceAlt})
+	if err != nil {
+		return err
+	}
+	a.shell.status = status
+
+	if a.shell.create, err = newCreatePage(a); err != nil {
+		return err
+	}
+	if a.shell.restore, err = newRestorePage(a); err != nil {
+		return err
+	}
+	if a.shell.settings, err = newSettingsPage(a); err != nil {
+		return err
+	}
+	a.refreshShell()
+	return nil
+}
+
+// pagePanels returns the panels of the navigation's pages, in order.
+func (a *app) pagePanels() []*widget.Panel {
+	return []*widget.Panel{a.shell.create.panel, a.shell.restore.panel, a.shell.settings.panel}
+}
+
+// showPage shows a page of the navigation.
+func (a *app) showPage(page int) {
+	a.page = page
+	for i, p := range a.pagePanels() {
+		p.Show(i == page)
+	}
+	a.shell.sidebar.Select(page)
+	a.layout()
+}
+
+// layoutShell places the sidebar, the status bar and the shown page.
+func (a *app) layoutShell(client win32.Rect) {
+	area := widget.NewArea(a.theme.Scale, client)
+	win32.SetWindowPos(a.shell.status.HWND(), area.Bottom(widget.StatusBarHeight))
+	win32.SetWindowPos(a.shell.sidebar.HWND(), area.Left(widget.SidebarWidth))
+	content := area.Rest()
+	for _, p := range a.pagePanels() {
+		win32.SetWindowPos(p.HWND(), content)
+	}
+	a.shell.create.layout()
+	a.shell.restore.layout()
+	a.shell.settings.layout()
+	for i, p := range a.pagePanels() {
+		if i == a.page {
+			win32.RedrawAll(p.HWND())
+		}
+	}
+}
+
+// refreshShell shows the current snapshot on the pages and the status bar.
+func (a *app) refreshShell() {
+	if a.shell.create == nil {
+		return
+	}
+	a.shell.create.update()
+	a.shell.restore.update()
+	a.shell.settings.update()
+	a.layout()
+}
+
+// restyleShell applies the theme's fonts after a DPI change.
+func (a *app) restyleShell() {
+	a.shell.status.Restyle()
+	win32.Invalidate(a.shell.sidebar.HWND())
+	a.shell.create.restyle()
+	a.shell.restore.restyle()
+	a.shell.restore.update()
+	a.shell.settings.restyle()
+}
+
+// shortcut handles the keyboard shortcuts of GUI spec 3.2; it reports whether
+// it handled the key.
+func (a *app) shortcut(vk uintptr) bool {
+	if a.modal != 0 || a.plan != nil || a.restore != nil || a.verify != nil {
+		return false
+	}
+	ctrl := win32.KeyDown(win32.VK_CONTROL)
+	switch {
+	case ctrl && vk >= '1' && vk <= '3':
+		a.showPage(int(vk - '1'))
+	case ctrl && vk == 'B':
+		a.do(view.ActionBackUp)
+	case vk == win32.VK_F5:
+		a.do(view.ActionCheckAgain)
+	default:
+		return false
+	}
+	return true
+}
+
+// do runs the action of a button or link.
+func (a *app) do(action view.Action) {
+	switch action {
+	case view.ActionBackUp:
+		if a.snapshot != nil && !a.snapshot.Check.BlocksBackup() {
+			a.startOperation(opRequest{op: flow.OpBackup})
+		}
+	case view.ActionRestore:
+		b := a.shell.restore
+		if sets := b.chosen(); len(sets) > 0 {
+			a.openRestore(b.selRun, sets)
+		}
+	case view.ActionOpenRestored:
+		if r := a.machine.Current(); r != nil && r.Restore != nil {
+			a.open(r.Restore.Destination, false)
+		}
+	case view.ActionVerify:
+		if sets := a.shell.restore.chosen(); len(sets) > 0 {
+			bar := a.shell.restore.bar
+			a.verifyWhat, a.verifyWhole, a.verifyHidden = bar.What, bar.Whole, bar.Hidden
+			a.startOperation(opRequest{op: flow.OpVerify, sets: sets})
+		}
+	case view.ActionCheckAgain:
+		a.reload() // re-reads config.yaml, then checks again
+	case view.ActionShowInBackups:
+		a.showPage(view.PageRestore)
+	case view.ActionOpenSettings:
+		a.showPage(view.PageSettings)
+	case view.ActionEditConfig:
+		a.open(a.opts.ConfigPath, true)
+	case view.ActionCancel:
+		a.confirmCancel()
+	case view.ActionShowLog:
+		a.showRunLog()
+	case view.ActionShowDetails:
+		a.showResultDetails()
+	case view.ActionDismiss:
+		a.dismiss()
+	case view.ActionReload:
+		a.reload()
+	case view.ActionAddMissing:
+		a.addMissing()
+	case view.ActionOpenBackupDir:
+		a.open(a.backupDir, false)
+	}
+}
+
+// focusPage puts the keyboard focus on the shown page's first action.
+func (a *app) focusPage() {
+	switch a.page {
+	case view.PageCreate:
+		a.shell.create.focus()
+	case view.PageRestore:
+		a.shell.restore.focus()
+	default:
+		win32.SetFocus(a.shell.sidebar.HWND())
+	}
+}
+
+// actions maps the control IDs of a page's buttons and links to actions.
+type actions map[uint16]view.Action
+
+// button creates a button for b on p and records its action; primary makes
+// it the accent-filled button.
+func (m actions) button(p *widget.Panel, b view.Button, id uint16, primary bool) win32.HWND {
+	var h win32.HWND
+	if primary {
+		h = p.PrimaryButton(b.Text, uintptr(id))
+	} else {
+		h = p.Button(b.Text, uintptr(id))
+	}
+	win32.Enable(h, b.Enabled)
+	m[id] = b.Action
+	return h
+}
+
+// link creates a link for b on p and records its action.
+func (m actions) link(p *widget.Panel, b view.Button, id uint16) win32.HWND {
+	h := p.Link(b.Text, uintptr(id))
+	win32.Enable(h, b.Enabled)
+	m[id] = b.Action
+	return h
+}
+
+// paletteChanged follows Windows into or out of high contrast: the pages
+// are built again in the new colors.
+func (a *app) paletteChanged() {
+	p := widget.CurrentPalette()
+	if p == a.theme.Palette || a.shell.sidebar == nil {
+		return
+	}
+	a.theme.Palette = p
+	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.create.panel.HWND(), a.shell.restore.panel.HWND(), a.shell.settings.panel.HWND()} {
+		win32.DestroyWindow(h)
+	}
+	a.shell = shell{}
+	if err := a.createShell(); err != nil {
+		return
+	}
+	a.showPage(a.page)
+	a.refreshShell()
+	a.focusPage()
+}

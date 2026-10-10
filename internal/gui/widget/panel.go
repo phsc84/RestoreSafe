@@ -1,0 +1,369 @@
+package widget
+
+import (
+	"strings"
+
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+
+	"golang.org/x/sys/windows"
+)
+
+// PanelStyle is the look of a panel.
+type PanelStyle struct {
+	// Back is the background; Outer the color around a card's rounded
+	// corners (the parent's background).
+	Back, Outer Color
+	// Card draws a rounded border.
+	Card bool
+}
+
+// Panel is a container: pages and cards. It paints its background (and a
+// card's border), gives its text controls their colors, draws its primary
+// buttons, and passes commands and link clicks to OnCommand. All text is in
+// standard controls, so screen readers and UI Automation see names, roles
+// and control IDs (GUI spec 3.4).
+type Panel struct {
+	hwnd     win32.HWND
+	theme    *Theme
+	style    PanelStyle
+	children []child
+	brush    windows.Handle
+	// OnCommand receives the clicks of buttons and links (id, BN_CLICKED or
+	// 0 for a link) and the notifications of other controls.
+	OnCommand func(id, code uint16)
+	// OnNotify receives WM_NOTIFY of controls other than links.
+	OnNotify func(hdr *win32.NMHdr) uintptr
+	// OnScroll is called when the user scrolled a panel that SetScroll made
+	// scrollable; the owner lays its children out at ScrollOffset.
+	OnScroll func()
+	content  int32 // height of the content in pixels, 0 when not scrolling
+	offset   int32
+	// tip shows the tips of the children: their own (Tip) and the full
+	// text of a label that is cut off. tipText keeps the shown text alive.
+	tip     win32.HWND
+	tipText []uint16
+}
+
+// child is a control the panel created; it styles it.
+type child struct {
+	hwnd    win32.HWND
+	style   TextStyle
+	color   Color
+	primary bool
+	button  bool // painted by StyleButton
+	link    bool
+	styled  bool // false for widgets that draw their own text
+	// cuts is set for one-line text that may be shortened with "…".
+	cuts bool
+	// tip is the child's own tip; tool whether the tooltip knows it.
+	tip  string
+	tool bool
+}
+
+// NewPanel creates a panel as a child of parent.
+func NewPanel(t *Theme, parent win32.HWND, id uintptr, style PanelStyle) (*Panel, error) {
+	p := &Panel{theme: t, style: style}
+	hwnd, err := create(p, classPanel, parent, win32.WS_CLIPCHILDREN, win32.WS_EX_CONTROLPARENT, id)
+	if err != nil {
+		return nil, err
+	}
+	p.hwnd = hwnd
+	return p, nil
+}
+
+// HWND returns the panel's window.
+func (p *Panel) HWND() win32.HWND { return p.hwnd }
+
+// Back returns the panel's background, for the widgets on it.
+func (p *Panel) Back() Color { return p.style.Back }
+
+// Label creates a text control. Its text is shown as is (no & prefixes).
+func (p *Panel) Label(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_ENDELLIPSIS, 0)
+}
+
+// Button creates a standard push button; & marks its access key.
+func (p *Panel) Button(text string, id uintptr) win32.HWND {
+	return p.add(child{style: TextBody, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
+}
+
+// PrimaryButton creates the accent-filled button of the page (GUI spec 2:
+// one per window).
+func (p *Panel) PrimaryButton(text string, id uintptr) win32.HWND {
+	return p.add(child{style: TextBody, primary: true, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
+}
+
+// Link creates a link; its click reaches OnCommand with code 0.
+func (p *Panel) Link(text string, id uintptr) win32.HWND {
+	markup := "<a>" + strings.ReplaceAll(text, "<", "") + "</a>"
+	return p.add(child{style: TextSmall, link: true, styled: true}, win32.WC_LINK, markup, win32.WS_TABSTOP|win32.LWS_TRANSPARENT, id)
+}
+
+// Adopt makes the panel destroy hwnd with its other children on Clear.
+func (p *Panel) Adopt(hwnd win32.HWND) { p.children = append(p.children, child{hwnd: hwnd}) }
+
+func (p *Panel) add(c child, class, text string, style uint32, id uintptr) win32.HWND {
+	hwnd, err := win32.CreateWindow(0, class, text, win32.WS_CHILD|win32.WS_VISIBLE|style, 0, 0, 0, 0, p.hwnd, id)
+	if err != nil {
+		return 0
+	}
+	c.hwnd = hwnd
+	if c.button {
+		StyleButton(p.theme, hwnd, p.style.Back, c.primary)
+	}
+	win32.SetFont(hwnd, p.theme.Fonts.Get(c.style))
+	p.children = append(p.children, c)
+	if c.cuts {
+		p.addTool(&p.children[len(p.children)-1])
+	}
+	return hwnd
+}
+
+// SetColor changes the text color of a label.
+func (p *Panel) SetColor(hwnd win32.HWND, color Color) {
+	for i := range p.children {
+		if p.children[i].hwnd == hwnd {
+			p.children[i].color = color
+			win32.Invalidate(hwnd)
+		}
+	}
+}
+
+// Clear destroys the panel's children.
+func (p *Panel) Clear() {
+	for _, c := range p.children {
+		if c.tool {
+			win32.RemoveTooltip(p.tip, c.hwnd)
+		}
+		win32.DestroyWindow(c.hwnd)
+	}
+	p.children = nil
+}
+
+// Restyle applies the theme's current fonts, after a DPI change.
+func (p *Panel) Restyle() {
+	for _, c := range p.children {
+		if c.styled {
+			win32.SetFont(c.hwnd, p.theme.Fonts.Get(c.style))
+		}
+	}
+	win32.Invalidate(p.hwnd)
+}
+
+// Destroy destroys the panel and its children.
+func (p *Panel) Destroy() {
+	win32.DestroyWindow(p.hwnd)
+	if p.brush != 0 {
+		win32.DeleteObject(p.brush)
+		p.brush = 0
+	}
+}
+
+func (p *Panel) paint(hdc uintptr, r win32.Rect) {
+	if !p.style.Card {
+		fill(hdc, r, p.style.Back)
+		return
+	}
+	fill(hdc, r, p.style.Outer)
+	s := p.theme.Scale
+	r.Right--
+	r.Bottom--
+	roundRect(hdc, r, s.Px(CardRadius*2), p.style.Back, p.theme.Palette.Lines)
+}
+
+func (p *Panel) backBrush() windows.Handle {
+	if p.brush == 0 {
+		p.brush = win32.CreateSolidBrush(uint32(p.style.Back))
+	}
+	return p.brush
+}
+
+func (p *Panel) find(hwnd win32.HWND) *child {
+	for i := range p.children {
+		if p.children[i].hwnd == hwnd {
+			return &p.children[i]
+		}
+	}
+	return nil
+}
+
+func (p *Panel) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (uintptr, bool) {
+	switch msg {
+	case win32.WM_CTLCOLORSTATIC:
+		win32.SetBkModeTransparent(wparam)
+		color := p.theme.Palette.Text
+		if c := p.find(win32.HWND(lparam)); c != nil && c.color != 0 {
+			color = c.color
+		}
+		win32.SetTextColor(wparam, uint32(color))
+		return uintptr(p.backBrush()), true
+	case win32.WM_CTLCOLORBTN:
+		return uintptr(p.backBrush()), true
+	case win32.WM_COMMAND:
+		if p.OnCommand != nil {
+			p.OnCommand(win32.LoWord(wparam), win32.HiWord(wparam))
+		}
+		return 0, true
+	case win32.WM_NOTIFY:
+		hdr := win32.NMHdrParam(lparam)
+		if hdr.Code == win32.TTN_GETDISPINFOW && p.tip != 0 && hdr.HwndFrom == p.tip {
+			p.tipText, _ = windows.UTF16FromString(p.tipOf(win32.HWND(hdr.IDFrom)))
+			win32.TooltipTextOf(hdr).Text = &p.tipText[0]
+			return 0, true
+		}
+		if c := p.find(hdr.HwndFrom); c != nil && c.link && (hdr.Code == win32.NM_CLICK || hdr.Code == win32.NM_RETURN) {
+			if p.OnCommand != nil {
+				p.OnCommand(uint16(hdr.IDFrom), 0)
+			}
+			return 0, true
+		}
+		if p.OnNotify != nil {
+			return p.OnNotify(hdr), true
+		}
+		return 0, true
+	case win32.WM_SIZE:
+		// A card's border follows its size: without a full repaint, a card
+		// that grows keeps its old bottom edge, one that shrinks loses it.
+		if p.style.Card {
+			win32.Invalidate(hwnd)
+		}
+	case win32.WM_VSCROLL:
+		p.scrollBy(wparam)
+		return 0, true
+	case win32.WM_MOUSEWHEEL:
+		if p.content > 0 {
+			delta := int32(int16(win32.HiWord(wparam)))
+			p.ScrollTo(p.offset - delta*p.theme.Scale.Px(wheelStep)/win32.WHEEL_DELTA)
+			return 0, true
+		}
+	case win32.WM_DESTROY:
+		if p.brush != 0 {
+			win32.DeleteObject(p.brush)
+			p.brush = 0
+		}
+	}
+	return 0, false
+}
+
+// SetText changes the text of a control.
+func (p *Panel) SetText(hwnd win32.HWND, text string) { win32.SetText(hwnd, text) }
+
+// Show shows or hides the panel. A hidden panel is also disabled, so the
+// access keys of its controls cannot fire.
+func (p *Panel) Show(shown bool) {
+	win32.SetVisible(p.hwnd, shown)
+	win32.Enable(p.hwnd, shown)
+}
+
+// Paragraph creates a text control that wraps its text at word breaks;
+// MeasureWrapped tells the height it needs.
+func (p *Panel) Paragraph(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true}, "STATIC", text, win32.SS_NOPREFIX, 0)
+}
+
+// PathLabel creates a one-line text control that shortens a path in its
+// text in the middle ("C:\Users\...\Backups") when it does not fit.
+func (p *Panel) PathLabel(text string, style TextStyle, color Color) win32.HWND {
+	return p.add(child{style: style, color: color, styled: true, cuts: true}, "STATIC", text, win32.SS_NOPREFIX|win32.SS_PATHELLIPSIS, 0)
+}
+
+// wheelStep is how far one notch of the mouse wheel scrolls, in DIPs.
+const wheelStep = 60
+
+// SetScroll makes the panel scrollable for content of height pixels: a
+// scroll bar appears when the content is taller than the panel. 0 turns
+// scrolling off.
+func (p *Panel) SetScroll(height int32) {
+	p.content = height
+	view := win32.ClientRect(p.hwnd).Height()
+	p.offset = max(min(p.offset, height-view), 0)
+	win32.SetVScroll(p.hwnd, height, view, p.offset)
+}
+
+// ScrollOffset returns how far the content is scrolled, in pixels.
+func (p *Panel) ScrollOffset() int32 { return p.offset }
+
+// ScrollTo scrolls to offset pixels, within the content.
+func (p *Panel) ScrollTo(offset int32) {
+	view := win32.ClientRect(p.hwnd).Height()
+	offset = max(min(offset, p.content-view), 0)
+	if offset == p.offset {
+		return
+	}
+	p.offset = offset
+	win32.SetVScroll(p.hwnd, p.content, view, offset)
+	if p.OnScroll != nil {
+		p.OnScroll()
+	}
+}
+
+func (p *Panel) scrollBy(wparam uintptr) {
+	view := win32.ClientRect(p.hwnd).Height()
+	line := p.theme.Scale.Px(wheelStep / 2)
+	switch win32.LoWord(wparam) {
+	case win32.SB_LINEUP:
+		p.ScrollTo(p.offset - line)
+	case win32.SB_LINEDOWN:
+		p.ScrollTo(p.offset + line)
+	case win32.SB_PAGEUP:
+		p.ScrollTo(p.offset - view)
+	case win32.SB_PAGEDOWN:
+		p.ScrollTo(p.offset + view)
+	case win32.SB_THUMBTRACK:
+		p.ScrollTo(win32.VScrollTrack(p.hwnd))
+	case win32.SB_TOP:
+		p.ScrollTo(0)
+	case win32.SB_BOTTOM:
+		p.ScrollTo(p.content)
+	}
+}
+
+// Tip shows text when the mouse rests on the child hwnd, as well as the
+// full text of a label that is cut off.
+func (p *Panel) Tip(hwnd win32.HWND, text string) {
+	c := p.find(hwnd)
+	if c == nil {
+		return
+	}
+	c.tip = text
+	if text != "" {
+		p.addTool(c)
+	}
+}
+
+// addTool lets the panel's tooltip ask for the tip of c.
+func (p *Panel) addTool(c *child) {
+	if c.tool {
+		return
+	}
+	if p.tip == 0 {
+		h, err := win32.NewTooltipWindow(p.hwnd, p.theme.Scale.Px(tipWidth))
+		if err != nil {
+			return
+		}
+		p.tip = h
+	}
+	win32.AddTooltipCallback(p.tip, c.hwnd)
+	c.tool = true
+}
+
+// tipOf returns the tip of the child hwnd: its full text when it is cut
+// off, and its own tip; "" shows none.
+func (p *Panel) tipOf(hwnd win32.HWND) string {
+	c := p.find(hwnd)
+	if c == nil {
+		return ""
+	}
+	var lines []string
+	if c.cuts {
+		text := win32.Text(hwnd)
+		w, _ := p.theme.Fonts.Measure(text, c.style)
+		if w > win32.ClientRect(hwnd).Width() {
+			lines = append(lines, text)
+		}
+	}
+	if c.tip != "" && (len(lines) == 0 || c.tip != lines[0]) {
+		lines = append(lines, c.tip)
+	}
+	return strings.Join(lines, "\n")
+}

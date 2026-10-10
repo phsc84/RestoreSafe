@@ -1,0 +1,146 @@
+# Checks every pull request, and every push to the release branches, on
+# Windows, the only platform RestoreSafe supports (refactoring 2.0 RF-1).
+# A branch with a pull request runs once per push, through the pull request.
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Format, vet, build, static analysis
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Not formatted with gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: Build (release configuration)
+        env:
+          CGO_ENABLED: "0"
+        run: go build -trimpath ./...
+      - name: staticcheck
+        run: go tool staticcheck ./...
+      - name: govulncheck
+        run: go tool govulncheck ./...
+      # A report only: a wrapper function added in one commit may get its
+      # caller in the next.
+      - name: deadcode (report)
+        run: go tool deadcode -test ./...
+
+  test:
+    name: Tests and coverage
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: go test
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -o pipefail
+          go test -count=1 -coverprofile=cover.out ./... 2>&1 | tee test.log
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci/annotate-failures.sh test.log
+      - name: Coverage floors per package
+        run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
+      # Each benchmark runs once, so that it keeps working; the numbers are
+      # not compared (CONTRIBUTING.md, "Benchmarks and fuzzing").
+      - name: Benchmarks run once
+        env:
+          CGO_ENABLED: "0"
+        run: go test -count=1 -run '^$' -bench . -benchtime 1x ./...
+      - name: Total coverage
+        run: go tool cover -func=cover.out | tail -n 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: cover.out
+
+  race:
+    name: Race detector
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # -race needs cgo and a gcc; the runner image has MinGW. Release builds
+      # stay CGO_ENABLED=0.
+      - name: go test -race
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          gcc --version | head -n 1
+          set -o pipefail
+          go test -count=1 -race -timeout 45m ./... 2>&1 | tee test.log
+      - name: Report failures
+        if: failure()
+        run: bash scripts/ci/annotate-failures.sh test.log
+
+  fuzz:
+    name: Fuzzing
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # Each fuzz target for 30 s. A failing input lands in the package's
+      # testdata/fuzz/; download it from the artifact and commit it, so that
+      # go test runs it as a regression test from then on.
+      - name: Fuzz every target
+        env:
+          CGO_ENABLED: "0"
+        run: bash scripts/ci/fuzz.sh 30
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: fuzz-failures
+          path: internal/**/testdata/fuzz/
+
+  gui:
+    name: GUI smoke test
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The runner's session has a desktop, which the UI Automation of
+      # scripts\gui-test needs: the smoke test drives the real window through
+      # two backups, a restore and a verification, then every status of the
+      # Create backup page is checked.
+      - name: Smoke test and state check
+        shell: powershell
+        run: .\scripts\ci\gui-smoke.ps1 -Work "$env:RUNNER_TEMP\gui-smoke"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: gui-screenshots
+          path: |
+            ${{ runner.temp }}/gui-smoke/shots
+            ${{ runner.temp }}/gui-smoke/states

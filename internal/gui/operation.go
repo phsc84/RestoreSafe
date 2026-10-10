@@ -1,0 +1,346 @@
+package gui
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/gui/flow"
+	"github.com/phsc84/restoresafe/internal/gui/view"
+	"github.com/phsc84/restoresafe/internal/gui/win32"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/restore"
+	"github.com/phsc84/restoresafe/internal/workflow/verify"
+)
+
+// runState is the worker of the operation in progress; a.machine holds its
+// stage.
+type runState struct {
+	b      *flow.Bridge
+	cancel context.CancelFunc
+	doneCh chan workerEnd
+}
+
+// workerEnd is how the worker ended: the workflow's error and the facts of
+// its log.
+type workerEnd struct {
+	err   error
+	facts logging.RunFacts
+}
+
+// runFacts reads the facts of the run's log; it runs on the worker, as the
+// log may be on a slow network share. Without a log (the run failed before
+// it opened one) there are none.
+func runFacts(logPath string) logging.RunFacts {
+	if logPath == "" {
+		return logging.RunFacts{}
+	}
+	facts, _ := logging.ReadFacts(logPath) //nolint:errcheck // the result card does without
+	return facts
+}
+
+// opRequest is an operation and what the user chose for it.
+type opRequest struct {
+	op flow.Op
+	// sets are the sets to restore or verify; destination is where to
+	// restore them.
+	sets        []naming.BackupEntry
+	destination string
+}
+
+// startOperation runs req in a worker goroutine. A backup opens its plan
+// dialog and shows its progress on Create backup; a verification shows its
+// progress on Restore backup; a restore runs in the Restore window, which
+// started it, and shows its progress on Restore backup too.
+func (a *app) startOperation(req opRequest) {
+	op := req.op
+	if !a.machine.Start(op) {
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &runState{cancel: cancel, doneCh: make(chan workerEnd, 1)}
+	r.b = flow.NewBridge(func(kind int) {
+		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
+	})
+	a.run = r
+	a.logText.Reset()
+	u := flow.NewUI(r.b, questions{a})
+
+	switch op {
+	case flow.OpBackup:
+		a.showPage(view.PageCreate)
+		a.refreshRun()
+		a.openPlanDialog()
+	case flow.OpVerify:
+		a.machine.Current().What, a.machine.Current().Whole = a.verifyWhat, a.verifyWhole
+		a.showPage(view.PageRestore)
+		a.refreshRun()
+		a.openVerifyDialog(a.verifyWhat, a.verifyHidden)
+	}
+	a.updateTaskbar()
+
+	cfg, exeDir := a.opts.Config, a.opts.ExeDir
+	go func() {
+		var err error
+		defer func() {
+			if p := recover(); p != nil {
+				err = fmt.Errorf("Internal error: %v", p)
+			}
+			r.doneCh <- workerEnd{err, runFacts(r.b.LogPath())}
+			win32.PostMessage(a.hwnd, msgWorkerDone, 0, 0) //nolint:errcheck
+		}()
+		switch op {
+		case flow.OpBackup:
+			err = backup.Run(ctx, u, cfg, exeDir)
+		case flow.OpRestore:
+			err = restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets: req.sets, Destination: req.destination})
+		case flow.OpVerify:
+			err = verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets: req.sets})
+		}
+	}()
+}
+
+// runStarted records that the user started the operation in its plan,
+// Restore or Verify window.
+func (a *app) runStarted() {
+	a.machine.Confirmed(time.Now())
+	a.refreshRun()
+	a.focusPage()
+}
+
+// refreshRun shows the state of the operation on its page, and on the
+// taskbar button.
+func (a *app) refreshRun() {
+	a.shell.create.updateRun()
+	a.shell.restore.updateRun()
+	a.updateTaskbar()
+}
+
+// onProgress shows the latest progress report.
+func (a *app) onProgress() {
+	if a.run == nil {
+		return
+	}
+	p := a.run.b.TakeProgress()
+	a.machine.Progressed(p, time.Now())
+	if a.machine.Stage() != flow.StageRunning {
+		return
+	}
+	a.refreshRun()
+}
+
+// onOutput keeps new output.
+func (a *app) onOutput() {
+	if a.run == nil {
+		return
+	}
+	a.logText.WriteString(a.run.b.TakeOutput())
+}
+
+// confirmCancel handles Cancel while an operation runs: it asks first once
+// the operation has started (figure 6.3).
+func (a *app) confirmCancel() {
+	switch a.machine.CancelRequested() {
+	case flow.CancelNow:
+		a.cancelRun()
+	case flow.CancelAsk:
+		if a.confirm(a.dialogOwner(), view.CancelConfirm(a.machine.Current().Op, false)) {
+			a.cancelRun()
+		}
+	}
+}
+
+// cancelRun cancels the operation: the context stops the running work, and
+// the bridge answers pending and later questions with their cancel answers.
+func (a *app) cancelRun() {
+	r := a.run
+	if r == nil || a.machine.Stage() == flow.StageCancelling {
+		return
+	}
+	a.machine.Cancelling()
+	r.cancel()
+	r.b.Close()
+	a.closeModal()
+	if a.plan != nil {
+		a.plan.close()
+	}
+	if a.verify != nil {
+		a.verify.close()
+	}
+	a.refreshRun()
+}
+
+// onWorkerDone shows the result, or closes the window when that was
+// requested while the operation ran.
+func (a *app) onWorkerDone() {
+	r := a.run
+	if r == nil {
+		return
+	}
+	end := <-r.doneCh
+	r.cancel()
+	a.onOutput()
+	a.run = nil
+	if a.plan != nil {
+		// The plan blocked the start: the result card says why.
+		a.plan.close()
+	}
+	if a.machine.Done(flow.End{Result: r.b.FinalResult(), Err: end.err, Facts: end.facts, LogPath: r.b.LogPath()}, time.Now()) {
+		win32.UnblockShutdown(a.hwnd)
+		win32.DestroyWindow(a.hwnd)
+		return
+	}
+	if cfg := a.deferredConfig; cfg != nil && !a.machine.Busy() {
+		a.useConfig(cfg)
+	}
+	if run := a.machine.Current(); run.Op == flow.OpRestore && a.restore != nil && a.restore.workerDone() {
+		// The restore ended before it started; the Restore window shows why.
+		a.refreshRun()
+		return
+	}
+	if run := a.machine.Current(); run.Op == flow.OpVerify && a.verify != nil && a.verify.workerDone() {
+		// The verification ended before it started; the Verify window shows why.
+		a.refreshRun()
+		return
+	}
+	a.startCheck()
+	a.refreshRun()
+	a.focusPage()
+	a.updateTaskbar()
+	if !win32.IsForeground(a.hwnd) {
+		win32.FlashUntilActive(a.hwnd)
+	}
+}
+
+// dismiss ends the shown result: the Create backup page shows the state again.
+func (a *app) dismiss() {
+	a.machine.Dismiss()
+	a.refreshShell()
+	a.updateTaskbar()
+	a.focusPage()
+}
+
+// runLogPath returns the log file of the operation, "" when none.
+func (a *app) runLogPath() string {
+	if a.run != nil {
+		return a.run.b.LogPath()
+	}
+	if r := a.machine.Current(); r != nil {
+		return r.LogPath
+	}
+	return ""
+}
+
+// showRunLog shows the log of the operation in the log window (GUI spec
+// BR-7), as it is when opened.
+func (a *app) showRunLog() {
+	a.showLog(a.hwnd, a.runLogPath(), "")
+}
+
+// showResultDetails shows the workflow's message of the result card: the
+// plan's preflight when the plan blocked the start.
+func (a *app) showResultDetails() {
+	r := a.machine.Current()
+	if r == nil {
+		return
+	}
+	if r.Started.IsZero() && r.Plan != nil {
+		a.showDetails(a.hwnd, view.PlanDetailsTitle, r.Plan.Details)
+		return
+	}
+	if c := view.ResultCardOf(r); c != nil {
+		a.showText(a.hwnd, view.DetailsOfResult, c.Detail)
+	}
+}
+
+// onClose handles closing the window (GUI spec 6.4, 12.4).
+func (a *app) onClose() {
+	switch a.machine.CloseRequested() {
+	case flow.CloseNow:
+		win32.DestroyWindow(a.hwnd)
+	case flow.CloseAfterCancel:
+		a.cancelRun()
+	case flow.CloseAsk:
+		if a.confirm(a.hwnd, view.CancelConfirm(a.machine.Current().Op, true)) {
+			a.machine.CloseConfirmed()
+			a.cancelRun()
+		}
+	}
+}
+
+// onQueryEndSession cancels a running operation when Windows ends the
+// session and asks Windows to wait until it has cleaned up. It reports
+// whether the session may end now.
+func (a *app) onQueryEndSession() bool {
+	if a.run == nil {
+		return true
+	}
+	a.machine.CloseConfirmed()
+	a.cancelRun()
+	win32.BlockShutdown(a.hwnd, fmt.Sprintf("RestoreSafe is stopping the %s and cleaning up.", strings.ToLower(opName(a.machine.Current().Op))))
+	return false
+}
+
+// onEndSession waits (bounded) for the worker when the session ends anyway.
+func (a *app) onEndSession() {
+	r := a.run
+	if r == nil {
+		return
+	}
+	a.cancelRun()
+	select {
+	case end := <-r.doneCh:
+		r.doneCh <- end
+	case <-time.After(20 * time.Second):
+	}
+}
+
+// updateTaskbar shows the operation on the taskbar button (GUI spec BR-5):
+// progress while it runs, red after a failure, amber after warnings.
+func (a *app) updateTaskbar() {
+	tb := a.taskbar
+	if tb == nil {
+		return
+	}
+	r := a.machine.Current()
+	switch {
+	case r == nil || r.Stage == flow.StagePlanning:
+		tb.SetState(win32.TaskbarNoProgress)
+	case r.Stage == flow.StageCancelling:
+		tb.SetState(win32.TaskbarPaused)
+	case r.Stage == flow.StageRunning:
+		if f := r.Progress.Fraction(); f >= 0 && r.Progress.Phase != interact.PhaseUnlocking {
+			tb.SetState(win32.TaskbarNormal)
+			tb.SetValue(uint64(f*1000), 1000)
+		} else {
+			tb.SetState(win32.TaskbarIndeterminate)
+		}
+	default:
+		c := view.ResultCardOf(r)
+		switch {
+		case c == nil || c.Tone == view.ToneSuccess || c.Tone == view.ToneNeutral:
+			tb.SetState(win32.TaskbarNoProgress)
+		case c.Tone == view.ToneError:
+			tb.SetState(win32.TaskbarError)
+			tb.SetValue(1000, 1000)
+		default:
+			tb.SetState(win32.TaskbarPaused)
+			tb.SetValue(1000, 1000)
+		}
+	}
+}
+
+// opName returns the operation's name as the workflows use it in messages.
+func opName(o flow.Op) string {
+	switch o {
+	case flow.OpRestore:
+		return "Restore"
+	case flow.OpVerify:
+		return "Verification"
+	}
+	return "Backup"
+}

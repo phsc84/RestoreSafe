@@ -16,25 +16,74 @@ backup_directory: "C:/Backup"
 # Default: 4096 MB (= 4 GB)
 split_size_mb: 4096
 
-# Retention: number of backup sets to keep per source directory.
-# Just the N newest backups and log files are kept; any older backup and log files are
-# deleted automatically.
+# Retention: number of backup chains to keep per source directory. A chain is a
+# full backup plus the differential backups based on it; it is always deleted as a
+# whole, so a full backup is never deleted while a kept differential needs it.
 # 0 = keep all backups (no automatic cleanup)
 retention_keep: 3
 
-# Log level: "info" (default) or "debug" (verbose output)
-log_level: "info"
+# Differential backups store only the files that are new or changed since the
+# last full backup. RestoreSafe decides automatically between full and
+# differential and shows the decision in the backup plan before the backup
+# starts; click "Full backup instead" there to force a full backup.
+differential:
+  # false = every backup is a full backup. Default: true
+  enabled: true
+  # Create a new full backup when the latest full backup is this many days old.
+  # Default: 30  |  Minimum: 1  |  Maximum: 365
+  full_backup_interval_days: 30
+  # Create a new full backup when the latest differential has reached this
+  # percentage of the full backup's size (differentials grow over time, because
+  # each one contains all changes since the full backup).
+  # Default: 50  |  Minimum: 1  |  Maximum: 100
+  max_size_percent: 50
+  # Number of differential backups kept per chain; older ones are deleted first.
+  # Each differential needs only its full backup, so deleting older ones never
+  # affects newer ones. The newest differential is always kept.
+  # 0 = keep all differentials (default)
+  retention_keep_differentials: 0
 
-# Additional I/O diagnostics in debug log/console (write calls, average write size).
-# Enable this only for storage or write-amplification troubleshooting.
-io_diagnostics: false
+# Files and directories to leave out of every backup (case-insensitive).
+#   "*.tmp"           name pattern: matches at any depth
+#   "node_modules"    a directory name: skipped with everything inside
+#   "/Cache"          starts with "/" or contains "/": path from the source directory root
+#   "logs/"           trailing "/": directories only
+# Wildcards: * (any characters), ? (one character), [abc] (one of a, b, c).
+# Default: none
+exclude: []
+#exclude:
+#  - "*.tmp"
+#  - "~$*"
+#  - "Thumbs.db"
+#  - "node_modules"
+
+# What to do when a file cannot be read (e.g. locked by another program):
+#   "fail" = abort the backup of that directory (default)
+#   "skip" = continue, list the file as a warning, and keep older backups
+#            of that directory until a backup without skipped files succeeds
+on_unreadable_file: "fail"
+
+# Log level: "info" (default) or "debug" (verbose output). "debug" also logs
+# I/O diagnostics of a backup: progress every 2 seconds, a warning when no data
+# moves for 10 seconds, write calls and the size of every part file. Use it
+# for storage troubleshooting.
+log_level: "info"
 
 # Verify the backup immediately after it is written.
 # Re-reads and decrypts the new .enc parts (no extra password/YubiKey prompt)
-# to confirm the backup restores. A failure is logged as a warning and the
-# files are kept. Adds roughly one decrypt pass per backup run.
+# and checks every file against its checksum. For a differential backup, the
+# new and changed files are checked (its full backup was checked when it was
+# written). A failure is logged as a warning, the files are kept, and old
+# backups are not cleaned up. Adds roughly one decrypt pass per backup run.
 # Default: false
 verify_after_backup: false
+
+# Remind on the Overview when the newest backup is older than this many
+# days. RestoreSafe checks it only while it is open; it never runs in the
+# background.
+# 0 = no reminder
+# Default: 7  |  Minimum: 0  |  Maximum: 365
+reminder_days: 7
 
 # Authentication mode.
 # 1 = Password only (default)
@@ -45,21 +94,38 @@ verify_after_backup: false
 #     The YubiKey must support FIDO2 hmac-secret and have a FIDO2 PIN configured.
 authentication_mode: 1
 
+# Modes 2 and 3: register a second YubiKey as spare when new keys are created.
+# Either YubiKey can then restore every backup made with those keys. The spare
+# YubiKey is only needed once, when the keys are created.
+# Default: false
+yubikey_spare: false
+
+# Create a recovery code when new keys are created. The code alone restores
+# every backup made with those keys, even without password or YubiKey (also in
+# mode 2). Store it in a password manager or on paper, never next to your backups.
+# Default: false
+recovery_code: false
+
+# Minimum password length (in characters) when new keys are created.
+# Default: 12  |  Minimum: 8  |  Maximum: 256
+password_min_length: 12
+
 # Argon2id key-derivation parameters.
 #
-# RestoreSafe uses Argon2id (RFC 9106) to derive the AES-256 encryption key from
-# your password. Argon2id is memory-hard, which makes GPU/ASIC-based brute-force
-# attacks orders of magnitude more expensive than classic password hashing (bcrypt,
-# PBKDF2, etc.).
+# RestoreSafe uses Argon2id (RFC 9106) to derive the key that unlocks your backups
+# from your password (and/or YubiKey response or recovery code). Argon2id is
+# memory-hard, which makes GPU/ASIC-based brute-force attacks orders of magnitude
+# more expensive than classic password hashing (bcrypt, PBKDF2, etc.).
 #
 # These three parameters control how much work is done each time the key is derived
 # (once per backup run, once per restore). Higher values slow down legitimate use
 # slightly, but make brute-force attacks proportionally harder — the cost grows for
 # an attacker exactly as it grows for you.
 #
-# The values in effect at encryption time are stored in every backup file, so
-# restore always uses the original parameters automatically. Changing these settings
-# only affects new backups, not existing ones.
+# The values are stored in the keys when new keys are created, and restore always
+# uses the stored values automatically. Because RestoreSafe reuses your keys,
+# changed values take effect the next time new keys are created (first backup, or
+# "New keys + full backup…" in the backup plan); existing backups are not affected.
 #
 # Parameters and their effect:
 #

@@ -1,0 +1,18 @@
+Documents	d	-	-	-	-	
+Documents/Empty folder	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/Hidden folder	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	H
+Documents/Hidden folder/inside.txt	f	18	f03389af9106bda4a727af92866eb6db97ff15f42ac2bb3dfdbbb7f3c8a7725b	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/Mail	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/big.bin	f	1200000	866f2dd7245ce7d46782f60ed64a581540d26c682d26d34d4f578d6d14989884	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/busy.db	f	19	1f48bf44b98e444aa490c398fec7426185c8487ab96cbcb0a0be6e87e47629bf	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/deep	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/deep/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/deep/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee	d	-	-	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/deep/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn.txt	f	9	a626bf0d5b57865ee8e1c91b944c82564496d67523639027676d0f7f90373825	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/deleteme.txt	f	31	fd2aee7320a09fb7330caccec7f0140993b25f389a7165446eda117ca764aa25	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/empty.txt	f	0	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/hidden.txt	f	6	e564b4081d7a9ea4b00dada53bdae70c99b87b6fce869f0c3dd4d2bfa1e53e1c	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	H
+Documents/letter.txt	f	16	b8760bfda0b01d7496af8b182fbe36bb08946141f88e702933c8c08d4d1ad834	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	
+Documents/readonly.txt	f	9	4fed3970dcc0d31dccddbf69ef55b00f32d2ca787f1757894914bc0365ea7aa5	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	R
+Documents/system.txt	f	6	bbc5e661e106c6dcd8dc6dd186454c2fcba3c710fb4d8e71a60c93eaf077f073	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	S
+Documents/Ünïcødé ✓ 日本語.txt	f	12	8898cd6a1c9777bbb832388868a66967c501a8ab02291e595816b7b23470c838	2018-01-02T03:04:05.6Z	2019-05-06T07:08:09.1Z	

@@ -1,0 +1,190 @@
+package backup
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
+)
+
+// runBackupDirectory writes one full set of a small source and returns the
+// log content.
+func runBackupDirectory(t *testing.T, level string) (string, string) {
+	t.Helper()
+	tempRoot := t.TempDir()
+	sourceDir := filepath.Join(tempRoot, "source")
+	backupDir := filepath.Join(tempRoot, "target")
+	createFile(t, filepath.Join(sourceDir, "sample.txt"), "hello")
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+
+	logPath := filepath.Join(backupDir, fmt.Sprintf("test-%d.log", time.Now().UnixNano()))
+	logger, err := logging.NewLogger(logPath, level, nil)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
+	cfg := &config.Config{SplitSizeMB: 1}
+	entry := naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"}
+	op := &operation{cfg: cfg, log: logger, backupDir: backupDir, runID: "ORD123", keySet: ks, master: master}
+	_, backupErr := op.backupDirectory(context.Background(), nil, sourceDir, entry, nil)
+	logger.Close()
+	if backupErr != nil {
+		t.Fatalf("backupDirectory failed: %v", backupErr)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read log file: %v", err)
+	}
+	return string(data), backupDir
+}
+
+func TestBackupDirectoryWritesCompleteSet(t *testing.T) {
+	_, backupDir := runBackupDirectory(t, "info")
+	info := catalog.InspectSet(backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
+	if !info.Complete() {
+		t.Fatalf("expected a complete set, got %v", info.Err)
+	}
+}
+
+func TestBackupDirectoryLogsTarCreationAtDebugLevel(t *testing.T) {
+	logContent, _ := runBackupDirectory(t, "debug")
+	if !strings.Contains(logContent, "Starting TAR creation and encryption for:") {
+		t.Fatalf("expected TAR creation debug line in log, got: %q", logContent)
+	}
+}
+
+func TestBackupDirectoryLogsIODiagnosticsAtDebugLevel(t *testing.T) {
+	logContent, _ := runBackupDirectory(t, "debug")
+	if !strings.Contains(logContent, "I/O diagnostics") {
+		t.Fatalf("expected I/O diagnostics lines in log, got: %q", logContent)
+	}
+	if !strings.Contains(logContent, "Part 001 size:") {
+		t.Fatalf("expected per-part size line in log, got: %q", logContent)
+	}
+}
+
+func TestBackupDirectoryLogsPartNamesAtInfoLevel(t *testing.T) {
+	logContent, _ := runBackupDirectory(t, "info")
+
+	partIdx := strings.Index(logContent, "Part 001: [source]_ORD123_2026-03-18_FULL-001.enc")
+	createdIdx := strings.Index(logContent, "Created: 1 part file(s)")
+	if partIdx < 0 || createdIdx < 0 {
+		t.Fatalf("expected part and created lines in log, got: %q", logContent)
+	}
+	if createdIdx < partIdx {
+		t.Fatalf("expected created summary after part lines, got: %q", logContent)
+	}
+	if !strings.Contains(logContent, "Backed up: 1 file(s), 0 directory(s)") {
+		t.Fatalf("expected file summary in log, got: %q", logContent)
+	}
+	if strings.Contains(logContent, "I/O diagnostics") {
+		t.Fatalf("did not expect I/O diagnostics at info level, got: %q", logContent)
+	}
+}
+
+func TestRunReturnsErrorWhenBackupDirCannotBeCreated(t *testing.T) {
+	t.Parallel()
+	// Use an existing file as the target path so MkdirAll fails.
+	base := t.TempDir()
+	filePath := filepath.Join(base, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to create file: %v", err)
+	}
+	// Append a subdir to the file path — MkdirAll will fail.
+	cfg := &config.Config{BackupDirectory: filepath.Join(filePath, "sub")}
+	err := Run(context.Background(), &interacttest.Script{}, cfg, "")
+	if err == nil {
+		t.Fatal("expected error when target dir cannot be created, got nil")
+	}
+	if !strings.Contains(err.Error(), "Failed to create backup directory") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunReturnsErrorWhenAllSourcesFail(t *testing.T) {
+	t.Parallel()
+	backupDir := t.TempDir()
+	cfg := &config.Config{
+		BackupDirectory:   backupDir,
+		SourceDirectories: []string{filepath.Join(backupDir, "nonexistent-source")},
+	}
+	err := Run(context.Background(), &interacttest.Script{}, cfg, "")
+	if err == nil {
+		t.Fatal("expected error when all sources fail, got nil")
+	}
+	if !strings.Contains(err.Error(), "Backup preflight failed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
+	t.Parallel()
+	sourceDir := t.TempDir()
+	backupDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sourceDir, "f.txt"), []byte("data"), 0o600); err != nil {
+		t.Fatalf("failed to create source file: %v", err)
+	}
+
+	cfg := &config.Config{
+		BackupDirectory:   backupDir,
+		SourceDirectories: []string{sourceDir},
+	}
+	var out strings.Builder
+	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("n")}, cfg, "")
+	output := out.String()
+	if runErr != nil {
+		t.Fatalf("expected nil error on cancel, got: %v", runErr)
+	}
+	if !strings.Contains(output, "Backup cancelled.") {
+		t.Fatalf("expected 'Backup cancelled.' in output, got: %q", output)
+	}
+	if !strings.Contains(output, "new keys will be created") {
+		t.Fatalf("expected key plan in preflight, got: %q", output)
+	}
+}
+
+func TestRemoveLeftoverTempPartsDeletesOnlyTempParts(t *testing.T) {
+	dir := t.TempDir()
+	temp := filepath.Join(dir, "[Docs]_ABC123_2026-03-18_FULL-001.enc.tmp")
+	keep := filepath.Join(dir, "[Docs]_ABC123_2026-03-18_FULL-001.enc")
+	other := filepath.Join(dir, "notes.tmp")
+	for _, p := range []string{temp, keep, other} {
+		createFile(t, p, "x")
+	}
+	removeLeftoverTempParts(dir, logging.NewConsoleLogger("info", nil))
+	assertNotExists(t, temp)
+	assertExists(t, keep)
+	assertExists(t, other)
+}
+
+func TestNewRunIDAvoidsUsedIDs(t *testing.T) {
+	t.Parallel()
+	used := make([]catalog.SetInfo, 0)
+	for i := 0; i < 5; i++ {
+		id, _ := naming.NewBackupID()
+		used = append(used, catalog.SetInfo{Entry: naming.BackupEntry{ChainID: id}})
+	}
+	id, err := newRunID(used)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range used {
+		if u.Entry.ChainID == id {
+			t.Fatalf("newRunID returned used ID %s", id)
+		}
+	}
+}

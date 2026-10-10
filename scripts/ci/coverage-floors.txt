@@ -1,0 +1,29 @@
+# Coverage floors per package, in % of statements (refactoring 2.0 RF-40).
+# CI fails when a package falls below its floor. Raise a floor when a
+# package's coverage has risen for good; never lower one to let a change
+# through without a reason in the refactoring plan.
+internal/security/cryptox        85
+internal/security/recovery       90
+internal/config                  90
+internal/format/manifest         90
+internal/format/naming           90
+internal/workflow/plan           90
+internal/workflow/health         90
+internal/problem                 85
+internal/format/archive          70
+internal/format/catalog          70
+internal/format/container        85
+internal/format/setwriter        85
+internal/workflow/backup         70
+internal/workflow/restore        70
+internal/workflow/verify         70
+internal/workflow/unlock         70
+internal/workflow/restorepoint   85
+internal/workflow/job            70
+internal/workflow/interact       70
+internal/fsx                     70
+internal/logging                 85
+internal/gui/view                85
+internal/gui/flow                70
+internal/gui/widget              70
+internal/security/yubikey        35

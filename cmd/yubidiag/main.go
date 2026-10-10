@@ -14,7 +14,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"RestoreSafe/internal/security"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
@@ -31,10 +32,6 @@ type hiddAttributes struct {
 	ProductID     uint16
 	VersionNumber uint16
 }
-
-const (
-	yubicoVID = 0x1050
-)
 
 type yubiInterface struct {
 	rawPath     string
@@ -59,6 +56,13 @@ func (yi yubiInterface) interfaceName() string {
 }
 
 func main() {
+	// Load DLLs from System32 only: RestoreSafe is a portable exe, often run
+	// from a download or USB folder, where a planted DLL must never be loaded
+	// (refactoring 2.0 RF-52). Windows 8 and later have the call.
+	windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32) //nolint:errcheck // nothing safer to fall back to
+	if os.Getenv("RESTORESAFE_FIDO2_DEBUG") == "1" {
+		yubikey.DebugOutput = os.Stdout
+	}
 	fmt.Println("================================")
 	fmt.Println("RestoreSafe YubiKey Diagnostic")
 	fmt.Println("================================")
@@ -120,7 +124,7 @@ func printResults(ifaces []yubiInterface) {
 
 	fmt.Println()
 	fmt.Println("WebAuthn API:")
-	webauthnErr := security.CheckYubiKeyAvailability()
+	webauthnErr := yubikey.CheckAvailability()
 	if webauthnErr == nil {
 		fmt.Println("  [OK] Windows WebAuthn API (webauthn.dll) is present and supports hmac-secret.")
 	} else {
@@ -173,9 +177,9 @@ func printLiveFIDO2Probe() {
 	fmt.Println()
 	fmt.Println("Live FIDO2 hmac-secret test:")
 	fmt.Println("  Windows will register a diagnostic credential, then ask again to derive a test secret.")
-	combined, challengeJSON, err := security.CombineWithPassword([]byte("restoresafe-yubidiag"), false)
+	combined, challengeJSON, err := yubikey.CombineWithPassword([]byte("restoresafe-yubidiag"), false)
 	if len(combined) > 0 {
-		security.ZeroBytes(combined)
+		cryptox.ZeroBytes(combined)
 	}
 	if err != nil {
 		fmt.Printf("  [ERROR] %v\n", err)
@@ -183,7 +187,7 @@ func printLiveFIDO2Probe() {
 		fmt.Println("         Remedy: Ensure the YubiKey supports FIDO2 hmac-secret and has a FIDO2 PIN configured.")
 		return
 	}
-	if err := security.ValidateChallengeJSON(challengeJSON); err != nil {
+	if err := yubikey.ValidateChallengeJSON(challengeJSON); err != nil {
 		fmt.Printf("  [ERROR] Diagnostic challenge validation failed: %v\n", err)
 		fmt.Println("Verdict: Live FIDO2 hmac-secret authentication returned invalid challenge data.")
 		return
@@ -227,7 +231,7 @@ func printRegistrySection() {
 }
 
 func findYubiKeyInterfaces() []yubiInterface {
-	paths, err := security.YubiKeyHIDDevicePaths()
+	paths, err := yubikey.HIDDevicePaths()
 	if err != nil {
 		fmt.Printf("[ERROR] HID device enumeration failed: %v\n", err)
 		return nil

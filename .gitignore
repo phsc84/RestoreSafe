@@ -1,12 +1,17 @@
+# Local settings
 .gitconfig
-*.log
+
+# Build output (build.bat) and generated resources
+/dist/
+resource.syso
 *.exe
 *.zip
-cmd/resource.syso
-dev_setup.txt
 
-assets/**
-!assets/RestoreSafe.ico
-!assets/Screenshot_v*.png
+# Logs of local runs
+*.log
 
-/test/
+# Personal manual test folder
+/sandbox/
+
+# Private development notes
+/docs/DEVELOPMENT.md

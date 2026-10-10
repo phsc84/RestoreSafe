@@ -1,0 +1,463 @@
+// Package backup orchestrates the full backup workflow:
+//  1. Lock the backup directory exclusively
+//  2. Plan the run (package plan), show the plan, and ask to start
+//  3. Determine the keys: reuse the current key set or create new keys
+//  4. For each source directory: stream TAR → encrypt → split → .enc parts
+//     (written as .tmp and renamed once the set is complete)
+//  5. Optionally re-read and verify the written sets (verify_after_backup)
+//  6. Apply the retention policy; the run writes one log file throughout
+package backup
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync/atomic"
+	"time"
+
+	"github.com/phsc84/restoresafe/internal/config"
+	"github.com/phsc84/restoresafe/internal/format/archive"
+	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/format/container"
+	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/format/setwriter"
+	"github.com/phsc84/restoresafe/internal/fsx"
+	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/job"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
+	"github.com/phsc84/restoresafe/internal/workflow/restorepoint"
+)
+
+// Run executes the full backup workflow, asking u for decisions and credentials
+// and reporting progress to it. Cancelling ctx stops the backup: sets
+// completed before are kept, the interrupted one is removed, and the returned
+// error matches context.Canceled.
+func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
+	out := u.Output()
+	// Resolve backup directory (may be relative to exe dir).
+	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
+	if err := os.MkdirAll(backupDir, 0o750); err != nil {
+		return problem.Errorf("Failed to create backup directory: %w.", err).WithRemedy("Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.")
+	}
+
+	lock, err := fsx.AcquireBackupLock(backupDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
+	sources := plan.ResolveSources(cfg.SourceDirectories, exeDir)
+
+	infos, err := catalog.Inventory(backupDir)
+	if err != nil {
+		return problem.Errorf("Failed to scan backup directory: %w.", err).WithRemedy("Check read permissions in the backup directory.")
+	}
+
+	// Determine backup run identifiers.
+	runID, err := newRunID(infos)
+	if err != nil {
+		return err
+	}
+	date := naming.DateString()
+
+	// Set up logger.
+	logPath := naming.LogFileName(backupDir, date, runID)
+	log, err := logging.NewLogger(logPath, cfg.LogLevel, out)
+	if err != nil {
+		return err
+	}
+	defer log.Close()
+	u.LogStarted(logPath)
+
+	removeLeftoverTempParts(backupDir, log)
+
+	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos)
+	if err != nil {
+		return err
+	}
+	if !start {
+		log.InfoLogOnly("Backup cancelled by user before start")
+		fmt.Fprintln(out, "Backup cancelled.")
+		return nil
+	}
+
+	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
+	keySet, master, err := obtainKeys(u, cfg, keys, log)
+	if err != nil {
+		return err
+	}
+	defer cryptox.ZeroBytes(master)
+
+	op := &operation{cfg: cfg, log: log, logPath: logPath, backupDir: backupDir, date: date, runID: runID, keySet: keySet, master: master}
+	return op.run(ctx, u, sources, plans)
+}
+
+// newRunID generates a run ID that is not yet used as chain ID or run ID in
+// the backup directory, so a chain ID always identifies one full backup.
+func newRunID(infos []catalog.SetInfo) (naming.BackupID, error) {
+	used := make(map[string]bool)
+	for _, info := range infos {
+		used[string(info.Entry.ChainID)] = true
+		if info.Header != nil {
+			used[info.Header.RunID] = true
+		}
+	}
+	for attempt := 0; attempt < 100; attempt++ {
+		id, err := naming.NewBackupID()
+		if err != nil {
+			return "", err
+		}
+		if !used[string(id)] {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("Failed to generate a unique backup ID.")
+}
+
+// removeLeftoverTempParts deletes part files an interrupted backup left
+// behind with the temporary suffix. It runs under the backup lock, so no other
+// backup can be writing them.
+func removeLeftoverTempParts(backupDir string, log *logging.Logger) {
+	names, err := catalog.ListTempParts(backupDir)
+	if err != nil {
+		log.Warn("Failed to look for leftovers of interrupted backups: %v", err)
+		return
+	}
+	for _, name := range names {
+		if err := os.Remove(filepath.Join(backupDir, name)); err != nil {
+			log.Warn("Failed to remove leftover of an interrupted backup %s: %v", name, err)
+			continue
+		}
+		log.Info("Removed leftover of an interrupted backup: %s", name)
+	}
+}
+
+// operation is a backup run whose keys are known: it asks nothing more, so
+// tests can drive it with keys they made.
+type operation struct {
+	cfg       *config.Config
+	log       *logging.Logger
+	logPath   string
+	backupDir string
+	// date and runID name the sets of the run.
+	date   string
+	runID  naming.BackupID
+	keySet *container.KeySet
+	master []byte
+}
+
+// run backs up sources; u receives the progress and the summary. plans
+// decides full or differential per directory; directories without a plan
+// (or a nil map) get a full backup.
+func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Source, plans map[string]*plan.Folder) error {
+	out := u.Output()
+	fmt.Fprintln(out)
+	n := runnableSourceCount(sources)
+	dirWord := "directories"
+	if n == 1 {
+		dirWord = "directory"
+	}
+	start := time.Now()
+	o.log.Info("Backup started - ID: %s, date: %s, %d source %s", string(o.runID), o.date, n, dirWord)
+	warningCount := 0
+	var written []naming.BackupEntry
+	// retentionHold lists directories whose new backup misses unreadable
+	// files; their older backups are kept because they may still have them.
+	retentionHold := make(map[string]bool)
+
+	// Back up each source directory.
+	index := 0
+	for _, source := range sources {
+		if source.Warning != "" {
+			o.log.Warn("Source directory warning: %s → %s", source.Resolved, source.Warning)
+			warningCount++
+		}
+		if source.Skip {
+			continue
+		}
+
+		srcAbs := source.Resolved
+		directoryName := source.BackupName
+		if directoryName == "" {
+			directoryName = naming.DirectoryBaseName(srcAbs)
+		}
+
+		o.log.Info("Processing source directory: %s", srcAbs)
+		o.log.Debug("Directory name in archive: %s", directoryName)
+
+		entry := naming.BackupEntry{DirectoryName: directoryName, ChainID: o.runID, Date: o.date}
+		var base *setwriter.Base
+		if folder := plans[directoryName]; folder.IsDiff() {
+			loaded, err := loadBase(o.backupDir, folder.Base, o.keySet, o.master)
+			if err != nil {
+				o.log.Warn("  The full backup %s cannot be used as base (%v). A full backup is created instead.", folder.Base.Entry.String(), err)
+				warningCount++
+			} else {
+				base = loaded
+				entry = naming.BackupEntry{DirectoryName: directoryName, ChainID: folder.Base.Entry.ChainID, Date: o.date, DiffNumber: folder.DiffNumber}
+				o.log.Info("  Backup type: differential %03d of chain %s (%s)", folder.DiffNumber, folder.Base.Entry.ChainID, folder.Reason)
+			}
+		} else if folder != nil {
+			o.log.Info("  Backup type: full (%s)", folder.Reason)
+		}
+		index++
+		stats, err := o.backupDirectory(ctx, job.Stamp(u, interact.PhaseBackingUp, index, n), srcAbs, entry, base)
+		if err != nil {
+			return backupFailed(ctx, o.log, start, fmt.Errorf("Backup of %q failed: %w", srcAbs, err))
+		}
+		setResult := logging.ResultOK
+		if stats.Skipped+stats.Stale > 0 {
+			warningCount++
+			retentionHold[directoryName] = true
+			setResult = logging.ResultWarnings
+		}
+		o.log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, Bytes: stats.Bytes})
+		written = append(written, entry)
+	}
+
+	// Optionally verify the freshly written sets before pruning old backups.
+	verifyFailed := false
+	if o.cfg.VerifyAfterBackup && len(written) > 0 {
+		failed, err := verifyBackupAfterWrite(ctx, u, o.backupDir, written, o.master, o.log)
+		if err != nil {
+			return backupFailed(ctx, o.log, start, err)
+		}
+		if failed > 0 {
+			verifyFailed = true
+			warningCount += failed
+		}
+	}
+
+	// A cancelled run leaves the older backups alone.
+	if err := ctx.Err(); err != nil {
+		return backupFailed(ctx, o.log, start, err)
+	}
+
+	// Retention is skipped when verification failed so a verified older backup
+	// set is never pruned in favour of an unverified new one.
+	if verifyFailed {
+		o.log.Warn("Cleanup old data skipped because post-backup verification failed; existing backup sets left untouched.")
+	} else {
+		job.ReportPhase(u, interact.PhaseCleaningUp, "Cleaning up")
+		if err := applyRetentionPolicy(o.backupDir, o.cfg.RetentionKeep, o.cfg.Differential.RetentionKeepDifferentials, sources, retentionHold, o.log); err != nil {
+			o.log.Warn("  Cleanup old data failed: %v", err)
+			warningCount++
+		}
+	}
+
+	if len(retentionHold) > 0 {
+		o.log.Warn("Backup completed with warnings: some files could not be read and are not in this backup (see the warnings above).")
+	} else {
+		o.log.Info("Backup completed successfully")
+	}
+	result := logging.ResultOK
+	if warningCount > 0 {
+		result = logging.ResultWarnings
+	}
+	o.log.Fact(logging.Fact{Kind: logging.FactBackup, Result: result, Warnings: warningCount, Seconds: secondsSince(start)})
+	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
+	return nil
+}
+
+// backupFailed returns err, or, when the user cancelled the backup, logs what
+// was kept and returns the cancellation.
+func backupFailed(ctx context.Context, log *logging.Logger, start time.Time, err error) error {
+	if ctx.Err() == nil {
+		log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: err.Error(), Seconds: secondsSince(start)})
+		return err
+	}
+	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultCancelled, Seconds: secondsSince(start)})
+	log.Warn("Backup cancelled. Backup sets completed before cancelling were kept, an interrupted one was removed, and old backups were not cleaned up.")
+	return job.Cancelled("Backup")
+}
+
+// verifyKeptRemedy is appended to each post-backup verification failure so the
+// reason and the "files kept / try a manual restore" guidance live on one line.
+const verifyKeptRemedy = " The backup files were kept; try a manual restore/verify."
+
+// verifyBackupAfterWrite re-reads the sets just written, decrypts them, and
+// checks every file against its manifest hash. It reuses the unlocked master
+// key, so it needs no additional password prompt or YubiKey touch. Failures
+// are logged as warnings and the backup files are left in place; the number of
+// sets that failed is returned so the caller can flag the run and skip
+// retention. When ctx is cancelled, it stops with the context's error.
+func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, backupDir string, entries []naming.BackupEntry, master []byte, log *logging.Logger) (int, error) {
+	log.Info("Verifying backup integrity")
+
+	failures := 0
+	for i, entry := range entries {
+		set, err := catalog.OpenSet(backupDir, entry)
+		if err != nil {
+			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			failures++
+			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
+			continue
+		}
+		// A differential's own data is checked; its full backup was
+		// verified when it was written.
+		var done atomic.Int64
+		stop := job.TrackProgress(job.Stamp(rep, interact.PhaseVerifying, i+1, len(entries)), interact.Progress{Step: "Verifying", Item: entry.DirectoryName, Total: restorepoint.SectionSize(set, nil)}, &done)
+		m, err := restorepoint.VerifyOwnData(ctx, set, master, restorepoint.Output{Log: log, Done: &done})
+		stop()
+		parts := len(set.Paths)
+		set.Close() //nolint:errcheck
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return failures, ctxErr
+		}
+		if err != nil {
+			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			failures++
+			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
+			continue
+		}
+		log.Info("  Verified: %d part file(s), %d file(s) - [%s] successfully verified", parts, m.Footer.Files, entry.DirectoryName)
+		log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultOK, Set: entry.String()})
+	}
+
+	if failures == 0 {
+		log.Info("  Post-backup verification successful")
+	}
+	return failures, nil
+}
+
+// loadBase opens the full backup a differential is based on and decrypts and
+// validates its manifest. The base must use the unlocked key set.
+func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet, master []byte) (*setwriter.Base, error) {
+	if info.Header.KeySet.ID != keySet.ID {
+		return nil, fmt.Errorf("it uses different keys")
+	}
+	set, err := catalog.OpenSet(backupDir, info.Entry)
+	if err != nil {
+		return nil, err
+	}
+	defer set.Close()
+	keys, err := set.SectionKeys(master)
+	if err != nil {
+		return nil, err
+	}
+	defer keys.Zero()
+	m, sum, err := set.ReadManifest(keys)
+	if err != nil {
+		return nil, err
+	}
+	return &setwriter.Base{Header: set.Header, Manifest: m, ManifestSHA256: sum}, nil
+}
+
+// backupDirectory writes one backup set of srcDir into the backup directory: a
+// differential of base, or a full backup when base is nil. It returns the
+// files it skipped as unreadable and the size of the set.
+func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressReporter, srcDir string, entry naming.BackupEntry, base *setwriter.Base) (setStats, error) {
+	var inBytes, outBytes, outWriteCalls atomic.Int64
+	counters := setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
+	var progressLog *logging.Logger
+	if o.log.DebugEnabled() {
+		progressLog = o.log
+	}
+	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
+	defer stopProgress()
+
+	excludeDirs := []string{o.backupDir}
+	var done atomic.Int64
+	var total int64
+	if rep != nil {
+		total = archive.SourceSize(archive.BuildOptions{SourceDir: srcDir, ExcludeDirs: excludeDirs, Exclude: o.cfg.ExcludeMatcher})
+	}
+	progress := interact.Progress{Step: "Backing up", Item: entry.DirectoryName, Total: total}
+	stopReport := job.TrackProgress(rep, progress, &done)
+	defer func() {
+		if stopReport != nil {
+			stopReport()
+		}
+	}()
+
+	o.log.Debug("Starting TAR creation and encryption for: %s", srcDir)
+	res, err := setwriter.Write(ctx, setwriter.Params{
+		SourceDir:      srcDir,
+		ExcludeDirs:    excludeDirs,
+		OutputDir:      o.backupDir,
+		Entry:          entry,
+		Base:           base,
+		RunID:          o.runID,
+		KeySet:         *o.keySet,
+		Master:         o.master,
+		SplitSizeBytes: o.cfg.SplitSizeMB * 1024 * 1024,
+		SyncParts:      true,
+		Exclude:        o.cfg.ExcludeMatcher,
+		SkipUnreadable: o.cfg.SkipUnreadableFiles(),
+		OnSkip: func(rel, reason string, stale bool) {
+			if stale {
+				o.log.Warn("  Older version kept (could not be read): %s → %s", rel, reason)
+				return
+			}
+			o.log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
+		},
+		OnPartOpened: func(seq int, path string) {
+			o.log.Info("  Part %03d: %s", seq, filepath.Base(path))
+		},
+		Counters: counters,
+		Progress: &done,
+	})
+	if err != nil {
+		return setStats{}, err
+	}
+
+	o.logPartSummary(res.Parts, entry.DirectoryName, counters)
+	o.log.Info("  Backed up: %d file(s), %d directory(s), %s", res.Manifest.Files, res.Manifest.Dirs, fsx.FormatBytesBinary(uint64(res.Manifest.TotalBytes)))
+	if base != nil {
+		o.log.Info("  Differential: %d new or changed file(s) stored (%s), %d unchanged file(s) in the full backup", res.Stats.Stored, fsx.FormatBytesBinary(uint64(res.Manifest.DataBytes)), res.Stats.Unchanged)
+	}
+	if n := res.Stats.Excluded; n > 0 {
+		o.log.Info("  Excluded by pattern: %d file(s)/directory(s)", n)
+	}
+	if n := res.Stats.Vanished; n > 0 {
+		o.log.Info("  Deleted while the backup was running: %d file(s)/directory(s) (not in this backup)", n)
+	}
+	if n := res.Stats.Skipped; n > 0 {
+		o.log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
+	}
+	if n := res.Stats.Stale; n > 0 {
+		o.log.Warn("  [%s] %d file(s) could not be read; this backup contains their older version from the full backup.", entry.DirectoryName, n)
+	}
+	size := partsSize(res.Parts)
+	// The last report of the step carries the size of the set (GUI spec BR-4).
+	stopReport()
+	stopReport = nil
+	if rep != nil {
+		progress.Done, progress.Written = done.Load(), size
+		rep.Progress(progress)
+	}
+	return setStats{Skipped: res.Stats.Skipped, Stale: res.Stats.Stale, Bytes: size}, nil
+}
+
+// secondsSince returns the seconds since start, rounded up, so that a run
+// shorter than a second still records a duration (0 means none recorded).
+func secondsSince(start time.Time) int64 {
+	return int64((time.Since(start) + time.Second - 1) / time.Second)
+}
+
+// setStats is what backupDirectory reports about the set it wrote.
+type setStats struct {
+	// Skipped counts the files and directories that could not be read.
+	Skipped int
+	// Stale counts the files that could not be read and keep their older
+	// version from the full backup.
+	Stale int
+	// Bytes is the size of the set's part files.
+	Bytes int64
+}
+
+// partsSize returns the total size of the part files; a part that cannot be
+// read counts as 0, as the size only feeds the run's facts.
+func partsSize(paths []string) int64 {
+	var total int64
+	for _, p := range paths {
+		if fi, err := os.Stat(p); err == nil {
+			total += fi.Size()
+		}
+	}
+	return total
+}

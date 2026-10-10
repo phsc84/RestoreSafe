@@ -3,47 +3,92 @@
 [![Latest Release](https://img.shields.io/github/v/release/phsc84/RestoreSafe)](https://github.com/phsc84/RestoreSafe/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2064--bit-blue)](https://github.com/phsc84/RestoreSafe/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
-[![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go)](https://go.dev/dl/)
+[![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go)](https://go.dev/dl/)
 
-RestoreSafe is a standalone Windows 64-bit backup tool that backs up your directories into encrypted, split archive files, with password protection and optional YubiKey 2FA. Restore your backups anytime using the same secure password or YubiKey authentication.
+RestoreSafe is a standalone Windows 64-bit tool that turns your directories into encrypted, tamper-evident backups you can store anywhere - on an external drive, a NAS, or in any cloud storage - without trusting that place. Nobody who gets hold of your backup files can read them, and nobody can change them without RestoreSafe noticing. Backups are locked with a password and optional YubiKey 2FA. RestoreSafe creates full and differential backups automatically, checks every restored file against its checksum, and needs nothing but `RestoreSafe.exe` to back up, verify, and restore.
 
 ## Table of Contents
 
-- [Screenshot](#screenshot)
+- [More than a copy of your files](#more-than-a-copy-of-your-files)
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [Installation & Configuration](#installation--configuration)
+- [Updating](#updating)
 - [Usage](#usage)
+- [Full and differential backups](#full-and-differential-backups)
+- [How your backups are locked](#how-your-backups-are-locked)
 - [Naming scheme of created files](#naming-scheme-of-created-files)
 - [Known limitations](#known-limitations)
 - [YubiKey setup](#yubikey-setup)
 - [Development setup](#development-setup)
 
-## Screenshot
+## More than a copy of your files
 
-<img src="assets/Screenshot_v1.0.0.png" alt="RestoreSafe main menu">
+A plain copy of your files is only as safe as the place where it lies. RestoreSafe makes the backup itself safe, so the place no longer matters:
+
+- **Stolen or leaked backups are useless.** File contents, file names, folders, sizes, and times are encrypted with AES-256-GCM. A thief, a cloud provider, or anyone with access to your cloud account sees only encrypted `.enc` files (see [What is not encrypted](#what-is-not-encrypted) for the few readable details). To open them, they need one of your unlock methods: your password, your YubiKey, or your recovery code.
+- **Guessing your password is expensive.** Argon2id key derivation makes every password guess cost time and memory, and with a YubiKey a password alone is not enough.
+- **Tampering is detected.** Every part of a backup is authenticated: the encrypted data, the locked boxes with the master key, the header, and the order and completeness of the data. Someone who modifies, swaps, reorders, or cuts off any part of a backup file - or a disk or upload error that does - cannot produce a backup that RestoreSafe accepts. Restore and verify stop and report the damage instead of giving you altered files.
+- **Every file is checked.** Each backup contains an encrypted list of all its files with their SHA-256 checksums. Restore and verify check every file against it, so you know that what you get back is exactly what you backed up.
+- **Restores can't be redirected.** A restore stops when its destination, or a folder in it, is a link to another place, so no other program can make RestoreSafe write your files somewhere else. Links inside a backup are never recreated.
+- **Your backups stay yours.** RestoreSafe needs no account, no server, and no internet connection. It only reads your folders and writes `.enc` files; where you keep them is up to you.
+
+What RestoreSafe cannot do is stop someone with access to your backup files from deleting them, or ransomware from encrypting them a second time. It detects that a backup was damaged, but it can't repair it. Keep at least one copy of your backups where such software can't reach it, for example on an external drive that you disconnect after the backup, or in cloud storage that keeps older versions of your files.
+
+## Screenshots
+
+The **Create backup** page answers "are my folders protected?": the status at the top, then the folders with their newest backup and the type of the next one, the backup directory, and the keys:
+
+<img src="docs/images/Screenshot_v2.0.0_overview.png" alt="Create backup page with the status, the folders, the backup directory, and the keys">
+
+**Back up now…** shows the plan first: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
+
+<img src="docs/images/Screenshot_v2.0.0_plan.png" alt="Backup plan with differential backups and the start choices">
+
+While it runs, the page shows the steps, the progress, and the speed; the Folders card follows each folder:
+
+<img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress on the Create backup page">
+
+The **Restore backup** page lists every backup run with its folders, types, sizes, and status, and a link to each run's log; Restore and Verify act on the selected run:
+
+<img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Restore backup page with runs and backup sets">
+
+Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
+
+<img src="docs/images/Screenshot_v2.0.0_restore.png" alt="Restore window before the restore starts">
 
 ## Features
 
 ### Core
 - Backs up one or more source directories into split, encrypted `.enc` archive files
-- Restores selected backup sets to a chosen destination
-- Verifies backup integrity (decryption + archive readability) without restoring
-- Retention policy: automatically keeps only the newest N backup sets per source directory (configured via `retention_keep` in `config.yaml`)
+- Full and differential backups: RestoreSafe decides automatically and shows the decision before the backup starts; a differential stores only files that are new or changed since the last full backup
+- Restores or verifies any backup, full or differential, and checks every file against its SHA-256 checksum
+- Restores file contents, directory structure, timestamps, and the read-only, hidden, and system attributes
+- Retention policy: keeps the newest N backup chains (a full backup plus its differentials) and optionally only the newest differentials per chain
+- Exclude patterns for files and directories you don't want to back up
 
 ### Security
-- AES-256-GCM encryption (content and metadata/file names)
+- AES-256-GCM encryption of the file contents and of the names, sizes and times of the backed-up files (see [What is not encrypted](#what-is-not-encrypted))
+- Tamper detection: the data, the key boxes, the header, and the order and completeness of every backup are authenticated; a modified backup is reported as damaged and never restored as if it were intact
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
+- Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
+- A restore stops when its destination folder, or a folder in it, is a link to another place (a junction or symbolic link), so that no other program can redirect the restored files
 
 ### Reliability
-- Startup health check: validates directories, YubiKey, and structural integrity of existing backups at launch
-- Streaming pipeline: no intermediate temp files, low CPU/RAM footprint
-- Local staging: when source and backup directory share the same drive (e.g. NAS), parts are written to local TEMP first, then moved
-- Optional post-backup verification: when `verify_after_backup: true`, each backup re-reads and decrypts its freshly written parts to confirm they restore, catching an unrestorable backup at backup time instead of at restore time
+- Every backup contains an encrypted manifest: the list of all files with their checksums; restore and verify check each file against it
+- A backup appears under its final file names only when it is complete; an interrupted backup never looks like a valid backup
+- Startup health check: validates directories, YubiKey, keys, and the structural integrity of existing backups at launch
+- Two RestoreSafe windows with the same backup directory don't get in each other's way: a restore or verification does not start while a backup runs (whose cleanup could delete the files it reads), and a backup does not start while a restore or verification runs; restores and verifications may run at the same time. A backup directory where RestoreSafe can't create its lock file can't be backed up into; a restore from it shows a warning instead
+- Streaming pipeline: low CPU/RAM footprint
+- Optional post-backup verification (`verify_after_backup: true`): each new backup is re-read and checked right after it is written
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Interactive menu; custom config path via `-config` flag
+- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, and a Settings page with Reload
+- Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
+- Custom config path via `-config` argument
+- One password entry and at most one YubiKey touch per backup run
 - Backup split size configurable; supports multiple source directories with automatic alias disambiguation
 - Per-run log files; configurable log level
 
@@ -56,19 +101,31 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
 ### First time usage
 
 1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe and extract it to any directory on your computer.
+
+   RestoreSafe is not signed with a paid code-signing certificate, so when you start it for the first time Windows may show "Windows protected your PC" (SmartScreen, "unknown publisher"). Click **More info**, then **Run anyway**. Windows asks only on the first start of a downloaded version.
+
+   On Windows 11 with **Smart App Control** turned on, Windows may block RestoreSafe without offering **Run anyway**. Smart App Control allows only programs that are signed or known to Microsoft. To run RestoreSafe, turn it off in Windows Security → App & browser control → Smart App Control settings. On older Windows 11 versions it can only be turned on again by reinstalling Windows.
+
+   Optional, for checking that the download is unchanged: download `SHA256SUMS.txt` of the same release into the same folder as the ZIP and run this in PowerShell there (it prints `True`):
+
+   ```powershell
+   (Get-FileHash .\RestoreSafe-2.0.0.zip).Hash -eq (Get-Content .\SHA256SUMS.txt).Split(' ')[0]
+   ```
 2. Rename `config-SAMPLE.yaml` to `config.yaml`.
 
-   By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a `.bat` file to launch RestoreSafe with the desired config (always use an absolute path):
+   By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a shortcut to `RestoreSafe.exe` and add the configuration to its **Target** (always use an absolute path):
 
-   ```bat
-   @echo off
+   ```text
    "C:\Tools\RestoreSafe\RestoreSafe.exe" -config="D:\Configs\home-backup.yaml"
-   pause
    ```
+
+   The Settings page shows which configuration is loaded. After changing `config.yaml`, click **Reload** on the Settings page.
 3. In `config.yaml` edit at least parameters `source_directories` and `backup_directory`.
 
-   For any other parameters you may keep the default values or adjust them according to your needs.
-4. Authentication mode comparison
+   For any other parameters you may keep the default values or adjust them according to your needs. Every parameter is explained in `config-SAMPLE.yaml`.
+
+   A parameter that is missing from `config.yaml` uses its default value; the Settings page lists such parameters and **Add to config.yaml** writes them into the file with their default values and explanations (a copy of the previous file is kept). A misspelled or unknown parameter is an error, so a typo can't silently fall back to a default.
+4. Choose the authentication mode:
 
    | Setting | Password prompt | Second factor (2FA) | Description |
    |---|---|---|---|
@@ -76,30 +133,197 @@ RestoreSafe is a standalone Windows 64-bit backup tool that backs up your direct
    | `authentication_mode: 2` | Yes | YubiKey | Password + YubiKey |
    | `authentication_mode: 3` | No | YubiKey | Password-less, key-in-hand authentication |
 
-   The automatically generated `.challenge` file(s) in `authentication_mode: 2` and `authentication_mode: 3` must be stored together with the corresponding `.enc` file(s). The `.challenge` files do not contain secret keys, but are required for restore when YubiKey mode is enabled.
-   
-   In `authentication_mode: 3` the YubiKey FIDO2 credential is the sole RestoreSafe authentication factor. Keep your YubiKey and FIDO2 PIN safe - anyone who can complete the YubiKey prompt with the matching `.challenge` file can restore the backup.
+   In `authentication_mode: 3` the YubiKey is the sole RestoreSafe authentication factor. Keep your YubiKey and FIDO2 PIN safe - anyone who can complete the YubiKey prompt can restore the backup.
 
-### Updating
+   Consider `yubikey_spare: true` and `recovery_code: true`; see [How your backups are locked](#how-your-backups-are-locked).
+
+### Main configuration options
+
+| Option | Default | Purpose |
+|---|---|---|
+| `retention_keep` | `3` in `config-SAMPLE.yaml`; `0` when the line is missing | Number of backup chains kept per source directory (0 = keep all) |
+| `differential.enabled` | `true` | Create differential backups when a usable full backup exists |
+| `differential.full_backup_interval_days` | `30` | Create a new full backup when the last one is this many days old |
+| `differential.max_size_percent` | `50` | Create a new full backup when the last differential reached this percentage of the full backup |
+| `differential.retention_keep_differentials` | `0` | Differentials kept per chain (0 = keep all) |
+| `exclude` | none | Files and directories to leave out (e.g. `*.tmp`, `node_modules`, `/Cache`) |
+| `on_unreadable_file` | `fail` | `fail` aborts when a file cannot be read (e.g. locked); `skip` continues and lists the file as a warning |
+| `yubikey_spare` | `false` | Register a second YubiKey when new keys are created (modes 2 and 3) |
+| `recovery_code` | `false` | Create a recovery code when new keys are created |
+| `password_min_length` | `12` | Minimum password length for new keys (at least 8) |
+| `verify_after_backup` | `false` | Re-read and check each backup right after writing it |
+| `reminder_days` | `7` | Remind on the Create backup page when the newest backup is older than this many days (0 = no reminder) |
+
+## Updating
 
 [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe.exe and replace the existing version on your computer. See [CHANGELOG.md](CHANGELOG.md) for a summary of changes between versions.
 
 If updating to a new major version (v1.x.x → v2.x.x), please also download `config-SAMPLE.yaml`, rename it to `config.yaml` and set the parameters according to your previous `config.yaml`.
 
-This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a new bugfix version (v1.0.1 → v1.0.2).
+This is not needed when updating to a new minor version (v1.0.x → v1.1.x) or a new bugfix version (v1.0.1 → v1.0.2): new parameters use their default values, and the Settings page offers to add them to your `config.yaml`.
+
+### Updating from RestoreSafe 1.x to 2.0
+
+RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created by 1.x**, and 1.x cannot restore 2.0 backups. Your first 2.0 backup starts fresh: it creates new keys and a full backup of every source directory.
+
+- Keep a copy of RestoreSafe 1.0.2 as long as you keep 1.x backups; you need it to restore them.
+- 2.0 never modifies or deletes 1.x backup files (`[Name]_DATE_ID-001.enc`, `.challenge`) or their log files, even in the same backup directory. The startup health check reports them as a reminder.
+- Delete the 1.x backups yourself once your 2.0 backups are in place and verified.
+- Start from the new `config-SAMPLE.yaml`. RestoreSafe 2.0 refuses settings it doesn't know: a 1.x `config.yaml` with `io_diagnostics` doesn't load until you remove that line (`log_level: "debug"` now includes the I/O diagnostics).
 
 ## Usage
 
+Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`:
+
+- **Create backup** - whether your folders are protected, and **Back up now…**. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. Below: your folders with the date of their newest backup and the type of the next one (and a note when the last backup failed or was cancelled); the backup directory and its free space; and your keys.
+- **Restore backup** - every backup run with its backup sets and a **Show log** link, and **Restore…** and **Verify…** for the selected run. Clicking a run or any of its folders selects the run; to act on a single folder, choose it in the folder filter at the top.
+- **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
+
+RestoreSafe checks your backups when it starts, after every operation, with **Refresh** (on Create backup and Restore backup) or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
+
 ### Create a backup
-Double-click RestoreSafe.exe, choose **Backup** from the menu, confirm the preflight summary, and enter your password (or touch the YubiKey when it blinks, if YubiKey authentication is configured).
+Click **Back up now…** (`Ctrl+B`). The backup plan shows, for every folder, whether it gets a full or a differential backup and why, the space needed (for a differential an estimate of the files changed since the full backup), how you will unlock, and what retention removes afterwards (see [Screenshots](#screenshots)). Then choose:
+
+- **Start** - back up as planned
+- **Full backup instead** - full backups for every folder (offered when a differential is planned); **Back to plan** returns
+- **New keys + full backup…** - create new keys and full backups (to change your password, replace a lost YubiKey, or get a new recovery code; see [How your backups are locked](#how-your-backups-are-locked))
+- **Cancel**
+
+Then enter your password and/or confirm the Windows Security prompt of your YubiKey. On your first backup, RestoreSafe creates your keys first (see [What you will see](#what-you-will-see)).
+
+While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, and the speed; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
 
 ### Restore a backup
-Double-click RestoreSafe.exe, choose **Restore** from the menu, select the backup set(s) and destination directory, then enter your password (or touch the YubiKey when it blinks, if YubiKey authentication is configured).
+On the Restore backup page, select a backup run and click **Restore…** (or double-click it). The Restore window shows that run's folders, all checked; when the folder filter shows one folder, only that folder is checked:
 
-The restore destination must not already exist - RestoreSafe creates it during restore and will abort if the path is already present.
+- **To** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet.
+- The folders, with their type, size, and whether the new folder can be created. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
+- **Space** and **Unlock** - whether it fits, and what you'll be asked for.
+
+The window checks your choices while you make them. Nothing is written before you click **Start** and enter your password and/or confirm your YubiKey. Start closes the window; the progress and then the result appear at the top of the Restore backup page, as for a verification.
+
+Every backup is a restore point. Restoring a differential needs the full backup of the same chain (same ID in the file name); RestoreSafe finds it automatically (**Show details** lists it). Files deleted before the differential was created are not restored. If a file does not match its checksum, the restore stops and reports which folder is incomplete.
 
 ### Verify a backup
-Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the backup set(s) to check. RestoreSafe confirms all parts are present, decryptable, and form a readable archive - without writing any files to disk.
+On the Restore backup page, select a backup run and click **Verify…**; it verifies all folders of the run, or only the one the folder filter shows. The Verify window shows the folders, how much is read, and how you unlock them; click **Start**. RestoreSafe decrypts everything and checks every file against its checksum - without writing any files to disk. Verifying a differential checks the complete restore point, including the unchanged files in its full backup. The progress and then the result appear at the top of the page, and the Status column shows the result ("Verified" or "Damaged") for each backup set.
+
+### Excluding files and unreadable files
+Use `exclude` in `config.yaml` to leave out files and directories (case-insensitive):
+
+| Pattern | Matches |
+|---|---|
+| `*.tmp` | Every file or directory named `*.tmp`, at any depth |
+| `node_modules` | Every `node_modules` directory with everything inside |
+| `/Cache` or `Projects/*/build` | A path from the source directory root (patterns containing `/`) |
+| `logs/` | Directories named `logs` only (trailing `/`) |
+
+A file that cannot be read (for example a mail archive locked by an open mail program) aborts the backup by default (`on_unreadable_file: fail`). With `on_unreadable_file: skip`, RestoreSafe backs up everything else, lists the file as a warning, and keeps your older backups of that directory until a backup without skipped files succeeds. In a differential, a changed file that cannot be read keeps its older version from the full backup. Files deleted while the backup runs are simply not included. A file that another program holds locked counts as unreadable also when RestoreSafe runs as administrator, so it is never copied while it may be changing.
+
+## Full and differential backups
+
+- A **full backup** contains every file of a source directory.
+- A **differential backup** contains only the files that are new or changed since the last full backup, plus the complete list of all files. It needs its full backup to be restored - and only that one: every differential is independent of the other differentials.
+- A **chain** is one full backup plus the differentials based on it. All files of a chain share the same ID in their names.
+
+RestoreSafe creates a differential when all of these hold, otherwise a full backup:
+
+- a complete full backup of the directory exists and uses your current keys;
+- `differential.enabled` is `true`;
+- the full backup is younger than `differential.full_backup_interval_days`;
+- the last differential is smaller than `differential.max_size_percent` of the full backup (each differential contains all changes since the full backup, so differentials grow over time);
+- the chain has fewer than 999 differentials.
+
+A file counts as changed when its size, last modification time, or NTFS change time differs from the full backup. Unchanged files are not read at all, which makes differentials fast.
+
+**Rule of thumb for your backup files: all files with the same ID belong together. A `DIFF` file is useless without the `FULL` files of the same ID.** Retention always deletes a chain as a whole, so it never removes a full backup that a kept differential needs.
+
+## How your backups are locked
+
+### In short
+
+- Your backups are encrypted with a **master key** that RestoreSafe creates at random.
+- The master key is stored inside every backup, but only in **locked boxes**. Each box opens with one of your unlock methods: your password, your YubiKey, your spare YubiKey, or your recovery code.
+- To restore, you only need to open **one** box. Any of your unlock methods works.
+
+### The picture
+
+```text
+Every backup file contains:
+
+  Box 1: master key, locked with your password + YubiKey
+  Box 2: master key, locked with your password + spare YubiKey    (optional)
+  Box 3: master key, locked with your recovery code               (optional)
+
+Open any one box  ->  master key  ->  your files
+```
+
+The boxes are not secret. Someone who steals your backup files also has the boxes, but they still need one of your unlock methods to open one. Without it, the backup is useless to them.
+
+### What is not encrypted
+
+Everything inside a backup is encrypted: the contents of your files, their names, folders, sizes and times. A few things are readable without unlocking, because RestoreSafe needs them to list your backups before you enter a password:
+
+- the name of the backed-up folder (for example `Documents`), the dates and the backup ID, which are in the file names too;
+- the time the backup was made and the RestoreSafe version;
+- the boxes: for each, its kind (password, YubiKey, recovery code), the salt and settings of its key derivation, and for a YubiKey the ID of its registered credential;
+- the total size of the backup files, as for any file.
+
+### Your unlock methods
+
+| `authentication_mode` | You unlock with | Optional extras |
+|---|---|---|
+| `1` | Password | Recovery code |
+| `2` | Password + YubiKey | Spare YubiKey, recovery code |
+| `3` | YubiKey | Spare YubiKey, recovery code |
+
+Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_code: true`.
+
+### What you will see
+
+**Your first backup (key setup).** RestoreSafe creates your keys:
+
+1. You choose a password (at least `password_min_length` characters, 12 by default) and enter it twice.
+2. You register your YubiKey (two Windows Security prompts).
+3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
+4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Click **Copy** to put it in your password manager, or write it down on paper. Windows keeps the copied code out of the clipboard history and the cloud clipboard.
+5. Then every source directory gets a full backup.
+
+**Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
+
+**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, the unlock dialog offers **Use your recovery code instead**.
+
+### When RestoreSafe creates new keys
+
+New keys mean: a new master key, new boxes, and a new full backup of every source directory. This happens when:
+
+- you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
+- you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
+- you click **New keys + full backup…** in the backup plan, to change your password, replace a lost YubiKey, or get a new recovery code.
+
+The backup plan always tells you in advance when new keys will be created and why; so does the Keys card on the Create backup page.
+
+**Important:** new keys come with new unlock methods. Your old password, old YubiKey registrations, and old recovery code do **not** open backups made with the new keys. They still open your older backups, until retention deletes them.
+
+### What to keep where
+
+| Item | Keep it | Never |
+|---|---|---|
+| Password | In your head or a password manager | In a file next to your backups |
+| YubiKey | With you | - |
+| Spare YubiKey | At a different, safe place (home safe, trusted person) | In the same bag as your main YubiKey |
+| Recovery code | In a password manager, or on paper in a safe place | Next to your backups, or unencrypted on your computer |
+
+The recovery code opens your backups **on its own**, even in password + YubiKey mode. Treat it like the key to a safe.
+
+### What if ...
+
+| Situation | What to do |
+|---|---|
+| I lost my YubiKey. | Restore with your spare YubiKey or your recovery code. Then click **New keys + full backup** at your next backup to create new keys with a new YubiKey, so you have a spare again. Without spare and recovery code, backups locked with that YubiKey cannot be restored by anyone. |
+| I forgot my password. | Restore with your recovery code; it works alone, no password or YubiKey needed. Then click **New keys + full backup** at your next backup to set a new password. Without a recovery code, the backups cannot be restored by anyone. |
+| I want to change my password. | Click **New keys + full backup** at the next backup. Your older backups keep opening with the old password. |
+| Someone stole my backup drive. | Without your unlock methods, they cannot read anything. If you think your password or recovery code was exposed too, click **New keys + full backup** at your next backup and delete the old backups once the new ones are in place. |
+| I deleted all backups. | The next backup creates new keys, like the first time. |
 
 ## Naming scheme of created files
 
@@ -108,44 +332,41 @@ Double-click RestoreSafe.exe, choose **Verify** from the menu, and select the ba
 | Name part | Meaning |
 |---|---|
 | DirectoryName | Name of the source directory |
-| YYYY-MM-DD | Backup date |
-| ID | Short backup run code (6 characters, A-Z and 0-9) |
+| ID | Chain ID: the ID of the chain's full backup (6 characters, A-Z and 0-9) |
+| YYYY-MM-DD | Date of this backup |
+| FULL / DIFFnnn | Full backup, or differential number nnn of the chain |
 | 001 / 002 / ... | File part number when the backup is split |
 
 ### Backup files
 
-`[DirectoryName]_YYYY-MM-DD_ID-001.enc`
+```text
+[DirectoryName]_ID_YYYY-MM-DD_FULL-001.enc
+[DirectoryName]_ID_YYYY-MM-DD_DIFFnnn-001.enc
+```
 
 Samples:
 
 ```text
-[Documents]_2026-01-15_ABC123-001.enc
-[Documents]_2026-01-15_ABC123-002.enc
-[Documents]_2026-01-15_ABC123-003.enc
-[Pictures]_2026-01-15_ABC123-001.enc
+[Documents]_ABC123_2026-09-01_FULL-001.enc       full backup, part 1
+[Documents]_ABC123_2026-09-01_FULL-002.enc       full backup, part 2
+[Documents]_ABC123_2026-09-12_DIFF001-001.enc    differential 1 of chain ABC123
+[Documents]_ABC123_2026-09-26_DIFF002-001.enc    differential 2 of chain ABC123
+[Documents]_DEF456_2026-10-01_FULL-001.enc       next chain
+[Pictures]_DEF456_2026-10-01_FULL-001.enc
 ```
 
-### Challenge files (.challenge)
+The ID comes before the date, so sorting by name (the Windows Explorer default) keeps all files of a chain together. Differential numbers are never reused, even after retention deleted older differentials.
 
-only created if YubiKey is enabled → `authentication_mode: 2` and `authentication_mode: 3`
-
-`[DirectoryName]_YYYY-MM-DD_ID.challenge`
-
-Samples:
-
-```text
-[Documents]_2026-01-15_ABC123.challenge
-[Pictures]_2026-01-15_ABC123.challenge
-```
+While a backup is being written, its parts carry the extra extension `.tmp`. Leftovers of an interrupted backup are removed at the start of the next backup.
 
 ### Log files
 
-`YYYY-MM-DD_ID.log`
+`YYYY-MM-DD_ID.log` - one log file per backup run, named after the run's ID (for a full backup, this is its chain ID).
 
 Sample:
 
 ```text
-2026-01-15_ABC123.log
+2026-10-01_DEF456.log
 ```
 
 ### Special cases
@@ -156,34 +377,36 @@ In the added alias part, every character outside `a-zA-Z0-9` is encoded as UTF-8
 Examples **without** special characters in that added alias part:
 
 ```text
-C:\RootA\Documents → [Documents__from__C_RootA]_2026-01-15_ABC123-001.enc
-D:\RootB\Documents → [Documents__from__D_RootB]_2026-01-15_ABC123-001.enc
+C:\RootA\Documents → [Documents__from__C_RootA]_ABC123_2026-01-15_FULL-001.enc
+D:\RootB\Documents → [Documents__from__D_RootB]_ABC123_2026-01-15_FULL-001.enc
 ```
 
 Examples **with** special characters in that added alias part:
 
 ```text
-C:\Root A\Documents → [Documents__from__C_Root~20~A]_2026-01-15_ABC123-001.enc
-C:\Root-A\Documents → [Documents__from__C_Root~2D~A]_2026-01-15_ABC123-001.enc
-C:\Root_A\Documents → [Documents__from__C_Root~5F~A]_2026-01-15_ABC123-001.enc
-C:\Root.A\Documents → [Documents__from__C_Root~2E~A]_2026-01-15_ABC123-001.enc
-C:\Root~A\Documents → [Documents__from__C_Root~7E~A]_2026-01-15_ABC123-001.enc
+C:\Root A\Documents → [Documents__from__C_Root~20~A]_ABC123_2026-01-15_FULL-001.enc
+C:\Root-A\Documents → [Documents__from__C_Root~2D~A]_ABC123_2026-01-15_FULL-001.enc
+C:\Root_A\Documents → [Documents__from__C_Root~5F~A]_ABC123_2026-01-15_FULL-001.enc
+C:\Root.A\Documents → [Documents__from__C_Root~2E~A]_ABC123_2026-01-15_FULL-001.enc
+C:\Root~A\Documents → [Documents__from__C_Root~7E~A]_ABC123_2026-01-15_FULL-001.enc
 ```
 
 **Result:** Backup file names remain deterministic and distinct across special characters.
 
 ## Known limitations
 
-A restored backup is not a byte-for-byte mirror of the source. The following file metadata is intentionally **not** preserved:
+Restore reproduces directory structure, file names, file contents, creation and modification times, and the read-only, hidden, and system attributes. The following is intentionally **not** preserved:
 
 - **Symbolic links are dropped.** Symlinks (and other non-regular entries such as junctions, devices, and named pipes) in the source are skipped and are not recreated on restore. This is a deliberate security choice: recreating symlinks during extraction is a common path-traversal attack vector, so RestoreSafe never writes them. Only directories and regular files are restored.
-- **File permissions are normalized.** Restored files are written with fixed `0o640` permissions and directories with `0o750`, regardless of the source mode. Original permission bits, ownership, and Windows ACLs are not carried over.
+- **Permissions are not carried over.** Original permission bits, ownership, and Windows ACLs are not restored; restored files get the default permissions of the destination.
+- **Other metadata is not restored:** last-access times, alternate data streams, and EFS encryption or NTFS compression flags.
+- **Changed files are copied whole.** A differential stores every changed file completely, even if only a small part of it changed (e.g. a large mail archive or virtual disk).
 
-Restore preserves directory structure, file names, and file contents. If you require symlink or permission fidelity, capture that metadata with a separate tool before backing up.
+If you require symlink or permission fidelity, capture that metadata with a separate tool before backing up.
 
 ## YubiKey setup
 
-RestoreSafe uses the Windows WebAuthn API for YubiKey authentication. In plain English: Windows shows the security prompts, the YubiKey performs the protected operation, and RestoreSafe receives only the result needed to encrypt or decrypt the backup. RestoreSafe never sees your FIDO2 PIN, and the YubiKey does not give its private secret to Windows or RestoreSafe.
+RestoreSafe uses the Windows WebAuthn API for YubiKey authentication. In plain English: Windows shows the security prompts, the YubiKey performs the protected operation, and RestoreSafe receives only the result needed to unlock your backups. RestoreSafe never sees your FIDO2 PIN, and the YubiKey does not give its private secret to Windows or RestoreSafe.
 
 ### Requirements
 
@@ -196,51 +419,41 @@ Other FIDO2 security keys may support similar technology, but RestoreSafe curren
 ### Before first use
 
 1. Install [Yubico Authenticator](https://www.yubico.com/products/yubico-authenticator/) and open it with the YubiKey inserted.
-2. Go to **Passkeys** -> **PIN** and set a FIDO2 PIN if you have not done so already. Windows may prompt for administrator rights when you open this section - this is expected. The PIN is used to authorize the Windows Security prompts that appear during backup, restore, and verify.
+2. Go to **Passkeys** -> **PIN** and set a FIDO2 PIN if you have not done so already (also on your spare YubiKey). Windows may prompt for administrator rights when you open this section - this is expected. The PIN is used to authorize the Windows Security prompts that appear during backup, restore, and verify.
 3. Set `authentication_mode` in `config.yaml`:
    - `2` - password + YubiKey (2FA)
    - `3` - YubiKey-only (no password)
 
 ### What RestoreSafe stores
 
-When YubiKey authentication is enabled, RestoreSafe creates a `.challenge` file next to the encrypted backup parts. This file stores only two things:
+For each registered YubiKey, the header of every backup file contains:
 
-- A credential ID, which tells the YubiKey which backup credential to use later.
-- A random salt, which is safe helper data used to reproduce the same YubiKey response during restore or verify.
+- A credential ID, which tells the YubiKey which RestoreSafe credential to use.
+- A random salt, which is safe helper data used to reproduce the same YubiKey response.
 
-The `.challenge` file does not contain your password, your FIDO2 PIN, or a secret key. Still, keep it with the matching `.enc` files: without it, RestoreSafe cannot ask the YubiKey the same question again during restore.
+Neither is secret: they do not contain your password, your FIDO2 PIN, or a key. There are no separate `.challenge` files anymore; everything RestoreSafe needs is inside the `.enc` files.
 
 ### What happens behind the prompts
 
-On backup, RestoreSafe asks Windows to create a new YubiKey credential for that backup run. Windows shows the prompt, you enter the FIDO2 PIN and touch the YubiKey, and the YubiKey creates the credential internally. RestoreSafe receives only the credential ID.
-
-RestoreSafe then asks Windows to use that new credential with a random salt. Windows shows a second prompt, you authorize it again, and the YubiKey calculates a 32-byte response. RestoreSafe combines that response with your backup password, or uses it by itself in YubiKey-only mode, to derive the encryption key.
+When new keys are created, RestoreSafe asks Windows to create a new YubiKey credential. Windows shows the prompt, you enter the FIDO2 PIN and touch the YubiKey, and the YubiKey creates the credential internally. RestoreSafe receives only the credential ID. RestoreSafe then asks Windows to use that credential with a random salt; the YubiKey calculates a 32-byte response, which RestoreSafe combines with your password (or uses alone in YubiKey-only mode) to lock your box of the master key.
 
 The important part: the YubiKey secret stays inside the YubiKey. Windows is the messenger, not the owner of the secret.
 
-### What to expect during backup
+### What to expect
 
-Backup triggers two Windows Security prompts in sequence:
+- **Key setup (first backup, or new keys):** two Windows Security prompts per YubiKey - **Register security key** (enter PIN, touch) and **Use your security key** (enter PIN if asked, touch).
+- **Every other backup, restore, and verify:** one **Use your security key** prompt. With a spare YubiKey registered, either YubiKey works; connect the one you have.
 
-1. **Register security key** - Windows asks the YubiKey to create the backup credential. Enter your FIDO2 PIN and touch the YubiKey when it blinks.
-2. **Use your security key** - Windows asks the YubiKey to calculate the response used for encryption. Enter your PIN again if Windows asks, and touch the YubiKey a second time.
-
-This double prompt is expected during backup. Restore and verify need only the second kind of prompt because the backup credential already exists.
-
-### What to expect during restore and verify
-
-One Windows Security prompt appears:
-
-- **Use your security key** - enter your FIDO2 PIN and touch the YubiKey.
-
-The same YubiKey that was used during backup must be present. If the YubiKey is lost, the backup cannot be restored.
+If all registered YubiKeys are lost and you have no recovery code, backups locked with them cannot be restored by anyone.
 
 ## Development setup
 
 ### Prerequisites
 
-- [Go](https://go.dev/dl/) 1.26 or later
-- [goversioninfo](https://github.com/josephspurrier/goversioninfo): `go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest`
+- [Go](https://go.dev/dl/) 1.27 or later
+- Nothing else: the developer tools (`goversioninfo`, `staticcheck`, `govulncheck`, `deadcode`) are pinned in `go.mod` and run with `go tool <name>`.
+
+Branches, commits, pull requests, CI, and the rules every change keeps are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Build
 
@@ -248,11 +461,30 @@ The same YubiKey that was used during backup must be present. If the YubiKey is 
 build.bat
 ```
 
-This compiles `RestoreSafe.exe`, creates `RestoreSafe-<version>.zip`, and extracts it to the `test\` directory for local testing.
+This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
+
+### Project layout
+
+| Folder | Content |
+|---|---|
+| `cmd/restoresafe` | Entry point of `RestoreSafe.exe` |
+| `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
+| `internal/gui` | The window application: `gui/flow` (operation lifecycle and questions), `gui/view` (what every page and dialog shows, as plain Go), `gui/widget` (drawn controls and the theme), `gui/win32` (the Windows API it uses) |
+| `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, restore points); `workflow/interact` is the contract between the workflows and the GUI |
+| `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
+| `internal/security` | Encryption and key derivation (`cryptox`), recovery codes, YubiKey through Windows WebAuthn |
+| `internal/config`, `logging`, `fsx`, `buildinfo` | Configuration, log files, file system helpers, version |
+| `build` | Icon, application manifest, and version information embedded by `build.bat` |
+| `docs` | Specifications and the GUI test checklist |
+| `scripts/gui-test` | PowerShell UI automation: smoke test, status conditions, access keys (see its README) |
+
+Imports point downward only (`gui` → `workflow` → `format` → `security`, ...); `go test ./internal/architecture` checks this.
+
+The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-2.0.md](docs/SPEC-2.0.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
 
 ### YubiKey diagnostic tool
 
-`cmd/yubidiag` is a developer utility that enumerates YubiKey HID devices, reports firmware version and registry entries, checks Windows WebAuthn API availability, and can optionally run a live FIDO2 hmac-secret test with Windows Security prompts. Use it to investigate YubiKey detection and authentication issues during development and testing.
+`cmd/yubidiag` is a developer utility that enumerates YubiKey HID devices, reports firmware version and registry entries, checks Windows WebAuthn API availability, and can optionally run a live FIDO2 hmac-secret test with Windows Security prompts. Use it to investigate YubiKey detection and authentication issues during development and testing. Set `RESTORESAFE_FIDO2_DEBUG=1` to print WebAuthn details in yubidiag (RestoreSafe itself has no console for them).
 
 It is not part of the release. To build it:
 
