@@ -65,7 +65,7 @@ jobs:
       - name: Coverage floors per package
         run: bash scripts/ci/check-coverage-floors.sh scripts/ci/coverage-floors.txt test.log
       # Each benchmark runs once, so that it keeps working; the numbers are
-      # not compared (CONTRIBUTING.md, "Benchmarks and fuzzing").
+      # not compared (docs/CI.md section 4).
       - name: Benchmarks run once
         env:
           CGO_ENABLED: "0"
