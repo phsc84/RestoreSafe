@@ -107,7 +107,7 @@ var errManifestStopped = errors.New("manifest stream stopped")
 
 // encryptManifest streams what manifestFn writes through a pipe into
 // EncryptStream and hashes it on the way, so that the serialized manifest is
-// never held in memory as a whole (SPEC-2.0 section 5.3). It returns the hex
+// never held in memory as a whole (SPEC-core section 5.3). It returns the hex
 // SHA-256 of the plaintext manifest.
 func encryptManifest(dst io.Writer, manifestFn func(io.Writer) error, key, aad []byte) (string, error) {
 	pr, pw := io.Pipe()

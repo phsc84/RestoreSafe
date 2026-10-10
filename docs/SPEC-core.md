@@ -1,19 +1,20 @@
-# Specification: RestoreSafe 2.0
+# Specification: RestoreSafe core
 
 | | |
 |---|---|
-| Status | Released in 2.0.0 (2026-10-10): format, workflows and the window ([SPEC-gui.md](SPEC-gui.md)). YubiKey paths tested on hardware in the GUI checklist run of 2026-10-09. |
-| Target release | RestoreSafe 2.0.0 |
-| Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
+| Status | Living. Introduced with 2.0.0 (2026-10-10); YubiKey paths tested on hardware in the GUI checklist run of 2026-10-09. The on-disk format (sections 4 and 5) is frozen for 2.x. |
+| Compatibility | 2.x cannot read 1.x backups; 1.x cannot read 2.x backups. |
+| User interface | [SPEC-gui.md](SPEC-gui.md) |
+
+This document specifies the backup format and what backup, restore, verify and retention do, independent of how they are presented. The window that drives them is specified in [SPEC-gui.md](SPEC-gui.md). Where this document speaks of the **preflight**, it means the plan the workflow shows before anything is written (the backup plan, the Restore window and the Verify window, GUI spec 4); **prompts** are the credential dialogs (GUI spec 9).
 
 Main topics:
 
-- Differential backups (sections 6-9).
 - Container format 2 with embedded manifest (sections 4-5).
 - Key sets: spare YubiKey and recovery code (section 4.4).
+- Differential backups (sections 6-9).
 - Restore of timestamps and attributes (section 7.6).
 - Exclude patterns, unreadable-file policy, and a password minimum (sections 6.4-6.6).
-- Graphical user interface replacing the console menu: specified separately in [SPEC-gui.md](SPEC-gui.md).
 
 ## 1. Goals and non-goals
 
@@ -21,10 +22,10 @@ Main topics:
 
 1. **Bullet-proof.** A restore either produces exactly the recorded state of the source directory or fails loudly. No silent partial restores, no silently missing or stale files.
 2. **Self-contained.** RestoreSafe.exe alone creates, verifies, and restores full and differential backups. No external tools, no local state database, no files outside the backup directory.
-3. **User friendly.** The user chooses "Create backup"; RestoreSafe decides between full and differential, explains the decision in the preflight summary, and lets the user override it with one key.
+3. **User friendly.** The user chooses "Create backup"; RestoreSafe decides between full and differential, explains the decision in the preflight, and lets the user override it with one choice (full backup, or new keys + full backup).
 4. **No single point of failure in the credentials.** Losing one YubiKey or forgetting the password does not have to mean losing all backups (spare YubiKey, recovery code).
 
-### 1.2 Not part of 2.0 (see section 13 for optional enhancements)
+### 1.2 Not supported (see section 13 for optional enhancements)
 
 - Content-based change detection (hashing every source file on every run).
 - Block-level (sub-file) deltas.
@@ -339,26 +340,18 @@ After the credentials are entered, the base is opened and its manifest is decryp
 
 ### 6.2 Preflight and override
 
-```text
-Source directory(s):
-  [OK] C:/Users/phs/Documents
-          → Differential backup (base: full 2026-09-01 ABC123, 25 days old)
-  [OK] C:/Users/phs/Pictures
-          → Full backup (reason: full backup is 31 days old (limit 30))
-...
-Keys          : existing keys, created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code
+The preflight shows, per directory, the planned type with its base or the reason for a full (6.1), and for the run the key set (existing or new, with its unlock methods), the needed and free space, the prompts that will follow (6.3) and what retention removes if the run succeeds (9). The window shows it as the backup plan (GUI spec 6.1). The user answers with one of four choices (`interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys`, `BackupCancel`):
 
-Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] cancel:
-```
-
-- `F` forces a full backup for every directory with the current key set (e.g. to start fresh chains). It is offered only when at least one differential is planned.
-- `K` creates a new key set (enrollment, 6.3) and forces a full backup for every directory. Use it to change the password, replace a lost YubiKey, or get a new recovery code. Creating new keys needs no old credentials; older chains keep their old key set and remain restorable with the old credentials.
+- **Start** runs the plan as shown.
+- **Full backup instead** forces a full backup for every directory with the current key set (e.g. to start fresh chains). It is offered only when at least one differential is planned.
+- **New keys + full backup** creates a new key set (enrollment, 6.3) and forces a full backup for every directory. Use it to change the password, replace a lost YubiKey, or get a new recovery code. Creating new keys needs no old credentials; older chains keep their old key set and remain restorable with the old credentials. It is offered only when an existing key set would be reused.
+- **Cancel** ends the run; nothing is written.
 - There is no "force differential": when the automatic rules choose full, a differential would violate a configured limit or has no valid base.
 
 **Needed space.** The exact changes of a differential are known only after the password is entered (the full backup's manifest is encrypted), so the preflight estimates them from the directory listing: files whose last-write or creation time is at or after the full backup's creation count as changed. It shows `about <changed> (files changed since the full backup); up to <all files> if everything is stored again`. The estimate misses files moved or renamed since the full backup (they keep their times but get a new path) and files whose times a tool set back; the differential stores them anyway.
 
 - The free-space check of the backup directory fails only when even the estimate does not fit. When only the estimate fits, the preflight shows a warning; if the space then runs out, the backup stops and removes the unfinished set (4.7).
-- Choosing `F` or `K` when the estimate was used checks the free space again against all files, before anything is written.
+- Choosing a full backup or new keys when the estimate was used checks the free space again against all files, before anything is written.
 
 ### 6.3 Credentials
 
@@ -367,7 +360,7 @@ Start backup now? [Y] yes / [F] full backup / [K] new keys + full backup / [N] c
 - Modes 2/3: one YubiKey touch (4.4.3).
 - The unlocked key set is used for every directory in the run, full and differential alike.
 
-**Enrollment** (no usable key set, configuration changed, or `K`):
+**Enrollment** (no usable key set, configuration changed, or new keys chosen in the preflight):
 1. Modes 1/2: new password + confirmation; minimum length enforced (6.6).
 2. Modes 2/3: register YubiKey 1 and derive its secret (two Windows prompts, as in 1.x).
 3. If `yubikey_spare: true`: *"Remove YubiKey 1 and insert your spare YubiKey."* Register and derive (two prompts). Registration passes YubiKey 1's credential ID as exclude list, so registering the **same** YubiKey twice is refused by the key itself; RestoreSafe reports this and asks again for the spare.
@@ -409,7 +402,7 @@ A file or directory deleted while the backup is running is not unreadable: it is
   - Differential backup, file present in the base: keep the base's entry (`o:"F"`) and mark it stale (`x:1`); the restore point contains the older version.
   - Differential backup, file not in the base: record as `t:"s"`.
   - If the failure happens after the file's TAR header was written, the remaining bytes are zero-padded and the entry gets `v:1` so restore skips the void TAR entry.
-  - The console summary and log list every skipped and stale file; the run ends with "completed with warnings".
+  - The log lists every skipped and stale file and ends with "Backup completed with warnings"; the result reports the run as finished with warnings (GUI spec BR-7).
   - Retention is skipped for a directory whose newest set contains skipped or stale entries, so an older backup that still contains those files is never deleted as a consequence.
 
 ### 6.6 Password minimum
@@ -443,28 +436,15 @@ As today (walk -> TAR -> encrypt -> split), plus:
 
 ### 7.1 Selection
 
-Restore points are listed per backup run, newest run first, as in 1.x; every complete set is a restore point. Differentials are marked:
-
-```text
-Available backups:
-  - Backup ID: XYZ789 / Timestamp (local): 2026-09-26 18:02:11 CEST
-    - Documents_ABC123_2026-09-26_DIFF002 (differential: full backup ABC123 + changes)
-    - Pictures_XYZ789_2026-09-26_FULL
-  - Backup ID: ABC123 / Timestamp (local): 2026-09-01 17:45:03 CEST
-    - Documents_ABC123_2026-09-01_FULL
-```
-
-The selection accepts `.` (newest run), a run ID (every set of that run), or a set name. Incomplete sets are not listed. A differential whose full backup is missing or incomplete is rejected in the preflight with the reason.
-
-Possible later improvement: a per-directory view with restore sizes and entry counts (needs the password to read the manifests) and markers for restore points with skipped or stale files.
+Restore points are listed per backup run, newest run first; every complete set is a restore point, and a differential is shown with the full backup it needs (GUI spec 7). The user selects sets of one run, and the frontend passes them to the workflow with the destination as a request (`restore.Request`, `verify.Request`; GUI spec 12.3); the workflow does not ask for them. Incomplete sets cannot be selected. A differential whose full backup is missing or incomplete is rejected in the preflight with the reason.
 
 ### 7.2 Preflight
 
-Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. The destination must not exist (unchanged).
+Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. Each set is restored into a new folder `<destination>\<backup name>`, which must not exist yet; existing files are never overwritten.
 
 ### 7.3 Credentials
 
-One unlock per distinct key set in the selection (normally one). The user authenticates with the regular factor (password and/or YubiKey) or chooses `[R] use recovery code` when the key set has a recovery slot.
+One unlock per distinct key set in the selection (normally one). The user authenticates with the regular factor (password and/or YubiKey) or chooses the recovery code instead (`ChooseUnlockMethod`) when the key set has a recovery slot.
 
 ### 7.4 Restoring a full
 
@@ -491,7 +471,7 @@ Still not restored (README "Known limitations"): symlinks/junctions, permissions
 
 - Every file entry of the target manifest was written exactly once with a matching hash and size.
 - No TAR entry was ignored except those explicitly skipped (superseded in 7.5 step 3, `v:1`).
-- Skipped and stale files are listed in the console and log: *"3 files are not in this restore point (they could not be read during backup)"*, *"1 file is restored in an older version from 2026-09-01"*.
+- Skipped and stale files are listed in the log and counted in the result (GUI spec RW-8): files that are not in this restore point because they could not be read during backup, and files restored in an older version from the full backup's date.
 - On any failure: stop, report which entries are affected, leave the partially restored destination in place, and state clearly that the restore is **incomplete** (the log lists the missing/invalid paths). The destination is never presented as a successful restore.
 
 ## 8. Verify workflow
@@ -515,7 +495,7 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 - Plaintext header content: directory name, dates, IDs, backup type, key set ID, slot types and labels, Argon2 parameters, YubiKey credential IDs and hmac salts. None of these is secret.
 - Header, slots, and sections are authenticated; any tampering fails decryption rather than producing wrong data.
 - The recovery code is a full alternative credential: it bypasses the YubiKey in mode 2. It is optional and off by default.
-- The key set is reused until the user creates new keys (`K`). Compromise of the password (mode 1) exposes all backups using that key set, as with 1.x when the same password was used. `K` is the documented response to a suspected compromise.
+- The key set is reused until the user creates new keys (6.2). Compromise of the password (mode 1) exposes all backups using that key set, as with 1.x when the same password was used. Creating new keys is the documented response to a suspected compromise.
 - No credentials or keys are ever written to disk outside the encrypted slot format. Unattended operation is permanently out of scope (1.3).
 
 ## 11. Startup health check and migration
@@ -523,11 +503,11 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 - Reads the header and trailer of every set (no password). Reports: incomplete sets, differentials with missing/incomplete base, header/file-name mismatches, unexpected `.tmp` files.
 - A differential whose full is missing is reported with the chain ID, e.g. *"[Documents] differentials DIFF001-DIFF004 of chain ABC123 cannot be restored: the full backup `[Documents]_ABC123_2026-09-01_FULL-*.enc` is missing. Remedy: Restore the FULL files of ABC123 from your copy, or delete the DIFF files of ABC123."*
 - Shows the current key set summary (created date, slot types) and whether the configuration requires new keys at the next backup.
-- If 1.x files are found (`[Name]_DATE_ID-SEQ.enc`, `.challenge`): warn once per start: *"RestoreSafe 1.x backups found. RestoreSafe 2.0 cannot restore them. Keep RestoreSafe 1.0.2 to restore these files; they are never modified or deleted by 2.0."* This is a warning, not a blocking error.
+- If 1.x files are found (`[Name]_DATE_ID-SEQ.enc`, `.challenge`): report them as information (`LEGACY_1X`, GUI spec 11.8): RestoreSafe 2 cannot restore them, RestoreSafe 1.0.2 can, and 2.x never modifies or deletes them. This never blocks a backup.
 
 ## 12. Configuration
 
-New and changed keys (the other 1.x keys keep their meaning, except the removed `io_diagnostics` below):
+Keys introduced or changed in 2.0 (the other 1.x keys keep their meaning, except the removed `io_diagnostics` below). The complete list with defaults is `config-SAMPLE.yaml` and the README's option table; later keys such as `reminder_days` are specified where they are used (GUI spec decision 2).
 
 ```yaml
 # Number of backup chains (a full backup plus its differential backups) kept per
@@ -575,7 +555,7 @@ Changing `authentication_mode`, `yubikey_spare`, or `recovery_code` requires new
 
 Removed: `io_diagnostics`. `log_level: "debug"` includes the I/O diagnostics of a backup (progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes). 2.0 doesn't promise to load a 1.x configuration file: a file that still contains `io_diagnostics` fails with an unknown key (GUI spec 11.6), and users start from the new `config-SAMPLE.yaml`.
 
-## 13. Optional future enhancements (not part of 2.0)
+## 13. Optional future enhancements (not implemented)
 
 ### 13.1 Content-based change detection
 
@@ -653,88 +633,3 @@ Allow `exclude` per source directory in addition to the global list.
 ### 15.4 Scale test
 
 Synthetic source with 50,000 files (mixed sizes) and ~5 GB: measure differential creation time with 1 % changed files, peak memory, and manifest size; assert memory stays below a defined budget.
-
-## Appendix A. README draft: "How your backups are locked"
-
-Audience: RestoreSafe users, not cryptography experts. This draft was adopted into README.md ("How your backups are locked") in phase 7, adjusted to the final prompts; the README is now the maintained version. Everything below the line is the original draft.
-
----
-
-### How your backups are locked
-
-#### In short
-
-- Your backups are encrypted with a **master key** that RestoreSafe creates at random.
-- The master key is stored inside every backup, but only in **locked boxes**. Each box opens with one of your unlock methods: your password, your YubiKey, your spare YubiKey, or your recovery code.
-- To restore, you only need to open **one** box. Any of your unlock methods works.
-
-#### The picture
-
-```text
-Every backup file contains:
-
-  Box 1: master key, locked with your password + YubiKey
-  Box 2: master key, locked with your password + spare YubiKey    (optional)
-  Box 3: master key, locked with your recovery code               (optional)
-
-Open any one box  ->  master key  ->  your files
-```
-
-The boxes are not secret. Someone who steals your backup files also has the boxes, but they still need one of your unlock methods to open one. Without it, the backup is useless to them.
-
-#### Your unlock methods
-
-| `authentication_mode` | You unlock with | Optional extras |
-|---|---|---|
-| `1` | Password | Recovery code |
-| `2` | Password + YubiKey | Spare YubiKey, recovery code |
-| `3` | YubiKey | Spare YubiKey, recovery code |
-
-Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_code: true`.
-
-#### What you will see
-
-**Your first backup (key setup).** RestoreSafe creates your keys:
-
-1. You choose a password (at least 12 characters) and enter it twice.
-2. You register your YubiKey (two Windows Security prompts).
-3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
-4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Copy it into your password manager or write it down.
-5. Then every source directory gets a full backup.
-
-**Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
-
-**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If you have a recovery code, you can choose `[R] use recovery code` instead.
-
-#### When RestoreSafe creates new keys
-
-New keys mean: a new master key, new boxes, and a new full backup of every source directory. This happens when:
-
-- you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
-- you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
-- you press `[K]` in the backup summary, to change your password, replace a lost YubiKey, or get a new recovery code.
-
-The backup summary always tells you in advance when new keys will be created and why.
-
-**Important:** new keys come with new unlock methods. Your old password, old YubiKey registrations, and old recovery code do **not** open backups made with the new keys. They still open your older backups, until retention deletes them.
-
-#### What to keep where
-
-| Item | Keep it | Never |
-|---|---|---|
-| Password | In your head or a password manager | In a file next to your backups |
-| YubiKey | With you | - |
-| Spare YubiKey | At a different, safe place (home safe, trusted person) | In the same bag as your main YubiKey |
-| Recovery code | On paper, in a safe place | Next to your backups, or unencrypted on your computer |
-
-The recovery code opens your backups **on its own**, even in password + YubiKey mode. Treat it like the key to a safe.
-
-#### What if ...
-
-| Situation | What to do |
-|---|---|
-| I lost my YubiKey. | Restore with your spare YubiKey or your recovery code. Then press `[K]` at your next backup to create new keys with a new YubiKey, so you have a spare again. Without spare and recovery code, backups locked with that YubiKey cannot be restored by anyone. |
-| I forgot my password. | Restore with your recovery code; it works alone, no password or YubiKey needed. Then press `[K]` at your next backup to set a new password. Without a recovery code, the backups cannot be restored by anyone. |
-| I want to change my password. | Press `[K]` at the next backup. Your older backups keep opening with the old password. |
-| Someone stole my backup drive. | Without your unlock methods, they cannot read anything. If you think your password or recovery code was exposed too, press `[K]` at your next backup and delete the old backups once the new ones are in place. |
-| I deleted all backups. | The next backup creates new keys, like the first time. |

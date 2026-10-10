@@ -14,7 +14,7 @@ import (
 type planMode int
 
 const (
-	// planAutomatic chooses full or differential per directory (2.0 spec 6.1).
+	// planAutomatic chooses full or differential per directory (core spec 6.1).
 	planAutomatic planMode = iota
 	// planFull makes every directory a full backup with the current keys.
 	planFull

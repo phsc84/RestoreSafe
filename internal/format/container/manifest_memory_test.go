@@ -58,7 +58,7 @@ func liveHeap() uint64 {
 	return sample[0].Value.Uint64()
 }
 
-// TestManifestStreamsAtOneMillionEntries checks SPEC-2.0 section 5.3: the
+// TestManifestStreamsAtOneMillionEntries checks SPEC-core section 5.3: the
 // serialized manifest is written and read as a stream, never held in memory
 // as a whole. At 1,000,000 entries it is about 210 MB. Writing and reading
 // each add less than that to the heap on top of the entries: what they add

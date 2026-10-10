@@ -29,7 +29,7 @@ import (
 
 // The format fixtures (refactoring 2.0 RF-41) are backups written by
 // RestoreSafe 2.0.0, committed to internal/format/testdata/v2.0.0. Every later
-// 2.x build must restore them to exactly the recorded listings (2.0 spec: the
+// 2.x build must restore them to exactly the recorded listings (core spec: the
 // format of a major version is frozen). They are never changed after 2.0.0 is
 // released; a later version adds fixtures of its own next to them.
 //

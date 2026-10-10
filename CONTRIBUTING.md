@@ -29,7 +29,7 @@ A pull request lives on GitHub, not in Git: its commits are those of its branch.
 
 - **One purpose per commit.** A commit that renames something does not also fix a bug. Small commits are easy to review, to find with `git log`, and to revert.
 - **Every commit builds and passes the tests** (`go build ./...`, `go test ./...`). A series of commits may leave an improvement unfinished, never something broken.
-- **The message says what and why.** The first line is a short summary in the imperative or as a statement ("Tests no longer swap os.Stdout"), at most about 72 characters. After a blank line, the body explains why the change was needed and anything a reviewer would not see in the diff. Cite plan items as "refactoring 2.0 RF-10" and spec sections as "2.0 spec 6.1" or "GUI spec OV-8".
+- **The message says what and why.** The first line is a short summary in the imperative or as a statement ("Tests no longer swap os.Stdout"), at most about 72 characters. After a blank line, the body explains why the change was needed and anything a reviewer would not see in the diff. Cite plan items as "refactoring 2.0 RF-10" and spec sections as "core spec 6.1" or "GUI spec OV-8".
 - **Replaced code goes in the same commit.** No commented-out code, no "old" copies, no compatibility shims inside the program.
 - **Commits written with an AI assistant** end with its `Co-Authored-By:` line.
 

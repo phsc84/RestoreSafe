@@ -292,7 +292,7 @@ func manifestErr(format string, args ...any) error {
 	return problem.Errorf("Invalid backup manifest: %s.", fmt.Sprintf(format, args...)).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 }
 
-// Validate checks the manifest against the rules of the format (2.0 spec 5.2).
+// Validate checks the manifest against the rules of the format (core spec 5.2).
 // Consistency with the set header is checked by the caller.
 func (m *Manifest) Validate() error {
 	h := m.Header

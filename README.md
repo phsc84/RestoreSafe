@@ -480,7 +480,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 
 Imports point downward only (`gui` → `workflow` → `format` → `security`, ...); `go test ./internal/architecture` checks this.
 
-The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-2.0.md](docs/SPEC-2.0.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
+The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-core.md](docs/SPEC-core.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
 
 ### YubiKey diagnostic tool
 

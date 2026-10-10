@@ -2,20 +2,20 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); released in 2.0.0 (2026-10-10); the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
-| Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
-| Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
+| Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
+| Planned | Editing the configuration and dark mode in 2.1.0 (decisions 1 and 4). |
+| Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
 
 ## 0. How to use this document (read first)
 
-This document specifies RestoreSafe's window application: a status-first interface that replaces the first GUI's home screen (configuration paths, health check report, three buttons) and its linear operation screens. The architecture of the first GUI (bridge, threads, secret handling, section 12 to 14) stays. It is written for developers and coding agents.
+This document specifies RestoreSafe's window application, a status-first interface over the workflows of [SPEC-core.md](SPEC-core.md). It is written for developers and coding agents.
 
 - **Requirement IDs** (`OV-1`, `BP-3`, `BK-5`, `RW-2`, `ST-4`) identify testable requirements. Reference them in commits, tests and questions; section 16 maps them to tests.
 - **Text wins over wireframes.** Wireframes show layout, content and states, not pixels. Colors, sizes and spacing are defined in section 3.3. If a wireframe and the text disagree, follow the text and flag the difference.
-- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-2.0.md](SPEC-2.0.md). Where the UI needs data the workflows don't expose yet, section 11 names the addition. Add it there; don't guess and don't parse text meant for people.
-- **Keep what already works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are reused unchanged.
+- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-core.md](SPEC-core.md). Section 11 lists what the workflows expose for the UI. When the UI needs more, add it there; don't guess and don't parse text meant for people.
+- **Keep what works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are settled; change them only for a stated reason.
 - **Ask when something is unclear.** Section 18 lists the decisions taken. Do not silently pick a different answer.
 - **Pure Win32.** No WebView2, no web technology, no third-party UI toolkit, no cgo, no new modules. Standard controls first, custom drawing only where section 3.4 says so.
 
@@ -38,9 +38,9 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 **In scope:** Create backup page, backup plan and run, Restore backup page (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
 
-**Out of scope, permanently** (2.0 spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
+**Out of scope, permanently** (core spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
-**Out of scope for this redesign:** restoring single files or subfolders (2.0 spec 13.5), deleting backups from the UI (decision 5), cloud destinations, more than one backup directory per configuration, a first-run wizard, localization.
+**Not offered:** restoring single files or subfolders (core spec 13.5), deleting backups from the UI (decision 5), cloud destinations, more than one backup directory per configuration, a first-run wizard, localization.
 
 **What RestoreSafe does today, and the UI must represent:**
 
@@ -294,7 +294,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 |---|---|
 | OV-1 | The hero shows the state from 3.5. The title is a short statement; the sub line carries facts (Empty has none). The hero has no link to the full health check report: it names the most urgent problem and its fix, and the pages show the rest (3.5). Each Warning and Error variant offers exactly one primary fix action; Error may add one secondary action. |
 | OV-2 | "Back up now…" opens the backup plan (6.1). When the health check blocks a backup (`health.Result.BlocksBackup`), the hero names the reason and offers its fix actions (OV-1) instead of **Back up now…**, and `Ctrl+B` does nothing: a disabled button next to them would be a third action that does nothing. There is no split button: the full-backup and new-keys overrides are offered in the plan, next to the reason for the planned type. |
-| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (2.0 spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. The paths and their state are on Settings (ST-3). |
+| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (core spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. The paths and their state are on Settings (ST-3). |
 | OV-4 | The backup directory card shows the path, a segmented bar (backups, other data, free) and a legend. Backups is the size of all 2.0 set parts in the directory; Other is used space minus Backups; Free comes from the file system. Each segment's tooltip shows exact bytes. The last line estimates a new full backup of all folders as the sum of each folder's newest full backup (trailer data length). |
 | OV-5 | The page shows only what a backup needs: the type, size and base of existing sets, and the size of runs, are on Restore backup. Below the folders, the Folders card says when the newest backup failed or was cancelled ("The backup of today, 09:12 failed; the Restore backup page has its log."), which the folders' dates alone don't show. |
 | OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode`, spare YubiKey, recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys." |
@@ -305,7 +305,7 @@ Purpose: answer "are my folders safe?" and start a backup.
 
 ### 6.1 Backup plan
 
-The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately with a marquee while the workflow scans the folders and estimates sizes, then shows the plan.
+The plan dialog is the backup preflight (core spec 6.2). It opens immediately with a marquee while the workflow scans the folders and estimates sizes, then shows the plan.
 
 **Figure 6.1: Backup plan.**
 
@@ -355,7 +355,7 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 | ID | Requirement |
 |---|---|
-| BP-1 | The plan lists every source folder in a table: **Folder**, **Type** (badge: differential with its number, or full), **Why** (the reason in plain words) and **About** (the size (for a differential the estimate from 2.0 spec 6.2; for a full the folder size)). A folder with a blocking problem has no type and shows the problem in red under Why. The row's tooltip has the path and the full reason. The table shows up to five rows; a splitter below it makes it taller or shorter (not below its rows, at most three), and the dialog grows or shrinks with it, as in the Restore window (RW-5). |
+| BP-1 | The plan lists every source folder in a table: **Folder**, **Type** (badge: differential with its number, or full), **Why** (the reason in plain words) and **About** (the size (for a differential the estimate from core spec 6.2; for a full the folder size)). A folder with a blocking problem has no type and shows the problem in red under Why. The row's tooltip has the path and the full reason. The table shows up to five rows; a splitter below it makes it taller or shorter (not below its rows, at most three), and the dialog grows or shrinks with it, as in the Restore window (RW-5). |
 | BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), store a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
@@ -526,7 +526,7 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 
 ## 8. Restore window
 
-Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (2.0 spec 13.5); the window says so where users look for it.
+Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (core spec 13.5); the window says so where users look for it.
 
 The Restore window is the restore's plan, as the backup plan dialog (6.1) is the backup's: one page that shows what will happen, with **Start** and **Cancel**. Start closes it; the progress and the result show on the Restore backup page, as for a verification (BK-8). The restore point is chosen on the Restore backup page: the window opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3). To restore from another run, the user cancels and selects it; nothing has been written before Start.
 
@@ -619,7 +619,7 @@ Its layout and wording follow the backup plan dialog: a heading that says what h
 | RW-6a | The checks run when the window opens, when a folder is checked or unchecked, and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the plan `restore.Run` shows (including whether a YubiKey is connected), so the window and the restore cannot disagree. A checked folder that already exists or can't be created, and an error of the plan, disable Start; warnings don't. |
 | RW-6b | **Start** starts the restore with the checked folders and the destination. The workflow checks again (`ShowRestorePlan`); the window shows that plan and answers its start question (`ConfirmStart`) itself, because Start was the confirmation, and the credential dialogs (section 9) follow. If the workflow finds a blocking issue (something changed since the check), it ends before asking for anything, nothing is written, and the window shows the issue in place of the check. Once the workflow asks to start, the window closes and the credential dialogs follow, as after Start in the Verify window (BK-8). Cancelling a credential dialog ends the restore before anything is written; the page shows no result card for it. |
 | RW-7 | Progress card on Restore backup (RW-9): step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.2. |
-| RW-8 | Result card on Restore backup (RW-9): success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in the log window of BK-5. |
+| RW-8 | Result card on Restore backup (RW-9): success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (core spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in the log window of BK-5. |
 | RW-9 | While a restore runs, the progress card is at the top of the Restore backup page, then the result card until it is dismissed, as for a verification (BK-8); the main window stays usable for reading; starting another operation is disabled. |
 
 ## 9. Credential dialogs
@@ -748,7 +748,7 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 |---|---|
 | ST-1 | Configuration file: the loaded path, **Edit config.yaml** (opens it in its default application, `ShellExecuteW` as today) and **Reload**. |
 | ST-2 | **Reload** reads the file again, validates it and runs the health check; on success every page shows the new values. A file that doesn't load keeps the previous configuration and shows the error with its line and remedy on this card (the app keeps running). Reload is disabled while an operation runs. This replaces "restart RestoreSafe" (section 11.6). |
-| ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, 2.0 spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. A splitter below the card sets the table's height, as on Create backup (OV-3). |
+| ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, core spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. A splitter below the card sets the table's height, as on Create backup (OV-3). |
 | ST-4 | Backup directory: path, reachability and free space (from the health check), split size, **Open in Explorer**. |
 | ST-5 | Full and differential: `differential.enabled`, `full_backup_interval_days`, `max_size_percent`, in words. |
 | ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0; when `retention_keep` is missing from the file, the value adds "(the default; 3 chains recommended)"), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
@@ -759,7 +759,7 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 
 ## 11. Workflow interface
 
-The UI keeps the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. What the redesign changes in today's contract is listed here. Two changes remove parts: the plans of 11.2 replace `ShowReport`, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
+The UI talks to the workflows through the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. This section lists the structured data the workflows provide for it. The plans of 11.2 carry what the user confirms, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
@@ -813,7 +813,7 @@ A problem carries its code and the facts that describe it, not sentences: the wo
 
 ### 11.2 Structured plans
 
-`ShowReport(Report)` is replaced by one typed call per workflow, made before `ConfirmBackupStart` / `ConfirmStart`. The types are plain data in `interact` (`plan.go`); each carries the text report as `Details`, which "Show details" renders and `interacttest.Script` prints:
+Each workflow shows its plan with one typed call, made before `ConfirmBackupStart` / `ConfirmStart`. The types are plain data in `interact` (`plan.go`); each carries the text report as `Details`, which "Show details" renders and `interacttest.Script` prints:
 
 ```go
 ShowBackupPlan(p BackupPlan)
@@ -834,13 +834,13 @@ type BackupPlan struct {
 
 The workflows fill the plan from the values they already compute (`plan.Folders`, the space estimate, `plan.KeysFor`, the restore and verify preflights), and build `Details` from the same values.
 
-### 11.3 Retention preview (new)
+### 11.3 Retention preview
 
 `plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the retention line on Restore backup (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
 
-### 11.4 Run facts from the log (new)
+### 11.4 Run facts from the log
 
-The Restore backup page needs, per run, the warning count and the verification results; the result card also shows the duration. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
+The Restore backup page needs, per run, the warning count and the verification results; the result card also shows the duration. The run's log carries them as structured, machine-readable lines (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
 
 ### 11.5 Session result
 
@@ -852,7 +852,7 @@ A function that loads and validates the configuration again, returning the same 
 
 `config.Load` is strict about names and lenient about omissions (decision 9):
 
-- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. 2.0 isn't compatible with 1.x configuration files: a key 2.0 no longer has (`io_diagnostics`, 2.0 spec 12) is an unknown key too, and the error tells the user to remove it.
+- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. 2.0 isn't compatible with 1.x configuration files: a key 2.0 no longer has (`io_diagnostics`, core spec 12) is an unknown key too, and the error tells the user to remove it.
 - **Missing keys use their defaults** and are listed in `Config.MissingKeys` in the order of `config-SAMPLE.yaml`. A block that is missing entirely is listed by its name (`differential`), single missing keys of a block by their path (`differential.max_size_percent`). `source_directories` and `backup_directory` have no default and stay required.
 - `config.AddMissing(path, now)` writes them (ST-10). It reads the file again, builds the new text, and writes it only when the new text loads, lists no missing keys and gives the same effective configuration as before, so adding defaults can never change what RestoreSafe does. The comments come from `config-SAMPLE.yaml`, embedded in the executable; the values are the defaults of `config`, not the sample's (the sample keeps 3 chains, the default is to keep all). A file in YAML flow style (`{ … }`) is refused with a remedy to add the settings by hand. The new file replaces the old one by rename, keeping its line endings.
 
@@ -919,8 +919,6 @@ else                                                        -> Protected
 
 ## 12. Architecture
 
-Carried over from the first GUI; unchanged unless noted.
-
 ### 12.1 Packages
 
 | Package | Content |
@@ -977,14 +975,14 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 | `ShowRestorePlan` | Restore window (8): the check of Start (RW-6b); its `Details` for "Show details". |
 | `ShowVerifyPlan` | Verify window (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3). |
-| `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (new in 2.0; the workflows call it after opening the log). |
+| `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (the workflows call it after opening the log). |
 | `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore window itself after its **Start** (RW-6b). |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
 | `NewPassword`, `ShowRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
 | `Progress` | Progress card (6.2). |
 
-The user's choice is not a question: the GUI passes it when it starts the workflow, `restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets, Destination})` and `verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets})`. The first GUI's questions `SelectBackups` and `RestoreDestination` are removed from `interact.UI`.
+The user's choice is not a question: the GUI passes it when it starts the workflow, `restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets, Destination})` and `verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets})`. `interact.UI` has no question for choosing sets or a destination.
 
 Cancel in any question returns `interact.ErrCancelled` or the method's "no" answer (`ConfirmStart` false, `BackupCancel`, `WaitForSpareYubiKey` false). Cancel in a password dialog returns an error "Cancelled."; the workflow ends before anything is written.
 
@@ -994,7 +992,7 @@ Messages the workflows print between questions (e.g. "Wrong password. 2 attempt(
 
 - **Cancel** cancels the workflow's context and waits for the worker to finish. The workflows clean up on cancellation: incomplete parts are removed, the lock is released, the log is written.
 - **Closing the window:** no operation running: the window closes. During a question: the question is answered with `interact.ErrCancelled`, the worker finishes, the window closes. During a running operation: the confirmation of 6.4; on confirmation the context is cancelled and the window closes after the worker has finished (it stays open, disabled, showing "Cancelling…").
-- **Windows shutdown or logoff** (`WM_QUERYENDSESSION`): the operation is cancelled, and `ShutdownBlockReasonCreate` ("RestoreSafe is stopping a backup") asks Windows to wait until the worker has finished. Windows may still end the process after its timeout; the incomplete parts are then removed by the next backup (2.0 spec 4.7).
+- **Windows shutdown or logoff** (`WM_QUERYENDSESSION`): the operation is cancelled, and `ShutdownBlockReasonCreate` ("RestoreSafe is stopping a backup") asks Windows to wait until the worker has finished. Windows may still end the process after its timeout; the incomplete parts are then removed by the next backup (core spec 4.7).
 
 ## 13. Secrets and YubiKey
 
@@ -1056,7 +1054,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 ### 16.1 Testable structure
 
 - **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → CreatePage`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → RestorePage`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
-- **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side, as the first GUI's screen state machine was.
+- **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side.
 - **Clock and file system.** The status model, the view models and the speed and time-left calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
 - **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the existing `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
 
@@ -1072,7 +1070,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Progress | A recording UI checks per workflow: phases in the order of BR-2, `Index` from 1 to `Count`, `Done` never decreasing within a step, a final report per step. | 11.7, BR-2, RW-7 |
 | Reload | A valid file replaces the configuration; an invalid file keeps the previous one and returns the error; Reload during an operation is refused. `reminder_days` bounds and default. | 11.6, ST-2, decision 2 |
 | Config keys | An unknown key, top level and in a block, fails with its name and line; every key of `Config` and every key of `config-SAMPLE.yaml` is known, and every key with a default can be reported missing. `MissingKeys` for an empty block, a partial block and a minimal file. `AddMissing` on the minimal file, a partial block, a CRLF file and a file without a final newline: the result loads, lists nothing missing, has the same effective configuration, keeps every original line, and the copy equals the old file; a flow-style file is refused and left unchanged. | 11.6, ST-10, decision 9 |
-| Unchanged workflows | The existing workflow and e2e tests pass; they change only for the request parameters, the plan calls, the progress fields and the facts. | 17.1 (criterion 6) |
+| Unchanged workflows | The workflow and e2e tests pass without the window. | 17.1 (criterion 6) |
 
 ### 16.3 GUI logic without windows (Go tests)
 
@@ -1086,18 +1084,18 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
-| Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (The first GUI found a real defect this way: a hidden page's access key started a backup.) | 15 |
+| Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (This test once found a real defect: a hidden page's access key started a backup.) | 15 |
 | Layout | Every page and dialog at its minimum and default size at 96, 120, 144 and 192 dpi: no control overlaps another or leaves the client area, and every text fits its measured width. | 3.2, 15 |
 | Bridge and secrets | The existing bridge tests (questions answered exactly once, cancellation, output order, progress coalescing) and secret tests (buffers zeroed) stay and are extended to the plan messages. | 12.2, 13 |
 
 ### 16.4 Window automation (`scripts/gui-test`)
 
-The PowerShell scripts drive the real window. They are updated for the new UI and find controls by `AutomationId` (15), not by text.
+The PowerShell scripts drive the real window. They find controls by `AutomationId` (15), not by text.
 
 | Script | Purpose |
 |---|---|
-| `New-TestCondition.ps1` (new) | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
-| `Check-States.ps1` (new) | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
+| `New-TestCondition.ps1` | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
+| `Check-States.ps1` | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
 | `Smoke-BackupRestore.ps1` | Back up through the plan dialog, restore one folder of the newest run through the Restore window, verify the run; compare the restored files with the sources. |
 | `Screenshot.ps1` | One screenshot per page and dialog, for the visual review against 3.3 and the wireframes (16.5), and for the README. |
 | `Accessibility.ps1` | Role, name, `AutomationId` and access key of every control on every page and dialog. |
@@ -1110,7 +1108,7 @@ They run on every release candidate at 100% and 150% scaling.
 
 ### 16.6 Usability session
 
-Before the release, give one person who hasn't seen the new UI a test configuration and these tasks, without further help, and write down where they hesitate or go wrong:
+Before a major release or a redesign of the window, give one person who hasn't seen the window a test configuration and these tasks, without further help, and write down where they hesitate or go wrong:
 
 1. "Are your folders protected? How do you know?"
 2. "Back up now. What kind of backup will Documents get, and why?"
@@ -1122,12 +1120,12 @@ A task that fails or needs help is a defect in the UI or its texts, not in the u
 
 ### 16.7 Release gate
 
-The redesign ships with 2.0.0 only when:
+A release that changes the window ships only when:
 
 - `go test ./...` passes, including `internal/architecture` and `internal/e2e`;
 - `Check-States.ps1` and `Smoke-BackupRestore.ps1` pass at 100% and 150%;
 - every row of the checklist is tested by hand, or accepted with a reason;
-- the usability session found no task that failed.
+- the usability session, when one is due (16.6), found no task that failed.
 
 ## 17. Acceptance criteria
 
@@ -1138,7 +1136,7 @@ The redesign ships with 2.0.0 only when:
 3. A user can back up, see the planned type and reason per folder and what retention removes, force a full backup, create new keys, watch progress, cancel, and read the result and log without opening a file.
 4. A user can restore one folder of a differential run to a new folder using only the Restore window; nothing is written before **Start**, and a checksum mismatch is reported as "Restore incomplete".
 5. A user can verify a run or a set and see the result in the backups list.
-6. Every behavior of the 2.0 workflows is unchanged; the e2e tests pass and change only for the request parameters, the plan calls, the progress fields and the facts.
+6. The window doesn't change what the workflows do ([SPEC-core.md](SPEC-core.md)); the e2e tests drive the workflows without it and pass.
 7. All interactions work with keyboard only. Narrator announces the sidebar, hero, lists, buttons, progress and credential fields.
 8. The UI stays responsive during every operation and while the backup directory is unreachable.
 9. No user-visible string shows raw OS or workflow text outside "Show details" and the log.
@@ -1148,7 +1146,7 @@ The redesign ships with 2.0.0 only when:
 
 "Decision N" elsewhere in this document refers to row N of 18.1.
 
-### 18.1 Status-first redesign (decided 2026-09-30)
+### 18.1 Pages and behavior (decided 2026-09-30 unless noted)
 
 | # | Topic | Decision |
 |---|---|---|
@@ -1157,12 +1155,12 @@ The redesign ships with 2.0.0 only when:
 | 3 | Verification history | Verify results are written as structured lines into the run's log (11.4), so "Verified <time>" and "Damaged" survive a restart and disappear with the run. |
 | 4 | Dark mode | 2.0.0: light only (Win32 common controls have no supported dark mode). 2.1.0: dark mode (the tokens in 3.3 are ready); common controls need `DarkMode_Explorer` themes and custom drawing for buttons and group boxes. |
 | 5 | Deleting backups in the app | Not offered. Retention removes chains safely after each backup; manual deletion stays in Explorer, and the health check reports what it breaks. |
-| 6 | Single-file restore | Not offered (2.0 spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
-| 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (2.0 spec 7.7). Recovery mode (2.0 spec 13.6) isn't part of this redesign. |
-| 8 | Target release | 2.0.0. The redesign replaces the first GUI before the release; there is no release with the first GUI's home screen. |
+| 6 | Single-file restore | Not offered (core spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
+| 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (core spec 7.7). Recovery mode (core spec 13.6) isn't offered. |
+| 8 | (retired) | The target release of the redesign; it shipped with 2.0.0. The number isn't reused. |
 | 9 | Settings missing from config.yaml (decided 2026-10-04) | Missing settings keep using their defaults, so a file from an older version still works; blocking until the file is complete would break every configuration with each new setting. Unknown keys are an error, because a misspelled key silently falls back to its default. The Settings page names the missing settings and adds them on request (ST-10), with a copy of the old file; RestoreSafe never writes config.yaml on its own. Defaults aren't written without asking because a written value can't be told from a chosen one: a default raised in a later version (for example `argon2.memory_mb`) would no longer reach that file. |
 
-### 18.2 Still valid from the first GUI (decided 2026-09-26)
+### 18.2 Foundations (decided 2026-09-26)
 
 | # | Decision | Rationale |
 |---|---|---|
@@ -1172,7 +1170,7 @@ The redesign ships with 2.0.0 only when:
 | G5 | Progress is coalesced: at most one pending progress message. | The window stays responsive regardless of how often progress arrives. |
 | G6 | Cancelling cancels the workflow's context and waits for the worker. | The workflows already clean up on cancellation. |
 | G7 | Per-monitor DPI awareness (v2) and common controls 6 through the application manifest. | Sharp text on every monitor and modern control visuals. |
-| — | The GUI ships with 2.0.0; the console frontend is removed completely, with no separate console build. | A GUI-subsystem executable cannot use the console of the terminal it was started from reliably. |
-| — | Unattended or scheduled backups, tray icons and background services are permanently out of scope. | Every operation needs the user to authenticate (2.0 spec 1.3). |
+| — | The window is the only frontend; there is no console frontend or console build. | A GUI-subsystem executable cannot use the console of the terminal it was started from reliably. |
+| — | Unattended or scheduled backups, tray icons and background services are permanently out of scope. | Every operation needs the user to authenticate (core spec 1.3). |
 
-The first GUI's decisions G3 (one window with linear screens), G8 (log and reports as the main content) and "configuration read-only, restart to apply" are replaced by this document.
+G3 and G8 were retired; the numbers aren't reused.

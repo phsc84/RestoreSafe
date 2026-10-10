@@ -26,7 +26,7 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 1. **The backup format of the current major version is frozen.** Every backup written by any x.0.0 release restores unchanged with every later x.y build. This includes fields that look like leftovers. The format-fixture tests (`internal/format/testdata/`) enforce it; a round never edits existing fixtures, it only adds new ones.
 2. **Behaviour is preserved.** The GUI's texts, the log file format, the order of questions, and the exit behaviour stay the same unless an item says otherwise and names the user-visible change for the CHANGELOG.
 3. **The layer rules stay and get stricter, never looser.** `internal/architecture` is the reference; a new package is added to its test in the same commit.
-4. **No unattended operation.** No item may introduce scheduling, background backups, or stored credentials (SPEC-2.0 section 1.3).
+4. **No unattended operation.** No item may introduce scheduling, background backups, or stored credentials (SPEC-core section 1.3).
 5. **The build and all tests pass after every commit.** A phase may leave an improvement unfinished, never something broken.
 6. **Delete, don't keep.** Replaced code goes in the same commit. No compatibility shims inside the program, no commented-out code, no "old" copies of files.
 7. **Measure before claiming.** A performance item records the numbers before and after; a "simplification" that adds lines or indirection needs a reason in the item.
@@ -89,7 +89,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 - Profile the throughput benchmarks (`-cpuprofile`, `-memprofile`) and list the top functions in the plan before proposing any change.
 - Allocations per chunk, per file, or per manifest entry in the backup and restore paths (`testing.B` with `b.ReportAllocs`).
-- Memory that grows with the number of files (manifest, maps) against the limits in SPEC-2.0 section 5.3.
+- Memory that grows with the number of files (manifest, maps) against the limits in SPEC-core section 5.3.
 - Blocking calls on the UI thread; snapshot and file-system work that can hang on a network drive.
 - Compare with the previous round's throughput; a drop of more than 10 % is a P1 finding.
 
@@ -126,7 +126,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 - README, CHANGELOG, `config-SAMPLE.yaml`, and the specs against the code: defaults, option names, screenshots, statuses.
 - `docs/README.md` lists every document with its status; finished plans are deleted after their release.
-- Code comments cite specs as "2.0 spec n" or "GUI spec n"; a cited section still says what the comment claims.
+- Code comments cite specs as "core spec n" or "GUI spec n"; a cited section still says what the comment claims.
 
 ## 6. Items
 
