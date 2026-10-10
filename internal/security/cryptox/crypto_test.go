@@ -340,6 +340,9 @@ func (zeroReader) Read(p []byte) (int, error) {
 // TestStreamAllocationsIndependentOfSize checks that no chunk allocates: a
 // stream of 16 chunks allocates as much as a stream of 2.
 func TestStreamAllocationsIndependentOfSize(t *testing.T) {
+	if raceEnabled {
+		t.Skip("counts allocations; the race detector adds its own")
+	}
 	key := bytes.Repeat([]byte{7}, KeyLen)
 	encrypted := func(size int64) []byte {
 		var out bytes.Buffer
