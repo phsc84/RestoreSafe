@@ -102,13 +102,13 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 1. [Download](https://github.com/phsc84/RestoreSafe/releases) the latest version of RestoreSafe and extract it to any directory on your computer.
 
-   To check that the download is complete and unchanged, download `SHA256SUMS.txt` of the same release into the same folder and run in PowerShell there (it prints `True`):
+   RestoreSafe is not signed with a paid code-signing certificate, so when you start it for the first time Windows may show "Windows protected your PC" (SmartScreen, "unknown publisher"). Click **More info**, then **Run anyway**.
+
+   Optional, for checking that the download is unchanged: download `SHA256SUMS.txt` of the same release into the same folder as the ZIP and run this in PowerShell there (it prints `True`):
 
    ```powershell
    (Get-FileHash .\RestoreSafe-2.0.0.zip).Hash -eq (Get-Content .\SHA256SUMS.txt).Split(' ')[0]
    ```
-
-   RestoreSafe is not signed with a paid code-signing certificate, so when you start it for the first time Windows may show "Windows protected your PC" (SmartScreen, "unknown publisher"). Click **More info**, then **Run anyway**.
 2. Rename `config-SAMPLE.yaml` to `config.yaml`.
 
    By default, RestoreSafe loads config.yaml from the same directory as the executable. When managing multiple backup configurations, it may be useful to load `config.yaml` from a separate directory. In that case create a shortcut to `RestoreSafe.exe` and add the configuration to its **Target** (always use an absolute path):
