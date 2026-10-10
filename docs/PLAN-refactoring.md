@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | **Done 2026-10-09** (section 17). Proposed 2026-10-06; Phases A and B done 2026-10-07, Phase C done 2026-10-08, phases D and E done 2026-10-08; all open questions answered. What is left is in section 18: the Process Monitor check of RF-52 and RF-62 before and after the 2.0.0 release, the coverage targets of RF-40 for the next round |
+| Status | **Done 2026-10-09** (section 17). Proposed 2026-10-06; Phases A and B done 2026-10-07, Phase C done 2026-10-08, phases D and E done 2026-10-08; all open questions answered. What is left is in section 18: RF-62 right after the 2.0.0 release, the coverage targets of RF-40 for the next round |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
 | Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
 | Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1, B: #2, C: #3, D and E: #4); CI runs on each push to the pull request |
@@ -234,6 +234,7 @@ Done in `0282e6d`. A backup fails when the lock file can't be created. A restore
 
 **RF-52 (P1) Restrict DLL search.** RestoreSafe is a portable exe that users run from a download or USB folder. The WebAuthn and Win32 procs use `NewLazySystemDLL` (good), but the process's default DLL search order still includes the exe's folder for DLLs that Windows or the runtime loads implicitly. Call `windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32)` as the first statement of `main` in both commands, before any window or WebAuthn call. Check by hand with Process Monitor that no DLL is looked up in the exe's folder.
 Done in `d11617c`. No package `init` touches the Windows API before `main`, and the window starts as before. Open: the check with Process Monitor by hand.
+Checked by hand 2026-10-09 (owner, `a5986bb`): `RestoreSafe.exe` alone in `C:\dlltest\` with empty `dwmapi.dll`, `uxtheme.dll` and `version.dll` as bait, under Process Monitor (process `RestoreSafe.exe`, path in that folder), through start, Browse…, Edit config.yaml and a scaling change. No bait was looked up, and every DLL loaded came from System32 (or WinSxS for `comctl32.dll`). Two lookups in the folder remain, both outside what `SetDefaultDllDirectories` covers and neither running code: `tzres.dll` (Go's `time` package reads the time zone names with `RegLoadMUIStringW`, which tries the folder before Go falls back to System32) and `explorerframe.dll` (the folder dialog's icon lookup calls `SearchPathW`, which uses the old search order). Both load the file as a resource-only data file, so a planted file could at worst change a time zone name or a folder icon.
 
 **RF-53 (P2) Recovery code as bytes.** `recovery.Code` stores the code in `string` fields and `Secret()` converts to a new `[]byte` ([recovery.go:25-32](../internal/security/recovery/recovery.go#L25-L32)). Strings cannot be zeroed, so every recovery code generated or typed stays in memory until the GC reuses the space. The same applies to `ShowRecoveryCode(code string)` in `interact.UI` and `win32.CopySecretText(owner, text string)`. Keep the code as `[]byte` end to end, give `Code` a `Zero()` method, and zero the UTF-16 copy after `SetClipboardData` copied it. Passwords already follow this rule; this brings the recovery code in line.
 Done 2026-10-08. `recovery.Code` keeps its data characters as `[]byte` with `Zero()`; `Display()` replaces `String()`, `Parse` takes `[]byte` and fills a buffer that never grows. `ShowRecoveryCode`, the GUI flow and `view.CredentialDialog.Code` carry bytes (the separate `Copy` field is gone: the Copy button copies `Code`). New `win32.SetSecretText` and `win32.CopySecret` convert to UTF-16 without a string and zero their copy; what remains is the copy inside the STATIC control and on the clipboard, which Windows owns. The backup workflow zeroes the code once its slot is made, the unlock zeroes the parsed code. Checked with `Smoke-BackupRestore.ps1` on new keys with a recovery code (the script reads the code from the dialog).
@@ -406,13 +407,9 @@ Then close the round as SPEC-refactoring section 8 describes.
 
 Coverage by package: cryptox 89.1, recovery 94.0, yubikey 36.4; config 92.6, logging 88.5, problem 100; manifest 92.6, naming 92.5, container 85.5, setwriter 85.2, catalog 81.2, archive 78.1; fsx 82.7; health 95.1, plan 93.3, restorepoint 90.9, unlock 84.7, job 84.3, backup 83.3, restore 79.1, interact 78.3, verify 73.2; gui/view 91.0, gui/flow 77.0, gui/widget 73.6, gui/win32 10.4, gui 2.0; cmd/restoresafe 33.3.
 
-Done when (section 16): every P1 and P2 item is done, decided or dropped with its reason, except the two manual or release-bound steps of section 18. CI runs every listed check. The fixtures restore bit-exact. `deadcode` reports nothing and `gui/flow` matches no workflow text. One file in `internal/gui` is over 500 lines: `view/strings.go` (516), the table of the window's texts; splitting a list of constants would make texts harder to find, so it stays whole. The manual GUI checklist passed on 2026-10-09 at `a5986bb`.
+Done when (section 16): every P1 and P2 item is done, decided or dropped with its reason, except RF-62, which follows the release (section 18). CI runs every listed check. The fixtures restore bit-exact. `deadcode` reports nothing and `gui/flow` matches no workflow text. One file in `internal/gui` is over 500 lines: `view/strings.go` (516), the table of the window's texts; splitting a list of constants would make texts harder to find, so it stays whole. The manual GUI checklist passed on 2026-10-09 at `a5986bb`.
 
 ## 18. Carried over
-
-Before the 2.0.0 release:
-
-- **RF-52 (P1)**, the check by hand, by the owner: run `RestoreSafe.exe` from a folder of its own under Process Monitor (filter: process name `RestoreSafe.exe`, path ends with `.dll`) and confirm that no DLL is looked up in that folder. The code change is done (`d11617c`).
 
 Right after the 2.0.0 release, in one commit (SPEC-refactoring section 8, step 5):
 
