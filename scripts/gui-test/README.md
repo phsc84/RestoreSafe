@@ -33,7 +33,7 @@ $cfg = "C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"
 .\Accessibility.ps1 -Exe $exe -Config $cfg
 
 # Screenshot of the Create backup page for the README.
-.\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\Screenshot_v2.0.0_overview.png -Scale 0.667
+.\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\create-backup.png -Scale 0.667
 ```
 
 The release gate (spec 16.7) runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` at 100 % and 150 % display scaling.

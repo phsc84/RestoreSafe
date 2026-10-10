@@ -39,23 +39,23 @@ What RestoreSafe cannot do is stop someone with access to your backup files from
 
 The **Create backup** page answers "are my folders protected?": the status at the top, then the folders with their newest backup and the type of the next one, the backup directory, and the keys:
 
-<img src="docs/images/Screenshot_v2.0.0_overview.png" alt="Create backup page with the status, the folders, the backup directory, and the keys">
+<img src="docs/images/create-backup.png" alt="Create backup page with the status, the folders, the backup directory, and the keys">
 
 **Back up now…** shows the plan first: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
 
-<img src="docs/images/Screenshot_v2.0.0_plan.png" alt="Backup plan with differential backups and the start choices">
+<img src="docs/images/create-backup-window.png" alt="Backup plan with differential backups and the start choices">
 
 While it runs, the page shows the steps, the progress, and the speed; the Folders card follows each folder:
 
-<img src="docs/images/Screenshot_v2.0.0_running.png" alt="Backup in progress on the Create backup page">
+<img src="docs/images/create-backup-running.png" alt="Backup in progress on the Create backup page">
 
 The **Restore backup** page lists every backup run with its folders, types, sizes, and status, and a link to each run's log; Restore and Verify act on the selected run:
 
-<img src="docs/images/Screenshot_v2.0.0_backups.png" alt="Restore backup page with runs and backup sets">
+<img src="docs/images/restore-backup.png" alt="Restore backup page with runs and backup sets">
 
 Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
 
-<img src="docs/images/Screenshot_v2.0.0_restore.png" alt="Restore window before the restore starts">
+<img src="docs/images/restore-backup-window.png" alt="Restore window before the restore starts">
 
 ## Features
 
