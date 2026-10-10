@@ -6,6 +6,8 @@
 // support CTAP2 with the hmac-secret extension (all YubiKey 5 series devices do).
 package yubikey
 
+//lint:file-ignore ST1003 names follow winwebauthn.h, so they match the WebAuthn API documentation
+
 import (
 	"bytes"
 	"crypto/rand"

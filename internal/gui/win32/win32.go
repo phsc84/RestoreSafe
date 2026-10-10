@@ -3,6 +3,8 @@
 // calls one Windows API and converts its failure into an error.
 package win32
 
+//lint:file-ignore ST1003 names follow the Windows SDK headers, so they match the Win32 documentation
+
 import (
 	"fmt"
 	"syscall"
