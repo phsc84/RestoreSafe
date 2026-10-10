@@ -21,8 +21,8 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | OV-1 | `BackupDirUnreachable` (USB drive removed, or NAS unreachable): red hero within 5 seconds, the window stays responsive, **Check again** recovers after reconnecting | `Check-States.ps1` uses a missing drive letter; pull a real USB drive or NAS by hand. |
 | OV-1 | Several problems at once: the most urgent one shows, the sub line says "and N more" | |
 | OV-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls when they no longer fit | |
-| OV-3 | Folders card: next type and its reason in the tooltip match the backup plan that follows | |
-| 3.4 | Tables (Create backup, backup plan, Settings, Restore window): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | |
+| OV-3 | Folders card: next type and its reason in the tooltip match the Create backup window that follows | |
+| 3.4 | Tables (Create backup page, Create backup window, Settings, Restore backup window): a column dragged wider stays wider during a backup's progress updates and after "Full backup instead"; resizing the window refits the filling column; the row tooltip shows the path; more than five folders scroll within the table | |
 | 3.4 | One-line text cut off with "…" (a long backup directory path in a narrow window) shows its full text in a tooltip; text that fits has none | |
 | OV-4 | Backup directory bar: segments and tooltips plausible compared with Explorer's drive properties | |
 | OV-6 | Keys card for each authentication mode; YubiKey connected and not connected; "next backup creates new keys" after changing `recovery_code` and Reload | Needs a YubiKey. |
@@ -57,7 +57,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BK-5 | "Show log" at the right of each run's header, and in the context menu, opens the run's log window: title with date and file, filter ("No warnings or errors in this log." when there are none), **Open in Editor**, **Close**; no link on a group of incomplete sets; no log pane below the list, and a small window gives the page a scroll bar | |
 | BK-6 | Problem and information lines for `BaseMissing`, `IncompleteNewest`, `Legacy1x`, `LeftoverTmp` | `New-TestCondition.ps1` |
 | BK-7 | No line about the retention rule; with `retention_keep: 1` and two chains, the line names what the next backup removes | |
-| BK-7a | Verify window and backup plan side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | `Screenshot.ps1` |
+| BK-7a | Verify window and Create backup window side by side: same width, same order (heading, table, Read, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; Cancel reads nothing; Start goes on to the password and the progress card | `Screenshot.ps1` |
 | BK-7a | The splitter below the table makes it taller and shorter, not below its rows (at most three); the window grows and shrinks with it, up to the height of the screen | |
 | BK-8 | Verify a run and a single set; "Verified <time>" survives a restart | The smoke test verifies a set. |
 | BK-8 | `Damaged` (one byte changed in a part file): "Damage found in the backup of <date>", the set shows "Damaged", the hero turns red | `New-TestCondition.ps1` |
@@ -69,12 +69,12 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 
 | ID | Check | Hints |
 |---|---|---|
-| RW-1 | Restore window and backup plan side by side: same width, same order (heading, table, Space, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; `Enter` starts, `Esc` and Cancel close without writing anything; the window fits its content until it is resized | `Screenshot.ps1` |
+| RW-1 | Restore backup window and Create backup window side by side: same width, same order (heading, table, Space, Unlock, note, issues, Show details), **Start** and **Cancel** at the bottom right; `Enter` starts, `Esc` and Cancel close without writing anything; the window fits its content until it is resized | `Screenshot.ps1` |
 | RW-3 | Restore… on a run, also with one of its folders clicked: the window opens on that run, its heading names the run's date and the number of checked folders, all restorable folders are checked | |
 | RW-4 | "Restore into the backup directory" fills the path with backslashes, like Browse…, and the restore into it works | |
 | RW-5 | Folder, Type, About and Check columns; a folder whose full backup is missing (`BaseMissing`) is disabled and named in the warning line; an unchecked folder shows "-" | |
 | RW-5 | The splitter below the table makes it taller and shorter, not below its rows (at most three) | |
-| RW-6 | Space and Unlock worded as in the backup plan; the hints ("Choose at least one folder.", "Enter a full path…", "Checking…") replace them while there is nothing to check | |
+| RW-6 | Space and Unlock worded as in the Create backup window; the hints ("Choose at least one folder.", "Enter a full path…", "Checking…") replace them while there is nothing to check | |
 | RW-6a | Existing target folders show "Already exists" in red, are named once below with the remedy and disable Start; renaming them in Explorer and changing the path unblocks | |
 | RW-6b | Start closes the window and goes straight to the password, as Verify does; cancelling it ends the restore without a result card; nothing exists in the destination before the password is entered | |
 | RW-6b | A folder created in the destination after the check: Start ends before the password and the window shows it in red | |

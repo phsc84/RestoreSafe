@@ -41,7 +41,7 @@ The **Create backup** page answers "are my folders protected?": the status at th
 
 <img src="docs/images/create-backup.png" alt="Create backup page with the status, the folders, the backup directory, and the keys">
 
-**Back up now…** shows the plan first: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
+**Back up now…** first opens the **Create backup** window with the plan: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
 
 <img src="docs/images/create-backup-window.png" alt="Create backup window with differential backups and the start choices">
 
@@ -53,7 +53,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
 <img src="docs/images/restore-backup.png" alt="Restore backup page with runs and backup sets">
 
-Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
+**Restore…** opens the **Restore backup** window, which shows on one page what will happen, like the Create backup window: which folders, where to, whether they fit, and how you unlock them:
 
 <img src="docs/images/restore-backup-window.png" alt="Restore backup window before the restore starts">
 
@@ -85,7 +85,7 @@ Restoring shows what will happen on one page, like the backup plan: which folder
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a backup plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, and a Settings page with Reload
+- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a Create backup window with the plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, and a Settings page with Reload
 - Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
 - Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
@@ -182,7 +182,7 @@ Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar 
 RestoreSafe checks your backups when it starts, after every operation, with **Refresh** (on Create backup and Restore backup) or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
 
 ### Create a backup
-Click **Back up now…** (`Ctrl+B`). The backup plan shows, for every folder, whether it gets a full or a differential backup and why, the space needed (for a differential an estimate of the files changed since the full backup), how you will unlock, and what retention removes afterwards (see [Screenshots](#screenshots)). Then choose:
+Click **Back up now…** (`Ctrl+B`). The Create backup window shows, for every folder, whether it gets a full or a differential backup and why, the space needed (for a differential an estimate of the files changed since the full backup), how you will unlock, and what retention removes afterwards (see [Screenshots](#screenshots)). Then choose:
 
 - **Start** - back up as planned
 - **Full backup instead** - full backups for every folder (offered when a differential is planned); **Back to plan** returns
@@ -194,7 +194,7 @@ Then enter your password and/or confirm the Windows Security prompt of your Yubi
 While the backup runs, the Create backup page shows the steps, the folder being backed up, the progress, and the speed; the taskbar button shows the progress too. **Cancel** asks, then stops: folders backed up so far are kept, the one being written is removed, and old backups are not cleaned up. Closing the window during a backup asks first and then does the same. The result stays on the page until you click **Done**.
 
 ### Restore a backup
-On the Restore backup page, select a backup run and click **Restore…** (or double-click it). The Restore window shows that run's folders, all checked; when the folder filter shows one folder, only that folder is checked:
+On the Restore backup page, select a backup run and click **Restore…** (or double-click it). The Restore backup window shows that run's folders, all checked; when the folder filter shows one folder, only that folder is checked:
 
 - **To** - where to (**Browse…**, or restore into the backup directory itself). RestoreSafe creates one folder per restored folder, named like the backed-up folder; these folders must not exist yet.
 - The folders, with their type, size, and whether the new folder can be created. Whole folders are restored; to get a single file back, restore its folder to a new place and copy the file.
@@ -298,9 +298,9 @@ New keys mean: a new master key, new boxes, and a new full backup of every sourc
 
 - you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
 - you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
-- you click **New keys + full backup…** in the backup plan, to change your password, replace a lost YubiKey, or get a new recovery code.
+- you click **New keys + full backup…** in the Create backup window, to change your password, replace a lost YubiKey, or get a new recovery code.
 
-The backup plan always tells you in advance when new keys will be created and why; so does the Keys card on the Create backup page.
+The Create backup window always tells you in advance when new keys will be created and why; so does the Keys card on the Create backup page.
 
 **Important:** new keys come with new unlock methods. Your old password, old YubiKey registrations, and old recovery code do **not** open backups made with the new keys. They still open your older backups, until retention deletes them.
 

@@ -9,7 +9,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// Control IDs of the plan dialog.
+// Control IDs of the Create backup window.
 const (
 	idPlanStart = 451 + iota
 	idPlanFull
@@ -19,7 +19,7 @@ const (
 	idPlanRemoves
 )
 
-// Sizes of the plan dialog, in DIPs.
+// Sizes of the Create backup window, in DIPs.
 const (
 	planWidth  = 680
 	planMargin = 18
@@ -27,7 +27,7 @@ const (
 
 const planClass = "RestoreSafePlan"
 
-// planDialog is the backup plan (GUI spec 6.1). It opens when the backup
+// planDialog is the Create backup window (GUI spec 6.1). It opens when the backup
 // starts, with a marquee while the workflow measures the folders, shows
 // each plan the workflow sends, and stays open while the user switches
 // plans. It is modal to the main window but runs in the main message
@@ -53,7 +53,7 @@ type planDialog struct {
 	left, right []win32.HWND
 }
 
-// openPlanDialog opens the plan dialog in its waiting state.
+// openPlanDialog opens the Create backup window in its waiting state.
 func (a *app) openPlanDialog() {
 	if a.plan != nil {
 		return

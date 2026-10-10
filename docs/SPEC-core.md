@@ -6,7 +6,7 @@
 | Compatibility | 2.x cannot read 1.x backups; 1.x cannot read 2.x backups. |
 | User interface | [SPEC-gui.md](SPEC-gui.md) |
 
-This document specifies the backup format and what backup, restore, verify and retention do, independent of how they are presented. The window that drives them is specified in [SPEC-gui.md](SPEC-gui.md). Where this document speaks of the **preflight**, it means the plan the workflow shows before anything is written (the backup plan, the Restore window and the Verify window, GUI spec 4); **prompts** are the credential dialogs (GUI spec 9).
+This document specifies the backup format and what backup, restore, verify and retention do, independent of how they are presented. The window that drives them is specified in [SPEC-gui.md](SPEC-gui.md). Where this document speaks of the **preflight**, it means the plan the workflow shows before anything is written (the Create backup window, the Restore backup window and the Verify window, GUI spec 4); **prompts** are the credential dialogs (GUI spec 9).
 
 Main topics:
 
@@ -340,7 +340,7 @@ After the credentials are entered, the base is opened and its manifest is decryp
 
 ### 6.2 Preflight and override
 
-The preflight shows, per directory, the planned type with its base or the reason for a full (6.1), and for the run the key set (existing or new, with its unlock methods), the needed and free space, the prompts that will follow (6.3) and what retention removes if the run succeeds (9). The window shows it as the backup plan (GUI spec 6.1). The user answers with one of four choices (`interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys`, `BackupCancel`):
+The preflight shows, per directory, the planned type with its base or the reason for a full (6.1), and for the run the key set (existing or new, with its unlock methods), the needed and free space, the prompts that will follow (6.3) and what retention removes if the run succeeds (9). The window shows it in the Create backup window (GUI spec 6.1). The user answers with one of four choices (`interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys`, `BackupCancel`):
 
 - **Start** runs the plan as shown.
 - **Full backup instead** forces a full backup for every directory with the current key set (e.g. to start fresh chains). It is offered only when at least one differential is planned.

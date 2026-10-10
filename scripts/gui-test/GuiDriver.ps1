@@ -3,7 +3,7 @@
 # Dot-source it:  . .\GuiDriver.ps1
 # Controls are found by their control ID, which is also their UI Automation
 # AutomationId (spec 15), not by their texts: see $Ids. Windows are found by
-# class: RestoreSafeMainWindow, RestoreSafePlan (backup plan),
+# class: RestoreSafeMainWindow, RestoreSafePlan (Create backup window),
 # RestoreSafeVerify (verify), RestoreSafeRestore (restore),
 # RestoreSafeInputDialog (credentials), RestoreSafeDetails (reports and
 # logs), "#32770" (task dialogs).

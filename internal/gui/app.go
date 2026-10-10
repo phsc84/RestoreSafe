@@ -45,7 +45,7 @@ const (
 	msgWorkerDone  = win32.WM_APP + 3
 	msgRunLog      = win32.WM_APP + 4 // wparam: the backups list group whose Show log was clicked
 	msgListFocus   = win32.WM_APP + 5 // the backups list may have moved the focus to a group
-	msgDestChecked = win32.WM_APP + 6 // the Restore window's check of the choices is done
+	msgDestChecked = win32.WM_APP + 6 // the Restore backup window's check of the choices is done
 	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
 )
 
@@ -74,8 +74,8 @@ type app struct {
 	theme   *widget.Theme
 	page    int
 	modal   win32.HWND     // open credential dialog, if any
-	plan    *planDialog    // open backup plan dialog, if any
-	restore *restoreDialog // open Restore window, if any
+	plan    *planDialog    // open Create backup window, if any
+	restore *restoreDialog // open Restore backup window, if any
 	verify  *verifyDialog  // open Verify window, if any
 	// credential is the open credential dialog, if any.
 	credential *credentialDialog

@@ -8,7 +8,7 @@ import (
 )
 
 // VerifyPlanView is the Verify window (figure 7.3), laid out and worded
-// like the backup plan (6.1).
+// like the Create backup window (6.1).
 type VerifyPlanView struct {
 	Heading string
 	Folders Table

@@ -59,7 +59,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	owner := a.dialogOwner()
 	t := a.theme
 	if dw, ok := handlers[owner].(*dialogWindow); ok {
-		t = dw.theme // the Restore window, at its scale
+		t = dw.theme // the Restore backup window, at its scale
 	}
 	win, err := newDialogWindow(t, owner, credentialClass, v.Title)
 	if err != nil {
@@ -283,7 +283,7 @@ func (a *app) confirm(owner win32.HWND, c view.Confirm) bool {
 }
 
 // dialogOwner is the window questions and confirmations are modal to: the
-// Restore window while it is open, the main window otherwise.
+// Restore backup window while it is open, the main window otherwise.
 func (a *app) dialogOwner() win32.HWND {
 	if a.restore != nil {
 		return a.restore.win.hwnd

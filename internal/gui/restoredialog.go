@@ -14,7 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// Control IDs of the Restore window.
+// Control IDs of the Restore backup window.
 const (
 	idRestoreStart = 701 + iota
 	idRestoreCancel
@@ -25,7 +25,7 @@ const (
 	idRestoreDetails
 )
 
-// Sizes of the Restore window, in DIPs; it is as wide as the backup plan.
+// Sizes of the Restore backup window, in DIPs; it is as wide as the Create backup window.
 const (
 	restoreWidth     = planWidth
 	restoreHeight    = 560
@@ -58,8 +58,8 @@ const (
 	checkDelayMs = 300
 )
 
-// restoreDialog is the Restore window (GUI spec 8): the restore's plan, as
-// the plan dialog is the backup's. It checks the choices with
+// restoreDialog is the Restore backup window (GUI spec 8): the restore's plan, as
+// the Create backup window is the backup's. It checks the choices with
 // restore.PlanDestination while the user makes them; Start runs the restore
 // workflow, which checks again and asks to start, and the window answers
 // yes itself, because Start was the confirmation. Then it closes and the
@@ -90,7 +90,7 @@ type restoreDialog struct {
 	listHeight int32
 	listTop    int32
 	// userSized is set once the user sizes the window; until then it fits
-	// its content, as the backup plan does. fitting is set while it does.
+	// its content, as the Create backup window does. fitting is set while it does.
 	userSized, fitting bool
 
 	// Controls of the window.
@@ -105,7 +105,7 @@ type restoreDialog struct {
 	filling          bool
 }
 
-// openRestore opens the Restore window on the run runID with sets checked.
+// openRestore opens the Restore backup window on the run runID with sets checked.
 func (a *app) openRestore(runID naming.BackupID, sets []naming.BackupEntry) {
 	if a.restore != nil || a.snapshot == nil || a.machine.Busy() {
 		return
@@ -223,7 +223,7 @@ func (w *restoreDialog) update() {
 	w.layout()
 }
 
-// buildLines rebuilds the lines below the table, as the backup plan lays
+// buildLines rebuilds the lines below the table, as the Create backup window lays
 // out its own (BP-2, RW-6): Space, Unlock, the note, the issues, Show
 // details.
 func (w *restoreDialog) buildLines() {

@@ -162,7 +162,7 @@ A failure without a saved input (the fuzzer reports that its process hung or ran
 
 [scripts/ci/gui-smoke.ps1](../scripts/ci/gui-smoke.ps1) builds `RestoreSafe.exe` with its resources, makes a fresh setup (two source folders, a password-only configuration with a recovery code), and runs two scripts of [scripts/gui-test](../scripts/gui-test/README.md) on the runner's desktop:
 
-- `Smoke-BackupRestore.ps1`: two backups through the plan dialog, a restore of one folder through the wizard, a verification; compares the restored folder with its source and checks that no label lies over a control.
+- `Smoke-BackupRestore.ps1`: two backups through the Create backup window, a restore of one folder through the wizard, a verification; compares the restored folder with its source and checks that no label lies over a control.
 - `Check-States.ps1`: makes each condition of GUI spec 3.5 and 11.8 (backup missing, directory unreachable, damaged set, ...), starts RestoreSafe, and compares the title and primary action of the Create backup page with the expected ones.
 
 It fails when a step of the smoke test fails, or a condition shows the wrong title or action. On failure it uploads the screenshots as the `gui-screenshots` artifact: `shots\` with one screenshot per smoke test step (and `desktop.png` when the window did not show), `states\` with one per condition.

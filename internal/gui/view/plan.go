@@ -11,7 +11,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// PlanRow is one folder of the backup plan (GUI spec BP-1).
+// PlanRow is one folder of the Create backup window (GUI spec BP-1).
 type PlanRow struct {
 	Name, Path string
 	// Badge is the planned type; nil for a folder that is not backed up.
@@ -38,7 +38,7 @@ type IssueLine struct {
 	Glyph Glyph
 }
 
-// BackupPlanView is the backup plan dialog (GUI spec 6.1).
+// BackupPlanView is the Create backup window (GUI spec 6.1).
 type BackupPlanView struct {
 	Title   string
 	Heading string

@@ -131,9 +131,9 @@ const (
 // ButtonClose is the label of a dialog's close button.
 const ButtonClose = buttonClose
 
-// Backup plan (GUI spec 6.1).
+// Create backup window (GUI spec 6.1).
 const (
-	planTitle              = "Back up"
+	planTitle              = "Create backup"
 	planHeading            = "Back up %s to %s"
 	planNewKeys            = "New keys will be created: %s. Every folder gets a full backup."
 	planWhyDiff            = "Based on the full backup of %s"
@@ -410,9 +410,9 @@ const (
 	menuOpenFolder  = "&Open backup folder"
 )
 
-// Restore window (GUI spec 8), worded like the backup plan (6.1).
+// Restore backup window (GUI spec 8), worded like the Create backup window (6.1).
 const (
-	RestoreTitle         = "Restore"
+	RestoreTitle         = "Restore backup"
 	RestoreTo            = "To"
 	RestoreBrowse        = "B&rowse…"
 	RestoreIntoBackupDir = "Restore into the backup directory"

@@ -402,7 +402,7 @@ func restorePlan(items []restorePreflightItem, restorePath string, ks *container
 // PlanDestination is the plan of restoring sets into destination, without
 // asking anything: the same checks Run makes before it asks to start (the
 // folders to create, the space, whether a YubiKey is connected). infos is
-// the inventory of backupDir. The Restore window checks the choices with it
+// the inventory of backupDir. The Restore backup window checks the choices with it
 // while the user makes them.
 func PlanDestination(cfg *config.Config, backupDir string, infos []catalog.SetInfo, sets []naming.BackupEntry, destination string) (interact.RestorePlan, error) {
 	if strings.TrimSpace(destination) == "" {

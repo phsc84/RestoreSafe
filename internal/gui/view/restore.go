@@ -59,7 +59,7 @@ func baseOf(s *health.Snapshot, info catalog.SetInfo) (*catalog.SetInfo, bool) {
 	return nil, false
 }
 
-// FolderChoice is a set of the run, a row of the Restore window's table
+// FolderChoice is a set of the run, a row of the Restore backup window's table
 // (RW-5).
 type FolderChoice struct {
 	Set    naming.BackupEntry
@@ -134,8 +134,8 @@ func Chosen(choices []FolderChoice, checked map[naming.BackupEntry]bool) []namin
 	return sets
 }
 
-// RestoreView is the Restore window's choose page below the destination
-// (RW-2, RW-5, RW-6), worded like the backup plan (6.1).
+// RestoreView is the Restore backup window's choose page below the destination
+// (RW-2, RW-5, RW-6), worded like the Create backup window (6.1).
 type RestoreView struct {
 	Heading string
 	// Checks is the Check cell of each checked folder (RW-5) and Tips the
@@ -240,7 +240,7 @@ func RestoreViewOf(choices []FolderChoice, checked map[naming.BackupEntry]bool, 
 }
 
 // restoreSpaceLine compares the space a restore needs with the free space,
-// worded as the backup plan's Space line (BP-2).
+// worded as the Create backup window's Space line (BP-2).
 func restoreSpaceLine(p interact.RestorePlan) PlanLine {
 	line := PlanLine{Label: planSpace, Tone: ToneSuccess, Glyph: GlyphCheck}
 	line.Text = fmt.Sprintf(spaceNeeded, Size(p.NeededBytes))
@@ -268,7 +268,7 @@ func hasCode(issues []interact.Issue, code interact.Code) bool {
 }
 
 // restoreUnlockText lists the prompts that follow Start, worded as the
-// backup plan's Unlock line (BP-2): "One YubiKey touch, then your
+// Create backup window's Unlock line (BP-2): "One YubiKey touch, then your
 // password, or recovery code".
 func restoreUnlockText(u interact.UnlockPlan) string {
 	text := unlockPassword

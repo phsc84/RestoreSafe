@@ -310,7 +310,7 @@ func (z *tableSizer) moved(top int32) {
 
 // dialogTable is the table of a dialog that sizes itself to its content,
 // with a splitter in the gap below it that sets its height, as in the
-// Restore window: the dialog grows and shrinks with the table. The table
+// Restore backup window: the dialog grows and shrinks with the table. The table
 // and the splitter outlive the dialog's rebuilds, so a drag goes on over
 // one.
 type dialogTable struct {

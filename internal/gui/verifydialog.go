@@ -19,7 +19,7 @@ const (
 const verifyClass = "RestoreSafeVerify"
 
 // verifyDialog is the Verify window (GUI spec figure 7.3), the
-// verification's plan, laid out like the backup plan (6.1). It opens when
+// verification's plan, laid out like the Create backup window (6.1). It opens when
 // the verification starts, with a marquee until the workflow sends its
 // plan, and Start answers the workflow's start question; then it closes and
 // the progress card on Restore backup takes over (BK-8). It is modal to the
@@ -96,7 +96,7 @@ func (d *verifyDialog) ask(answer func(bool, error)) {
 }
 
 // build creates the controls for the current state and sizes the window to
-// them, as the backup plan does.
+// them, as the Create backup window does.
 func (d *verifyDialog) build(place bool) {
 	t := d.win.theme
 	s := t.Scale
@@ -124,7 +124,7 @@ func (d *verifyDialog) build(place bool) {
 	default:
 		d.view = view.VerifyPlanOf(*d.plan, d.what, d.hidden, time.Now())
 		if d.ended {
-			d.view.Start = nil // only Cancel is left, as in a blocked backup plan (BP-5)
+			d.view.Start = nil // only Cancel is left, as in a blocked Create backup window (BP-5)
 			if d.err != nil && !d.plan.HasErrors() {
 				d.view.Issues = append(d.view.Issues, view.IssueLine{Text: issueOf(d.err), Tone: view.ToneError, Glyph: view.GlyphError})
 			}
@@ -132,7 +132,7 @@ func (d *verifyDialog) build(place bool) {
 		d.content(st)
 	}
 
-	// Start and Cancel at the right, as in the backup plan.
+	// Start and Cancel at the right, as in the Create backup window.
 	var buttons []win32.HWND
 	if v := d.view; v.Start != nil {
 		d.start = panel.PrimaryButton(v.Start.Text, idVerifyStart)

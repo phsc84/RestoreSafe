@@ -14,7 +14,7 @@ func (w *restoreDialog) layout() {
 	area := widget.NewArea(s, win32.ClientRect(p.HWND()))
 	area.Inset(restoreMargin, restoreMargin, restoreMargin, restoreMargin)
 
-	// Start and Cancel at the bottom right, as in the backup plan.
+	// Start and Cancel at the bottom right, as in the Create backup window.
 	row := widget.NewArea(s, area.Bottom(widget.ButtonHeight))
 	win32.SetWindowPos(w.cancel, row.RightPx(buttonWidth(t, w.cancel)))
 	row.Right(8)
@@ -82,7 +82,7 @@ func (w *restoreDialog) linesHeight() int32 {
 	return w.linesSt.height()
 }
 
-// fitHeight sizes the window to its content, as the backup plan does,
+// fitHeight sizes the window to its content, as the Create backup window does,
 // until the user sizes it; at most the height of the screen.
 func (w *restoreDialog) fitHeight() {
 	if w.userSized || w.list == 0 {
