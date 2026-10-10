@@ -43,7 +43,7 @@ The **Create backup** page answers "are my folders protected?": the status at th
 
 **Back up now…** shows the plan first: full or differential per folder and why, the space, how you unlock, and what retention removes afterwards:
 
-<img src="docs/images/create-backup-window.png" alt="Backup plan with differential backups and the start choices">
+<img src="docs/images/create-backup-window.png" alt="Create backup window with differential backups and the start choices">
 
 While it runs, the page shows the steps, the progress, and the speed; the Folders card follows each folder:
 
@@ -55,7 +55,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
 Restoring shows what will happen on one page, like the backup plan: which folders, where to, whether they fit, and how you unlock them:
 
-<img src="docs/images/restore-backup-window.png" alt="Restore window before the restore starts">
+<img src="docs/images/restore-backup-window.png" alt="Restore backup window before the restore starts">
 
 ## Features
 
