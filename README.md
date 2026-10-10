@@ -453,7 +453,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 - [Go](https://go.dev/dl/) 1.27 or later
 - Nothing else: the developer tools (`goversioninfo`, `staticcheck`, `govulncheck`, `deadcode`) are pinned in `go.mod` and run with `go tool <name>`.
 
-Branches, commits, pull requests, and the rules every change keeps are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md); the CI jobs, and how to fix a failure, in [docs/CI.md](docs/CI.md).
+Branches, commits, pull requests, and the rules every change keeps are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md); the CI jobs, and how to fix a failure, in [docs/CI.md](docs/CI.md); the setup of a development machine, the builds, and the release steps in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ### Build
 

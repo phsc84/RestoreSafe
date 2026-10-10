@@ -12,6 +12,3 @@ resource.syso
 
 # Personal manual test folder
 /sandbox/
-
-# Private development notes
-/docs/DEVELOPMENT.md

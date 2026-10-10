@@ -3,6 +3,7 @@
 | Document | Covers | Status |
 |---|---|---|
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branches, commits, pull requests, CHANGELOG, rules of the code, releases | Living |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Setting up a Windows machine, building, updating Go, benchmarks, publishing a release step by step | Living |
 | [CI.md](CI.md) | The CI jobs: what each checks, how to run it locally, how to fix a failure | Living |
 | [SPEC-core.md](SPEC-core.md) | Container format 2, keys, manifest, what backup, restore, verify and retention do, configuration, security | Living; the format part is frozen for 2.x |
 | [SPEC-gui.md](SPEC-gui.md) | The window: pages, dialogs, requirement IDs (`OV-1`, `BP-3`, ...), the workflow interface the window needs | Living |
