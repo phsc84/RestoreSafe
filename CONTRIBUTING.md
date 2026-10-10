@@ -6,22 +6,22 @@ How changes get from an idea into a release: branches, commits, pull requests, t
 
 | Branch | Holds | Rules |
 |---|---|---|
-| `main` | The latest release (now 1.0.2) | Changes only at a release: `v2` is merged into `main` as soon as 2.0.0 is released. GitHub shows `main` by default. |
-| `v2` | The development of 2.x | Always builds and passes CI, so a release can be made from it at any time. Changes only through pull requests. |
-| Work branches, e.g. `refactor-2.0` | One piece of work: a refactoring round, a feature, a fix | Branched from `v2`, merged back with a pull request, then brought up to date with `v2` (or deleted when the work is done). |
+| `main` | The latest release (now 2.0.0) | Changes only at a release, through a pull request from `dev` (section 7). GitHub shows `main` by default. |
+| `dev` | The work towards the next release: features, fixes, refactoring rounds | Committed and pushed to directly; CI runs on every push. Keep it building and green, so a release can be made from it at any time. |
+| A branch for larger work, e.g. `v3` or `feature-<name>` | A next major version or a feature that takes longer than one release | Created from `dev` only when needed; bring it up to date with `git merge dev` regularly, and merge it back into `dev` with a pull request when it is done. Then delete it. |
 
-A refactoring round has one branch, `refactor-<release>`, and one pull request per phase of its plan ([docs/SPEC-refactoring.md](docs/SPEC-refactoring.md)).
+An urgent fix while `dev` holds work that is not ready for a release goes on a short branch from `main` (e.g. `fix-2.0.1`), into `main` with a pull request, and is released from there; then merge `main` into `dev`. Without unreleased work on `dev`, the fix simply goes through `dev`.
 
-GitHub enforces this for `main` and `v2` with the ruleset in [.github/rulesets/release-branches.json](.github/rulesets/release-branches.json), for everyone including the owner:
+GitHub enforces this for `main` with the ruleset in [.github/rulesets/release-branch.json](.github/rulesets/release-branch.json), for everyone including the owner:
 
 - a direct push is rejected; changes arrive through a pull request only;
 - a pull request can be merged only when the three CI jobs are green;
-- the branches cannot be force-pushed or deleted;
+- the branch cannot be force-pushed or deleted;
 - no approval is required (GitHub does not let anyone approve their own pull request).
 
-The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. Work branches are not protected.
+The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -File scripts\apply-rulesets.ps1`, which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. `dev` and the other branches are not protected.
 
-After a pull request is merged, there is nothing to do: keep committing on the work branch; the next pull request shows only the new commits. When `v2` has received changes from elsewhere (another pull request) that the work branch needs, merge them without leaving it: `git fetch`, then `git merge origin/v2`. To bring your local `v2` up to date with GitHub without leaving the work branch, run `git fetch origin v2:v2` (it only moves `v2` forward, so it cannot lose anything). Switch to `v2` itself (`git switch v2`) only to build or test exactly what `v2` holds, e.g. for a release, and switch back to the work branch afterwards: a commit made on `v2` cannot be pushed.
+Stay on `dev` for daily work. To bring your local `main` up to date without leaving it, run `git fetch origin main:main` (it only moves `main` forward, so it cannot lose anything). Switch to `main` (`git switch main`) only to build exactly what is released, and switch back afterwards: a commit made on `main` cannot be pushed.
 
 A pull request lives on GitHub, not in Git: its commits are those of its branch. See them with `gh pr list --state all`, `gh pr view <number>`, and `gh pr checks <number>`.
 
@@ -35,10 +35,14 @@ A pull request lives on GitHub, not in Git: its commits are those of its branch.
 
 ## 3. Pull requests
 
-A pull request (PR) asks to merge a work branch into `v2`. GitHub shows its commits, the combined diff, and the result of CI for its newest commit.
+A pull request (PR) asks to merge one branch into another. GitHub shows its commits, the combined diff, and the result of CI for its newest commit. There are three kinds:
 
-1. Push the work branch: `git push -u origin <branch>`.
-2. Open the PR, on GitHub or with `gh pr create --base v2`. Open it as a **draft** (`--draft`) while the work goes on: CI runs on every push, but the PR cannot be merged by mistake.
+- `dev` into `main`: a release (section 7);
+- a branch for larger work into `dev`, when that work is done;
+- an urgent fix into `main` (section 1).
+
+1. Push the branch: `git push -u origin <branch>`.
+2. Open the PR, on GitHub or with `gh pr create --base <target>`. Open it as a **draft** (`--draft`) while the work goes on: CI runs on every push, but the PR cannot be merged by mistake.
 3. The description says what the PR changes and, for plan work, which items it covers.
 4. Mark it ready (`gh pr ready`) when the work is done and CI is green.
 5. Merge it on GitHub with **Merge pull request** (or `gh pr merge --merge`). The button is enabled once every check is green. Only merge commits are allowed: squashing would fold the small commits of section 2 into one, and rebasing would rewrite them.
@@ -50,9 +54,9 @@ GitHub Actions runs the checks of [.github/workflows/ci.yml](.github/workflows/c
 ### When it runs
 
 - On every push to a branch with an open pull request; the result shows on the PR.
-- On every push to `main` and `v2`, which in practice means after every merge.
+- On every push to `main` and `dev`; for `main` that means after every merge.
 
-A push to a work branch without a PR runs nothing.
+A push to any other branch without a PR runs nothing.
 
 ### What it does
 
@@ -131,7 +135,9 @@ The standing constraints of refactoring work are in [docs/SPEC-refactoring.md](d
 
 ## 7. Releases
 
-1. On a work branch: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, and merge it into `v2` with a pull request.
-2. Run `build.bat`: it writes `dist/RestoreSafe-<version>.zip` and `dist/SHA256SUMS.txt`.
-3. Tag the commit with an annotated tag (`git tag -a v2.0.0 -m "Release version 2.0.0"`, `git push origin v2.0.0`) and publish a GitHub release for the tag, with the notes of the CHANGELOG section, the ZIP, and `SHA256SUMS.txt`.
-4. Merge `v2` into `main` with a pull request (`gh pr create --base main --head v2`), so `main` holds the latest release; CI checks the release state once more before `main` changes.
+1. On `dev`: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, push, and wait for CI to be green.
+2. Merge `dev` into `main` with a pull request (`gh pr create --base main --head dev --title "Release 2.1.0"`); CI checks the release state once more before `main` changes.
+3. Update the local `main` (`git fetch origin main:main`), switch to it (`git switch main`), and run `build.bat`: it writes `dist/RestoreSafe-<version>.zip` and `dist/SHA256SUMS.txt`.
+4. Tag that commit of `main` with an annotated tag (`git tag -a v2.1.0 -m "Release version 2.1.0"`, `git push origin v2.1.0`).
+5. Create the GitHub release as a **draft** with release notes written for users, the ZIP, and `SHA256SUMS.txt`. Download the ZIP from the draft, check it, and run it once; then publish.
+6. Switch back to `dev` and bring it up to date with the merge (`git switch dev`, `git merge main`).

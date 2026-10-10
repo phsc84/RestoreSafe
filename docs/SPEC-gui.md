@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); implemented on `v2`; the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
+| Status | Specified 2026-09-30 (status-first redesign); released in 2.0.0 (2026-10-10); the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
 | Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
 | Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |

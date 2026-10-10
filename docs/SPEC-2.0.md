@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Implemented for 2.0.0 (unreleased): format, workflows and the window ([SPEC-gui.md](SPEC-gui.md)) on `v2`. YubiKey paths tested on hardware in the GUI checklist run of 2026-10-09. |
+| Status | Released in 2.0.0 (2026-10-10): format, workflows and the window ([SPEC-gui.md](SPEC-gui.md)). YubiKey paths tested on hardware in the GUI checklist run of 2026-10-09. |
 | Target release | RestoreSafe 2.0.0 |
 | Compatibility | **Breaking.** 2.0 cannot read 1.x backups; 1.x cannot read 2.0 backups. |
 

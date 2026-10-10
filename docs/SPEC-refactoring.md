@@ -33,7 +33,7 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 
 ## 3. A round, step by step
 
-1. **Branch.** `refactor-<release>` from the release branch, after the release.
+1. **Branch.** The round works on `dev`, after the release (CONTRIBUTING.md section 1). Each phase ends in a state that builds and passes CI.
 2. **Baseline.** Run the measurements of section 4 and copy the previous round's baseline table into the new plan with a column for each round, so trends are visible.
 3. **Review.** Go through the checklist of section 5, area by area. Write down only findings with evidence: a file and line, or a tool's output. "Could be nicer" without a cost is not a finding.
 4. **Carry over.** Add the items the previous round moved on (section 8), re-checked: some will have gone away by themselves.
@@ -171,7 +171,7 @@ A round is done when every P1 and P2 item is done or dropped with a reason, and 
 | Status | Proposed <date> |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
 | Baseline | `<branch>` at `<commit>` |
-| Branch | `refactor-<release>` |
+| Branch | `dev` |
 | Scope | <areas; what is explicitly not touched> |
 
 ## 1. Purpose
