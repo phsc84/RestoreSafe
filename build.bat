@@ -54,6 +54,7 @@ set GOARCH=amd64
 set CGO_ENABLED=0
 
 REM -H=windowsgui: a window application; no console window opens.
+REM build-dev.bat has the same command; keep them equal.
 go build -trimpath -ldflags="-s -w -H=windowsgui -X github.com/phsc84/restoresafe/internal/buildinfo.Version=%VERSION%" -o "%DIST_DIR%\RestoreSafe.exe" ./cmd/restoresafe
 if errorlevel 1 (
     echo [ERROR] Compilation failed

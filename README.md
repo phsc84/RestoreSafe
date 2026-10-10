@@ -463,6 +463,8 @@ build.bat
 
 This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
 
+`build-dev.bat` compiles only `sandbox\RestoreSafe.exe` and leaves `dist\` as it is.
+
 ### Project layout
 
 | Folder | Content |
