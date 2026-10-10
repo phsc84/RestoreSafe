@@ -759,7 +759,7 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 
 ## 11. Workflow interface
 
-The UI keeps the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. What the redesign changes in today's contract is listed here. Two changes remove parts: the plans of 11.2 replace `ShowReport`, and restore and verify receive the user's choice as a request instead of asking for it (12.3). [PLAN-gui-redesign.md](PLAN-gui-redesign.md) has the package layout and the order of the work.
+The UI keeps the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. What the redesign changes in today's contract is listed here. Two changes remove parts: the plans of 11.2 replace `ShowReport`, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
@@ -1129,7 +1129,7 @@ The redesign ships with 2.0.0 only when:
 - every row of the checklist is tested by hand, or accepted with a reason;
 - the usability session found no task that failed.
 
-## 17. Acceptance criteria and build order
+## 17. Acceptance criteria
 
 ### 17.1 Acceptance criteria
 
@@ -1143,10 +1143,6 @@ The redesign ships with 2.0.0 only when:
 8. The UI stays responsive during every operation and while the backup directory is unreachable.
 9. No user-visible string shows raw OS or workflow text outside "Show details" and the log.
 10. The release gate of 16.7 is met.
-
-### 17.2 Build order
-
-The phases, the package layout and the order of the work are in [PLAN-gui-redesign.md](PLAN-gui-redesign.md). Tests are written in the phase of their code, not afterwards.
 
 ## 18. Decisions
 

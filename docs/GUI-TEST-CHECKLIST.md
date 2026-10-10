@@ -8,7 +8,7 @@ CI runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` on every pull request (
 
 ## Known differences from the spec
 
-Decided on 2026-10-06 (GUI plan section 6g); the spec matches the code in each case, so none of them is a defect.
+Decided on 2026-10-06; the spec matches the code in each case, so none of them is a defect.
 
 | Spec | Difference | Decision |
 |---|---|---|
@@ -18,7 +18,7 @@ Decided on 2026-10-06 (GUI plan section 6g); the spec matches the code in each c
 | CR-1 | The unlock dialog did not name the key set by its date; the workflow's notice above the field said which backup and the keys' date. | **Changed** by refactoring 2.0 RF-26: the question carries the other keys and their creation date (`interact.OtherKeys`), and the dialog's notice shows them. CR-1 changed. |
 | RW-1 | The restore window is resizable; its progress page left empty space below the card. | **Changed**: the card fills the page and centres its content. |
 | 15 | Turning high contrast on or off rebuilds the pages; a dialog open at that moment keeps its colors until it closes. | **Accepted**: rare, and it corrects itself when the dialog closes. Section 15 changed. |
-| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: test it with a backup from the day before (plan decision 9). |
+| 16.4 | `Overdue` has no script variant: a backup's date is in its header, which is authenticated, so a script can't change it. | **Accepted**: test it with a backup from the day before. |
 
 ## 1. Status and Create backup page
 
