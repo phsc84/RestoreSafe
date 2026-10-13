@@ -14,7 +14,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 
 - **Requirement IDs** (`OV-1`, `BP-3`, `BK-5`, `RW-2`, `ST-4`) identify testable requirements. Reference them in commits, tests and questions; section 16 maps them to tests.
 - **Text wins over wireframes.** Wireframes show layout, content and states, not pixels. Colors, sizes and spacing are defined in section 3.3. If a wireframe and the text disagree, follow the text and flag the difference.
-- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-core.md](SPEC-core.md). Section 11 lists what the workflows expose for the UI. When the UI needs more, add it there; don't guess and don't parse text meant for people.
+- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.TakeSnapshot`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-core.md](SPEC-core.md). Section 11 lists what the workflows expose for the UI. When the UI needs more, add it there; don't guess and don't parse text meant for people.
 - **Keep what works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are settled; change them only for a stated reason.
 - **Ask when something is unclear.** Section 18 lists the decisions taken. Do not silently pick a different answer.
 - **Pure Win32.** No WebView2, no web technology, no third-party UI toolkit, no cgo, no new modules. Standard controls first, custom drawing only where section 3.4 says so.
@@ -763,7 +763,7 @@ The UI talks to the workflows through the `interact.UI` contract and the bridge 
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
-`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Create backup, Restore backup and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory (shared with `health.Check`), `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
+`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Create backup, Restore backup and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory, `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
 
 ```go
 type State int // StateEmpty, StateProtected, StateWarning, StateError (Running is set by the UI)
@@ -931,7 +931,7 @@ else                                                        -> Protected
 | `internal/gui/win32` | Thin wrapper over the Win32 functions, structs and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. Structs mirror the Windows SDK layout; every call that can fail returns an error built from `GetLastError`. |
 | `internal/workflow/interact` | The contract between the workflows and the frontend: `interact.UI`, the plan types (11.2), problem codes (11.8), `Report`, `Progress`, `Result`, `ErrCancelled`. |
 | `internal/workflow/plan` | Planning without a password: source resolution and backup names, full or differential per folder, key plan, retention candidates and preview. |
-| `internal/workflow/health` | `health.Check` and `health.Result` (items with problem codes), `health.Snapshot` (11.1). |
+| `internal/workflow/health` | `health.Snapshot` (11.1), with `health.Result` (items with problem codes) as its `Check`. |
 | `internal/logging` | Run log files; facts (11.4). |
 | `internal/security/yubikey` | `SetParentWindow(hwnd)` (13.4). |
 
