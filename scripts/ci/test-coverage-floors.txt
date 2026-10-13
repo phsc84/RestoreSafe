@@ -14,7 +14,7 @@ internal/format/archive          85
 internal/format/catalog          94
 internal/format/container        85
 internal/format/setwriter        85
-internal/workflow/backup         83
+internal/workflow/backup         85
 internal/workflow/restore        90
 internal/workflow/verify         93
 internal/workflow/unlock         87

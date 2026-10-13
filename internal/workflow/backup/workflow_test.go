@@ -204,3 +204,12 @@ func setInfo(t *testing.T, backupDir string, entry naming.BackupEntry) catalog.S
 	t.Fatalf("%s is not in the inventory", entry)
 	return catalog.SetInfo{}
 }
+
+func TestRemoveLeftoverTempPartsWarnsWhenItCannotLook(t *testing.T) {
+	t.Parallel()
+	var out testutil.Output
+	removeLeftoverTempParts(filepath.Join(t.TempDir(), "missing"), logging.NewConsoleLogger("info", &out))
+	if !strings.Contains(out.String(), "Failed to look for leftovers") {
+		t.Fatalf("expected a warning for an unreadable directory, got %q", out.String())
+	}
+}
