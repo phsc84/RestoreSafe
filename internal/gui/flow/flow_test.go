@@ -20,6 +20,14 @@ type fakeDialogs struct {
 	confirm      []byte // the confirmation NewPassword answered
 	recovery     bool
 	choiceSecret []byte
+	// What the restore and verification dialogs got and answer.
+	restorePlans []interact.RestorePlan
+	verifyPlans  []interact.VerifyPlan
+	actions      []string
+	confirmStart bool
+	codes        [][]byte
+	codeOK       bool
+	spareOK      bool
 }
 
 func (f *fakeDialogs) BackupPlan(p interact.BackupPlan, answer func()) {
@@ -30,14 +38,26 @@ func (f *fakeDialogs) ConfirmBackupStart(o interact.BackupStartOptions, answer f
 	f.opts = append(f.opts, o)
 	answer(f.start, nil)
 }
-func (f *fakeDialogs) RestorePlan(interact.RestorePlan, func()) {}
-func (f *fakeDialogs) VerifyPlan(interact.VerifyPlan, func())   {}
-func (f *fakeDialogs) ConfirmStart(string, func(bool, error))   {}
+func (f *fakeDialogs) RestorePlan(p interact.RestorePlan, answer func()) {
+	f.restorePlans = append(f.restorePlans, p)
+	answer()
+}
+func (f *fakeDialogs) VerifyPlan(p interact.VerifyPlan, answer func()) {
+	f.verifyPlans = append(f.verifyPlans, p)
+	answer()
+}
+func (f *fakeDialogs) ConfirmStart(action string, answer func(bool, error)) {
+	f.actions = append(f.actions, action)
+	answer(f.confirmStart, nil)
+}
 func (f *fakeDialogs) ChooseUnlockMethod(_ interact.UnlockChoice, answer func(bool, []byte, error)) {
 	answer(f.recovery, f.choiceSecret, nil)
 }
-func (f *fakeDialogs) RecoveryCode([]byte, func(bool))                 {}
-func (f *fakeDialogs) SpareYubiKey(interact.SpareQuestion, func(bool)) {}
+func (f *fakeDialogs) RecoveryCode(code []byte, answer func(bool)) {
+	f.codes = append(f.codes, code)
+	answer(f.codeOK)
+}
+func (f *fakeDialogs) SpareYubiKey(_ interact.SpareQuestion, answer func(bool)) { answer(f.spareOK) }
 func (f *fakeDialogs) Password(q interact.SecretQuestion, answer func([]byte, error)) {
 	f.questions = append(f.questions, q)
 	answer(f.password(q))
@@ -126,6 +146,93 @@ func TestUIPlansAndStartReachTheDialogs(t *testing.T) {
 	choice, err := u.ConfirmBackupStart(interact.BackupStartOptions{OfferFull: true})
 	if err != nil || choice != interact.BackupFull || len(d.plans) != 1 || d.plans[0].BackupDir != "D:/Backups" || !d.opts[0].OfferFull {
 		t.Fatalf("choice %v, err %v, plans %+v, opts %+v", choice, err, d.plans, d.opts)
+	}
+}
+
+func TestUIRestoreAndVerifyReachTheDialogs(t *testing.T) {
+	t.Parallel()
+	d := &fakeDialogs{confirmStart: true}
+	u := newTestUI(t, d)
+	u.ShowRestorePlan(interact.RestorePlan{Destination: "E:/Restore"})
+	u.ShowVerifyPlan(interact.VerifyPlan{Bytes: 42})
+	started, err := u.ConfirmStart("restore")
+	if err != nil || !started || len(d.actions) != 1 || d.actions[0] != "restore" {
+		t.Fatalf("start %v, err %v, actions %v", started, err, d.actions)
+	}
+	if len(d.restorePlans) != 1 || d.restorePlans[0].Destination != "E:/Restore" || len(d.verifyPlans) != 1 || d.verifyPlans[0].Bytes != 42 {
+		t.Fatalf("plans: restore %+v, verify %+v", d.restorePlans, d.verifyPlans)
+	}
+
+	d.confirmStart = false
+	if started, err := u.ConfirmStart("verification"); err != nil || started {
+		t.Fatalf("declined start: %v, %v", started, err)
+	}
+}
+
+func TestUIRecoveryCodeAndSpareYubiKeyAnswers(t *testing.T) {
+	t.Parallel()
+	d := &fakeDialogs{codeOK: true, spareOK: true}
+	u := newTestUI(t, d)
+	if err := u.ShowRecoveryCode([]byte("CODE")); err != nil || len(d.codes) != 1 || string(d.codes[0]) != "CODE" {
+		t.Fatalf("shown code: %v, %q", err, d.codes)
+	}
+	if ok, err := u.WaitForSpareYubiKey(interact.SpareQuestion{}); !ok || err != nil {
+		t.Fatalf("spare YubiKey connected: %v, %v", ok, err)
+	}
+
+	d.codeOK, d.spareOK = false, false
+	if err := u.ShowRecoveryCode([]byte("CODE")); !errors.Is(err, interact.ErrCancelled) {
+		t.Fatalf("closing the code without confirming cancels, got %v", err)
+	}
+	if ok, err := u.WaitForSpareYubiKey(interact.SpareQuestion{}); ok || err != nil {
+		t.Fatalf("spare YubiKey declined: %v, %v", ok, err)
+	}
+}
+
+func TestUIResultLogAndProgressReachTheBridge(t *testing.T) {
+	t.Parallel()
+	u := NewUI(NewBridge(func(int) {}), &fakeDialogs{})
+	if u.Bridge().FinalResult() != nil || u.Bridge().LogPath() != "" {
+		t.Fatal("a new operation has no result and no log")
+	}
+	u.LogStarted("D:/Backups/2026-09-30_ABC123.log")
+	u.Progress(interact.Progress{Item: "Docs", Done: 7})
+	u.ShowResult(interact.Result{Warnings: 2})
+	if r := u.Bridge().FinalResult(); r == nil || r.Warnings != 2 {
+		t.Fatalf("result %+v", r)
+	}
+	if u.Bridge().LogPath() != "D:/Backups/2026-09-30_ABC123.log" || u.Bridge().TakeProgress().Done != 7 {
+		t.Fatal("log path or progress lost")
+	}
+}
+
+func TestMachineRecordsThePlansShown(t *testing.T) {
+	t.Parallel()
+	var m Machine
+	m.PlanShown(interact.BackupPlan{}) // idle: nothing to record
+	m.Start(OpVerify)
+	m.PlanShown(interact.BackupPlan{BackupDir: "D:/Backups"})
+	m.VerifyPlanShown(interact.VerifyPlan{Bytes: 1})
+	m.RestorePlanShown(interact.RestorePlan{Destination: "E:/"})
+	r := m.Current()
+	if r.Plan == nil || r.Plan.BackupDir != "D:/Backups" || r.Verify == nil || r.Verify.Bytes != 1 || r.Restore == nil || r.Restore.Destination != "E:/" {
+		t.Fatalf("plans not recorded: %+v", r)
+	}
+}
+
+func TestMachineClosesAfterTheUserConfirmedCancelAndClose(t *testing.T) {
+	t.Parallel()
+	var m Machine
+	m.CloseConfirmed() // idle: nothing to record
+	m.Start(OpBackup)
+	m.Confirmed(time.Now())
+	if m.CloseRequested() != CloseAsk {
+		t.Fatal("closing while running asks")
+	}
+	m.CloseConfirmed()
+	m.Cancelling()
+	if !m.Done(End{Err: errors.New("Backup cancelled.")}, time.Now()) {
+		t.Fatal("the window closes once the cancelled worker has finished")
 	}
 }
 
