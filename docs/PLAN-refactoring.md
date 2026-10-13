@@ -171,6 +171,8 @@ Phase 1 done 2026-10-13 (`fc02339`): RF-75 dropped, RF-85 and RF-90 done, RF-40 
 
 Phase 2 done 2026-10-13 (`b378846`), with RF-95 found and fixed in it: RF-40 brought nine packages to their targets, RF-80 is done except the sleep, which moved to RF-67. The four packages RF-70 touches reached their targets in phase 3 (`b6b2bd2`), which closed RF-40. Checks after RF-40: gofmt, vet, staticcheck, `deadcode -test` and `deadcode` (outside the test-support packages) report nothing; `go test ./...` passes in 50 s; coverage 57.4 %; CI passes.
 
+Phase 3 done 2026-10-13 (`960ad01`): RF-70, RF-71, RF-67, RF-65, RF-66, RF-72 and RF-86 done, and RF-40 closed with the four packages RF-70 touched. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; `go test ./...` passes; coverage 57.4 %; CI passes on all five jobs.
+
 ## Open questions
 
 Answered 2026-10-13:
