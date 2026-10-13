@@ -231,6 +231,34 @@ func TestSealOpenKeyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSealAndOpenKeyRefuseWrongLengths(t *testing.T) {
+	t.Parallel()
+
+	kek := testKey(t)
+	nonce, _ := RandomBytes(NonceLen)
+	for name, call := range map[string]func() error{
+		"seal, short key":   func() error { _, err := SealKey(kek[:16], nonce, kek, nil); return err },
+		"seal, short nonce": func() error { _, err := SealKey(kek, nonce[:8], kek, nil); return err },
+		"open, short key":   func() error { _, err := OpenKey(kek[:16], nonce, kek, nil); return err },
+		"open, short nonce": func() error { _, err := OpenKey(kek, nonce[:8], kek, nil); return err },
+	} {
+		if err := call(); err == nil || errors.Is(err, ErrWrongPassword) || !strings.Contains(err.Error(), "Invalid") {
+			t.Fatalf("%s: expected a length error, got %v", name, err)
+		}
+	}
+}
+
+func TestZeroBytesClearsEveryByte(t *testing.T) {
+	t.Parallel()
+
+	b := []byte("correct horse battery staple")
+	ZeroBytes(b)
+	if !bytes.Equal(b, make([]byte, len(b))) {
+		t.Fatalf("ZeroBytes left %q", b)
+	}
+	ZeroBytes(nil) // no panic
+}
+
 func TestOpenKeyRejectsWrongKEKAndAAD(t *testing.T) {
 	t.Parallel()
 
