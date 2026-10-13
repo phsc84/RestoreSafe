@@ -19,7 +19,7 @@ Five jobs run in parallel, each on its own runner; together they take about eigh
 
 | ID | Job (as GitHub shows it) | Checks | Scripts in `scripts/ci/` | Section |
 |---|---|---|---|---|
-| `static` | static: format, vet, build, analysis | formatting, `go vet`, the release build, staticcheck, known vulnerabilities; reports dead code | none | 3 |
+| `static` | static: format, vet, build, analysis | formatting, `go vet`, the release build, staticcheck, known vulnerabilities, dead code | `static-deadcode.sh` | 3 |
 | `test` | test: tests and coverage | `go test`, the coverage floor of each package, every benchmark once | `test-coverage-floors.sh`, `test-coverage-floors.txt`, `shared-annotate-failures.sh` | 4 |
 | `race` | race: race detector | `go test -race` | `shared-annotate-failures.sh` | 5 |
 | `fuzz` | fuzz: fuzzing | every fuzz target for 30 seconds | `fuzz-targets.sh` | 6 |
@@ -63,7 +63,7 @@ A job can turn red on `dev` without a change of yours: govulncheck learns of new
 | Build (release configuration) | the code does not build with `CGO_ENABLED=0 -trimpath` | `$env:CGO_ENABLED = "0"; go build -trimpath ./...` |
 | staticcheck | staticcheck reports a finding | `go tool staticcheck ./...` |
 | govulncheck | the code calls a function with a known vulnerability | `go tool govulncheck ./...` |
-| deadcode (report) | never; only reports unreachable functions | `go tool deadcode -test ./...` |
+| deadcode | a function has no caller, or a production function has only tests as callers (outside `testutil` and `interacttest`) | `bash scripts/ci/static-deadcode.sh` |
 
 The tools are pinned in the `tool` block of `go.mod`; nothing to install.
 
@@ -72,7 +72,7 @@ The tools are pinned in the `tool` block of `go.mod`; nothing to install.
   - In the standard library: update Go to the fixed version (`go mod edit -go=<version>`, see "Maintenance" in section 8), and an entry under **Dependencies** in CHANGELOG.md.
   - In a module: `go get <module>@<fixed version>`, `go mod tidy`, and an entry under **Dependencies** in CHANGELOG.md (CONTRIBUTING.md section 5).
   - Without a fixed version yet: avoid the vulnerable call if the code can, or wait for the fix; the job stays red until then.
-- **deadcode.** Read the report now and then. A function that stays unreachable after the commit that should have used it is deleted. It never fails the job, because a function added in one commit may get its caller in the next.
+- **deadcode.** Delete the function, or give it its caller: a function and its first caller go in the same commit. A helper that only tests need goes into a `_test.go` file of the package that uses it, or into `testutil` when several packages need it (RF-70).
 
 ## 4. test: tests and coverage
 

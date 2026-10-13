@@ -140,6 +140,7 @@ Done 2026-10-13. `x/crypto` 0.58.0, `x/sys` 0.49.0; staticcheck 0.8.2, govulnche
 **RF-86 (P3) The dead-code check in CI only reports.** Evidence: [ci.yml:44-46](../.github/workflows/ci.yml#L44-L46) runs `go tool deadcode -test ./...` as "a report only", so a finding never fails CI and is seen only when someone reads the job's log; the round of 2.0 brought it to zero.
 Change: fail the job when `deadcode -test` reports anything, and, after RF-70, when `deadcode` without `-test` reports anything outside the test-support packages and the functions RF-70 keeps (open question 1).
 Acceptance: a function without a caller, added on a test branch, fails the static job.
+Done 2026-10-13: `scripts/ci/static-deadcode.sh` runs `deadcode` with and without `-test` (open question 1) and fails on either finding, outside `testutil` and `interacttest`. Checked locally with a planted function without a caller and one only a test calls: each reported once, exit 1; the clean tree passes. CI.md describes the step.
 
 ## 9. Documentation
 

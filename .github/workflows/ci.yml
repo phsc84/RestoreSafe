@@ -40,10 +40,8 @@ jobs:
         run: go tool staticcheck ./...
       - name: govulncheck
         run: go tool govulncheck ./...
-      # A report only: a wrapper function added in one commit may get its
-      # caller in the next.
-      - name: deadcode (report)
-        run: go tool deadcode -test ./...
+      - name: deadcode
+        run: bash scripts/ci/static-deadcode.sh
 
   test:
     name: "test: tests and coverage"
