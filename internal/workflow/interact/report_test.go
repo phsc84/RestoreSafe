@@ -23,7 +23,7 @@ func TestWriteReport(t *testing.T) {
 				Item(StatusWarn, "approaching the limit"),
 				Field("Verify after backup", "enabled"),
 			}},
-			{Rows: []Row{Note("Sample note."), Heading("Empty")}},
+			{Rows: []Row{Heading("Empty")}},
 		},
 		Issues: []Issue{{Status: StatusError, Text: "Pics is broken."}, {Status: StatusWarn, Text: "Slow drive."}},
 	}
@@ -42,7 +42,6 @@ Needed space       : 1 B
   [WARN] approaching the limit
 Verify after backup: enabled
 
-Sample note.
 Empty:
 
 [ERROR] Pics is broken.

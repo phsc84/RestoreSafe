@@ -61,8 +61,6 @@ const (
 	RowItem
 	// RowField is a label/value pair of a summary.
 	RowField
-	// RowNote is an explanatory sentence.
-	RowNote
 )
 
 // Row is one line of a section with, for items, its details.
@@ -70,7 +68,7 @@ type Row struct {
 	Kind RowKind
 	// Label is the heading text or the field label.
 	Label string
-	// Text is the item text, the field value, or the note.
+	// Text is the item text or the field value.
 	Text string
 	// Status and Details apply to items.
 	Status  Status
@@ -120,9 +118,6 @@ func Item(status Status, text string, details ...string) Row {
 // Field returns a label/value row.
 func Field(label, value string) Row { return Row{Kind: RowField, Label: label, Text: value} }
 
-// Note returns an explanatory row.
-func Note(text string) Row { return Row{Kind: RowNote, Text: text} }
-
 // HasErrors reports whether an issue blocks the operation.
 func (r Report) HasErrors() bool { return hasErrors(r.Issues) }
 
@@ -165,8 +160,6 @@ func writeRow(w io.Writer, row Row, labelWidth int) {
 		fmt.Fprintf(w, "%s:\n", row.Label)
 	case RowField:
 		fmt.Fprintf(w, "%-*s: %s\n", labelWidth, row.Label, row.Text)
-	case RowNote:
-		fmt.Fprintln(w, row.Text)
 	case RowItem:
 		if row.Status == StatusNone {
 			fmt.Fprintf(w, "  %s\n", row.Text)
