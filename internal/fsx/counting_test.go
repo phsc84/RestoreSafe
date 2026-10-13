@@ -2,6 +2,8 @@ package fsx
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"sync/atomic"
 	"testing"
@@ -68,5 +70,23 @@ func TestCountingWriterNilCallsIsNoOp(t *testing.T) {
 	}
 	if got := total.Load(); got != 4 {
 		t.Fatalf("expected total 4, got %d", got)
+	}
+}
+
+func TestContextWriterStopsWritingOnceCancelled(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &ContextWriter{Ctx: ctx, W: &buf}
+	if _, err := io.WriteString(w, "before"); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if n, err := io.WriteString(w, "after"); n != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("after cancel: wrote %d, err %v", n, err)
+	}
+	if buf.String() != "before" {
+		t.Fatalf("got %q", buf.String())
 	}
 }
