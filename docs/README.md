@@ -9,7 +9,7 @@
 | [SPEC-gui.md](SPEC-gui.md) | The window: pages, dialogs, requirement IDs (`OV-1`, `BP-3`, ...), the workflow interface the window needs | Living |
 | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) | Manual tests of the window before a release | Living |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
-| [PLAN-refactoring.md](PLAN-refactoring.md) | The current refactoring round: the round after 2.0.0, items from RF-65 on, and RF-40 carried over | Started 2026-10-10 |
+| [PLAN-refactoring.md](PLAN-refactoring.md) | The current refactoring round: the round after 2.0.0, items from RF-65 on, and RF-40 carried over | Agreed 2026-10-13 |
 
 An implementation plan is deleted once its work is released; the refactoring plan keeps its name and gets the next round's content. Git history keeps both: the GUI redesign plan and the plan of the round of 2.0 are at the tag `v2.0.0` (`git show v2.0.0:docs/PLAN-gui-redesign.md`).
 
