@@ -120,6 +120,7 @@ Acceptance: no `time.Sleep` in tests; each of the four packages faster by the am
 **RF-85 (P2) Dependencies and tools behind their current versions.** Evidence: `go list -m -u all` (baseline): `x/crypto` 0.58.0, `x/sys` 0.49.0, staticcheck 0.8.2, govulncheck 1.9.0, `x/tools` 0.52.0 are available.
 Change: `go get -u ./...` and the tools, `go mod tidy`, one commit with the CHANGELOG line for the dependencies (CONTRIBUTING.md).
 Acceptance: `go list -m -u all` shows no update for a direct dependency or tool; CI passes, including the format fixtures.
+Done 2026-10-13. `x/crypto` 0.58.0, `x/sys` 0.49.0; staticcheck 0.8.2, govulncheck 1.9.0, `x/tools` 0.52.0 and their modules (`go get -u tool`). gofmt, vet, staticcheck, `deadcode -test` and `go test ./...` report nothing new, coverage 54.5 %; govulncheck still lists only GO-2026-5932 (`x/crypto/openpgp`, required, not imported). The updates `go list -m -u all` still shows (testify, go-spew, goldmark, `x/exp`, `renameio`) are in the module graph only, not in `go.mod`.
 
 **RF-86 (P3) The dead-code check in CI only reports.** Evidence: [ci.yml:44-46](../.github/workflows/ci.yml#L44-L46) runs `go tool deadcode -test ./...` as "a report only", so a finding never fails CI and is seen only when someone reads the job's log; the round of 2.0 brought it to zero.
 Change: fail the job when `deadcode -test` reports anything, and, after RF-70, when `deadcode` without `-test` reports anything outside the test-support packages and the functions RF-70 keeps (open question 1).
