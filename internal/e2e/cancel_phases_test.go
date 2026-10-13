@@ -35,6 +35,7 @@ func cancelAt(s *script, phase interact.Phase, cancel context.CancelFunc) (*obse
 // chains and is not stopped halfway, so a cancel that arrives during it is
 // too late and the run completes.
 func TestCancelAtEachPhase(t *testing.T) {
+	t.Parallel()
 	phases := map[string][]interact.Phase{
 		"backup":  {interact.PhaseUnlocking, interact.PhaseBackingUp, interact.PhaseVerifying, interact.PhaseCleaningUp},
 		"restore": {interact.PhaseUnlocking, interact.PhaseRestoring},
@@ -43,6 +44,7 @@ func TestCancelAtEachPhase(t *testing.T) {
 	for op, list := range phases {
 		for _, phase := range list {
 			t.Run(op+"/"+phaseName(phase), func(t *testing.T) {
+				t.Parallel()
 				root := t.TempDir()
 				docs := filepath.Join(root, "Docs")
 				writeFile(t, filepath.Join(docs, "a.txt"), strings.Repeat("restoresafe", 100_000))

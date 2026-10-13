@@ -118,6 +118,7 @@ func headerValueOffset(t *testing.T, part string) int64 {
 // reading leaves the partial restore in place, marked INCOMPLETE (SPEC-core
 // section 9).
 func TestDamagedSetIsRefused(t *testing.T) {
+	t.Parallel()
 	d := backUpThreeParts(t)
 	tr := d.trailer
 	total := tr.ManifestOffset + tr.ManifestLength + container.TrailerLen

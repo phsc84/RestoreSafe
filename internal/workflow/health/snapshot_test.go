@@ -173,12 +173,15 @@ func TestSnapshotNotesADisconnectedYubiKey(t *testing.T) {
 
 func TestEveryWarningAndErrorItemHasACode(t *testing.T) {
 	for _, c := range scenario.All {
-		sc := scenario.Build(t, c)
-		for _, item := range inspect(sc.Config, "", sc.ConfigPath).items {
-			if item.Severity != healthOK && item.Code == "" {
-				t.Fatalf("%s: a finding without a code: %+v", c, item)
+		t.Run(string(c), func(t *testing.T) {
+			t.Parallel()
+			sc := scenario.Build(t, c)
+			for _, item := range inspect(sc.Config, "", sc.ConfigPath).items {
+				if item.Severity != healthOK && item.Code == "" {
+					t.Fatalf("a finding without a code: %+v", item)
+				}
 			}
-		}
+		})
 	}
 }
 

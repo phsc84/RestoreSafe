@@ -26,6 +26,7 @@ func runLog(t *testing.T, backupDir string, set catalog.SetInfo) logging.RunFact
 }
 
 func TestRunFactsAreLogged(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	first := filepath.Join(root, "First")
 	second := filepath.Join(root, "Second")
@@ -71,6 +72,7 @@ func TestRunFactsAreLogged(t *testing.T) {
 }
 
 func TestCancelledBackupLogsItsFact(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	first := filepath.Join(root, "First")
 	second := filepath.Join(root, "Second")

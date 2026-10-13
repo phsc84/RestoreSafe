@@ -305,6 +305,7 @@ func listingPath(c fixtureCase, run int) string {
 // TestWriteFormatFixtures writes the fixtures and their listings. It runs
 // only on request and refuses to overwrite existing fixtures.
 func TestWriteFormatFixtures(t *testing.T) {
+	t.Parallel()
 	if os.Getenv("RESTORESAFE_WRITE_FIXTURES") != "1" {
 		t.Skip("set RESTORESAFE_WRITE_FIXTURES=1 to write the format fixtures")
 	}
