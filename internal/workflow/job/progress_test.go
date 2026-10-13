@@ -8,11 +8,13 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-func TestLogStreamProgressWritesDebugLine(t *testing.T) {
+func TestStreamProgressWritesDebugLine(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -29,7 +31,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 	outBytes.Store(2 * 1024 * 1024)
 	outWriteCalls.Store(2)
 
-	LogStreamProgress(logger, "Docs", "verified", &inBytes, &outBytes, &outWriteCalls, true)
+	streamProgress{log: logger, name: "Docs", label: "verified", c: fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}}.logLine(true)
 	logger.Close()
 
 	data, err := os.ReadFile(logPath)
@@ -49,7 +51,7 @@ func TestLogStreamProgressWritesDebugLine(t *testing.T) {
 	}
 }
 
-func TestLogProgressUntilDoneHandlesClosedDoneWithNilLogger(t *testing.T) {
+func TestStreamProgressUntilDoneWithNilLogger(t *testing.T) {
 	t.Parallel()
 
 	done := make(chan struct{})
@@ -60,10 +62,10 @@ func TestLogProgressUntilDoneHandlesClosedDoneWithNilLogger(t *testing.T) {
 	var outWriteCalls atomic.Int64
 
 	// Should return immediately without panic when logger is nil.
-	LogProgressUntilDone(nil, "Docs", "verified", &inBytes, &outBytes, &outWriteCalls, done)
+	streamProgress{name: "Docs", label: "verified", c: fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}}.untilDone(done)
 }
 
-func TestLogProgressUntilDoneLogsWhenDoneClosedImmediately(t *testing.T) {
+func TestStreamProgressLogsWhenDoneClosedImmediately(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -81,7 +83,7 @@ func TestLogProgressUntilDoneLogsWhenDoneClosedImmediately(t *testing.T) {
 	var outWriteCalls atomic.Int64
 	inBytes.Store(1024 * 1024)
 
-	LogProgressUntilDone(logger, "Docs", "encrypted", &inBytes, &outBytes, &outWriteCalls, done)
+	streamProgress{log: logger, name: "Docs", label: "encrypted", c: fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}}.untilDone(done)
 	logger.Close()
 
 	data, err := os.ReadFile(logPath)
@@ -100,7 +102,7 @@ func TestStartProgressTrackingStopsCleanly(t *testing.T) {
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
 
-	stop := StartProgressTracking(nil, "Docs", "encrypted", &inBytes, &outBytes, &outWriteCalls)
+	stop := StartProgressTracking(nil, "Docs", "encrypted", fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls})
 	stop() // must not deadlock
 }
 
@@ -156,4 +158,14 @@ func TestStampAndReportPhase(t *testing.T) {
 		t.Fatal("a nil reporter must stay nil, so TrackProgress reports nothing")
 	}
 	ReportPhase(nil, interact.PhaseUnlocking, "Unlocking keys") // must not panic
+}
+
+func TestStreamProgressReadsMissingCountersAsZero(t *testing.T) {
+	t.Parallel()
+
+	var out testutil.Output
+	streamProgress{log: logging.NewConsoleLogger("debug", &out), name: "Docs", label: "verified"}.logLine(false)
+	if !strings.Contains(out.String(), "input=0.00 MB, verified=0.00 MB, writes=0") {
+		t.Fatalf("got %q", out.String())
+	}
 }

@@ -352,12 +352,12 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 // files it skipped as unreadable and the size of the set.
 func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressReporter, srcDir string, entry naming.BackupEntry, base *setwriter.Base) (setStats, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
-	counters := setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
+	counters := fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
 	var progressLog *logging.Logger
 	if o.log.DebugEnabled() {
 		progressLog = o.log
 	}
-	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
+	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", counters)
 	defer stopProgress()
 
 	excludeDirs := []string{o.backupDir}

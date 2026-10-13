@@ -55,7 +55,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	first := selectedInfos[0].Header
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
-	log := job.OpenLogger(cfg, backupDir, first.Date, naming.BackupID(first.RunID), out)
+	log := job.OpenLogger(cfg, logPath, out)
 	warningCount := 0
 	if !log.IsConsoleOnly() {
 		u.LogStarted(logPath)

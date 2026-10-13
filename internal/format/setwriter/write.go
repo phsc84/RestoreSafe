@@ -23,14 +23,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/problem"
 )
 
-// Counters receive byte counts for progress and stall reporting. Any field may
-// be nil.
-type Counters struct {
-	In    *atomic.Int64
-	Out   *atomic.Int64
-	Calls *atomic.Int64
-}
-
 // Base describes the full backup a differential is based on.
 type Base struct {
 	Header         *container.Header
@@ -65,7 +57,7 @@ type Params struct {
 	// SyncParts flushes each part to disk before it is closed.
 	SyncParts    bool
 	OnPartOpened func(seq int, path string)
-	Counters     Counters
+	Counters     fsx.StreamCounters
 	// Progress receives the source bytes handled so far (see
 	// archive.BuildOptions.Progress); may be nil.
 	Progress *atomic.Int64

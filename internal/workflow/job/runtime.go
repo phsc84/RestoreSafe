@@ -9,15 +9,13 @@ import (
 	"io"
 
 	"github.com/phsc84/restoresafe/internal/config"
-	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 )
 
-// OpenLogger opens the log file of the backup run date/runID in backupDir,
+// OpenLogger opens the log file at logPath,
 // falling back to a console-only logger when the file cannot be opened.
 // Messages are mirrored to console.
-func OpenLogger(cfg *config.Config, backupDir, date string, runID naming.BackupID, console io.Writer) *logging.Logger {
-	logPath := naming.LogFileName(backupDir, date, runID)
+func OpenLogger(cfg *config.Config, logPath string, console io.Writer) *logging.Logger {
 	log, err := logging.NewLogger(logPath, cfg.LogLevel, console)
 	if err != nil {
 		fmt.Fprintf(console, "Warning: Failed to open log file: %v. Remedy: Check write permissions in backup directory; operation continues without a log file.\n", err)

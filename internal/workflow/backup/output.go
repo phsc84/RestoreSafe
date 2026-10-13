@@ -4,12 +4,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/phsc84/restoresafe/internal/format/setwriter"
+	"github.com/phsc84/restoresafe/internal/fsx"
 )
 
 // logPartSummary logs the parts of a set and, at debug level, how the
 // encrypted data was written (counters) and the size of every part.
-func (o *operation) logPartSummary(parts []string, directoryName string, counters setwriter.Counters) {
+func (o *operation) logPartSummary(parts []string, directoryName string, counters fsx.StreamCounters) {
 	if o.log.DebugEnabled() {
 		avgEncryptWriteKB := 0.0
 		if calls := counters.Calls.Load(); calls > 0 {

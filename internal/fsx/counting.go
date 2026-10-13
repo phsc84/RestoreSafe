@@ -6,6 +6,13 @@ import (
 	"sync/atomic"
 )
 
+// StreamCounters point at the counts of a stream, for its progress and the
+// I/O diagnostics in the log: the bytes read (In) and written (Out), and the
+// writes (Calls). Any of them may be nil.
+type StreamCounters struct {
+	In, Out, Calls *atomic.Int64
+}
+
 // CountingWriter wraps an io.Writer, tracking bytes written and optional write
 // call count. Total and Calls may be nil.
 type CountingWriter struct {

@@ -22,7 +22,7 @@ func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.Config{LogLevel: "info"}
 
-	log := OpenLogger(cfg, tmpDir, "2026-03-14", naming.BackupID("ABC123"), io.Discard)
+	log := OpenLogger(cfg, naming.LogFileName(tmpDir, "2026-03-14", naming.BackupID("ABC123")), io.Discard)
 	if log == nil {
 		t.Fatal("expected non-nil logger for valid target dir")
 	}
@@ -38,7 +38,7 @@ func TestOpenLoggerFallsBackToTheOutputWithoutATempDirectory(t *testing.T) {
 	t.Setenv("TEMP", missing)
 
 	var out strings.Builder
-	log := OpenLogger(&config.Config{LogLevel: "info"}, t.TempDir(), "2026-03-14", naming.BackupID("ABC123"), &out)
+	log := OpenLogger(&config.Config{LogLevel: "info"}, naming.LogFileName(t.TempDir(), "2026-03-14", naming.BackupID("ABC123")), &out)
 	defer log.Close()
 	if !log.IsConsoleOnly() || !strings.Contains(out.String(), "operation continues without a log file") {
 		t.Fatalf("expected the fallback with a warning, got console-only=%v output=%q", log.IsConsoleOnly(), out.String())
