@@ -213,9 +213,15 @@ func TestFinishReportsMissingFiles(t *testing.T) {
 
 	var empty bytes.Buffer
 	tar.NewWriter(&empty).Close()
-	err := restore(t, m, empty.Bytes(), t.TempDir(), true)
-	if err == nil || !strings.Contains(err.Error(), "2 file(s)") {
+	r := NewRestorer(m, t.TempDir(), true)
+	if err := r.ExtractSection(&empty, DecideOwn(m)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Finish(); err == nil || !strings.Contains(err.Error(), "2 file(s)") {
 		t.Fatalf("expected missing-files error, got %v", err)
+	}
+	if got := r.MissingFiles(); len(got) != 2 || got[0] != "a.txt" || got[1] != "b.txt" {
+		t.Fatalf("MissingFiles = %v", got)
 	}
 }
 
