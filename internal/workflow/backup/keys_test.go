@@ -27,7 +27,7 @@ type enrollStub struct {
 	code      string // display form of the recovery code
 	secret    []byte // its key material
 	out       bytes.Buffer
-	console   *interacttest.Script
+	ui        *interacttest.Script
 }
 
 // stubEnrollment scripts the user's answers and replaces the YubiKey and
@@ -43,7 +43,7 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	for _, p := range s.passwords {
 		passwords = append(passwords, p[0], p[1])
 	}
-	s.console = &interacttest.Script{
+	s.ui = &interacttest.Script{
 		Out: &s.out,
 		ReadPassword: func(string) ([]byte, error) {
 			if len(passwords) == 0 {
@@ -89,7 +89,7 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 
 func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, string, error) {
 	t.Helper()
-	ks, master, err := enrollKeySet(s.console, cfg, logging.NewConsoleLogger("info", &s.out))
+	ks, master, err := enrollKeySet(s.ui, cfg, logging.NewOutputLogger("info", &s.out))
 	return ks, master, s.out.String(), err
 }
 
@@ -187,7 +187,7 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 		return append([]byte(nil), master...), nil
 	}
 
-	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, plan.Keys{Existing: ks}, logging.NewConsoleLogger("info", nil))
+	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, plan.Keys{Existing: ks}, logging.NewOutputLogger("info", nil))
 	if err != nil || gotKS.ID != ks.ID || !bytes.Equal(gotMaster, master) {
 		t.Fatalf("existing keys not reused: %v", err)
 	}

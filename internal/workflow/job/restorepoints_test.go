@@ -118,7 +118,7 @@ func TestLogStartNamesTheSelection(t *testing.T) {
 	t.Parallel()
 	fx, diff, infos := restorePointFixture(t)
 	var out testutil.Output
-	log := logging.NewConsoleLogger("info", &out)
+	log := logging.NewOutputLogger("info", &out)
 	LogStart(log, "Verification", []catalog.SetInfo{infoOf(t, infos, diff), infoOf(t, infos, fx.Entry)})
 	for _, want := range []string{"Verification started - ID: ", "Verification selection:", "  " + diff.String(), "  " + fx.Entry.String()} {
 		if !strings.Contains(out.String(), want) {

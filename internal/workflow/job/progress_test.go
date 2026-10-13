@@ -164,7 +164,7 @@ func TestStreamProgressReadsMissingCountersAsZero(t *testing.T) {
 	t.Parallel()
 
 	var out testutil.Output
-	streamProgress{log: logging.NewConsoleLogger("debug", &out), name: "Docs", label: "verified"}.logLine(false)
+	streamProgress{log: logging.NewOutputLogger("debug", &out), name: "Docs", label: "verified"}.logLine(false)
 	if !strings.Contains(out.String(), "input=0.00 MB, verified=0.00 MB, writes=0") {
 		t.Fatalf("got %q", out.String())
 	}

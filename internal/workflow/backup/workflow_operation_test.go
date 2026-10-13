@@ -132,7 +132,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	failures, _ := verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewConsoleLogger("info", nil))
+	failures, _ := verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewOutputLogger("info", nil))
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)
 	}

@@ -87,7 +87,7 @@ func IssueOf(status Status, code Code, err error) Issue {
 	return Issue{Status: status, Code: code, Text: text, Remedy: remedy}
 }
 
-// Full returns the issue as the console and the log show it: the text and
+// Full returns the issue as the log pane and the log show it: the text and
 // its remedy.
 func (i Issue) Full() string {
 	return (&problem.Error{Msg: i.Text, Remedy: i.Remedy}).Error()

@@ -20,7 +20,7 @@ type unlockStub struct {
 	passwordCalls int
 	lines         []string
 	out           bytes.Buffer
-	console       *interacttest.Script
+	ui            *interacttest.Script
 }
 
 // stubUnlockInputs scripts the user's answers for one test: passwords for
@@ -33,7 +33,7 @@ func stubUnlockInputs(t *testing.T, passwords []string, yubiIndex int, yubiSecre
 		checkYubiKeyConnectedFn, deriveYubiKeySecretFn = prevCheck, prevDerive
 	})
 	stub := &unlockStub{lines: lines}
-	stub.console = &interacttest.Script{
+	stub.ui = &interacttest.Script{
 		Out: &stub.out,
 		ReadPassword: func(string) ([]byte, error) {
 			if stub.passwordCalls >= len(passwords) {
@@ -91,7 +91,7 @@ func yubiKeySet(t *testing.T, mode config.AuthMode, password []byte, yubiSecrets
 func (s *unlockStub) unlock(t *testing.T, ks *container.KeySet, opts Options) ([]byte, string, error) {
 	t.Helper()
 	s.out.Reset()
-	got, err := KeySet(s.console, ks, opts, nil)
+	got, err := KeySet(s.ui, ks, opts, nil)
 	return got, s.out.String(), err
 }
 
@@ -218,7 +218,7 @@ func TestUnlockKeySetsAuthenticatesOncePerKeySet(t *testing.T) {
 	stub := stubUnlockInputs(t, []string{"pw", "pw"}, 0, nil)
 
 	var keys MasterKeys
-	keys, err = KeySets(stub.console, infos, "pw: ", nil)
+	keys, err = KeySets(stub.ui, infos, "pw: ", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func twoKeySets(t *testing.T) []catalog.SetInfo {
 // answerByKeys answers the first key set's prompts with first, and the
 // prompts after the other keys were announced with other.
 func answerByKeys(stub *unlockStub, first, other string) {
-	stub.console.ReadPassword = func(string) ([]byte, error) {
+	stub.ui.ReadPassword = func(string) ([]byte, error) {
 		stub.passwordCalls++
 		if strings.Contains(stub.out.String(), "uses different keys") {
 			return []byte(other), nil
@@ -280,7 +280,7 @@ func TestUnlockKeySetsAsksAgainForOtherKeys(t *testing.T) {
 	stub := stubUnlockInputs(t, nil, 0, nil)
 	answerByKeys(stub, passwordOf(infos[0]), passwordOf(infos[1]))
 
-	keys, err := KeySets(stub.console, infos, "restore", nil)
+	keys, err := KeySets(stub.ui, infos, "restore", nil)
 	if err != nil {
 		t.Fatalf("KeySets: %v\n%s", err, stub.out.String())
 	}
@@ -295,7 +295,7 @@ func TestUnlockKeySetsFailsWhenTheOtherKeysStayLocked(t *testing.T) {
 	stub := stubUnlockInputs(t, nil, 0, nil)
 	answerByKeys(stub, passwordOf(infos[0]), "wrong")
 
-	keys, err := KeySets(stub.console, infos, "restore", nil)
+	keys, err := KeySets(stub.ui, infos, "restore", nil)
 	if err == nil || keys != nil {
 		t.Fatalf("expected no keys when the other keys stay locked, got %d keys, err %v", len(keys), err)
 	}

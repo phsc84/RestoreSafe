@@ -22,15 +22,16 @@ const (
 	LevelDebug Level = 1
 )
 
-// Logger writes structured log entries to the user's console and optionally
-// to a file.
+// Logger writes structured log entries to a log file and mirrors them to the
+// user's output (the window's log pane); a logger without a file writes to the
+// output only.
 type Logger struct {
 	level        Level
 	file         *os.File
 	originalPath string    // The path the user wanted (may be on network drive)
 	actualPath   string    // The temp file this logger writes to; Close appends it to originalPath
-	console      io.Writer // The user's output, also for problems with the log file (nil: discarded)
-	consoleOnly  bool
+	output       io.Writer // The user's output, also for problems with the log file (nil: discarded)
+	outputOnly   bool
 	mu           sync.Mutex
 }
 
@@ -50,13 +51,13 @@ func orDiscard(w io.Writer) io.Writer {
 }
 
 // NewLogger creates a Logger writing to logPath and mirroring messages to
-// console (nil: discarded).
+// output (nil: discarded).
 // The lines go to a temp file of this logger's own, so writing never waits for
 // a network drive; Close appends them to logPath. Two runs that log to the
 // same file at once (a restore and a verification of one backup run) thus
 // each add their own lines.
-func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, error) {
-	console = orDiscard(console)
+func NewLogger(logPath string, levelStr string, output io.Writer) (*Logger, error) {
+	output = orDiscard(output)
 	lvl := parseLogLevel(levelStr)
 
 	_, statErr := os.Stat(logPath)
@@ -67,10 +68,10 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 		return nil, problem.Errorf("Log file in temp directory could not be created: %w.", err).WithRemedy("Check TEMP/TMP path and write permissions.")
 	}
 
-	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: f.Name(), console: console}
+	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: f.Name(), output: output}
 
 	// Record the RestoreSafe version as the first line of a freshly created log
-	// (file only, so it does not duplicate the startup banner on the console). Later
+	// (file only, so it does not duplicate the startup banner in the output). Later
 	// restore/verify runs reuse and append to the same log, leaving this first
 	// line intact, so a backup's log identifies the version that created it.
 	if !logExists {
@@ -80,17 +81,19 @@ func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, err
 	return logger, nil
 }
 
-// NewConsoleLogger creates a logger that writes to console (nil: discarded) only.
-func NewConsoleLogger(levelStr string, console io.Writer) *Logger {
-	return &Logger{level: parseLogLevel(levelStr), consoleOnly: true, console: orDiscard(console)}
+// NewOutputLogger creates a logger without a log file: it writes to output
+// (nil: discarded) only.
+func NewOutputLogger(levelStr string, output io.Writer) *Logger {
+	return &Logger{level: parseLogLevel(levelStr), outputOnly: true, output: orDiscard(output)}
 }
 
-// IsConsoleOnly reports whether the logger writes only to the console.
-func (l *Logger) IsConsoleOnly() bool {
+// HasFile reports whether the logger writes a log file; a nil logger does
+// not.
+func (l *Logger) HasFile() bool {
 	if l == nil {
 		return false
 	}
-	return l.consoleOnly
+	return !l.outputOnly
 }
 
 // Close flushes and closes the temp file, then appends its lines to the log
@@ -105,7 +108,7 @@ func (l *Logger) Close() {
 
 	if l.file != nil {
 		if err := l.file.Sync(); err != nil {
-			fmt.Fprintf(l.console, "Warning: Syncing log file before close failed: %v\n", err)
+			fmt.Fprintf(l.output, "Warning: Syncing log file before close failed: %v\n", err)
 		}
 		l.file.Close()
 		l.file = nil
@@ -114,12 +117,12 @@ func (l *Logger) Close() {
 	if l.actualPath != "" && l.originalPath != "" {
 		data, err := os.ReadFile(l.actualPath)
 		if err != nil {
-			fmt.Fprintf(l.console, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
+			fmt.Fprintf(l.output, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
 			return
 		}
 		if err := appendFile(l.originalPath, data); err != nil {
-			fmt.Fprintf(l.console, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
-			fmt.Fprintf(l.console, "Log file is located in temp directory: %s\n", l.actualPath)
+			fmt.Fprintf(l.output, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
+			fmt.Fprintf(l.output, "Log file is located in temp directory: %s\n", l.actualPath)
 			// Intentionally do not remove the temp file — it is the user's only copy.
 			return
 		}
@@ -163,12 +166,12 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write(SeverityWarn, format, args...)
 }
 
-// InfoLogOnly logs an informational message without mirroring it to the console.
+// InfoLogOnly logs an informational message without mirroring it to the output.
 func (l *Logger) InfoLogOnly(format string, args ...any) {
 	l.writeLogOnly(SeverityInfo, format, args...)
 }
 
-// WarnLogOnly logs a warning without mirroring it to the console.
+// WarnLogOnly logs a warning without mirroring it to the output.
 func (l *Logger) WarnLogOnly(format string, args ...any) {
 	l.writeLogOnly(SeverityWarn, format, args...)
 }
@@ -191,13 +194,13 @@ func (l *Logger) writeLine(severity string, mirror bool, format string, args ...
 
 	line := FormatLine(time.Now(), severity, fmt.Sprintf(format, args...))
 	if mirror {
-		// Write to the console first so interactive users see messages immediately.
-		fmt.Fprint(l.console, line)
+		// Write to the output first so the user sees messages immediately.
+		fmt.Fprint(l.output, line)
 	}
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil {
-			fmt.Fprintf(l.console, "Warning: Writing to log file failed: %v\n", err)
+			fmt.Fprintf(l.output, "Warning: Writing to log file failed: %v\n", err)
 			return
 		}
 	}

@@ -11,25 +11,25 @@ import (
 	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
-func TestNewConsoleLogger(t *testing.T) {
+func TestNewOutputLogger(t *testing.T) {
 	var out testutil.Output
-	log := logging.NewConsoleLogger("debug", &out)
-	if !log.IsConsoleOnly() {
-		t.Fatal("expected console-only logger")
+	log := logging.NewOutputLogger("debug", &out)
+	if log.HasFile() {
+		t.Fatal("an output logger has no log file")
 	}
-	log.Info("console info %d", 1)
-	log.Debug("console debug %d", 2)
-	log.Warn("console warn %d", 3)
+	log.Info("output info %d", 1)
+	log.Debug("output debug %d", 2)
+	log.Warn("output warn %d", 3)
 	log.Close()
 	output := out.String()
 
-	if !strings.Contains(output, "console info 1") {
+	if !strings.Contains(output, "output info 1") {
 		t.Fatalf("expected info output, got %q", output)
 	}
-	if !strings.Contains(output, "console debug 2") {
+	if !strings.Contains(output, "output debug 2") {
 		t.Fatalf("expected debug output, got %q", output)
 	}
-	if !strings.Contains(output, "console warn 3") {
+	if !strings.Contains(output, "output warn 3") {
 		t.Fatalf("expected warn output, got %q", output)
 	}
 }
@@ -42,8 +42,8 @@ func TestNilLoggerMethodsAreSafe(t *testing.T) {
 	log.Warn("ignored")
 	log.WarnLogOnly("ignored")
 
-	if log.IsConsoleOnly() {
-		t.Fatal("nil logger should not report console-only")
+	if log.HasFile() {
+		t.Fatal("a nil logger has no log file")
 	}
 }
 
@@ -146,7 +146,7 @@ func TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten(t *testing.T) {
 	}
 }
 
-func TestWarnLogOnlyWritesFileWithoutConsole(t *testing.T) {
+func TestWarnLogOnlyWritesFileWithoutOutput(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "restore.log")
 	var out testutil.Output
 	log, err := logging.NewLogger(logPath, "info", &out)
@@ -159,7 +159,7 @@ func TestWarnLogOnlyWritesFileWithoutConsole(t *testing.T) {
 	log.Close()
 
 	if output != "" {
-		t.Fatalf("expected no console output for log-only warning, got %q", output)
+		t.Fatalf("expected no output for a log-only warning, got %q", output)
 	}
 	data, err := os.ReadFile(logPath)
 	if err != nil {

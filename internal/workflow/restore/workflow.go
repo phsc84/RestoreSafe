@@ -69,10 +69,10 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
 	log := job.OpenLogger(cfg, logPath, out)
 	warningCount := 0
-	if !log.IsConsoleOnly() {
+	if log.HasFile() {
 		u.LogStarted(logPath)
 	}
-	if log.IsConsoleOnly() {
+	if !log.HasFile() {
 		warningCount++
 	}
 	defer log.Close()

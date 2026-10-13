@@ -130,7 +130,7 @@ func TestRunReportsADamagedPartAndTheIncompleteFolder(t *testing.T) {
 	damagePart(t, fx.BackupFixture)
 
 	var out testutil.Output
-	log := logging.NewConsoleLogger("info", &out)
+	log := logging.NewOutputLogger("info", &out)
 	infos := fixtureInfos(t, fx.BackupFixture)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: log}
 	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
@@ -206,7 +206,7 @@ func TestRunCancelledBeforeTheFirstSetLeavesNoFolder(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	infos := fixtureInfos(t, fx.BackupFixture)
-	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewConsoleLogger("info", &out)}
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
 	err := op.run(ctx, &interacttest.Script{Out: &out}, 0)
 	if !errors.Is(err, context.Canceled) || err.Error() != job.Cancelled("Restore").Error() {
 		t.Fatalf("expected the restore to be cancelled, got %v", err)

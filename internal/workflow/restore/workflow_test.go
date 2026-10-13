@@ -93,7 +93,7 @@ func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewConsoleLogger("info", nil)}
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", nil)}
 	_, err = op.restoreAll(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("restore differential: %v", err)
@@ -180,5 +180,5 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 // entryOperation is a restore from backupDir into restorePath that logs to
 // nowhere, for tests of single sets.
 func entryOperation(backupDir, restorePath string) *operation {
-	return &operation{backupDir: backupDir, restorePath: restorePath, log: logging.NewConsoleLogger("info", nil)}
+	return &operation{backupDir: backupDir, restorePath: restorePath, log: logging.NewOutputLogger("info", nil)}
 }
