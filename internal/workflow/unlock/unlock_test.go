@@ -240,3 +240,66 @@ func TestPasswordFailurePrefix(t *testing.T) {
 		t.Fatalf("unexpected prefix for YubiKey-only: %q", got)
 	}
 }
+
+// twoKeySets is a backup directory with a set of the fixture's keys and an
+// older set of other keys, protected by "old".
+func twoKeySets(t *testing.T) []catalog.SetInfo {
+	t.Helper()
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	oldKeys, oldMaster := testutil.NewPasswordKeySet(t, []byte("old"))
+	testutil.WriteFullSet(t, fx.SrcDir, fx.BackupDir, naming.BackupEntry{DirectoryName: "Older", ChainID: "OLD001", Date: "2026-03-01"}, oldKeys, oldMaster)
+	infos, err := catalog.Inventory(fx.BackupDir)
+	if err != nil || len(infos) != 2 || infos[0].Header.KeySet.ID == infos[1].Header.KeySet.ID {
+		t.Fatalf("expected two sets with different keys, got %d (%v)", len(infos), err)
+	}
+	return infos
+}
+
+// answerByKeys answers the first key set's prompts with first, and the
+// prompts after the other keys were announced with other.
+func answerByKeys(stub *unlockStub, first, other string) {
+	stub.console.ReadPassword = func(string) ([]byte, error) {
+		stub.passwordCalls++
+		if strings.Contains(stub.out.String(), "uses different keys") {
+			return []byte(other), nil
+		}
+		return []byte(first), nil
+	}
+}
+
+// passwordOf returns the password of info's key set in twoKeySets.
+func passwordOf(info catalog.SetInfo) string {
+	if info.Entry.ChainID == "OLD001" {
+		return "old"
+	}
+	return "pw"
+}
+
+func TestUnlockKeySetsAsksAgainForOtherKeys(t *testing.T) {
+	infos := twoKeySets(t)
+	stub := stubUnlockInputs(t, nil, 0, nil)
+	answerByKeys(stub, passwordOf(infos[0]), passwordOf(infos[1]))
+
+	keys, err := KeySets(stub.console, infos, "restore", nil)
+	if err != nil {
+		t.Fatalf("KeySets: %v\n%s", err, stub.out.String())
+	}
+	defer keys.Zero()
+	if len(keys) != 2 || stub.passwordCalls != 2 {
+		t.Fatalf("expected two key sets from two prompts, got %d keys, %d prompts", len(keys), stub.passwordCalls)
+	}
+}
+
+func TestUnlockKeySetsFailsWhenTheOtherKeysStayLocked(t *testing.T) {
+	infos := twoKeySets(t)
+	stub := stubUnlockInputs(t, nil, 0, nil)
+	answerByKeys(stub, passwordOf(infos[0]), "wrong")
+
+	keys, err := KeySets(stub.console, infos, "restore", nil)
+	if err == nil || keys != nil {
+		t.Fatalf("expected no keys when the other keys stay locked, got %d keys, err %v", len(keys), err)
+	}
+	if stub.passwordCalls != 4 {
+		t.Fatalf("expected one prompt for the first keys and three for the other, got %d", stub.passwordCalls)
+	}
+}
