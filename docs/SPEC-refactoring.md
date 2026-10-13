@@ -142,7 +142,7 @@ Acceptance: how to see it is done (a command, a test, a measurement).
 - **P2** removes real cost: duplication, legacy protocol, measurable slowness, missing tests on code that decides correctness.
 - **P3** is cleanup worth doing while the code is open anyway.
 
-IDs restart at RF-1 in every round and are grouped by area (e.g. RF-1x tests, RF-5x security), leaving gaps for items found later. Outside its plan, cite an item with its round: "refactoring 2.0 RF-26". An item is never renumbered; a dropped item keeps its ID with "Dropped: <reason>".
+IDs count on from the last round (section 1) and are grouped by area in blocks of five from the round's first free number (e.g. RF-65 structure, RF-70 dead code, RF-80 tests), leaving gaps for items found later; a carried-over item keeps its ID. Outside its plan, cite an item with its round: "refactoring 2.0 RF-26". An item is never renumbered; a dropped item keeps its ID with "Dropped: <reason>".
 
 ## 7. Phases
 

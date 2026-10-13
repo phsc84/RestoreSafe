@@ -132,6 +132,7 @@ Acceptance: a function without a caller, added on a test branch, fails the stati
 **RF-90 (P3) SPEC-refactoring contradicts itself on item IDs.** Evidence: section 1 says IDs "count on across rounds"; section 6 says "IDs restart at RF-1 in every round" and gives "RF-1x tests" as the grouping example.
 Change: section 6 says IDs count on and are grouped by area with gaps from the round's first free number, as in this plan.
 Acceptance: section 1, section 6 and this plan agree.
+Done 2026-10-13.
 
 ## Phases
 
