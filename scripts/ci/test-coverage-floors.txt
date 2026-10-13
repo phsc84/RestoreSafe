@@ -11,7 +11,7 @@ internal/workflow/plan           93
 internal/workflow/health         95
 internal/problem                 100
 internal/format/archive          85
-internal/format/catalog          81
+internal/format/catalog          94
 internal/format/container        85
 internal/format/setwriter        85
 internal/workflow/backup         83
