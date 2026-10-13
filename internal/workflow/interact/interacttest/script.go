@@ -218,13 +218,13 @@ func (s *Script) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
 }
 
 // ShowBackupPlan prints the preflight summary of the plan.
-func (s *Script) ShowBackupPlan(p interact.BackupPlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.Output(), p.Details) }
 
 // ShowRestorePlan prints the preflight summary of the plan.
-func (s *Script) ShowRestorePlan(p interact.RestorePlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowRestorePlan(p interact.RestorePlan) { WriteReport(s.Output(), p.Details) }
 
 // ShowVerifyPlan prints the preflight summary of the plan.
-func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { WriteReport(s.Output(), p.Details) }
 
 // Progress is ignored: the script shows the log lines of each step instead.
 func (s *Script) Progress(interact.Progress) {}

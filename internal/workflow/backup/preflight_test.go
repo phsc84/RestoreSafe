@@ -14,6 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
@@ -170,7 +171,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -193,7 +194,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -229,7 +230,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -265,7 +266,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
+	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -306,7 +307,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")

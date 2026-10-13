@@ -12,7 +12,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/naming"
-	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
 var docsEntry = naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
@@ -53,7 +53,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], config.AuthModePassword, func() error { return nil }))
+	interacttest.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), restorePath, items[3:], config.AuthModePassword, func() error { return nil }))
 	if !strings.Contains(sb.String(), "→ with full backup Pics_PIC001_2026-03-01_FULL (parts: 2)") {
 		t.Fatalf("expected the required full backup in the preflight: %q", sb.String())
 	}
@@ -72,7 +72,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, config.AuthModePassword, func() error { return nil }))
+	interacttest.WriteReport(&sb, restorePreflightReport(&config.Config{}, backupDir, restorePath, items, config.AuthModePassword, func() error { return nil }))
 	output := sb.String()
 
 	selectionLine := "  [OK] " + docsEntry.String() + " (parts: 4)"
@@ -102,7 +102,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	} {
 		var sb strings.Builder
 		connected := tc.connected
-		interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePasswordYubiKey, func() error { return connected }))
+		interacttest.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePasswordYubiKey, func() error { return connected }))
 		output := sb.String()
 		authIdx := strings.Index(output, "Authentication: password + YubiKey")
 		statusIdx := strings.Index(output, tc.want)
@@ -120,7 +120,7 @@ func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}
 	var sb strings.Builder
-	interact.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePassword, func() error { return nil }))
+	interacttest.WriteReport(&sb, restorePreflightReport(&config.Config{}, t.TempDir(), t.TempDir(), items, config.AuthModePassword, func() error { return nil }))
 	if !strings.Contains(sb.String(), "[ERROR] Insufficient free space for restore:") {
 		t.Fatalf("expected insufficient-space restore error line, got: %q", sb.String())
 	}
