@@ -32,15 +32,22 @@ func build(t *testing.T, src string, excludes ...string) (*manifest.Manifest, []
 	if err := BuildTar(context.Background(), &tarBuf, BuildOptions{SourceDir: src, ExcludeDirs: excludes}, mb); err != nil {
 		t.Fatalf("BuildTar: %v", err)
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
+	return roundTrip(t, mb), tarBuf.Bytes()
+}
+
+// roundTrip encodes the manifest of mb and decodes it again, as a backup
+// writes it and a restore reads it.
+func roundTrip(t *testing.T, mb *manifest.Builder) *manifest.Manifest {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := mb.Encode(&buf); err != nil {
+		t.Fatalf("manifest Encode: %v", err)
 	}
-	m, err := manifest.Parse(data)
+	m, err := manifest.Decode(&buf)
 	if err != nil {
-		t.Fatalf("manifest Parse: %v", err)
+		t.Fatalf("manifest Decode: %v", err)
 	}
-	return m, tarBuf.Bytes()
+	return m
 }
 
 func restore(t *testing.T, m *manifest.Manifest, tarData []byte, dest string, verifyOnly bool) error {

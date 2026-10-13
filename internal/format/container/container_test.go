@@ -37,11 +37,11 @@ func testManifest(t testing.TB, h *Header, dataLen int) []byte {
 	b := manifest.NewBuilder(manifest.Header{SetType: h.SetType, ChainID: h.ChainID, DiffNumber: h.DiffNumber, DirectoryName: h.DirectoryName, SourcePath: "C:/src"})
 	zero := int64(0)
 	b.Add(manifest.Entry{Path: "data.bin", Type: manifest.TypeFile, Size: int64(dataLen), Hash: testHash, Origin: manifest.OriginFull, Offset: &zero})
-	data, err := b.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
+	var buf bytes.Buffer
+	if err := b.Encode(&buf); err != nil {
+		t.Fatalf("manifest Encode: %v", err)
 	}
-	return data
+	return buf.Bytes()
 }
 
 // writeTestSet writes a full set with the given payload into dir and returns

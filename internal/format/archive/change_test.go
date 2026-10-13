@@ -30,14 +30,7 @@ func buildWithHook(t *testing.T, src, target string, hook *func(string), change 
 	if err := BuildTar(context.Background(), &tarBuf, BuildOptions{SourceDir: src, SkipUnreadable: true, Stats: &stats}, mb); err != nil {
 		t.Fatalf("BuildTar: %v", err)
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := roundTrip(t, mb)
 	dest := t.TempDir()
 	if err := restore(t, m, tarBuf.Bytes(), dest, false); err != nil {
 		t.Fatalf("restore: %v", err)

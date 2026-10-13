@@ -23,15 +23,7 @@ func buildWith(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte, err
 	if err := BuildTar(context.Background(), &buf, opts, mb); err != nil {
 		return nil, nil, err
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatalf("manifest Parse: %v", err)
-	}
-	return m, buf.Bytes(), nil
+	return roundTrip(t, mb), buf.Bytes(), nil
 }
 
 func TestBuildTarAppliesExcludePatterns(t *testing.T) {
@@ -146,14 +138,7 @@ func TestRestoreSkipsVoidEntries(t *testing.T) {
 	mb := manifest.NewBuilder(manifest.Header{SetType: manifest.SetTypeFull, ChainID: "ABC123", DirectoryName: "src"})
 	mb.Add(manifest.Entry{Path: "broken.db", Type: manifest.TypeSkipped, Reason: "read error", Void: true})
 	mb.Add(manifest.Entry{Path: "good.txt", Type: manifest.TypeFile, Size: 4, Hash: sha256Hex("good"), Origin: manifest.OriginFull, Offset: &offset})
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := roundTrip(t, mb)
 	if err := restore(t, m, buf.Bytes(), t.TempDir(), true); err != nil {
 		t.Fatalf("restore with void entry: %v", err)
 	}

@@ -25,7 +25,7 @@ func buildFull(t *testing.T) []byte {
 	b.Add(Entry{Path: "docs/a.txt", Type: TypeFile, Size: 10, ModTime: 2, Hash: testHash, Origin: OriginFull, Offset: off(0)})
 	b.Add(Entry{Path: "empty.bin", Type: TypeFile, Size: 0, Hash: testHash, Origin: OriginFull, Offset: off(1024), Attributes: AttrReadOnly})
 	b.Add(Entry{Path: "locked.pst", Type: TypeSkipped, Reason: "in use", Void: true})
-	data, err := b.Bytes()
+	data, err := encode(b)
 	if err != nil {
 		t.Fatalf("Bytes: %v", err)
 	}
@@ -35,7 +35,7 @@ func buildFull(t *testing.T) []byte {
 func TestRoundTripFull(t *testing.T) {
 	t.Parallel()
 
-	m, err := Parse(buildFull(t))
+	m, err := parse(buildFull(t))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -64,11 +64,11 @@ func TestRoundTripDiffWithStaleEntry(t *testing.T) {
 	b.Add(Entry{Path: "old.txt", Type: TypeFile, Size: 5, Hash: testHash, Origin: OriginFull})
 	b.Add(Entry{Path: "new.txt", Type: TypeFile, Size: 7, Hash: testHash, Origin: OriginDiff, Offset: off(0)})
 	b.Add(Entry{Path: "busy.db", Type: TypeFile, Size: 3, Hash: testHash, Origin: OriginFull, Stale: true, Void: true})
-	data, err := b.Bytes()
+	data, err := encode(b)
 	if err != nil {
 		t.Fatalf("Bytes: %v", err)
 	}
-	m, err := Parse(data)
+	m, err := parse(data)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -89,11 +89,11 @@ func TestSkipLastDirectory(t *testing.T) {
 	if !b.SkipLastDirectory("ok/locked", "denied") {
 		t.Fatal("expected the last directory to be converted")
 	}
-	data, err := b.Bytes()
+	data, err := encode(b)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, _ := Parse(data)
+	m, _ := parse(data)
 	if m.Entries[1].Type != TypeSkipped || m.Entries[1].Reason != "denied" || m.Footer.Dirs != 1 || m.Footer.Skipped != 1 {
 		t.Fatalf("unexpected result: %+v %+v", m.Entries[1], m.Footer)
 	}
@@ -104,7 +104,7 @@ func TestBuilderRejectsInvalidManifest(t *testing.T) {
 
 	b := NewBuilder(fullHeader())
 	b.Add(Entry{Path: "../escape", Type: TypeFile, Hash: testHash, Origin: OriginFull, Offset: off(0)})
-	if _, err := b.Bytes(); err == nil {
+	if _, err := encode(b); err == nil {
 		t.Fatal("expected builder to reject an invalid entry")
 	}
 }
@@ -130,7 +130,7 @@ func TestParseRejectsStructuralProblems(t *testing.T) {
 		{"removed entry", join(append([]string{lines[0]}, lines[2:]...)...), "before its parent"},
 	}
 	for _, tc := range cases {
-		_, err := Parse(tc.data)
+		_, err := parse(tc.data)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%s: expected error containing %q, got %v", tc.name, tc.want, err)
 		}
@@ -235,7 +235,7 @@ func TestSerializationDoesNotEscapeHTML(t *testing.T) {
 
 	b := NewBuilder(fullHeader())
 	b.Add(Entry{Path: "a&b<c>.txt", Type: TypeFile, Hash: testHash, Origin: OriginFull, Offset: off(0)})
-	data, err := b.Bytes()
+	data, err := encode(b)
 	if err != nil {
 		t.Fatalf("Bytes: %v", err)
 	}
@@ -248,11 +248,11 @@ func FuzzParse(f *testing.F) {
 	b := NewBuilder(fullHeader())
 	b.Add(Entry{Path: "a", Type: TypeDir})
 	b.Add(Entry{Path: "a/b", Type: TypeFile, Size: 3, Hash: testHash, Origin: OriginFull, Offset: off(0)})
-	seed, _ := b.Bytes()
+	seed, _ := encode(b)
 	f.Add(seed)
 	f.Add([]byte("{}\n"))
 	f.Fuzz(func(t *testing.T, data []byte) {
-		m, err := Parse(data)
+		m, err := parse(data)
 		if err != nil {
 			return
 		}
@@ -262,3 +262,13 @@ func FuzzParse(f *testing.F) {
 		}
 	})
 }
+
+// encode is b.Encode into memory.
+func encode(b *Builder) ([]byte, error) {
+	var buf bytes.Buffer
+	err := b.Encode(&buf)
+	return buf.Bytes(), err
+}
+
+// parse is Decode of a manifest in memory.
+func parse(data []byte) (*Manifest, error) { return Decode(bytes.NewReader(data)) }

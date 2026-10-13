@@ -15,30 +15,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/problem"
 )
 
-// ScanBackups lists every backup set (complete part-file names only) in
-// backupDir.
-func ScanBackups(backupDir string) ([]naming.BackupEntry, error) {
-	entries, err := os.ReadDir(backupDir)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[naming.BackupEntry]bool)
-	var result []naming.BackupEntry
-	for _, de := range entries {
-		if de.IsDir() {
-			continue
-		}
-		entry, _, ok := naming.ParsePartFileName(de.Name())
-		if !ok || seen[entry] {
-			continue
-		}
-		seen[entry] = true
-		result = append(result, entry)
-	}
-	return result, nil
-}
-
 // CollectParts returns the part file paths of an entry, sorted by part number.
 func CollectParts(backupDir string, entry naming.BackupEntry) ([]string, error) {
 	all, err := listParts(backupDir)
@@ -133,16 +109,8 @@ func openParts(entry naming.BackupEntry, parts []string) (*container.Set, error)
 	return set, nil
 }
 
-// InspectSet opens and closes a set to report its status.
-func InspectSet(backupDir string, entry naming.BackupEntry) SetInfo {
-	parts, err := CollectParts(backupDir, entry)
-	if err != nil {
-		return SetInfo{Entry: entry, Err: err}
-	}
-	return inspectParts(entry, parts)
-}
-
-// inspectParts is InspectSet for the part paths of entry.
+// inspectParts opens and closes the set of the part paths of entry to report
+// its status.
 func inspectParts(entry naming.BackupEntry, parts []string) SetInfo {
 	info := SetInfo{Entry: entry, Parts: parts}
 	for _, p := range parts {

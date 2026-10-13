@@ -19,7 +19,23 @@ func writePart(t *testing.T, dir string, e naming.BackupEntry, seq int) string {
 	return p
 }
 
-func TestScanBackupsIndexesDistinctEntriesAndIgnoresOtherFiles(t *testing.T) {
+// inspect returns entry's SetInfo from the inventory of dir.
+func inspect(t *testing.T, dir string, entry naming.BackupEntry) SetInfo {
+	t.Helper()
+	infos, err := Inventory(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, info := range infos {
+		if info.Entry == entry {
+			return info
+		}
+	}
+	t.Fatalf("%s is not in the inventory", entry)
+	return SetInfo{}
+}
+
+func TestInventoryListsDistinctSetsAndIgnoresOtherFiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -34,12 +50,12 @@ func TestScanBackupsIndexesDistinctEntriesAndIgnoresOtherFiles(t *testing.T) {
 		}
 	}
 
-	entries, err := ScanBackups(dir)
+	infos, err := Inventory(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %v", entries)
+	if len(infos) != 2 || len(inspect(t, dir, a).Parts) != 2 || len(inspect(t, dir, b).Parts) != 1 {
+		t.Fatalf("expected the 2 sets with their parts, got %+v", infos)
 	}
 }
 
@@ -145,7 +161,7 @@ func TestFaultOfMissingParts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	info := InspectSet(fx.BackupDir, fx.Entry)
+	info := inspect(t, fx.BackupDir, fx.Entry)
 	if f := FaultOf(info.Err); f != FaultMissingParts {
 		t.Fatalf("fault %d, want FaultMissingParts: %v", f, info.Err)
 	}
@@ -183,7 +199,7 @@ func TestIsIncomplete(t *testing.T) {
 	if err := os.Truncate(last, fi.Size()-5); err != nil {
 		t.Fatal(err)
 	}
-	info := InspectSet(fx.BackupDir, fx.Entry)
+	info := inspect(t, fx.BackupDir, fx.Entry)
 	if info.Complete() || !IsIncomplete(info.Err) || FaultOf(info.Err) != FaultIncomplete {
 		t.Fatalf("expected incomplete set, got %v", info.Err)
 	}
