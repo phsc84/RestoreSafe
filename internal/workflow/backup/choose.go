@@ -45,12 +45,12 @@ func choosePlan(u interact.UI, cfg *config.Config, backupDir string, sources []p
 			folders = plan.Folders(cfg, infos, sources, keys, true, now)
 		}
 
-		est := sizes.estimate(folders)
-		details := backupPreflightReport(cfg, backupDir, sources, keys, folders, est, yubikey.CheckConnected)
-		issues, blockErr := backupPreflightIssues(backupDir, sources, est, partErr)
+		p := proposal{cfg: cfg, backupDir: backupDir, sources: sources, keys: keys, folders: folders, est: sizes.estimate(folders)}
+		details := p.report(yubikey.CheckConnected)
+		issues, blockErr := backupPreflightIssues(backupDir, sources, p.est, partErr)
 		details.Issues = issues
 		removes := plan.RetentionPreview(cfg, infos, sources, folders, now)
-		u.ShowBackupPlan(backupPlan(cfg, backupDir, sources, keys, folders, est, removes, mode != planAutomatic, details))
+		u.ShowBackupPlan(p.plan(removes, mode != planAutomatic, details))
 		if blockErr != nil && mode == planAutomatic {
 			return keys, folders, false, blockErr
 		}

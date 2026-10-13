@@ -171,7 +171,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -194,7 +194,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -230,7 +230,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -266,7 +266,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -307,7 +307,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interacttest.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
@@ -377,7 +377,7 @@ func TestBackupPreflightReportStructure(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 64, AuthenticationMode: config.AuthModeYubiKey, LogLevel: "info"}
 	sources := []plan.Source{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	r := backupPreflightReport(cfg, root, sources, plan.Keys{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
+	r := proposal{cfg: cfg, backupDir: root, sources: sources, keys: plan.Keys{NewKeysReason: "No existing keys"}}.report(func() error { return errors.New("no") })
 	if r.Title != "Backup preflight" || len(r.Sections) != 2 {
 		t.Fatalf("unexpected report: %+v", r)
 	}
@@ -541,4 +541,10 @@ func TestSourceProblemCode(t *testing.T) {
 // need.
 func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
 	return measureSources(cfg, backupDir, sources, plans).estimate(plans)
+}
+
+// firstBackup is the proposal of a first backup of sources: new keys, every
+// folder a full backup.
+func firstBackup(cfg *config.Config, backupDir string, sources []plan.Source) proposal {
+	return proposal{cfg: cfg, backupDir: backupDir, sources: sources, keys: plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, est: estimateBackupSpace(cfg, backupDir, sources, nil)}
 }

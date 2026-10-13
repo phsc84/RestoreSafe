@@ -16,30 +16,34 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
-// backupPreflightReport describes what the backup will do: each source
-// directory with its backup type, the backup directory, the keys, and the
-// settings. The issues that block the backup are added by
-// backupPreflightIssues.
-func backupPreflightReport(
-	cfg *config.Config,
-	backupDir string,
-	sources []plan.Source,
-	keys plan.Keys,
-	plans map[string]*plan.Folder,
-	est spaceEstimate,
-	checkYubiKeyConnected func() error,
-) interact.Report {
+// proposal is one plan of the backup as the user sees it: the sources, the
+// keys and folder plans chosen for them, and the space they need. The
+// details report and the plan are both built from it, so they describe the
+// same backup.
+type proposal struct {
+	cfg       *config.Config
+	backupDir string
+	sources   []plan.Source
+	keys      plan.Keys
+	folders   map[string]*plan.Folder
+	est       spaceEstimate
+}
+
+// report describes what the backup will do: each source directory with its
+// backup type, the backup directory, the keys, and the settings. The issues
+// that block the backup are added by backupPreflightIssues.
+func (p proposal) report(checkYubiKeyConnected func() error) interact.Report {
 	var maxPartCount int64
-	splitSizeBytes := cfg.SplitSizeMB * 1024 * 1024
-	for _, size := range est.sizes {
+	splitSizeBytes := p.cfg.SplitSizeMB * 1024 * 1024
+	for _, size := range p.est.sizes {
 		if parts := estimatePartCountWithMargin(size, splitSizeBytes); parts > maxPartCount {
 			maxPartCount = parts
 		}
 	}
-	freeBytes, freeErr := fsx.QueryFreeSpaceBytes(backupDir)
+	freeBytes, freeErr := fsx.QueryFreeSpaceBytes(p.backupDir)
 
 	directories := []interact.Row{interact.Heading("Source directory(s)")}
-	for _, src := range sources {
+	for _, src := range p.sources {
 		baseName := naming.DirectoryBaseName(src.Resolved)
 		backupName := src.BackupName
 		if backupName == "" {
@@ -59,7 +63,7 @@ func backupPreflightReport(
 			status = interact.StatusWarn
 			details = append(details, src.Warning)
 		}
-		if folder := plans[backupName]; folder != nil && !src.Skip {
+		if folder := p.folders[backupName]; folder != nil && !src.Skip {
 			reasonLabel := "reason: "
 			if folder.IsDiff() {
 				reasonLabel = ""
@@ -68,15 +72,15 @@ func backupPreflightReport(
 		}
 		directories = append(directories, interact.Item(status, src.Resolved, details...))
 	}
-	for _, warning := range est.warnings {
+	for _, warning := range p.est.warnings {
 		directories = append(directories, interact.Item(interact.StatusWarn, "size estimate: "+warning))
 	}
-	directories = append(directories, interact.Heading("Backup directory"), interact.Item(interact.StatusOK, backupDir))
-	directories = append(directories, job.AuthRows(cfg.AuthenticationMode.Label(), cfg.UseYubiKey(), "backup", checkYubiKeyConnected)...)
-	directories = append(directories, keyPlanRows(keys)...)
+	directories = append(directories, interact.Heading("Backup directory"), interact.Item(interact.StatusOK, p.backupDir))
+	directories = append(directories, job.AuthRows(p.cfg.AuthenticationMode.Label(), p.cfg.UseYubiKey(), "backup", checkYubiKeyConnected)...)
+	directories = append(directories, keyPlanRows(p.keys)...)
 
-	settings := []interact.Row{interact.Field("Needed space", est.neededText())}
-	if est.anyDiff {
+	settings := []interact.Row{interact.Field("Needed space", p.est.neededText())}
+	if p.est.anyDiff {
 		settings = append(settings, interact.Item(interact.StatusInfo, "The estimate leaves out files moved or renamed since the full backup; a differential stores them again."))
 	}
 	if freeErr != nil {
@@ -84,31 +88,31 @@ func backupPreflightReport(
 	} else {
 		settings = append(settings, interact.Field("Free space", fsx.FormatBytesBinary(freeBytes)))
 	}
-	settings = append(settings, interact.Field("Split size", fmt.Sprintf("%d MB", cfg.SplitSizeMB)))
-	if len(est.sizes) > 0 && splitSizeBytes > 0 {
+	settings = append(settings, interact.Field("Split size", fmt.Sprintf("%d MB", p.cfg.SplitSizeMB)))
+	if len(p.est.sizes) > 0 && splitSizeBytes > 0 {
 		if advisory := partCountAdvisory(maxPartCount); advisory != "" {
 			settings = append(settings, interact.Item(interact.StatusWarn, advisory))
 		}
 	}
-	settings = append(settings, interact.Field("Retention", retentionSummary(cfg.RetentionKeep, cfg.Differential.RetentionKeepDifferentials)))
+	settings = append(settings, interact.Field("Retention", retentionSummary(p.cfg.RetentionKeep, p.cfg.Differential.RetentionKeepDifferentials)))
 	verifyAfter := "disabled"
-	if cfg.VerifyAfterBackup {
+	if p.cfg.VerifyAfterBackup {
 		verifyAfter = "enabled"
 	}
 	settings = append(settings, interact.Field("Verify after backup", verifyAfter))
 	excludeInfo := "none"
-	if n := len(cfg.Exclude); n > 0 {
-		excludeInfo = strings.Join(cfg.Exclude, ", ")
+	if n := len(p.cfg.Exclude); n > 0 {
+		excludeInfo = strings.Join(p.cfg.Exclude, ", ")
 	}
 	settings = append(settings, interact.Field("Exclude", excludeInfo))
 	unreadable := "abort backup (fail)"
-	if cfg.SkipUnreadableFiles() {
+	if p.cfg.SkipUnreadableFiles() {
 		unreadable = "skip and warn (skip)"
 	}
 	settings = append(settings,
 		interact.Field("Unreadable files", unreadable),
-		interact.Field("KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", cfg.Argon2.Time, cfg.Argon2.MemoryMB, cfg.Argon2.Threads)),
-		interact.Field("Log level", strings.ToLower(cfg.LogLevel)),
+		interact.Field("KDF (Argon2id)", fmt.Sprintf("time=%d  memory=%d MB  threads=%d", p.cfg.Argon2.Time, p.cfg.Argon2.MemoryMB, p.cfg.Argon2.Threads)),
+		interact.Field("Log level", strings.ToLower(p.cfg.LogLevel)),
 	)
 
 	return interact.Report{Title: "Backup preflight", Sections: []interact.Section{{Rows: directories}, {Rows: settings}}}
@@ -386,30 +390,30 @@ func (est spaceEstimate) neededText() string {
 		fsx.FormatBytesBinary(uint64(est.likely)), fsx.FormatBytesBinary(uint64(est.full)))
 }
 
-// backupPlan describes the plan for the user: what happens to each source
+// plan describes the plan for the user: what happens to each source
 // directory, the space, the keys, and what retention removes afterwards. It
 // uses the values the details report was built from.
-func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, keys plan.Keys, folders map[string]*plan.Folder, est spaceEstimate, removes []catalog.SetInfo, fullRequested bool, details interact.Report) interact.BackupPlan {
-	p := interact.BackupPlan{
-		BackupDir:     backupDir,
-		NeededBytes:   est.likely,
-		AllBytes:      est.full,
+func (p proposal) plan(removes []catalog.SetInfo, fullRequested bool, details interact.Report) interact.BackupPlan {
+	bp := interact.BackupPlan{
+		BackupDir:     p.backupDir,
+		NeededBytes:   p.est.likely,
+		AllBytes:      p.est.full,
 		FreeBytes:     -1,
-		Keys:          keyPlanFor(cfg, keys),
-		VerifyAfter:   cfg.VerifyAfterBackup,
+		Keys:          keyPlanFor(p.cfg, p.keys),
+		VerifyAfter:   p.cfg.VerifyAfterBackup,
 		Removes:       removes,
 		FullRequested: fullRequested,
 		Issues:        details.Issues,
 		Details:       details,
 	}
-	if free, err := fsx.QueryFreeSpaceBytes(backupDir); err == nil {
-		p.FreeBytes = int64(free)
+	if free, err := fsx.QueryFreeSpaceBytes(p.backupDir); err == nil {
+		bp.FreeBytes = int64(free)
 	}
-	for _, src := range sources {
+	for _, src := range p.sources {
 		fp := interact.FolderPlan{Name: src.BackupName, Path: src.Resolved, Skipped: src.Skip, Warning: src.Warning}
 		if src.Err != nil {
 			fp.Problem, fp.Remedy = problem.Split(src.Err)
-		} else if folder := folders[src.BackupName]; folder != nil && !src.Skip {
+		} else if folder := p.folders[src.BackupName]; folder != nil && !src.Skip {
 			fp.Reason = folder.Reason
 			if folder.IsDiff() {
 				fp.Differential = true
@@ -417,12 +421,12 @@ func backupPlan(cfg *config.Config, backupDir string, sources []plan.Source, key
 				fp.Base = folder.Base.Entry
 				fp.BaseCreated = folder.Base.Created()
 			}
-			size := est.folders[src.BackupName]
+			size := p.est.folders[src.BackupName]
 			fp.EstimatedBytes, fp.AllBytes = size.likely, size.full
 		}
-		p.Folders = append(p.Folders, fp)
+		bp.Folders = append(bp.Folders, fp)
 	}
-	return p
+	return bp
 }
 
 // keyPlanFor says which keys lock the new backups and which prompts unlock
