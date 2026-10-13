@@ -38,7 +38,7 @@ func TestHealthCheckDerivesNoKeys(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	s := TakeSnapshot(Params{Config: cfg, ExeDir: exeDir, ConfigPath: filepath.Join(exeDir, "config.yaml"), Now: time.Now()})
-	Check(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
+	check(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	runtime.ReadMemStats(&after)
 
 	found := false

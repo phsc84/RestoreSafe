@@ -535,3 +535,9 @@ func TestSourceProblemCode(t *testing.T) {
 		t.Fatalf("other problem: got %s", got)
 	}
 }
+
+// estimateBackupSpace measures the sources and estimates the space plans
+// need.
+func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
+	return measureSources(cfg, backupDir, sources, plans).estimate(plans)
+}

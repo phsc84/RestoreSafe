@@ -377,12 +377,6 @@ func (s sourceSizes) estimate(plans map[string]*plan.Folder) spaceEstimate {
 	return est
 }
 
-// estimateBackupSpace measures the sources and estimates the space plans
-// need.
-func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
-	return measureSources(cfg, backupDir, sources, plans).estimate(plans)
-}
-
 // neededText describes the needed space for the preflight.
 func (est spaceEstimate) neededText() string {
 	if !est.anyDiff {

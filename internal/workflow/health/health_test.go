@@ -160,7 +160,7 @@ func TestCheckReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 		LogLevel:          "info",
 	}
 
-	result := Check(cfg, exeDir, configPath)
+	result := check(cfg, exeDir, configPath)
 	// A healthy config with YubiKey disabled should not block any operation.
 	if result.BlocksBackup() {
 		t.Fatalf("did not expect a healthy config to block backup, items: %#v", result.items)
@@ -331,4 +331,22 @@ func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t 
 	if hasSourceDirectoryError {
 		t.Fatalf("did not expect source-directory errors for encoded special-character variants, got items: %#v", items)
 	}
+}
+
+// check is the result of the startup health check, as TakeSnapshot builds
+// it; BlocksBackup and
+// BlocksRestoreOrVerify decide what its findings block.
+func check(cfg *config.Config, exeDir, configPath string) Result {
+	return buildResult(inspect(cfg, exeDir, configPath).items)
+}
+
+// collectStartupHealthItemsWithConfigPath returns the findings of the startup
+// health check.
+func collectStartupHealthItemsWithConfigPath(cfg *config.Config, exeDir, configPath string) []healthItem {
+	return inspect(cfg, exeDir, configPath).items
+}
+
+// checkBackupInventoryHealth returns the findings about the backup directory.
+func checkBackupInventoryHealth(cfg *config.Config, backupDir string) []healthItem {
+	return inventoryItems(cfg, scanInventory(backupDir))
 }
