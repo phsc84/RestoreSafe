@@ -3,6 +3,8 @@ package view
 import (
 	"fmt"
 	"strings"
+
+	"github.com/phsc84/restoresafe/internal/logging"
 )
 
 // LogLine is a line of the log pane.
@@ -30,11 +32,12 @@ func LogLinesOf(text string, filter LogFilter) []LogLine {
 		if line == "" {
 			continue
 		}
-		tone, entry := logTone(line)
-		if strings.Contains(line, "] FACT  - ") {
+		l, entry := logging.ParseLine(line)
+		if entry && l.Severity == logging.SeverityFact {
 			keep = false
 			continue
 		}
+		tone := logTone(l.Severity)
 		if entry {
 			keep = tone == ToneWarning || tone == ToneError
 		} else if len(out) > 0 {
@@ -51,19 +54,15 @@ func LogLinesOf(text string, filter LogFilter) []LogLine {
 	return out
 }
 
-// logTone returns the tone of a log line and whether it starts an entry
-// ("[2026-09-30 09:12:03] WARN  - ...").
-func logTone(line string) (Tone, bool) {
-	if !strings.HasPrefix(line, "[") || len(line) < 22 || line[20] != ']' {
-		return ToneNeutral, false
+// logTone returns the tone of a log line of severity.
+func logTone(severity string) Tone {
+	switch severity {
+	case logging.SeverityWarn:
+		return ToneWarning
+	case logging.SeverityError:
+		return ToneError
 	}
-	switch rest := line[21:]; {
-	case strings.HasPrefix(rest, " WARN"):
-		return ToneWarning, true
-	case strings.HasPrefix(rest, " ERROR"):
-		return ToneError, true
-	}
-	return ToneNeutral, true
+	return ToneNeutral
 }
 
 // LogWindowTitle titles the log window: "Log of today, 09:12

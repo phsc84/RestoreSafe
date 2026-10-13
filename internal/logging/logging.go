@@ -142,13 +142,13 @@ func appendFile(path string, data []byte) error {
 
 // Info logs an informational message.
 func (l *Logger) Info(format string, args ...any) {
-	l.write("INFO ", format, args...)
+	l.write(SeverityInfo, format, args...)
 }
 
 // Debug logs a debug message (only written at LevelDebug).
 func (l *Logger) Debug(format string, args ...any) {
 	if l.DebugEnabled() {
-		l.write("DEBUG", format, args...)
+		l.write(SeverityDebug, format, args...)
 	}
 }
 
@@ -160,17 +160,17 @@ func (l *Logger) DebugEnabled() bool {
 
 // Warn logs a warning message.
 func (l *Logger) Warn(format string, args ...any) {
-	l.write("WARN ", format, args...)
+	l.write(SeverityWarn, format, args...)
 }
 
 // InfoLogOnly logs an informational message without mirroring it to the console.
 func (l *Logger) InfoLogOnly(format string, args ...any) {
-	l.writeLogOnly("INFO ", format, args...)
+	l.writeLogOnly(SeverityInfo, format, args...)
 }
 
 // WarnLogOnly logs a warning without mirroring it to the console.
 func (l *Logger) WarnLogOnly(format string, args ...any) {
-	l.writeLogOnly("WARN ", format, args...)
+	l.writeLogOnly(SeverityWarn, format, args...)
 }
 
 func (l *Logger) write(severity, format string, args ...any) {
@@ -189,9 +189,7 @@ func (l *Logger) writeLine(severity string, mirror bool, format string, args ...
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	ts := time.Now().Format(timestampLayout)
-	msg := fmt.Sprintf(format, args...)
-	line := fmt.Sprintf("[%s] %s - %s\n", ts, severity, msg)
+	line := FormatLine(time.Now(), severity, fmt.Sprintf(format, args...))
 	if mirror {
 		// Write to the console first so interactive users see messages immediately.
 		fmt.Fprint(l.console, line)

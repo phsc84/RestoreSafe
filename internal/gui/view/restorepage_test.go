@@ -1,7 +1,8 @@
 package view
 
 import (
-	"io"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -132,14 +133,15 @@ func TestRestorePageEmptyAndFilter(t *testing.T) {
 func TestRestorePageListAFailedRunByItsLog(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.Protected)
-	// Log times have a resolution of one second: the failed run comes later.
-	time.Sleep(1100 * time.Millisecond)
-	log, err := logging.NewLogger(filepath.Join(sc.BackupDir, "2026-09-30_FAIL01.log"), "info", io.Discard)
+	// The failed run comes a minute after the scenario's runs.
+	fact, err := json.Marshal(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: "disk full"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: "disk full"})
-	log.Close()
+	line := logging.FormatLine(time.Now().Add(time.Minute), logging.SeverityFact, string(fact))
+	if err := os.WriteFile(filepath.Join(sc.BackupDir, "2026-09-30_FAIL01.log"), []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	s := health.TakeSnapshot(health.Params{Config: sc.Config, ConfigPath: sc.ConfigPath, Now: sc.Now})
 	p := RestorePageOf(&s, sc.Config, nil, AllFolders, sc.Now)
 	if len(p.Groups) != 2 || p.Groups[0].RunID != "FAIL01" || !strings.HasSuffix(p.Groups[0].Header, "Backup failed") || p.Groups[0].Tone != ToneError {
