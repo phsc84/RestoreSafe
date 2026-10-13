@@ -36,7 +36,6 @@ const (
 	LVM_INSERTCOLUMNW    = lvmFirst + 97
 	LVM_SETITEMTEXTW     = lvmFirst + 116
 	LVM_INSERTGROUP      = lvmFirst + 145
-	LVM_SETGROUPINFO     = lvmFirst + 147
 	LVM_GETGROUPINFO     = lvmFirst + 149
 	LVM_REMOVEALLGROUPS  = lvmFirst + 160
 	LVM_ENABLEGROUPVIEW  = lvmFirst + 157
@@ -253,16 +252,6 @@ func ListGroupCollapsed(lv HWND, id int32) bool {
 	g.Size = uint32(unsafe.Sizeof(g))
 	SendMessage(lv, LVM_GETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
 	return g.State&LVGS_COLLAPSED != 0
-}
-
-// ListSetGroupCollapsed collapses or expands group id.
-func ListSetGroupCollapsed(lv HWND, id int32, collapsed bool) {
-	g := lvGroup{Mask: LVGF_STATE, StateMask: LVGS_COLLAPSED}
-	if collapsed {
-		g.State = LVGS_COLLAPSED
-	}
-	g.Size = uint32(unsafe.Sizeof(g))
-	SendMessage(lv, LVM_SETGROUPINFO, uintptr(id), uintptr(unsafe.Pointer(&g)))
 }
 
 // ListInsertItem adds an item with the text of column 0 to group and

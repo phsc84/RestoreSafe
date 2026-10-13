@@ -83,7 +83,6 @@ var (
 	procCreateSolidBrush       = gdi32.NewProc("CreateSolidBrush")
 	procCreatePen              = gdi32.NewProc("CreatePen")
 	procRoundRect              = gdi32.NewProc("RoundRect")
-	procGetPixel               = gdi32.NewProc("GetPixel")
 	procGetTextFaceW           = gdi32.NewProc("GetTextFaceW")
 )
 
@@ -178,12 +177,6 @@ func DrawText(hdc uintptr, text string, r Rect, flags uint32) Rect {
 
 // SelectFont selects font into hdc and returns the previous one.
 func SelectFont(hdc uintptr, font windows.Handle) windows.Handle { return SelectObject(hdc, font) }
-
-// Pixel returns the color of a pixel of hdc as a COLORREF.
-func Pixel(hdc uintptr, x, y int32) uint32 {
-	r, _, _ := procGetPixel.Call(hdc, uintptr(x), uintptr(y))
-	return uint32(r)
-}
 
 // TextFace returns the face name of the font selected into hdc: what
 // Windows uses after substituting a missing face.

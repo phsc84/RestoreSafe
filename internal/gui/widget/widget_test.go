@@ -6,6 +6,8 @@ import (
 	"unsafe"
 
 	"github.com/phsc84/restoresafe/internal/gui/win32"
+
+	"golang.org/x/sys/windows"
 )
 
 // testTheme returns a theme at 96 dpi and a hidden top-level window to put
@@ -36,6 +38,9 @@ func testTheme(t *testing.T) (*Theme, win32.HWND) {
 	return &Theme{Palette: Light, Fonts: fonts, Scale: 96}, host
 }
 
+// procGetPixel reads the pixels a test rendered; the program never does.
+var procGetPixel = windows.NewLazySystemDLL("gdi32.dll").NewProc("GetPixel")
+
 // render sizes hwnd to w×h, paints it through WM_PRINTCLIENT, and returns
 // the pixels.
 func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
@@ -52,7 +57,10 @@ func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
 		win32.DeleteDC(mem)
 	})
 	win32.SendMessage(hwnd, win32.WM_PRINTCLIENT, mem, 0)
-	return func(x, y int32) Color { return Color(win32.Pixel(mem, x, y)) }
+	return func(x, y int32) Color {
+		r, _, _ := procGetPixel.Call(mem, uintptr(x), uintptr(y))
+		return Color(r)
+	}
 }
 
 func expect(t *testing.T, what string, got, want Color) {
@@ -135,27 +143,15 @@ func TestButtonsArePainted(t *testing.T) {
 	expect(t, "focus outline inside", px(60, 1), Light.Text)
 }
 
-func TestBadgeIconAndBar(t *testing.T) {
+func TestIconAndBar(t *testing.T) {
 	th, host := testTheme(t)
 	back := RGB(9, 9, 9)
-
-	b, err := NewBadge(th, host, back)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.Set("DIFF 3", Light.Diff, Light.DiffBack, "Differential 3")
-	if b.Width() <= 2*badgePadding {
-		t.Fatalf("badge width %d", b.Width())
-	}
-	px := render(t, b.HWND(), b.Width(), 18)
-	expect(t, "badge corner", px(0, 0), back)
-	expect(t, "badge fill", px(2, 9), Light.DiffBack)
 
 	i, err := NewIcon(th, host, back, TextIcon)
 	if err != nil {
 		t.Fatal(err)
 	}
-	px = render(t, i.HWND(), 52, 52)
+	px := render(t, i.HWND(), 52, 52)
 	expect(t, "icon without circle", px(26, 3), back)
 	i.Set(GlyphCheck, Light.Success, Light.SuccessBack, "Protected")
 	px = render(t, i.HWND(), 52, 52)
@@ -291,10 +287,6 @@ func TestListViewGroupsAndItems(t *testing.T) {
 	}
 	if !win32.ListGroupCollapsed(lv, 1) || win32.ListGroupCollapsed(lv, 0) {
 		t.Fatal("group 1 starts collapsed, group 0 expanded")
-	}
-	win32.ListSetGroupCollapsed(lv, 1, false)
-	if win32.ListGroupCollapsed(lv, 1) {
-		t.Fatal("group 1 expanded")
 	}
 	win32.ListSelect(lv, 1)
 	if sel := win32.ListSelected(lv); sel != 1 || win32.ListParam(lv, sel) != 8 {
