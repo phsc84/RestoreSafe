@@ -96,6 +96,14 @@ Acceptance: `git grep -i console -- '*.go'` finds only `yubidiag`, the `GetConso
 No code on the backup or restore path changed between `a5986bb` and `d4d192a` (`git diff a5986bb..HEAD` touches only comments there), and the Go toolchain and `x/sys` are the same, so the cause is likely the machine (a Windows or virus scanner update) rather than the code. A first SSD run under `%TEMP%`, while other tests ran, gave 221 and 138 MiB/s and is not counted.
 Change: run the benchmarks of `v2.0.0` and of `dev` alternately on the same data, as for RF-59 in the round of 2.0. If `v2.0.0` is as slow, the drop is the machine's: record the new reference numbers here and drop the item with that reason. If not, profile restore (`-cpuprofile`, `-memprofile`, SPEC-refactoring section 5.3) and fix what the profile shows.
 Acceptance: alternating runs of `v2.0.0` and the fix differ by less than 10 %, or the item is dropped with the measurement that shows the machine changed.
+Dropped 2026-10-13: the machine changed, not the code. `v2.0.0` (a worktree of the tag) and `dev` at `a8d5818`, alternately on the same data in `sandbox\bench` on the SSD, two rounds (median of 3 runs each):
+
+| | `v2.0.0` | `dev` |
+|---|---|---|
+| Backup, round 1 / 2 | 266.9 / 251.0 MiB/s | 243.1 / 256.7 MiB/s |
+| Restore, round 1 / 2 | 166.0 / 162.6 MiB/s | 159.4 / 153.6 MiB/s |
+
+The release itself restores at 163–166 MiB/s here today, against 255 MiB/s on 2026-10-08; `dev` is within 6 % of it. Neither `Get-HotFix` nor the virus scanner's versions name a cause. The reference for the next comparison is this round's own numbers; the network share was not run alternately, since the SSD already separates the code from the machine.
 
 ## 7. Tests
 
