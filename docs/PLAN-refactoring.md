@@ -145,6 +145,8 @@ Done 2026-10-13.
 
 No item changes what the user sees, so none needs a patch release; everything ships with 2.1.0.
 
+Phase 1 done 2026-10-13 (`fc02339`): RF-75 dropped, RF-85 and RF-90 done, RF-40 step 1 done. Checks at the end of the phase: gofmt, vet, staticcheck and `deadcode -test` report nothing; govulncheck unchanged (1 required-only); `go test ./...` passes with every package at its new floor; coverage 54.5 %.
+
 ## Open questions
 
 Answered 2026-10-13:
