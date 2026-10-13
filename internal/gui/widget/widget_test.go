@@ -46,6 +46,15 @@ var procGetPixel = windows.NewLazySystemDLL("gdi32.dll").NewProc("GetPixel")
 func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
 	t.Helper()
 	win32.SetWindowPos(hwnd, win32.Rect{Right: w, Bottom: h})
+	mem, px := canvas(t, w, h)
+	win32.SendMessage(hwnd, win32.WM_PRINTCLIENT, mem, 0)
+	return px
+}
+
+// canvas returns a memory DC of w×h pixels and a function that reads its
+// pixels.
+func canvas(t *testing.T, w, h int32) (uintptr, func(x, y int32) Color) {
+	t.Helper()
 	screen := win32.GetDC(0)
 	mem := win32.CreateCompatibleDC(screen)
 	bmp := win32.CreateCompatibleBitmap(screen, w, h)
@@ -56,8 +65,7 @@ func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
 		win32.DeleteObject(bmp)
 		win32.DeleteDC(mem)
 	})
-	win32.SendMessage(hwnd, win32.WM_PRINTCLIENT, mem, 0)
-	return func(x, y int32) Color {
+	return mem, func(x, y int32) Color {
 		r, _, _ := procGetPixel.Call(mem, uintptr(x), uintptr(y))
 		return Color(r)
 	}

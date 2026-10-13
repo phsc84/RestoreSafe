@@ -25,5 +25,5 @@ internal/fsx                     92
 internal/logging                 91
 internal/gui/view                91
 internal/gui/flow                95
-internal/gui/widget              72
+internal/gui/widget              85
 internal/security/yubikey        62
