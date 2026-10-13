@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.1] - Unreleased
+## [2.1.0] - Unreleased
 
 ### Changed
 - The windows that show the plan of a backup and of a restore are titled **Create backup** and **Restore backup**, like the pages they open from.

@@ -152,9 +152,13 @@ Done 2026-10-13.
 ## 10. Found during the work
 
 **RF-95 (P1) Two runs logging to the same file lose each other's lines.** Evidence: found by the verify tests of RF-40, whose parallel tests both logged to `verify.log`. `NewLogger` wrote to `%TEMP%\<name of the log>` ([logging.go:62](../internal/logging/logging.go#L62) at `c425eb0`), so every logger of one log file shared one temp file: a second `NewLogger` overwrote it with a fresh copy of the log, and `Close` overwrote the log with the temp file. A restore and a verification of the same backup run, started in two windows (the read lock lets both run), therefore lost the lines and facts the first one had written before the second one started. `TestLoggersOfTheSameFileAtOnceKeepEachOthersLines` fails on the old code with exactly that.
-Change: each logger writes to a temp file of its own (`os.CreateTemp`); `Close` appends it to the log instead of overwriting the log. The log format is unchanged; the warnings about copying an existing log to the temp directory are gone with the copy. CHANGELOG: under "Fixed" for 2.0.1.
+Change: each logger writes to a temp file of its own (`os.CreateTemp`); `Close` appends it to the log instead of overwriting the log. The log format is unchanged; the warnings about copying an existing log to the temp directory are gone with the copy. CHANGELOG: under "Fixed" for 2.1.0.
 Acceptance: the test above passes; a temp file that cannot be appended is kept and reported (`TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten`).
 Done 2026-10-13.
+
+**RF-96 (P2) Failures are not logged as errors, and their reason is not in the readable log.** Evidence: no workflow writes an `ERROR` line; every problem, from a skipped file to a failed run, is a `WARN` line (`git grep -n "log.Warn" -- internal/workflow`). When a run fails, its reason reaches the log file only as a `FACT` line (JSON), e.g. `backupFailed` ([backup/workflow.go:270](../internal/workflow/backup/workflow.go#L270)) and `verifyAll` ([verify/workflow.go:175](../internal/workflow/verify/workflow.go#L175)), and the log window hides fact lines; a failed restore writes no fact at all. A user who opens the log of a failed run sees the steps up to the failure, not why it failed. The log window's ERROR tone and the "Warnings and errors" filter (GUI spec BK-5) therefore only ever show warnings (found with RF-67).
+Change: `logging` gets an `Error` method for `SeverityError`. `ERROR` is for what the user asked for and did not happen: a backup run that failed, a set that failed its post-backup verification, a verification that found damage, a restore that failed (with its "INCOMPLETE" line). Each workflow fails in one place (`backupFailed`, the error paths of `run` in verify and restore); the error line goes there, as text with its remedy, next to the fact. `WARN` stays for a run that completed with something to look at: unreadable files skipped as configured, retention skipped, a base not usable (full backup instead), stalled I/O, the directory lock unavailable, wrong password attempts, and a cancel (the user's own choice, not a failure). CHANGELOG: under "Changed" for 2.1.0 (standing constraint 2: the log's content changes, not its format).
+Acceptance: tests show an `ERROR` line with the reason in the log of a failed backup, of a verification that found damage and of a failed restore, and none in the log of a cancelled run; the comment "never written" on `SeverityError` is gone.
 
 ## Phases
 
@@ -163,9 +167,9 @@ Done 2026-10-13.
 | 1. Tooling and safety net | RF-75, RF-85, RF-40 (floors raised to the current values), RF-90 | first | RF-75 compares with `v2.0.0` before the dependency update changes the code; the update and the raised floors guard everything after them |
 | 2. Tests | RF-40 (tests to the targets), RF-80 | after phase 1 | the safety net before code is changed or removed in phase 3 |
 | 3. Cleanup | RF-70, RF-71, RF-67, RF-65, RF-66, RF-72, then RF-86 | after phase 2 | small diffs inside single packages; RF-86 last, once RF-70 has brought `deadcode` to zero |
-| 4. Moves | RF-68, RF-69 | last | the largest diffs; RF-68 needs `archive` at its coverage target first |
+| 4. Log errors, then moves | RF-96, then RF-68, RF-69 | last | RF-96 changes what the log says, in three workflows; the moves are the largest diffs, and RF-68 needs `archive` at its coverage target first (reached) |
 
-No item changes what the user sees, so none needs a patch release; everything ships with 2.1.0.
+There is no 2.0.1 (owner's decision, 2026-10-13): everything ships with 2.1.0, including the user-visible fixes RF-95 and RF-96.
 
 Phase 1 done 2026-10-13 (`fc02339`): RF-75 dropped, RF-85 and RF-90 done, RF-40 step 1 done. Checks at the end of the phase: gofmt, vet, staticcheck and `deadcode -test` report nothing; govulncheck unchanged (1 required-only); `go test ./...` passes with every package at its new floor; coverage 54.5 %.
 
@@ -187,6 +191,7 @@ Answered 2026-10-13:
 - Supporting platforms other than Windows 64-bit.
 - Splitting the long functions in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), `setwriter.Write` and `backup.run` (RF-68 says why).
 - `gui/view/strings.go` (516 lines): a table of texts, longer by nature.
+- **yubidiag needs an overhaul** (owner, 2026-10-13): it may not do what it is for. Its new purpose and behaviour get a specification of their own first; then the work is a feature, not a refactoring item. Noted here so it is not forgotten.
 
 ## Done when
 
