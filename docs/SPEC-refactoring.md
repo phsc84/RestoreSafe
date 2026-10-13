@@ -54,7 +54,7 @@ Run on a clean checkout of the round's starting commit and record the results in
 | Tests and coverage | `go test -count=1 -coverprofile=cover.out ./...`; `go tool cover -func=cover.out` | pass or fail, total and per-package coverage |
 | Races | `go test -race ./...` with `CGO_ENABLED=1` and a gcc | pass or fail |
 | Static analysis | `go tool staticcheck ./...` (project configuration) | findings by check |
-| Dead code | `go tool deadcode -test ./...` | unreachable functions |
+| Dead code | `go tool deadcode -test ./...`; `go tool deadcode ./...` | unreachable functions; without `-test`, also the production functions only tests call (outside the test-support packages `testutil` and `interacttest`) |
 | Vulnerabilities | `go tool govulncheck -show verbose ./...` | called, imported, and required-only findings |
 | Formatting | `gofmt -l .` | files listed |
 | Fuzzing | each fuzz target for 30 s | crashes |
@@ -78,7 +78,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 ### 5.2 Dead and legacy code
 
-- `deadcode -test` and staticcheck U1000 findings. Struct fields that only keep a Windows ABI layout are not dead; they carry a `//lint:ignore U1000` with the reason and a layout test.
+- `deadcode` with and without `-test`, and staticcheck U1000 findings. `-test` counts tests as callers, so it misses production code only tests call (RF-70): delete it, or move it into the tests that need it. Struct fields that only keep a Windows ABI layout are not dead; they carry a `//lint:ignore U1000` with the reason and a layout test.
 - Wrapper functions in `gui/win32` with no caller.
 - Conversions that undo each other (a value turned into flags and back).
 - Wording and comments of an older version: file kinds, formats or screens that no longer exist (e.g. 1.x `.challenge` files, the first GUI).
