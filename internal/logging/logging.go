@@ -28,7 +28,7 @@ type Logger struct {
 	level        Level
 	file         *os.File
 	originalPath string    // The path the user wanted (may be on network drive)
-	actualPath   string    // The path we actually write to (may be temp fallback)
+	actualPath   string    // The temp file this logger writes to; Close appends it to originalPath
 	console      io.Writer // The user's output, also for problems with the log file (nil: discarded)
 	consoleOnly  bool
 	mu           sync.Mutex
@@ -51,41 +51,23 @@ func orDiscard(w io.Writer) io.Writer {
 
 // NewLogger creates a Logger writing to logPath and mirroring messages to
 // console (nil: discarded).
-// Strategy: Always write to a temp file to avoid network write issues.
-// If a log for this backup ID already exists, copy it to temp first (for appending).
-// On Close(), copy the complete temp log back to the original path.
+// The lines go to a temp file of this logger's own, so writing never waits for
+// a network drive; Close appends them to logPath. Two runs that log to the
+// same file at once (a restore and a verification of one backup run) thus
+// each add their own lines.
 func NewLogger(logPath string, levelStr string, console io.Writer) (*Logger, error) {
 	console = orDiscard(console)
 	lvl := parseLogLevel(levelStr)
 
-	// Determine temp path for actual writes.
-	base := filepath.Base(logPath)
-	tempPath := filepath.Join(os.TempDir(), base)
-
-	// If the original log file already exists, copy it to temp first (for appending).
 	_, statErr := os.Stat(logPath)
 	logExists := statErr == nil
-	if logExists {
-		// File exists; copy it to temp.
-		data, err := os.ReadFile(logPath)
-		if err != nil {
-			// Warn but continue; we'll create a new log in temp.
-			fmt.Fprintf(console, "Warning: Existing log file could not be read: %v. Remedy: Check read permissions for the target log file.\n", err)
-		} else {
-			// Write the existing content to the temp file.
-			if err := os.WriteFile(tempPath, data, 0o600); err != nil {
-				fmt.Fprintf(console, "Warning: Existing log file could not be copied to the temp directory: %v. Remedy: Check write permissions for TEMP/TMP.\n", err)
-			}
-		}
-	}
 
-	// Open temp log for appending.
-	f, err := os.OpenFile(tempPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.CreateTemp("", "restoresafe-*-"+filepath.Base(logPath))
 	if err != nil {
 		return nil, problem.Errorf("Log file in temp directory could not be created: %w.", err).WithRemedy("Check TEMP/TMP path and write permissions.")
 	}
 
-	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: tempPath, console: console}
+	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: f.Name(), console: console}
 
 	// Record the RestoreSafe version as the first line of a freshly created log
 	// (file only, so it does not duplicate the startup banner on the console). Later
@@ -111,8 +93,8 @@ func (l *Logger) IsConsoleOnly() bool {
 	return l.consoleOnly
 }
 
-// Close flushes and closes the underlying log file, then copies it from temp
-// back to the original path on the network drive.
+// Close flushes and closes the temp file, then appends its lines to the log
+// file, which it creates if needed.
 func (l *Logger) Close() {
 	if l == nil {
 		return
@@ -129,23 +111,33 @@ func (l *Logger) Close() {
 		l.file = nil
 	}
 
-	// Copy the complete temp log back to the original path.
-	if l.actualPath != "" && l.originalPath != "" && l.actualPath != l.originalPath {
+	if l.actualPath != "" && l.originalPath != "" {
 		data, err := os.ReadFile(l.actualPath)
 		if err != nil {
 			fmt.Fprintf(l.console, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
 			return
 		}
-		// Overwrite the original file with the complete temp log content.
-		if err := os.WriteFile(l.originalPath, data, 0o600); err != nil {
+		if err := appendFile(l.originalPath, data); err != nil {
 			fmt.Fprintf(l.console, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
 			fmt.Fprintf(l.console, "Log file is located in temp directory: %s\n", l.actualPath)
 			// Intentionally do not remove the temp file — it is the user's only copy.
 			return
 		}
-		// Cleanup temp file.
 		_ = os.Remove(l.actualPath)
 	}
+}
+
+// appendFile appends data to the file at path, which it creates if needed.
+func appendFile(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 // Info logs an informational message.

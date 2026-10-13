@@ -9,6 +9,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 - The windows that show the plan of a backup and of a restore are titled **Create backup** and **Restore backup**, like the pages they open from.
 
+### Fixed
+- A restore and a verification of the same backup, run at the same time in two windows, no longer lose lines of each other's log.
+
 ### Dependencies
 - `golang.org/x/crypto` 0.58.0 (was 0.57.0), `golang.org/x/sys` 0.49.0 (was 0.48.0).
 

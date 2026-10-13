@@ -135,6 +135,13 @@ Change: section 6 says IDs count on and are grouped by area with gaps from the r
 Acceptance: section 1, section 6 and this plan agree.
 Done 2026-10-13.
 
+## 10. Found during the work
+
+**RF-95 (P1) Two runs logging to the same file lose each other's lines.** Evidence: found by the verify tests of RF-40, whose parallel tests both logged to `verify.log`. `NewLogger` wrote to `%TEMP%\<name of the log>` ([logging.go:62](../internal/logging/logging.go#L62) at `c425eb0`), so every logger of one log file shared one temp file: a second `NewLogger` overwrote it with a fresh copy of the log, and `Close` overwrote the log with the temp file. A restore and a verification of the same backup run, started in two windows (the read lock lets both run), therefore lost the lines and facts the first one had written before the second one started. `TestLoggersOfTheSameFileAtOnceKeepEachOthersLines` fails on the old code with exactly that.
+Change: each logger writes to a temp file of its own (`os.CreateTemp`); `Close` appends it to the log instead of overwriting the log. The log format is unchanged; the warnings about copying an existing log to the temp directory are gone with the copy. CHANGELOG: under "Fixed" for 2.0.1.
+Acceptance: the test above passes; a temp file that cannot be appended is kept and reported (`TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten`).
+Done 2026-10-13.
+
 ## Phases
 
 | Phase | Items | When | Why then |
