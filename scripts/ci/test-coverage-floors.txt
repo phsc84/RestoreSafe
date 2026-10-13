@@ -3,7 +3,7 @@
 # package's coverage has risen for good; never lower one to let a change
 # through without a reason in the refactoring plan.
 internal/security/cryptox        89
-internal/security/recovery       94
+internal/security/recovery       98
 internal/config                  92
 internal/format/manifest         92
 internal/format/naming           92
