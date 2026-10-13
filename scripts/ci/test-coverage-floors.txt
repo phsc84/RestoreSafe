@@ -20,7 +20,7 @@ internal/workflow/verify         93
 internal/workflow/unlock         87
 internal/workflow/restorepoint   90
 internal/workflow/job            89
-internal/workflow/interact       78
+internal/workflow/interact       100
 internal/fsx                     92
 internal/logging                 91
 internal/gui/view                91

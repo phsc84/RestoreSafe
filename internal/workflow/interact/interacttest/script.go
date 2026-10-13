@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
@@ -87,7 +88,19 @@ func (s *Script) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 	if q.Failure != nil {
 		s.printf("%v Please try again.\n", q.Failure)
 	}
-	return interact.ReadPasswordConfirmed(s.readSecret, fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength), "Re-enter new backup password: ")
+	pw, err := s.readSecret(fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength))
+	if err != nil || len(pw) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		return interact.CheckNewPassword(pw, nil) // empty: no confirmation asked
+	}
+	confirm, err := s.readSecret("Re-enter new backup password: ")
+	if err != nil {
+		cryptox.ZeroBytes(pw)
+		return nil, err
+	}
+	return interact.CheckNewPassword(pw, confirm)
 }
 
 // ConfirmStart asks a yes/no question; yes is the default.

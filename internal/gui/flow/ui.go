@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
@@ -126,7 +125,7 @@ func (u *UI) Password(q interact.SecretQuestion) ([]byte, error) {
 }
 
 // NewPassword asks for a new password and its confirmation in one dialog,
-// with the rules and errors of interact.ReadPasswordConfirmed.
+// checked with interact.CheckNewPassword.
 func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 	v, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.NewPassword(q, func(pw, confirm []byte, ok bool) {
@@ -134,7 +133,7 @@ func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 				answer(nil, interact.ErrCancelled)
 				return
 			}
-			pw, err := checkNewPassword(pw, confirm)
+			pw, err := interact.CheckNewPassword(pw, confirm)
 			answer(pw, err)
 		})
 	}, nil, interact.ErrCancelled)
@@ -142,21 +141,6 @@ func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 		return nil, err
 	}
 	return v.([]byte), nil
-}
-
-// checkNewPassword checks a new password against its confirmation, zeroes
-// the confirmation, and zeroes the password when it is refused.
-func checkNewPassword(pw, confirm []byte) ([]byte, error) {
-	defer cryptox.ZeroBytes(confirm)
-	switch {
-	case len(pw) == 0:
-		cryptox.ZeroBytes(pw)
-		return nil, interact.ErrPasswordEmpty
-	case !bytes.Equal(pw, confirm):
-		cryptox.ZeroBytes(pw)
-		return nil, interact.ErrPasswordMismatch
-	}
-	return pw, nil
 }
 
 // ShowRecoveryCode shows the new recovery code once.
