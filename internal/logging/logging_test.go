@@ -20,6 +20,7 @@ func TestNewOutputLogger(t *testing.T) {
 	log.Info("output info %d", 1)
 	log.Debug("output debug %d", 2)
 	log.Warn("output warn %d", 3)
+	log.Error("output error %d", 4)
 	log.Close()
 	output := out.String()
 
@@ -28,6 +29,9 @@ func TestNewOutputLogger(t *testing.T) {
 	}
 	if !strings.Contains(output, "output debug 2") {
 		t.Fatalf("expected debug output, got %q", output)
+	}
+	if !strings.Contains(output, "] ERROR - output error 4") {
+		t.Fatalf("expected an ERROR line, got %q", output)
 	}
 	if !strings.Contains(output, "output warn 3") {
 		t.Fatalf("expected warn output, got %q", output)

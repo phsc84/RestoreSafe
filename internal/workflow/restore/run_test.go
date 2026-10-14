@@ -16,6 +16,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/filelock"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
@@ -235,4 +236,38 @@ func errorsIn(text string) []string {
 		}
 	}
 	return out
+}
+
+// cancelOnRestore cancels the operation at its first report of restoring a
+// folder: after the folder is created, before its content is written.
+type cancelOnRestore struct {
+	*interacttest.Script
+	cancel context.CancelFunc
+}
+
+func (c cancelOnRestore) Progress(p interact.Progress) {
+	if p.Phase == interact.PhaseRestoring {
+		c.cancel()
+	}
+}
+
+func TestRunCancelledWhileWritingMarksTheFolderIncompleteAsAWarning(t *testing.T) {
+	t.Parallel()
+	fx := testutil.NewRestoreFixture(t, []byte("pw"))
+
+	var out testutil.Output
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	infos := fixtureInfos(t, fx.BackupFixture)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
+	err := op.run(ctx, cancelOnRestore{Script: &interacttest.Script{Out: &out}, cancel: cancel}, 0)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected the restore to be cancelled, got %v", err)
+	}
+	if !strings.Contains(out.String(), "] "+logging.SeverityWarn+" -   The restore of ["+fx.Entry.DirectoryName+"] is INCOMPLETE") {
+		t.Fatalf("a cancelled folder is INCOMPLETE as a warning, got %q", out.String())
+	}
+	if lines := errorsIn(out.String()); len(lines) != 0 {
+		t.Fatalf("a cancellation is no error, got %q", lines)
+	}
 }
