@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-14 (decisions in section 11) |
+| Status | Living; implemented 2026-10-14 (RF-87); decisions in section 11 |
 | Plan item | RF-87 (tooling) in [PLAN-refactoring.md](PLAN-refactoring.md), phase 5 |
 | Replaces | `scripts/ci/*.sh` and the inline shell of [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
 | Keeps | The five jobs, their names and the ruleset; `scripts/ci/gui-smoke.ps1` and `scripts/gui-test/` |

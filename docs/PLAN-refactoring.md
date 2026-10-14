@@ -153,6 +153,11 @@ Done 2026-10-13: `scripts/ci/static-deadcode.sh` runs `deadcode` with and withou
 **RF-87 (P2) The checks of CI are defined in three places.** Evidence: shell inside [ci.yml](../.github/workflows/ci.yml) (gofmt, `go test | tee`, the benchmarks), four bash scripts with awk and grep in `scripts/ci/`, and the "Locally" columns of [CI.md](CI.md), which repeat them as single commands. Running CI locally means typing those commands one by one, and the coverage floors need Git Bash, because Windows PowerShell 5.1 writes redirected output in UTF-16.
 Change: one Go program, `tools/ci`, runs each job the same way on the development machine and on the runner, as specified in [SPEC-ci.md](SPEC-ci.md) (agreed 2026-10-14, decisions in its section 11), in that spec's four phases: the runner, the switch of `ci.yml`, the proof on a throwaway pull request, the pre-push hook.
 Acceptance: the acceptance criteria of SPEC-ci section 13.
+Done 2026-10-14, in the four phases of SPEC-ci:
+1. Runner (`8a7ccde`): `tools/ci` and `tools/ci/check`, next to the unchanged scripts; `internal/architecture` puts `tools` outside the layers and keeps it apart from the program both ways (`TestDevToolsStandAlone`). `tools/ci/check` is tested from `go test -json` streams recorded with Go 1.27.2 from a small fixture module (98.4 %, floor 90); the data race stream is written by hand in the same format, since the development machine has no gcc. Locally `fast`, `race` (skipped: no gcc) and `fuzz` gave the same results as the scripts; `gui` was not run locally, as it takes over mouse and keyboard, and runs in CI instead.
+2. Switch (`7f911a2`): `ci.yml` as in SPEC-ci 7.1, the four `.sh` scripts and the inline shell deleted, CI.md, CONTRIBUTING.md and DEVELOPMENT.md on the runner. The `gui` job failed at first: the step runs in PowerShell 7, whose `PSModulePath` the Windows PowerShell of `gui-smoke.ps1` inherited (`Get-FileHash` not found); the runner starts it without (`aa20f8a`). Job names unchanged, so the ruleset needed no change; a CI run takes about 7 minutes, as before.
+3. Proof (pull request #9 into `dev`, closed unmerged, branch deleted): an unformatted file, a vet finding, a failing test, a floor one above the coverage, an unused function and a data race each turned the expected job red with a readable annotation (a vet finding in a test file also breaks the build of `go test`, so test, race and fuzz turned red too). The fuzz job failed without an annotation when `go test -list` could not build a package; commands that fail before their output now carry their error into the annotation (`338d82a`).
+4. Pre-push hook (`910c18a`): turned on in the owner's clone; a push with an unformatted file was stopped. `fast` takes about 2 minutes on the development machine (static 18 s, test 1 min 44 s; the first run of the day 2 min 30 s).
 
 ## 9. Documentation
 
@@ -198,6 +203,8 @@ Phase 2 done 2026-10-13 (`b378846`), with RF-95 found and fixed in it: RF-40 bro
 Phase 3 done 2026-10-13 (`960ad01`): RF-70, RF-71, RF-67, RF-65, RF-66, RF-72 and RF-86 done, and RF-40 closed with the four packages RF-70 touched. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; `go test ./...` passes; coverage 57.4 %; CI passes on all five jobs.
 
 Phase 4 done 2026-10-14 (`f81ed7b`): RF-96, RF-68 and RF-69 done; RF-97 found by a test of RF-68 and fixed. The first CI run of the phase (`6c4f9cb`) failed on three coverage floors (archive, logging, restore), because only the packages changed directly had been measured before the push; the floors are now checked locally before every push. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; every package at its floor; CI passes on all five jobs.
+
+Phase 5 done 2026-10-14 (`910c18a`): RF-87 done; CI runs every job through `tools/ci`, and every push is checked by the pre-push hook. CI passes on all five jobs.
 
 ## Open questions
 
