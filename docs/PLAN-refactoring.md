@@ -169,6 +169,11 @@ Change: `logging` gets an `Error` method for `SeverityError`. `ERROR` is for wha
 Acceptance: tests show an `ERROR` line with the reason in the log of a failed backup, of a verification that found damage and of a failed restore, and none in the log of a cancelled run; the comment "never written" on `SeverityError` is gone.
 Done 2026-10-14: `Logger.Error`; `backupFailed`, the post-backup verification of a set, and the error paths of `run` in verify and restore write the error with its remedy as an `ERROR` line. The "INCOMPLETE" line of a restore is `ERROR` when the restore failed and stays `WARN` when it was cancelled. Tests: the failure tests of backup, verify and restore check the `ERROR` line, their cancel tests and `TestCancelAtEachPhase` check that a cancel writes none. CHANGELOG under "Changed" for 2.1.0.
 
+**RF-97 (P2) A folder deleted during a backup fails the backup.** Evidence: found by a test of RF-68. `addDir` ([archive/build.go](../internal/format/archive/build.go)) treated a folder that vanished between the walk listing it and reading its times as unreadable: by default the backup failed ("Cannot read ... set 'on_unreadable_file: skip'"), with `skip` it was reported as a file that could not be read. Core spec 6.5 says a file or directory deleted while the backup runs "never aborts a backup"; a file deleted in the same way is counted as vanished, and so is a folder the walk cannot list because it is gone. The code was the same before the split of RF-68.
+Change: `addDir` counts a folder that no longer exists as vanished, like the other two places.
+Acceptance: `TestBuildTarCountsAFolderThatVanishes` (the folder is deleted when the file before it is opened) fails before the change and passes after it. CHANGELOG under "Fixed" for 2.1.0.
+Done 2026-10-14.
+
 ## Phases
 
 | Phase | Items | When | Why then |

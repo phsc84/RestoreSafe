@@ -238,6 +238,11 @@ func (b *tarBuilder) unstatable(path, rel string, d fs.DirEntry, err error) erro
 func (b *tarBuilder) addDir(path, rel string) error {
 	meta, err := statBasic(path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			// Deleted since the walk listed it, like a file that vanishes.
+			b.stats.Vanished++
+			return filepath.SkipDir
+		}
 		if !b.opts.SkipUnreadable {
 			return newUnreadable(path, err, false)
 		}

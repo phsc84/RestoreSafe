@@ -12,6 +12,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - A restore and a verification of the same backup, run at the same time in two windows, no longer lose lines of each other's log.
+- A folder deleted while a backup runs no longer stops the backup or shows as a file that could not be read; like a deleted file, it is simply not in the backup.
 
 ### Dependencies
 - `golang.org/x/crypto` 0.58.0 (was 0.57.0), `golang.org/x/sys` 0.49.0 (was 0.48.0).
