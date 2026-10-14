@@ -32,6 +32,8 @@
 //     about backups.
 //   - testutil, e2e, and architecture are test support: exempt from the
 //     layers, never imported by production code.
+//   - tools holds development tools (the CI runner): outside the layers,
+//     separate from the program in both directions.
 //
 // The test fails for a package that belongs to no layer.
 package architecture

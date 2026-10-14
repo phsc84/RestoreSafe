@@ -27,3 +27,6 @@ internal/gui/view                91
 internal/gui/flow                95
 internal/gui/widget              85
 internal/security/yubikey        62
+
+# The CI runner (SPEC-ci section 8).
+tools/ci/check                   90
