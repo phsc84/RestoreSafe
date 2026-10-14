@@ -143,17 +143,11 @@ func (r *runner) setup(err error) {
 func (r *runner) command(cgo bool, name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = r.root
-	env := make([]string, 0, len(os.Environ())+1)
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(strings.ToUpper(kv), "CGO_ENABLED=") {
-			env = append(env, kv)
-		}
-	}
 	value := "0"
 	if cgo {
 		value = "1"
 	}
-	cmd.Env = append(env, "CGO_ENABLED="+value)
+	cmd.Env = append(withoutVar(os.Environ(), "CGO_ENABLED"), "CGO_ENABLED="+value)
 	return cmd
 }
 

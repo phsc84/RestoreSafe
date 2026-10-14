@@ -245,5 +245,28 @@ func (r *runner) gui() {
 		time.Sleep(5 * time.Second)
 	}
 	work := filepath.Join(r.jobDir, "work")
-	r.simple("smoke test", false, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join("scripts", "ci", "gui-smoke.ps1"), "-Work", work)
+	r.step("smoke test", func() bool {
+		cmd := r.command(false, "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", filepath.Join("scripts", "ci", "gui-smoke.ps1"), "-Work", work)
+		// Started from PowerShell 7 (the runner's shell), Windows PowerShell
+		// would inherit its module path and miss its own modules
+		// (Get-FileHash); without it, it uses its default.
+		cmd.Env = withoutVar(cmd.Env, "PSModulePath")
+		out, ok := r.stream(cmd)
+		if !ok {
+			return r.failStep("smoke test", out)
+		}
+		return true
+	})
+}
+
+// withoutVar returns env without the variable name (case-insensitive, as
+// on Windows).
+func withoutVar(env []string, name string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if !strings.HasPrefix(strings.ToUpper(kv), strings.ToUpper(name)+"=") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
