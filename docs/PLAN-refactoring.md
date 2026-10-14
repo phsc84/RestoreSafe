@@ -72,6 +72,7 @@ Done 2026-10-14: `BuildTar` keeps its per-run state in `tarBuilder`; the walk is
 **RF-69 (P3) `yubikey/fido2.go` holds four things in 910 lines.** Evidence: the file has the WebAuthn ABI structs (lines 105–298), the challenge data and its JSON (300–375), the public operations (379–525), the WebAuthn calls (526–810) and the HID enumeration through SetupAPI (811–910). It has been the largest production file for two rounds.
 Change: split by those parts into `webauthn.go`, `challenge.go`, `hid.go` and `fido2.go`; a move only, no change to a function.
 Acceptance: no file in `yubikey` over 400 lines; `git diff --stat -M` shows moves; `layout_test.go` passes.
+Done 2026-10-14: `fido2.go` (200 lines: debug output, errors, test seams, public operations), `challenge.go` (75), `webauthn_abi.go` (252: bindings and the ABI structs, which `layout_test.go` now reads), `webauthn.go` (309: the calls) and `hid.go` (117). Five files instead of four, because the WebAuthn part alone had 539 lines. A move only: the sorted lines of the new files, without package clauses and imports, equal those of the old file.
 
 ## 5. Dead and legacy code
 
