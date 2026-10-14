@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Agreed 2026-10-14 (decisions in section 11) |
-| Plan item | Proposed as RF-87 (tooling) in [PLAN-refactoring.md](PLAN-refactoring.md) |
+| Plan item | RF-87 (tooling) in [PLAN-refactoring.md](PLAN-refactoring.md), phase 5 |
 | Replaces | `scripts/ci/*.sh` and the inline shell of [.github/workflows/ci.yml](../.github/workflows/ci.yml) |
 | Keeps | The five jobs, their names and the ruleset; `scripts/ci/gui-smoke.ps1` and `scripts/gui-test/` |
 | Dependencies | None new: Go standard library only, the tools already pinned in `go.mod` |

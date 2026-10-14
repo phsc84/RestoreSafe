@@ -144,6 +144,10 @@ Change: fail the job when `deadcode -test` reports anything, and, after RF-70, w
 Acceptance: a function without a caller, added on a test branch, fails the static job.
 Done 2026-10-13: `scripts/ci/static-deadcode.sh` runs `deadcode` with and without `-test` (open question 1) and fails on either finding, outside `testutil` and `interacttest`. Checked locally with a planted function without a caller and one only a test calls: each reported once, exit 1; the clean tree passes. CI.md describes the step.
 
+**RF-87 (P2) The checks of CI are defined in three places.** Evidence: shell inside [ci.yml](../.github/workflows/ci.yml) (gofmt, `go test | tee`, the benchmarks), four bash scripts with awk and grep in `scripts/ci/`, and the "Locally" columns of [CI.md](CI.md), which repeat them as single commands. Running CI locally means typing those commands one by one, and the coverage floors need Git Bash, because Windows PowerShell 5.1 writes redirected output in UTF-16.
+Change: one Go program, `tools/ci`, runs each job the same way on the development machine and on the runner, as specified in [SPEC-ci.md](SPEC-ci.md) (agreed 2026-10-14, decisions in its section 11), in that spec's four phases: the runner, the switch of `ci.yml`, the proof on a throwaway pull request, the pre-push hook.
+Acceptance: the acceptance criteria of SPEC-ci section 13.
+
 ## 9. Documentation
 
 **RF-90 (P3) SPEC-refactoring contradicts itself on item IDs.** Evidence: section 1 says IDs "count on across rounds"; section 6 says "IDs restart at RF-1 in every round" and gives "RF-1x tests" as the grouping example.
@@ -170,6 +174,7 @@ Acceptance: tests show an `ERROR` line with the reason in the log of a failed ba
 | 2. Tests | RF-40 (tests to the targets), RF-80 | after phase 1 | the safety net before code is changed or removed in phase 3 |
 | 3. Cleanup | RF-70, RF-71, RF-67, RF-65, RF-66, RF-72, then RF-86 | after phase 2 | small diffs inside single packages; RF-86 last, once RF-70 has brought `deadcode` to zero |
 | 4. Log errors, then moves | RF-96, then RF-68, RF-69 | last | RF-96 changes what the log says, in three workflows; the moves are the largest diffs, and RF-68 needs `archive` at its coverage target first (reached) |
+| 5. CI runner | RF-87 | after phase 4 | it replaces the CI scripts the earlier phases still use; its own four phases are in SPEC-ci section 10 |
 
 There is no 2.0.1 (owner's decision, 2026-10-13): everything ships with 2.1.0, including the user-visible fixes RF-95 and RF-96.
 
