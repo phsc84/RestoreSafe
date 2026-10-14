@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
-| Planned | Editing the configuration and dark mode in 2.1.0 (decisions 1 and 4). |
+| Planned | Editing the configuration and dark mode in 2.1.0 (decisions 1 and 4). The YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10); release to be decided. |
 | Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
 | Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
@@ -36,7 +36,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 
 **Goal:** a user sees at a glance whether their folders are protected, starts a backup with one click, understands what RestoreSafe will do before it does it, and gets folders back without reading a report.
 
-**In scope:** Create backup page, Create backup window and run, Restore backup page (runs, sets, logs, verify), Restore backup window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the data the workflows provide for the UI (section 11).
+**In scope:** Create backup page, Create backup window and run, Restore backup page (runs, sets, logs, verify), Restore backup window, credential dialogs, Settings (configuration view), the YubiKey page (check, test and setup guide), window behavior when an operation finishes or the window is closed, and the data the workflows provide for the UI (section 11).
 
 **Out of scope, permanently** (core spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
@@ -52,7 +52,8 @@ This document specifies RestoreSafe's window application, a status-first interfa
 | Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Restore backup (7), Settings (10) |
 | Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Create backup window (6), Restore backup (7) |
 | Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Create backup (5) |
-| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero (5), problem lines on Restore backup (7), folder and backup directory status on Settings (10) |
+| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero (5), problem lines on Restore backup (7), folder and backup directory status on Settings (10.1) |
+| YubiKey diagnostics: Windows WebAuthn readiness, connected YubiKeys, a live test against the current keys, setup help | YubiKey page (10.2) |
 | Exclude patterns (global), `on_unreadable_file`, split size, Argon2 parameters, log level | Settings (10) |
 | One log file per run in the backup directory; restore and verify append to the log of the run they read | Log window of a run (BK-5) |
 | Several configurations via `-config` | Title bar, Settings (10) |
@@ -88,10 +89,10 @@ This document specifies RestoreSafe's window application, a status-first interfa
 - Default size 1000 × 700 DIP, minimum 820 × 600 DIP. Centered on the monitor of the cursor at start.
 - Title: `RestoreSafe <version>`. When the configuration isn't the default `config.yaml` next to the exe, the title adds the file name: `RestoreSafe 2.0.0 · home-backup.yaml`.
 - Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
-- Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings**. The sidebar names the pages by their action. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
+- Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings** (10.1), and at the bottom, below a line, **YubiKey** (10.2) while YubiKeys are in use (YK-1). The sidebar names the pages by their action; YubiKey is a tool page and is named by its subject. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`, `Ctrl+4` (YubiKey, while visible). The sidebar is one tab stop with arrow-key navigation.
 - Other shortcuts: `Ctrl+B` opens the Create backup window, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons.
 - Status bar: a strip on the secondary surface without text. What is going on shows on the page itself (hero, progress card, Refresh disabled while a check runs); the free space is on the backup directory cards, the runs on Restore backup.
-- While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
+- While an operation runs, all pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
 
 ### 3.3 Visual language
 
@@ -125,7 +126,7 @@ The implementation may use the user's Windows accent color instead of the accent
 
 | UI element | Win32 implementation |
 |---|---|
-| Sidebar | Custom child window, one tab stop, exposes UI Automation names and selection state |
+| Sidebar | Custom child window, one tab stop, exposes UI Automation names and selection state. An item can be hidden (YubiKey, YK-1); the bottom group is anchored to the sidebar's bottom edge. |
 | Status hero, cards, progress card | Container windows that paint only their background, border and icon circle (double buffered, DPI aware). All text in them is in standard `STATIC` and `SysLink` controls, so screen readers and UI Automation get names, roles and `AutomationId` without a custom provider. Redrawn only on state change. |
 | Step trail, badges, bars | Small painted controls; each sets its accessible name to its text ("Step 2 of 4, Back up 2 of 3", "Differential 3"). |
 | Backup list | `SysListView32`, report mode, groups enabled (one group per run). Badges and status are custom-drawn cells (`NM_CUSTOMDRAW`). Column headers as for the folder lists. |
@@ -689,7 +690,9 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 | CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
-## 10. Settings page
+## 10. Settings and YubiKey pages
+
+### 10.1 Settings page
 
 Purpose: show what RestoreSafe is configured to do and where to change it. The configuration is `config.yaml` (or the file given with `-config`). In 2.0.0 the page is **read-only**; editing in the app follows in 2.1.0 (decision 1). Each card shows the effective values in plain words, with the `config.yaml` key in the tooltip, so a user knows what to change in the file.
 
@@ -753,9 +756,152 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 | ST-5 | Full and differential: `differential.enabled`, `full_backup_interval_days`, `max_size_percent`, in words. |
 | ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0; when `retention_keep` is missing from the file, the value adds "(the default; 3 chains recommended)"), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
 | ST-7 | Checks: `verify_after_backup`; the reminder limit (decision 2). |
-| ST-8 | Keys and unlocking: authentication mode in words, spare YubiKey, recovery code, minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." |
+| ST-8 | Keys and unlocking: authentication mode in words, spare YubiKey, recovery code, minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." While the YubiKey page is shown in the sidebar (YK-1), the card ends with a **Check your YubiKey** link to it. |
 | ST-9 | Logging: `log_level` (debug includes the I/O diagnostics of a backup). |
 | ST-10 | Missing settings (decision 9): when the file lacks settings that have a default (11.6), a (i) line on the configuration card names their keys, "3 settings aren't in config.yaml, so their defaults apply: reminder_days, recovery_code, differential.", with **Add to config.yaml**. It saves a copy of the file next to it (`<name>.<yyyy-mm-dd_hhmmss>.bak`), adds each missing setting with its default value and its explanation from `config-SAMPLE.yaml`, and reloads (ST-2). Settings of a block that exists already (`differential`, `argon2`) are added at the end of that block, all others at the end of the file under one comment line that says when they were added. Lines already in the file are not changed. Nothing is written unless the user clicks; the button is disabled while an operation runs. Afterwards a line names the copy until the next Reload; a file that can't be written keeps the configuration in use and shows the error as ST-2 does. |
+
+### 10.2 YubiKey page
+
+Purpose: answer "will my YubiKey open my backups?" and help a user set one up. The page replaces the console tool `yubidiag` (decision 10): its checks, its live test and its technical details are here, for users and for bug reports. The page needs no password, writes nothing to disk and never changes the backups or the keys.
+
+**Figure 10.2: YubiKey, after a test.** The sidebar shows the page at its bottom, below a line (YK-1).
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ RestoreSafe 2.0.0                                                                      _    [ ]    x │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ YubiKey  [ Check again ]                                                          │
+│   Create backup  │                                                                                   │
+│   Restore backup │ (ok)  Your YubiKey opens your backups                         [ Test YubiKey... ] │
+│   Settings       │       YubiKey 1 answered · tested today, 08:52                                    │
+│                  │                                                                                   │
+│                  │ ┌─ Checks ──────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ (ok) Windows        Ready for YubiKeys                                        │ │
+│                  │ │ (ok) Connected      1 YubiKey with FIDO2, OTP and smart card                  │ │
+│                  │ │ (ok) Your keys      YubiKey 1 answered (keys created Tue 1 Sep 2026)          │ │
+│                  │ │      YubiKey 2 (spare) wasn't tested. Connect it and test it too.             │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ > How to set up a YubiKey                                                     │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│──────────────────│ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│ > YubiKey        │ │ > Technical details                                          [ Copy details ] │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 10.3: YubiKey without keys yet, with the setup guide.**
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ RestoreSafe 2.0.0                                                                      _    [ ]    x │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ YubiKey  [ Check again ]                                                          │
+│   Create backup  │                                                                                   │
+│   Restore backup │ ( )   Your YubiKey is connected                               [ Test YubiKey... ] │
+│   Settings       │       Test whether it can be used. Windows asks for its PIN and two touches.      │
+│                  │                                                                                   │
+│                  │ ┌─ Checks ──────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ (ok) Windows        Ready for YubiKeys                                        │ │
+│                  │ │ (ok) Connected      1 YubiKey with FIDO2 and OTP                              │ │
+│                  │ │ ( )  Your keys      None yet. Your first backup registers your YubiKey.       │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ Set up your YubiKey ─────────────────────────────────────────────────────────┐ │
+│                  │ │ 1  Use a YubiKey with FIDO2*                                                  │ │
+│                  │ │    A YubiKey 5 Series or Security Key Series key with firmware 5.2 or later.  │ │
+│                  │ │    YubiKey 4 and YubiKey NEO can't be used. The test tells you for sure.      │ │
+│                  │ │                                                                               │ │
+│                  │ │ 2  Give it a PIN                                                              │ │
+│                  │ │    Windows asks for this PIN at every backup and restore. Set it in Windows   │ │
+│                  │ │    Settings: Accounts > Sign-in options > Security key > Manage.              │ │
+│                  │ │    [ Open Windows settings... ]                                               │ │
+│                  │ │                                                                               │ │
+│                  │ │ 3  Test it here                                                               │ │
+│                  │ │    Test YubiKey... checks the PIN and that the key can protect backups.       │ │
+│                  │ │    Nothing stays on the YubiKey.                                              │ │
+│                  │ │                                                                               │ │
+│                  │ │ 4  Register it with your first backup                                         │ │
+│                  │ │    Back up now... registers it. With a spare YubiKey, keep both at hand.      │ │
+│                  │ │                                                                               │ │
+│                  │ │ (!) Never reset a YubiKey that opens your backups                             │ │
+│                  │ │     After 8 wrong PINs it locks, and only a reset unlocks it. A reset         │ │
+│                  │ │     makes it forget its registration for good: open your backups with your    │ │
+│                  │ │     spare YubiKey or recovery code, then create new keys.                     │ │
+│                  │ │                                                                               │ │
+│                  │ │ * FIDO2 turned off on your YubiKey? Windows can't turn it on again; Yubico    │ │
+│                  │ │   Authenticator can (run it as administrator). Get Yubico Authenticator       │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│──────────────────│ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│ > YubiKey        │ │ > Technical details                                          [ Copy details ] │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 10.4: Hero variants of the YubiKey page.** The hero has no border; the boxes only separate the variants.
+
+```text
+┌─ Checking ──────────────────────────────────────────────────────────────────────────┐
+│ ( )  Checking your YubiKey...                                                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: not connected ────────────────────────────────────────────────────────────┐
+│ ( )  Connect your YubiKey                                                           │
+│      Plug it into a USB port. This page updates when it's connected.                │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: connected, not tested ────────────────────────────────────────────────────┐
+│ ( )  Your YubiKey is connected                                  [ Test YubiKey... ] │
+│      Test whether it opens your backups. Windows asks for its PIN and a touch.      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: test cancelled ───────────────────────────────────────────────────────────┐
+│ ( )  The test was cancelled                                     [ Test YubiKey... ] │
+│      If Windows said it doesn't recognize the security key, this YubiKey isn't      │
+│      registered for your keys: connect YubiKey 1 or YubiKey 2 (spare).              │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Success: matches the current keys ─────────────────────────────────────────────────┐
+│ (ok) Your YubiKey opens your backups                            [ Test YubiKey... ] │
+│      YubiKey 2 (spare) answered · tested today, 08:52                               │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Success: no keys yet ──────────────────────────────────────────────────────────────┐
+│ (ok) Your YubiKey is ready                                      [ Test YubiKey... ] │
+│      It can protect your backups. Your first backup registers it.                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Warning: not one of your keys (YK-11) ─────────────────────────────────────────────┐
+│ (!)  This YubiKey doesn't open your backups                     [ Test YubiKey... ] │
+│      It isn't registered for your keys of Tue 1 Sep 2026. Connect YubiKey 1         │
+│      or YubiKey 2 (spare) and test again.                                           │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: Windows ────────────────────────────────────────────────────────────────────┐
+│ (x)  Windows can't use your YubiKey                      [ Open Windows Update... ] │
+│      RestoreSafe needs Windows 11 version 22H2 or later.                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: no FIDO2 ───────────────────────────────────────────────────────────────────┐
+│ (x)  This YubiKey can't protect your backups                                        │
+│      Its FIDO2 function is missing or turned off. The guide below shows which       │
+│      YubiKeys work.                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: test failed ────────────────────────────────────────────────────────────────┐
+│ (x)  The test didn't work                                       [ Test YubiKey... ] │
+│      Windows ended it with an error. Technical details has the error code; the      │
+│      guide below covers the PIN.                                                    │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+| ID | Requirement |
+|---|---|
+| YK-1 | The sidebar shows **YubiKey** at its bottom, below a line, when the configuration uses a YubiKey (`authentication_mode` 2 or 3) or any key set in the backup directory has a YubiKey slot (`Keys.YubiKeyInBackups`, 11.1), so a user who changed to password-only still finds it when restoring older backups. Otherwise the item is hidden. Visibility is recomputed with every snapshot and after Reload; when the page is hidden while it is shown, Settings is selected. `Ctrl+4` opens it while it is visible. The sidebar stays one tab stop; the arrow keys reach the item like the others. |
+| YK-2 | The page starts with its title "YubiKey" and **Check again** (as Refresh on the other pages, OV-8), then the hero (figure 10.4), the **Checks** card, the setup guide (YK-8) and the technical details (YK-9). The hero is the page's own verdict: it never changes the state of 3.5 or the hero on Create backup, where a YubiKey that isn't connected stays information. |
+| YK-3 | **Automatic checks** run without any Windows Security prompt: when the page is shown, on **Check again**, on `F5` while the page is shown (besides the health check of OV-8), after Reload, and 500 ms after the last `WM_DEVICECHANGE` (a YubiKey plugged in or pulled out). They call `yubikey.Diagnose` on a worker goroutine and post the result (12.2); a result that arrives after a newer request is dropped. Until the first result, the hero reads "Checking your YubiKey…". |
+| YK-4 | Checks card, one line each, icon and text (3.3): **Windows**: "Ready for YubiKeys", or the error of `yubikey.CheckAvailability` in words ("Needs Windows 11 version 22H2 or later"). **Connected**: the number of YubiKeys and their USB functions from the product ID ("1 YubiKey with FIDO2 and OTP"), "No YubiKey connected", or "No FIDO2 function" (error) when no connected Yubico device has a FIDO interface. The FIDO interface is found by its HID usage page `0xF1D0`, not by the `MI_xx` part of the device path, which single-function keys don't have. The product IDs 0x0402 to 0x0407 are shared by YubiKey 4 and 5, so the page never names a model. **Your keys**: "Not tested", the result of the last test (YK-6), or "None yet. Your first backup registers your YubiKey." when no key set has a YubiKey slot. When the current key set has a spare YubiKey that wasn't the one that answered, a second line names the other slot: "YubiKey 2 (spare) wasn't tested. Connect it and test it too." |
+| YK-5 | **Test YubiKey…** is the hero's action whenever a YubiKey with a FIDO interface is connected and Windows is ready. It shows Windows Security prompts, so it runs only when the user clicks. There are two kinds, chosen from the current key set (`catalog.CurrentKeySet`, the keys the next backup and the newest backups use): **Match** when it has YubiKey slots: one request over all its YubiKey slots (`yubikey.DeriveFIDO2SecretAny` with their challenges from the plaintext header, as unlock does), PIN and one touch; the result names the slot label that answered ("YubiKey 1", "YubiKey 2 (spare)"). **Capability** when there is no such key set: a registration and one hmac-secret request with a random salt (`yubikey.ProbeCapability`), PIN and two touches. The credential is non-resident, so nothing stays on the YubiKey. In both kinds the derived secret is zeroed as soon as its length is checked; it is never combined with a password, used to unwrap a key, shown or logged. Older key sets with other YubiKeys are not tested; the Restore backup window asks for their YubiKey when one of their sets is restored. |
+| YK-6 | While the test runs, the hero reads "Follow the Windows Security prompt" (CR-4) and **Test YubiKey…**, **Check again** and every action that would start an operation are disabled: the test takes the one worker slot of 12.2, without a progress card or a log. It is not offered while an operation runs. The Windows Security dialog has the main window as parent (13.4). The result is kept in memory for the session only (3.1) and is cleared when a YubiKey is plugged in or pulled out, after Reload, and after a backup that created new keys; "Your keys" then reads "Not tested" again. |
+| YK-7 | Test results map to the hero variants of figure 10.4: Match answered: "Your YubiKey opens your backups" with the slot label and the time. Capability passed: "Your YubiKey is ready". Cancelled in the Windows Security dialog (`NTE_USER_CANCELLED`): "The test was cancelled", with the hint about an unknown key, because Windows tells RestoreSafe only that the user cancelled when it shows "this security key doesn't look familiar" (to confirm, YK-11). Any other failure: "The test didn't work", with the HRESULT in the technical details. |
+| YK-8 | **Setup guide**, card "Set up your YubiKey" (figure 10.3), in four numbered steps and a warning: (1) which YubiKeys work: YubiKey 5 Series or Security Key Series with firmware 5.2 or later (FIDO2 with the hmac-secret extension); YubiKey 4 and NEO don't; (2) give it a PIN: Windows Settings > Accounts > Sign-in options > Security key > Manage, with **Open Windows settings…** (`ShellExecuteW` on `ms-settings:signinoptions`); no other software is needed; (3) test it here; (4) the first backup registers it, and with `yubikey_spare` the spare too. The warning: after 8 wrong PINs the YubiKey's FIDO2 function locks and only a reset unlocks it; a reset makes it forget every registration, so it no longer opens the backups; the user opens them with the spare YubiKey or the recovery code and then creates new keys. A footnote covers the one case Windows can't fix: when the FIDO2 function was turned off on the YubiKey, Yubico Authenticator turns it on again (on Windows it runs as administrator), with the link **Get Yubico Authenticator** to `https://www.yubico.com/products/yubico-authenticator/`. The card is expanded when no key set has a YubiKey slot, when the hero shows "This YubiKey can't protect your backups", and after a failed test; otherwise it is collapsed to "How to set up a YubiKey". Links open in the default browser; RestoreSafe itself makes no network request. All texts are in `view/strings.go` (3.6). |
+| YK-9 | **Technical details**, collapsed by default, a read-only rich edit in Consolas like the report view (3.4): RestoreSafe version, Windows version and build, WebAuthn API version and the minimum needed; per Yubico HID interface its function (FIDO, OTP, other), device path, product ID, USB device version, and whether generic write access was granted or the open error; the HID driver entries of `VID_1050` from `HKLM\SYSTEM\CurrentControlSet\Enum\HID`; the last test with kind, time, result, HRESULT and slot label; the WebAuthn trace of the last test (`yubikey.DebugOutput` set to an in-memory buffer for the duration of the test). It never contains a PIN, a secret, a salt or a credential ID. **Copy details** copies it as plain text for a bug report; the text holds no secret, so the clipboard protection of 13.3 is not used. Nothing is written to a file. |
+| YK-10 | Entry points besides the sidebar: the Keys card on Create backup (OV-6) and the Keys and unlocking card on Settings (ST-8) end with a **Check your YubiKey** link while the page is visible. |
+| YK-11 | **To confirm with real keys** before the implementation is final, and to record here: which HRESULT Windows returns when the connected YubiKey holds none of the requested credentials, and when its PIN is blocked. If either can be told apart from a cancel, it gets its own variant ("This YubiKey doesn't open your backups" in figure 10.4; a blocked PIN pointing to the warning of YK-8); until then both read as YK-7 says. Whether Windows asks for a new PIN during registration when a fresh YubiKey has none; if it does, step 2 of the guide says so ("Windows asks you to set one the first time") and setting it beforehand becomes optional. Also whether the USB device version (`bcdDevice`) equals the firmware version on YubiKey 5 and Security Key; if it does, the Connected line shows the firmware and flags firmware below 5.2 as an error. |
 
 ## 11. Workflow interface
 
@@ -780,7 +926,8 @@ type Snapshot struct {
     SetFacts  map[string]logging.Fact // per set name: what its backup recorded (skipped files)
     Verified  map[string]logging.Fact // per set name: its newest verification
     Storage   Storage            // Known, TotalBytes, FreeBytes, BackupBytes, FullEstimate
-    Keys      KeysSummary        // Exists, Created, Methods, SpareYubiKey, RecoveryCode, YubiKeyConnected *bool, NewKeysReason
+    Keys      KeysSummary        // Exists, Created, Methods, SpareYubiKey, RecoveryCode, YubiKeyConnected *bool, NewKeysReason,
+                                 // YubiKeySlots (labels of the current key set's YubiKey slots), YubiKeyInBackups (any key set has one; YK-1)
     Retention []catalog.SetInfo  // what the next backup removes if it succeeds (11.3)
     Check     Result             // the health check: what it blocks
     Checked   time.Time
@@ -923,7 +1070,7 @@ else                                                        -> Protected
 
 | Package | Content |
 |---|---|
-| `cmd/restoresafe` | Starts the GUI (section 14). |
+| `cmd/restoresafe` | Starts the GUI (section 14). It is the only command; `cmd/yubidiag` is removed (decision 10). |
 | `internal/gui` | Composition root and Win32 screens: `Run`, the app, the message loop, the shell (sidebar, status bar strip), one file per page and dialog. Page files only render views and forward input. |
 | `internal/gui/flow` | Operation lifecycle without Win32: the bridge (12.2), the `interact.UI` implementation (questions go to a `Dialogs` interface the `gui` package implements), the state machine of section 4, the speed. |
 | `internal/gui/view` | View models without Win32: plain functions from snapshot, plans and state to what each page and dialog shows; every user-visible string (`strings.go`) and all formatting (`format.go`). |
@@ -933,7 +1080,8 @@ else                                                        -> Protected
 | `internal/workflow/plan` | Planning without a password: source resolution and backup names, full or differential per folder, key plan, retention candidates and preview. |
 | `internal/workflow/health` | `health.Snapshot` (11.1), with `health.Result` (items with problem codes) as its `Check`. |
 | `internal/logging` | Run log files; facts (11.4). |
-| `internal/security/yubikey` | `SetParentWindow(hwnd)` (13.4). |
+| `internal/security/yubikey` | `SetParentWindow(hwnd)` (13.4). `Diagnose()` returns a `Diagnosis` without prompts (WebAuthn API version and error, Yubico HID interfaces with usage page, path, product ID, USB device version and access, registry driver entries; YK-3, YK-9); the enumeration moves here from `cmd/yubidiag`. `ProbeCapability()` registers a non-resident credential and derives one hmac-secret, zeroing it (YK-5). `DebugOutput` stays and is set only by the YubiKey test. |
+| `internal/workflow/keycheck` | The YubiKey test of YK-5: picks Match or Capability from the current key set, runs it and returns a `Result` (kind, slot label, time, cancelled, HRESULT, error, trace). No secret leaves it. |
 
 Imports point downward only; `internal/architecture` checks it (its package documentation lists the layers and rules). Two rules shape this layout:
 
@@ -1017,7 +1165,7 @@ As 13.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` ch
 
 ### 13.4 YubiKey and Windows Security dialogs
 
-The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start and to the Restore backup window while it is open. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
+The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start (which also covers the YubiKey test, YK-6) and to the Restore backup window while it is open. Without a console program there is no `GetConsoleWindow` fallback any more; a zero parent means no owner window. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
 
 ## 14. Build and start
 
@@ -1025,7 +1173,7 @@ The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set 
 - A configuration that cannot be loaded at start (or an invalid `-config` argument) shows an error message box with the message; closing it ends RestoreSafe. After start, Reload (ST-2) keeps the app running instead.
 - The executable uses the Windows GUI subsystem (`-ldflags "-H=windowsgui"`); no console window opens. There is no console frontend and no hidden console mode; the scripted text UI the tests use is `interacttest.Script`, which the release binary does not import.
 - `build/versioninfo.json` references the application manifest `build/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 11.
-- `yubidiag` stays a console tool.
+- There is no separate diagnostic tool. `cmd/yubidiag` and the `RESTORESAFE_FIDO2_DEBUG` environment switch are removed; the YubiKey page (10.2) shows what they showed, and its technical details carry the WebAuthn trace (YK-9).
 
 ## 15. Non-functional requirements
 
@@ -1070,6 +1218,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Progress | A recording UI checks per workflow: phases in the order of BR-2, `Index` from 1 to `Count`, `Done` never decreasing within a step, a final report per step. | 11.7, BR-2, RW-7 |
 | Reload | A valid file replaces the configuration; an invalid file keeps the previous one and returns the error; Reload during an operation is refused. `reminder_days` bounds and default. | 11.6, ST-2, decision 2 |
 | Config keys | An unknown key, top level and in a block, fails with its name and line; every key of `Config` and every key of `config-SAMPLE.yaml` is known, and every key with a default can be reported missing. `MissingKeys` for an empty block, a partial block and a minimal file. `AddMissing` on the minimal file, a partial block, a CRLF file and a file without a final newline: the result loads, lists nothing missing, has the same effective configuration, keeps every original line, and the copy equals the old file; a flow-style file is refused and left unchanged. | 11.6, ST-10, decision 9 |
+| YubiKey diagnosis and test | `yubikey.Diagnose` with injected HID enumeration, attributes and registry: FIDO found by usage page also without `MI_xx`, no Yubico device, two YubiKeys, an interface that can't be opened, WebAuthn missing and too old. `keycheck` with fakes for the WebAuthn calls: Match when the current key set has YubiKey slots, Capability without, the slot label of the answering credential, cancel and other HRESULTs, the secret zeroed in every path, the trace captured and `DebugOutput` reset afterwards. | YK-3 to YK-7, YK-9 |
 | Unchanged workflows | The workflow and e2e tests pass without the window. | 17.1 (criterion 6) |
 
 ### 16.3 GUI logic without windows (Go tests)
@@ -1081,6 +1230,7 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with spare and recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
 | Restore backup view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
 | Restore backup window | Preselection from a run and from a set, Start enablement (no folder checked; an existing target folder; a space warning, which doesn't block), the heading, Check column and issue lines, checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6b |
+| YubiKey view | Sidebar visibility for each `authentication_mode` with and without YubiKey key sets in the backup directory, and the switch to Settings when it disappears. Every hero variant of figure 10.4 from a diagnosis and a test result; the Checks lines; the spare line; when the guide is expanded; actions disabled while a test or an operation runs; results cleared on a device change, Reload and new keys; the technical details contain no secret, salt or credential ID. | YK-1 to YK-10 |
 | Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
@@ -1104,7 +1254,7 @@ They run on every release candidate at 100% and 150% scaling.
 
 ### 16.5 Manual tests
 
-[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
+[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys (including the YubiKey page with YubiKey 1, the spare, an unregistered key, a key without a PIN, a FIDO-only Security Key, and the open points of YK-11), listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
 
 ### 16.6 Usability session
 
@@ -1141,6 +1291,7 @@ A release that changes the window ships only when:
 8. The UI stays responsive during every operation and while the backup directory is unreachable.
 9. No user-visible string shows raw OS or workflow text outside "Show details" and the log.
 10. The release gate of 16.7 is met.
+11. A user with a YubiKey mode can see on the YubiKey page whether Windows and the connected YubiKey are ready, find out with one test whether it opens the current backups and whether it is YubiKey 1 or the spare, and set up a new YubiKey with the guide, without another tool.
 
 ## 18. Decisions
 
@@ -1159,6 +1310,7 @@ A release that changes the window ships only when:
 | 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (core spec 7.7). Recovery mode (core spec 13.6) isn't offered. |
 | 8 | (retired) | The target release of the redesign; it shipped with 2.0.0. The number isn't reused. |
 | 9 | Settings missing from config.yaml (decided 2026-10-04) | Missing settings keep using their defaults, so a file from an older version still works; blocking until the file is complete would break every configuration with each new setting. Unknown keys are an error, because a misspelled key silently falls back to its default. The Settings page names the missing settings and adds them on request (ST-10), with a copy of the old file; RestoreSafe never writes config.yaml on its own. Defaults aren't written without asking because a written value can't be told from a chosen one: a default raised in a later version (for example `argon2.memory_mb`) would no longer reach that file. |
+| 10 | YubiKey diagnostics in the app (decided 2026-10-14) | `cmd/yubidiag` is removed; its checks become the YubiKey page (10.2). A separate console tool that isn't part of the release doesn't reach the users who have the problems, and it duplicated code the app already has. The page sits at the bottom of the sidebar and only while YubiKeys are in use, so password-only users never see it. A page, not a dialog, because it updates live when a key is plugged in and holds the setup guide. Its live test checks the current keys (which slot answers) instead of registering a throwaway credential, because that answers the user's real question without a password. The guide sets the PIN in Windows Settings, which is built in and needs no administrator rights, so a fresh YubiKey needs no other software; Yubico Authenticator appears only in a footnote, for a YubiKey whose FIDO2 function was turned off. |
 
 ### 18.2 Foundations (decided 2026-09-26)
 
