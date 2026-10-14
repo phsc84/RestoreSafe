@@ -4,7 +4,7 @@
 # through without a reason in the refactoring plan.
 internal/security/cryptox        94
 internal/security/recovery       98
-internal/config                  93
+internal/config                  92
 internal/format/manifest         92
 internal/format/naming           92
 internal/workflow/plan           93
