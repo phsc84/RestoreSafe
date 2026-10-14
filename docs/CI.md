@@ -102,6 +102,8 @@ The tools are pinned in the `tool` block of `go.mod`; nothing to install.
 
 The job uploads `cover.out` as the `coverage` artifact (locally it is in `sandbox\ci\test\`, with `test.json`, the events of `go test -json`). The console shows what `go test ./...` without `-v` shows: the package lines, the output of each failing test, and build errors. `go test` also runs every input saved under `testdata/fuzz/` (section 6).
 
+**Test file names.** A test file is named after the file it tests (`keys_test.go` for `keys.go`), or after the behaviour or tool it covers when its tests span several files or none (`refuse_test.go`, `fuzz_test.go`, `bench_test.go`, `race_test.go`).
+
 **A failing test.** The annotation shows the failing test and its lines. Run it alone, with its output:
 
 ```powershell
