@@ -192,6 +192,8 @@ Phase 2 done 2026-10-13 (`b378846`), with RF-95 found and fixed in it: RF-40 bro
 
 Phase 3 done 2026-10-13 (`960ad01`): RF-70, RF-71, RF-67, RF-65, RF-66, RF-72 and RF-86 done, and RF-40 closed with the four packages RF-70 touched. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; `go test ./...` passes; coverage 57.4 %; CI passes on all five jobs.
 
+Phase 4 done 2026-10-14 (`f81ed7b`): RF-96, RF-68 and RF-69 done; RF-97 found by a test of RF-68 and fixed. The first CI run of the phase (`6c4f9cb`) failed on three coverage floors (archive, logging, restore), because only the packages changed directly had been measured before the push; the floors are now checked locally before every push. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; every package at its floor; CI passes on all five jobs.
+
 ## Open questions
 
 Answered 2026-10-13:
