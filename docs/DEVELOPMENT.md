@@ -152,6 +152,18 @@ git commit -m "Short, clear description"
 git push
 ```
 
+### The pre-push hook
+
+A Git hook runs `go run ./tools/ci fast` (the `static` and `test` jobs of CI, about two and a half minutes) before every push, and stops the push when a check fails. Commits are not checked, so push several commits at once to wait once. Turn it on once per clone:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+- It checks the working tree, not the commits being pushed: uncommitted changes are checked along with them, so commit or stash them first when they are not ready.
+- `git push --no-verify` skips it once, e.g. for a push that changes only docs.
+- `git config --unset core.hooksPath` turns it off again.
+
 Useful commands:
 
 ```powershell
