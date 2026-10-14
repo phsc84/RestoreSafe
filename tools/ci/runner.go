@@ -163,12 +163,16 @@ func (r *runner) stream(cmd *exec.Cmd) (string, bool) {
 }
 
 // output runs a command and returns its standard output; standard error is
-// shown.
+// shown, and is part of the error when the command fails.
 func (r *runner) output(name string, args ...string) (string, error) {
 	cmd := r.command(false, name, args...)
-	cmd.Stderr = os.Stderr
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	out, err := cmd.Output()
 	r.started(err)
+	if err != nil {
+		err = fmt.Errorf("%s %s: %w\n%s", name, strings.Join(args, " "), err, stderr.String())
+	}
 	return string(out), err
 }
 

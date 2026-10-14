@@ -22,7 +22,7 @@ func (r *runner) static() {
 	r.step("gofmt", func() bool {
 		out, err := r.output("gofmt", "-l", ".")
 		if err != nil {
-			return false
+			return r.failStep("gofmt", err.Error())
 		}
 		if files := strings.TrimSpace(out); files != "" {
 			fmt.Println("Not formatted with gofmt:")
@@ -40,7 +40,12 @@ func (r *runner) static() {
 		withTest, err1 := r.output("go", "tool", "deadcode", "-test", "./...")
 		without, err2 := r.output("go", "tool", "deadcode", "./...")
 		unreached, testOnly := check.FilterDeadcode(withTest, without)
-		ok := err1 == nil && err2 == nil
+		ok := true
+		for _, err := range []error{err1, err2} {
+			if err != nil {
+				ok = r.failStep("deadcode", err.Error())
+			}
+		}
 		if len(unreached) > 0 {
 			text := strings.Join(unreached, "\n")
 			fmt.Println("Functions nothing calls:\n" + text)
@@ -187,7 +192,15 @@ func (r *runner) fuzz() {
 	ok := r.step("list", func() bool {
 		out, err := r.output("go", "test", "-list", "^Fuzz", "-json", "./...")
 		if err != nil {
-			return false
+			// A package that does not build reports why in the events.
+			var build bytes.Buffer
+			if run, _ := check.ReadTest(strings.NewReader(out), io.Discard); run != nil {
+				for _, f := range run.Failures {
+					fmt.Fprintln(&build, check.FirstLines(f.Output, check.MaxAnnotationLines))
+				}
+			}
+			fmt.Print(build.String())
+			return r.failStep("list", build.String()+err.Error())
 		}
 		targets, err = check.FuzzTargets(strings.NewReader(out))
 		if err != nil || len(targets) == 0 {
