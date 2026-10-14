@@ -248,18 +248,13 @@ For manual testing between releases, build only the exe:
 
 A plain `go build` of `./cmd/restoresafe` needs `cmd\restoresafe\resource.syso`, which only the two scripts generate (ignored by Git). Without it the exe has no manifest, and RestoreSafe shows an error instead of its window. `go build ./...` alone only checks that everything compiles; it writes no exe.
 
-Before a commit, run the checks of CONTRIBUTING.md section 4 (what each one does, and how to fix a failure, is in [CI.md](CI.md)):
+Before pushing, run the checks of CONTRIBUTING.md section 4 (what each one does, and how to fix a failure, is in [CI.md](CI.md)):
 
 ```powershell
-gofmt -l .
-go vet ./...
-go build ./...
-go test ./...
-go tool staticcheck ./...
-go tool govulncheck ./...
+go run ./tools/ci fast
 ```
 
-`go test ./...` includes `internal/architecture`, which fails when a package imports one from a higher layer (order from bottom to top: `fsx`/`buildinfo`/`problem`, `security`, `config`/`logging`, `format`, `workflow`, `gui`, `cmd`). The project layout is described in the README (Development setup); the layer rules in the package documentation of `internal\architecture`, and how refactoring works in `docs\SPEC-refactoring.md`.
+`go test ./...`, which it runs, includes `internal/architecture`, which fails when a package imports one from a higher layer (order from bottom to top: `fsx`/`buildinfo`/`problem`, `security`, `config`/`logging`, `format`, `workflow`, `gui`, `cmd`). The project layout is described in the README (Development setup); the layer rules in the package documentation of `internal\architecture`, and how refactoring works in `docs\SPEC-refactoring.md`.
 
 ## 11. Manual testing
 

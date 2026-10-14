@@ -51,18 +51,13 @@ A pull request (PR) asks to merge one branch into another. GitHub shows its comm
 
 GitHub Actions runs five jobs on every push to `main` and `dev` and to a branch with an open pull request: `static` (format, vet, build, static analysis), `test` (tests and coverage), `race` (race detector), `fuzz` (fuzzing), and `gui` (GUI smoke test). A pull request into `main` can be merged only when all five are green.
 
-Before pushing, run what CI runs (the tools are pinned in `go.mod`; nothing to install):
+Before pushing, run what CI runs, with the same runner (the tools are pinned in `go.mod`; nothing to install):
 
 ```powershell
-gofmt -l .
-go vet ./...
-go build ./...
-go test ./...
-go tool staticcheck ./...
-go tool govulncheck ./...
+go run ./tools/ci fast
 ```
 
-What each job checks, how to read a result, and how to fix a failure, job by job, is in [CI.md](CI.md).
+`fast` is the `static` and `test` jobs; `all` adds `race` and `fuzz`. What each job checks, how to read a result, and how to fix a failure, job by job, is in [CI.md](CI.md).
 
 ## 5. CHANGELOG.md
 
