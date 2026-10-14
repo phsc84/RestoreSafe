@@ -41,6 +41,8 @@ Coverage by package is unchanged since the result of the 2.0 round: cryptox 89.1
 
 Looked at without a finding: the layer rules (`internal/architecture` unchanged since the release); package documentation; secrets passed as `string` (none); the DLL search order (both programs call `SetDefaultDllDirectories`); `.gitattributes` against the file types; `config-SAMPLE.yaml` against the configuration keys; every "core spec n", "GUI spec n" and "GUI spec XX-n" citation in the code against the specs; `ids_test.go` against the GUI scripts.
 
+Not looked at in this round: the cryptography point of SPEC-refactoring section 5.4 (algorithms, KDF bounds and defaults against current OWASP and RFC 9106 guidance). No deficiency is known; the defaults are 512 MB, 3 passes and 4 threads ([crypto.go:104](../internal/security/cryptox/crypto.go#L104)). The next round starts its review with it.
+
 ## 3. Constraints
 
 The standing constraints of SPEC-refactoring section 2 apply. The format fixtures in `internal/format/testdata/v2.0.0/` now describe the released format: they never change.
@@ -186,9 +188,7 @@ Answered 2026-10-13:
 
 ## Not part of this round
 
-- Any change to container format 2, the key hierarchy, or the KDF defaults.
 - Replacing the Win32 GUI with a toolkit, or `logging` with `log/slog`.
-- Supporting platforms other than Windows 64-bit.
 - Splitting the long functions in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), `setwriter.Write` and `backup.run` (RF-68 says why).
 - `gui/view/strings.go` (516 lines): a table of texts, longer by nature.
 - **yubidiag needs an overhaul** (owner, 2026-10-13): it may not do what it is for. Its new purpose and behaviour get a specification of their own first; then the work is a feature, not a refactoring item. Noted here so it is not forgotten.
