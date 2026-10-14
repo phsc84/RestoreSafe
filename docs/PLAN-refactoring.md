@@ -191,7 +191,7 @@ Answered 2026-10-13:
 - Replacing the Win32 GUI with a toolkit, or `logging` with `log/slog`.
 - Splitting the long functions in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), `setwriter.Write` and `backup.run` (RF-68 says why).
 - `gui/view/strings.go` (516 lines): a table of texts, longer by nature.
-- **yubidiag needs an overhaul** (owner, 2026-10-13): it may not do what it is for. Its new purpose and behaviour get a specification of their own first; then the work is a feature, not a refactoring item. Noted here so it is not forgotten.
+- **yubidiag needs an overhaul** (owner, 2026-10-13): it may not do what it is for. Its new purpose and behaviour get a specification of their own first; then the work is a feature, not a refactoring item. Noted here so it is not forgotten. Specified on 2026-10-14 as the YubiKey page in [SPEC-gui.md](SPEC-gui.md) 10.2 (decision 10), which removes `cmd/yubidiag`.
 
 ## Done when
 
