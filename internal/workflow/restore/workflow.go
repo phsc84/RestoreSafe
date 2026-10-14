@@ -139,6 +139,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) er
 			o.log.Warn("Restore cancelled. Directories restored before cancelling are complete; a directory that was being restored is incomplete (see the warning above).")
 			return job.Cancelled("Restore")
 		}
+		o.log.Error("%v", err)
 		return err
 	}
 	if unread > 0 {
@@ -362,7 +363,12 @@ func (o *operation) restoreEntry(ctx context.Context, rep interact.ProgressRepor
 	m, err := restorepoint.Restore(ctx, set, baseSet, master, outDir, restorepoint.Output{Log: o.log, Done: &done})
 	stopReport()
 	if err != nil {
-		o.log.Warn("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
+		// A cancel is the user's choice, not a failure.
+		incomplete := o.log.Error
+		if ctx.Err() != nil {
+			incomplete = o.log.Warn
+		}
+		incomplete("  The restore of [%s] is INCOMPLETE: %s may contain only part of the backup.", entry.DirectoryName, filepath.ToSlash(outDir))
 		return 0, err
 	}
 	o.log.Info("  Restored: %d file(s), %d directory(s) from %d part file(s) - [%s] successfully restored and checked", m.Footer.Files, m.Footer.Dirs, parts, entry.DirectoryName)

@@ -122,6 +122,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) er
 			o.log.Warn("Verification cancelled.")
 			return job.Cancelled("Verification")
 		}
+		o.log.Error("%v", err)
 		return err
 	}
 	if skipped > 0 {

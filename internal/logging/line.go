@@ -10,8 +10,6 @@ const (
 	SeverityDebug = "DEBUG"
 	SeverityWarn  = "WARN "
 	SeverityFact  = "FACT "
-	// SeverityError is never written by RestoreSafe 2, which logs failures
-	// as warnings; the log window marks such lines all the same.
 	SeverityError = "ERROR"
 )
 

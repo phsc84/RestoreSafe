@@ -140,6 +140,10 @@ func TestRunReportsADamagedPartAndTheIncompleteFolder(t *testing.T) {
 	if !strings.Contains(out.String(), "is INCOMPLETE") {
 		t.Fatalf("expected the incomplete folder to be named, got %q", out.String())
 	}
+	lines := errorsIn(out.String())
+	if len(lines) != 2 || !strings.Contains(lines[0], "is INCOMPLETE") || !strings.HasPrefix(lines[1], "Failed to restore directory") {
+		t.Fatalf("the incomplete folder and the failure must be ERROR lines, got %q", lines)
+	}
 }
 
 func TestRunWarnsAboutFilesTheBackupCouldNotRead(t *testing.T) {
@@ -217,4 +221,18 @@ func TestRunCancelledBeforeTheFirstSetLeavesNoFolder(t *testing.T) {
 	if !strings.Contains(out.String(), "Restore cancelled.") {
 		t.Fatalf("expected the cancellation in the log, got %q", out.String())
 	}
+	if lines := errorsIn(out.String()); len(lines) != 0 {
+		t.Fatalf("a cancellation is no error, got %q", lines)
+	}
+}
+
+// errorsIn returns the messages of the ERROR lines in text.
+func errorsIn(text string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if l, ok := logging.ParseLine(line); ok && l.Severity == logging.SeverityError {
+			out = append(out, l.Message)
+		}
+	}
+	return out
 }

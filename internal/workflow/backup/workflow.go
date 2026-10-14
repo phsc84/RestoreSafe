@@ -267,6 +267,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Sourc
 // was kept and returns the cancellation.
 func backupFailed(ctx context.Context, log *logging.Logger, start time.Time, err error) error {
 	if ctx.Err() == nil {
+		log.Error("%v", err)
 		log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: err.Error(), Seconds: secondsSince(start)})
 		return err
 	}
@@ -292,7 +293,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 	for i, entry := range entries {
 		set, err := catalog.OpenSet(backupDir, entry)
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			log.Error("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue
@@ -309,7 +310,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 			return failures, ctxErr
 		}
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			log.Error("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue

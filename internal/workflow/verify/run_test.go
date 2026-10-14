@@ -140,6 +140,9 @@ func TestVerifyAllReportsADamagedPartAndLogsTheFailure(t *testing.T) {
 	if fact := facts.Verify[fx.Entry.String()]; err != nil || len(facts.Verify) != 1 || fact.Result != logging.ResultFailed || fact.Error == "" {
 		t.Fatalf("expected one failed verify fact with its reason, got %+v (%v)", facts.Verify, err)
 	}
+	if lines := errorLines(t, logPath); len(lines) != 1 || !strings.HasPrefix(lines[0], "Failed to verify directory") {
+		t.Fatalf("the failure must be an ERROR line with its reason, got %q", lines)
+	}
 }
 
 func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
@@ -163,4 +166,28 @@ func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
 	if facts, err := logging.ReadFacts(logPath); err != nil || len(facts.Verify) != 0 {
 		t.Fatalf("a cancelled verification writes no fact, got %+v (%v)", facts.Verify, err)
 	}
+	if lines := errorLines(t, logPath); len(lines) != 0 {
+		t.Fatalf("a cancellation is no error, got %q", lines)
+	}
+}
+
+// errorLines returns the messages of the ERROR lines in the log at path.
+func errorLines(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return errorsIn(string(data))
+}
+
+// errorsIn returns the messages of the ERROR lines in text.
+func errorsIn(text string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		if l, ok := logging.ParseLine(line); ok && l.Severity == logging.SeverityError {
+			out = append(out, l.Message)
+		}
+	}
+	return out
 }

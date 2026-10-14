@@ -166,6 +166,13 @@ func (l *Logger) Warn(format string, args ...any) {
 	l.write(SeverityWarn, format, args...)
 }
 
+// Error logs a failure: what the user asked for did not happen (a run, a
+// set, a verification). A run that completed with something to look at
+// logs warnings instead.
+func (l *Logger) Error(format string, args ...any) {
+	l.write(SeverityError, format, args...)
+}
+
 // InfoLogOnly logs an informational message without mirroring it to the output.
 func (l *Logger) InfoLogOnly(format string, args ...any) {
 	l.writeLogOnly(SeverityInfo, format, args...)

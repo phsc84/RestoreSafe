@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/workflow/backup"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/restore"
@@ -93,6 +94,9 @@ func TestCancelAtEachPhase(t *testing.T) {
 					t.Error("a restore cancelled before writing must leave no folder")
 				case phase == interact.PhaseRestoring && !strings.Contains(s.out.String(), "INCOMPLETE"):
 					t.Errorf("a restore cancelled while writing must be marked INCOMPLETE: %s", s.out.String())
+				}
+				if strings.Contains(s.out.String(), "] "+logging.SeverityError+" - ") {
+					t.Errorf("a cancellation is no error: %s", s.out.String())
 				}
 			})
 		}
