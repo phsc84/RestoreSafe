@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -147,4 +148,51 @@ func TestRestoreSkipsVoidEntries(t *testing.T) {
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// denyListing makes dir unlistable for everyone, administrators included,
+// until the test ends.
+func denyListing(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("icacls", dir, "/deny", "*S-1-1-0:(RD)").CombinedOutput(); err != nil {
+		t.Fatalf("icacls deny: %v: %s", err, out)
+	}
+	t.Cleanup(func() {
+		if out, err := exec.Command("icacls", dir, "/remove:d", "*S-1-1-0").CombinedOutput(); err != nil {
+			t.Errorf("icacls remove: %v: %s", err, out)
+		}
+	})
+}
+
+func TestBuildTarHandlesAFolderItCannotList(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	mustWrite(t, filepath.Join(src, "a.txt"), []byte("alpha"))
+	mustWrite(t, filepath.Join(src, "locked", "b.txt"), []byte("beta"))
+	denyListing(t, filepath.Join(src, "locked"))
+	if _, err := os.ReadDir(filepath.Join(src, "locked")); err == nil {
+		t.Skip("the folder can still be listed; the deny entry has no effect here")
+	}
+
+	if _, _, err := buildWith(t, BuildOptions{SourceDir: src}); err == nil || !strings.Contains(err.Error(), "locked") || !strings.Contains(err.Error(), "on_unreadable_file: skip") {
+		t.Fatalf("by default the backup stops with the folder and the remedy, got %v", err)
+	}
+
+	var skipped []string
+	var stats BuildStats
+	m, _, err := buildWith(t, BuildOptions{
+		SourceDir: src, SkipUnreadable: true, Stats: &stats,
+		OnSkip: func(rel, reason string, stale bool) { skipped = append(skipped, rel) },
+	})
+	if err != nil {
+		t.Fatalf("with skip: %v", err)
+	}
+	types := map[string]string{}
+	for _, e := range m.Entries {
+		types[e.Path] = e.Type
+	}
+	if types["locked"] != manifest.TypeSkipped || types["a.txt"] != manifest.TypeFile || len(skipped) != 1 || skipped[0] != "locked" || stats.Skipped != 1 {
+		t.Fatalf("the folder is recorded as skipped: entries %v, skipped %v, stats %+v", types, skipped, stats)
+	}
 }
