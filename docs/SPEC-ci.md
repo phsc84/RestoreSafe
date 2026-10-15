@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living; implemented 2026-10-14 (refactoring RF-87); decisions in section 10 |
-| Readers | Whoever changes `tools/ci` or `ci.yml`. How to use CI and fix a failing job is in [CI.md](CI.md). |
+| Readers | Whoever changes `tools/ci` or `ci.yml`. How to use CI and fix a failing job is in [GUIDE-ci.md](GUIDE-ci.md). |
 | Dependencies | Go standard library only, and the tools pinned in `go.mod` |
 
 ## 1. Purpose
@@ -26,7 +26,7 @@ go run ./tools/ci gui         # the GUI smoke test (takes over mouse and keyboar
 
 ## 2. Constraints
 
-1. **Job IDs and names are fixed.** The keys `static`, `test`, `race`, `fuzz`, `gui` and their `name:` values in `ci.yml` are the required checks of [release-branch.json](../.github/rulesets/release-branch.json); renaming one means changing the ruleset in the same commit and applying it (CI.md section 8).
+1. **Job IDs and names are fixed.** The keys `static`, `test`, `race`, `fuzz`, `gui` and their `name:` values in `ci.yml` are the required checks of [release-branch.json](../.github/rulesets/release-branch.json); renaming one means changing the ruleset in the same commit and applying it (GUIDE-ci.md section 8).
 2. **Standard library only.** `tools/ci` imports nothing outside the standard library and no package of the module. External tools are called through `go tool` (staticcheck, govulncheck, deadcode, as pinned in `go.mod`), `go`, `gofmt`, `gcc` (for the check in 6.3 only) and `powershell.exe` (for `gui` only).
 3. **The project's rules apply to the runner too.** It is vetted, staticchecked and dead-code checked like the rest; its logic package has a coverage floor (section 8); it is in `internal/architecture` (section 3.2).
 4. **No check becomes weaker.** A change of the runner keeps every check of section 4, or the change says why in its commit and in this spec.
@@ -138,11 +138,11 @@ Step 6 (RF-70, RF-86):
 
 `go test -count=1 -race -timeout 45m -json ./...`, `CGO_ENABLED=1`, events saved to `<out>/race/race.json`, console output and failures as in 6.2 step 1. A data race shows as a failing test whose output contains `WARNING: DATA RACE`; the report is that test's output, no extra pattern needed.
 
-Before it starts, the runner looks for `gcc` in `PATH` and prints its version line. Without a gcc: in CI (`GITHUB_ACTIONS=true`) the job fails; locally it is skipped with the reason "no gcc in PATH (see CI.md section 5)" (decision 1).
+Before it starts, the runner looks for `gcc` in `PATH` and prints its version line. Without a gcc: in CI (`GITHUB_ACTIONS=true`) the job fails; locally it is skipped with the reason "no gcc in PATH (see GUIDE-ci.md section 5)" (decision 1).
 
 ### 6.4 fuzz
 
-1. **List.** `go test -list '^Fuzz' -json ./...`; a target is an `output` event of a package whose text (trimmed) starts with `Fuzz` and is a Go identifier. No target found is a failure: the project has fuzz targets (CI.md section 6), so an empty list means the listing broke.
+1. **List.** `go test -list '^Fuzz' -json ./...`; a target is an `output` event of a package whose text (trimmed) starts with `Fuzz` and is a Go identifier. No target found is a failure: the project has fuzz targets (GUIDE-ci.md section 6), so an empty list means the listing broke.
 2. **Fuzz** each target, one after the other: `go test -run '^$' -fuzz '^<name>$' -fuzztime <fuzztime> <package>`, `CGO_ENABLED=0`, output streamed and copied to `<out>/fuzz/fuzz.log`, headed `== <name> (<package>)`. Plain output, not `-json`: fuzzing reports a crash in text.
 3. A failing target fails the job; the others still run. When the output contains `Failing input written to <path>`, the summary lists that path.
 
@@ -206,18 +206,18 @@ Every job has this shape; only `name`, `timeout-minutes` and the artifact differ
 
 - `tools/ci/check` has a coverage floor of 90 in `test-coverage-floors.txt`.
 - `tools/ci` (`main`) has no floor: it runs commands. A change of it is checked by running the jobs it changes, locally and in CI.
-- No fuzz target: the runner reads output of `go`, not bytes from a backup directory (CI.md section 6).
+- No fuzz target: the runner reads output of `go`, not bytes from a backup directory (GUIDE-ci.md section 6).
 
 ## 9. Docs
 
-[CI.md](CI.md) is for the user of CI: what each job checks, how to read a result, how to reproduce and fix a failure, with `go run ./tools/ci <job>` as the way to run a job and single commands where they narrow a failure. This spec is for whoever changes the runner. A change of what the user sees (a job, a step, a command, the summary, an annotation) changes both. [CONTRIBUTING.md](CONTRIBUTING.md) section 4 and [DEVELOPMENT.md](DEVELOPMENT.md) section 10 name `go run ./tools/ci fast` before a push, and DEVELOPMENT.md section 7 the pre-push hook (section 10.1).
+[GUIDE-ci.md](GUIDE-ci.md) is for the user of CI: what each job checks, how to read a result, how to reproduce and fix a failure, with `go run ./tools/ci <job>` as the way to run a job and single commands where they narrow a failure. This spec is for whoever changes the runner. A change of what the user sees (a job, a step, a command, the summary, an annotation) changes both. [CONTRIBUTING.md](CONTRIBUTING.md) section 4 and [GUIDE-development.md](GUIDE-development.md) section 10 name `go run ./tools/ci fast` before a push, and GUIDE-development.md section 7 the pre-push hook (section 10.1).
 
 ## 10. Decisions
 
 Decided by the owner, 2026-10-14:
 
 1. **Race without a gcc, locally: skipped.** The summary shows `SKIP` with the reason, exit code 0. The development machine has no gcc; the race detector runs on the GitHub runner on every push and stays a required check for `main`. On the runner, a missing gcc fails the job (6.3).
-2. **Pre-push hook: yes, tried out.** Commits stay unchecked; pushes are checked, so pushing less often (several commits at once) keeps the wait small. If the wait turns out to be a nuisance, the hook is dropped again; that is a change of DEVELOPMENT.md only.
+2. **Pre-push hook: yes, tried out.** Commits stay unchecked; pushes are checked, so pushing less often (several commits at once) keeps the wait small. If the wait turns out to be a nuisance, the hook is dropped again; that is a change of GUIDE-development.md only.
 
 ### 10.1 The pre-push hook
 
@@ -225,8 +225,8 @@ Decided by the owner, 2026-10-14:
 |---|---|
 | CI-30 | `.githooks/pre-push` runs `go run ./tools/ci fast` from the repository root and passes its exit code on; a non-zero code stops the push. It is a two-line `sh` script (`#!/bin/sh`, `exec go run ./tools/ci fast`), which Git for Windows runs with its own `sh`. |
 | CI-31 | `.gitattributes` has `.githooks/* text eol=lf`, so the hook keeps LF line endings on Windows. |
-| CI-32 | The hook is turned on per clone with `git config core.hooksPath .githooks` (Git does not take hooks from a clone by itself). DEVELOPMENT.md says so, and that `git push --no-verify` skips it once, e.g. for a docs-only push. |
-| CI-33 | DEVELOPMENT.md notes that the hook checks the working tree, not the pushed commits: uncommitted changes are checked along with them. |
+| CI-32 | The hook is turned on per clone with `git config core.hooksPath .githooks` (Git does not take hooks from a clone by itself). GUIDE-development.md says so, and that `git push --no-verify` skips it once, e.g. for a docs-only push. |
+| CI-33 | GUIDE-development.md notes that the hook checks the working tree, not the pushed commits: uncommitted changes are checked along with them. |
 
 ## 11. Not part of this spec
 

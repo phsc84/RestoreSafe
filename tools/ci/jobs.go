@@ -165,7 +165,7 @@ func (r *runner) floors(run *check.TestRun) bool {
 func (r *runner) race() string {
 	gcc, err := exec.LookPath("gcc")
 	if err != nil {
-		const reason = "no gcc in PATH (see CI.md section 5)"
+		const reason = "no gcc in PATH (see GUIDE-ci.md section 5)"
 		if r.github {
 			r.step("gcc", func() bool {
 				fmt.Println(reason)

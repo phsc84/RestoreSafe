@@ -453,7 +453,7 @@ If all registered YubiKeys are lost and you have no recovery code, backups locke
 - [Go](https://go.dev/dl/) 1.27 or later
 - Nothing else: the developer tools (`goversioninfo`, `staticcheck`, `govulncheck`, `deadcode`) are pinned in `go.mod` and run with `go tool <name>`.
 
-Branches, commits, pull requests, and the rules every change keeps are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md); the CI jobs, and how to fix a failure, in [docs/CI.md](docs/CI.md); the setup of a development machine, the builds, and the release steps in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Branches, commits, pull requests, and the rules every change keeps are in [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md); the CI jobs, and how to fix a failure, in [docs/GUIDE-ci.md](docs/GUIDE-ci.md); the setup of a development machine, the builds, and the release steps in [docs/GUIDE-development.md](docs/GUIDE-development.md).
 
 ### Build
 
@@ -482,7 +482,7 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 
 Imports point downward only (`gui` → `workflow` → `format` → `security`, ...); `go test ./internal/architecture` checks this.
 
-The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-core.md](docs/SPEC-core.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUI-TEST-CHECKLIST.md](docs/GUI-TEST-CHECKLIST.md).
+The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-core.md](docs/SPEC-core.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUIDE-gui-test.md](docs/GUIDE-gui-test.md).
 
 ### YubiKey diagnostic tool
 

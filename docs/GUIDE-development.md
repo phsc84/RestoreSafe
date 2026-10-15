@@ -260,7 +260,7 @@ For manual testing between releases, build only the exe:
 
 A plain `go build` of `./cmd/restoresafe` needs `cmd\restoresafe\resource.syso`, which only the two scripts generate (ignored by Git). Without it the exe has no manifest, and RestoreSafe shows an error instead of its window. `go build ./...` alone only checks that everything compiles; it writes no exe.
 
-Before pushing, run the checks of CONTRIBUTING.md section 4 (what each one does, and how to fix a failure, is in [CI.md](CI.md)):
+Before pushing, run the checks of CONTRIBUTING.md section 4 (what each one does, and how to fix a failure, is in [GUIDE-ci.md](GUIDE-ci.md)):
 
 ```powershell
 go run ./tools/ci fast
@@ -271,7 +271,7 @@ go run ./tools/ci fast
 ## 11. Manual testing
 
 - `sandbox\` is the personal folder for manual tests (configurations, source and backup directories). It is ignored by Git.
-- `scripts\gui-test\` contains the PowerShell UI automation used for the manual GUI checklist (`docs\GUI-TEST-CHECKLIST.md`); see its README.
+- `scripts\gui-test\` contains the PowerShell UI automation used for the manual GUI checklist (`docs\GUIDE-gui-test.md`); see its README.
 
 ### Throughput benchmarks
 
@@ -303,7 +303,7 @@ go run golang.org/x/perf/cmd/benchstat@latest old.txt new.txt
 
 ### Fuzzing
 
-Every parser of bytes that can come from a backup directory or a file has a fuzz target. What fuzzing does, how to run it locally, and what to do when a target fails is in [CI.md](CI.md) section 6.
+Every parser of bytes that can come from a backup directory or a file has a fuzz target. What fuzzing does, how to run it locally, and what to do when a target fails is in [GUIDE-ci.md](GUIDE-ci.md) section 6.
 
 ## 12. Troubleshooting
 

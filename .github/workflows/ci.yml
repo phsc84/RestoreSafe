@@ -2,7 +2,7 @@
 # Windows, the only platform RestoreSafe supports (refactoring 2.0 RF-1).
 # A branch with a pull request runs once per push, through the pull request.
 # Each job's checks are one run of the CI runner, tools/ci, which runs the
-# same way locally: go run ./tools/ci <job> (docs/CI.md, docs/SPEC-ci.md).
+# same way locally: go run ./tools/ci <job> (docs/GUIDE-ci.md, docs/SPEC-ci.md).
 name: CI
 
 on:

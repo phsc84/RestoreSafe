@@ -58,7 +58,7 @@ Run on a clean checkout of the round's starting commit and record the results in
 | Vulnerabilities | `go tool govulncheck -show verbose ./...` | called, imported, and required-only findings |
 | Formatting | `gofmt -l .` | files listed |
 | Fuzzing | each fuzz target for 30 s | crashes |
-| Throughput | the opt-in benchmarks of DEVELOPMENT.md section 11, SSD and network share | median MiB/s, backup and restore |
+| Throughput | the opt-in benchmarks of GUIDE-development.md section 11, SSD and network share | median MiB/s, backup and restore |
 | Markers | `git grep -n -E "TODO\|FIXME\|XXX\|HACK"` | count and where |
 | Docs | the index in `docs/README.md` against the files in `docs/` | missing or stale documents |
 
@@ -113,7 +113,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 - The fault-injection matrix (damaged, missing, truncated parts; full disk; cancel in every phase) has a test per row.
 - The format fixtures restore bit-exact.
 - The GUI scripts in `scripts/gui-test` still find every control (`ids_test.go`) and run.
-- The manual checklist (`docs/GUI-TEST-CHECKLIST.md`) has no row that a script could cover instead.
+- The manual checklist (`docs/GUIDE-gui-test.md`) has no row that a script could cover instead.
 - Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference. A test that needs a permission to be denied (an ACL deny entry) did not take effect on every runner; such a test skips with the reason, and a second test reaches the same code in a way that works everywhere, so the floor does not depend on the runner (RF-68).
 - A check that only a person can do (Process Monitor, real hardware) names who does it and before which release, in the item itself; otherwise it stays open unnoticed (refactoring 2.0 RF-52).
 

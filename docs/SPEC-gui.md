@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
+| Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-09. |
 | Planned | Editing the configuration and dark mode in 2.1.0 (decisions 1 and 4). The YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10); release to be decided. |
 | Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
-| Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
+| Manual tests | [GUIDE-gui-test.md](GUIDE-gui-test.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
 
 ## 0. How to use this document (read first)
@@ -1254,7 +1254,7 @@ They run on every release candidate at 100% and 150% scaling.
 
 ### 16.5 Manual tests
 
-[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys (including the YubiKey page with YubiKey 1, the spare, an unregistered key, a key without a PIN, a FIDO-only Security Key, and the open points of YK-11), listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
+[GUIDE-gui-test.md](GUIDE-gui-test.md) holds what automation can't judge: YubiKey prompts with real keys (including the YubiKey page with YubiKey 1, the spare, an unregistered key, a key without a PIN, a FIDO-only Security Key, and the open points of YK-11), listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
 
 ### 16.6 Usability session
 

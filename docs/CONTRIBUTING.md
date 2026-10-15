@@ -1,6 +1,6 @@
 # Contributing to RestoreSafe
 
-How changes get from an idea into a release: branches, commits, pull requests, the checks CI runs, and the rules every change keeps. How to set up a machine and build is in the README ("Development setup"); what CI checks and how to fix a failure in [CI.md](CI.md).
+How changes get from an idea into a release: branches, commits, pull requests, the checks CI runs, and the rules every change keeps. How to set up a machine and build is in the README ("Development setup"); what CI checks and how to fix a failure in [GUIDE-ci.md](GUIDE-ci.md).
 
 ## 1. Branches
 
@@ -57,7 +57,7 @@ Before pushing, run what CI runs, with the same runner (the tools are pinned in 
 go run ./tools/ci fast
 ```
 
-`fast` is the `static` and `test` jobs; `all` adds `race` and `fuzz`. What each job checks, how to read a result, and how to fix a failure, job by job, is in [CI.md](CI.md).
+`fast` is the `static` and `test` jobs; `all` adds `race` and `fuzz`. What each job checks, how to read a result, and how to fix a failure, job by job, is in [GUIDE-ci.md](GUIDE-ci.md).
 
 ## 5. CHANGELOG.md
 
