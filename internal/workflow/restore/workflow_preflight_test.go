@@ -59,7 +59,7 @@ func TestBuildRestorePreflightReportsErrors(t *testing.T) {
 	}
 }
 
-func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *testing.T) {
+func TestRestorePreflightReportShowsRestoreDirectoriesWithPerDirectoryErrors(t *testing.T) {
 	t.Parallel()
 	backupDir := t.TempDir()
 	restorePath := t.TempDir()
@@ -89,7 +89,7 @@ func TestPrintRestorePreflightShowsRestoreDirectoriesWithPerDirectoryErrors(t *t
 	}
 }
 
-func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
+func TestRestorePreflightReportShowsYubiKeyStatus(t *testing.T) {
 	t.Parallel()
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1}}
 
@@ -115,7 +115,7 @@ func TestPrintRestorePreflightShowsYubiKeyStatus(t *testing.T) {
 	}
 }
 
-func TestPrintRestorePreflightShowsInsufficientSpaceError(t *testing.T) {
+func TestRestorePreflightReportShowsInsufficientSpaceError(t *testing.T) {
 	t.Parallel()
 
 	items := []restorePreflightItem{{Entry: docsEntry, PartCount: 1, TotalSizeBytes: math.MaxInt64}}

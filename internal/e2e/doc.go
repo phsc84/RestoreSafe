@@ -21,7 +21,7 @@
 //	                                    CorruptPart (verify after backup)
 //	Bit flipped in the manifest         as above                                       TestDamagedSetIsRefused/bit in manifest       as restore
 //	Bit flipped in the trailer          plan.TestFoldersUseNewestCompleteFullAsBase    TestDamagedSetIsRefused/bit in trailer        as restore
-//	Base of a differential missing      health.TestBaseMissingNextBackupIsFull         restorepoint.TestProcessRestorePoint-         verify.TestVerifyPlanDescribesThe-
+//	Base of a differential missing      health.TestBaseMissingNextBackupIsFull         restorepoint.TestRestorePoint-                verify.TestVerifyPlanDescribesThe-
 //	                                                                                   RejectsWrongOrMissingBase,                    Verification,
 //	                                                                                   job.TestSelectionPreflightAndRows             job.TestSelectionPreflightAndRows
 //	Cancel at each phase                TestCancelAtEachPhase/backup/*,                TestCancelAtEachPhase/restore/*,              TestCancelAtEachPhase/verify/*,

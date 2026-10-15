@@ -62,10 +62,10 @@ func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	return env.out.String()
 }
 
-// TestRunBackupOperationWritesCompleteSet exercises the operation half of the
+// TestOperationRunWritesCompleteSet exercises the operation half of the
 // backup workflow directly: with the key set passed in, no password prompt or
 // stdin mocking is required.
-func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
+func TestOperationRunWritesCompleteSet(t *testing.T) {
 	env := newOperationEnv(t, "operation payload")
 	output := env.run(t, "OPS001")
 	if !strings.Contains(output, "Backup completed successfully") {
@@ -77,10 +77,10 @@ func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
 	}
 }
 
-// TestRunBackupOperationVerifiesAfterBackup runs a backup with
+// TestOperationRunVerifiesAfterBackup runs a backup with
 // verify_after_backup enabled and confirms the freshly written set is
 // re-read, decrypted, and checked in the same run.
-func TestRunBackupOperationVerifiesAfterBackup(t *testing.T) {
+func TestOperationRunVerifiesAfterBackup(t *testing.T) {
 	env := newOperationEnv(t, "verify payload")
 	env.cfg.VerifyAfterBackup = true
 	output := env.run(t, "OPS002")
@@ -92,7 +92,7 @@ func TestRunBackupOperationVerifiesAfterBackup(t *testing.T) {
 	}
 }
 
-func TestRunBackupOperationPrintsLogFileLast(t *testing.T) {
+func TestOperationRunPrintsLogFileLast(t *testing.T) {
 	env := newOperationEnv(t, "operation payload")
 	output := env.run(t, "OPS004")
 

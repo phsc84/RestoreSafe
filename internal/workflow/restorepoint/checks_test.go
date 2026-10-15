@@ -57,28 +57,28 @@ func TestVerifyOwnDataDetectsCorruptedPart(t *testing.T) {
 	}
 }
 
-func TestProcessAndVerifyOwnDataRejectWrongKey(t *testing.T) {
+func TestVerifyAndVerifyOwnDataRejectAWrongKey(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	set := openSet(t, fx.BackupDir, fx.Entry)
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 	if _, err := Verify(context.Background(), set, nil, wrong, Output{}); err == nil {
-		t.Fatal("Process must fail with a wrong key")
+		t.Fatal("Verify must fail with a wrong key")
 	}
 	if _, err := VerifyOwnData(context.Background(), set, wrong, Output{}); err == nil {
 		t.Fatal("VerifyOwnData must fail with a wrong key")
 	}
 }
 
-func TestProcessStopsWhenCancelled(t *testing.T) {
+func TestVerifyStopsWhenCancelled(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := Verify(ctx, openSet(t, fx.BackupDir, fx.Entry), nil, fx.Master, Output{}); err == nil {
-		t.Fatal("a cancelled Process must fail")
+		t.Fatal("a cancelled Verify must fail")
 	}
 }
 

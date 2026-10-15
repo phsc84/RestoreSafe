@@ -33,7 +33,7 @@ func newDest(t *testing.T) string {
 	return dest
 }
 
-func TestProcessRestorePointRestoresAndVerifies(t *testing.T) {
+func TestRestorePointRestoresAndVerifies(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
@@ -57,7 +57,7 @@ func TestProcessRestorePointRestoresAndVerifies(t *testing.T) {
 	}
 }
 
-func TestProcessRestorePointDetectsCorruptedPart(t *testing.T) {
+func TestRestorePointDetectsCorruptedPart(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
@@ -96,7 +96,7 @@ func diffFixture(t *testing.T) (*testutil.BackupFixture, naming.BackupEntry) {
 	return fx, diff
 }
 
-func TestProcessRestorePointRestoresDifferential(t *testing.T) {
+func TestRestorePointRestoresDifferential(t *testing.T) {
 	t.Parallel()
 
 	fx, diff := diffFixture(t)
@@ -132,7 +132,7 @@ func TestProcessRestorePointRestoresDifferential(t *testing.T) {
 	}
 }
 
-func TestProcessRestorePointRejectsWrongOrMissingBase(t *testing.T) {
+func TestRestorePointRejectsWrongOrMissingBase(t *testing.T) {
 	t.Parallel()
 
 	fx, diff := diffFixture(t)
@@ -152,7 +152,7 @@ func TestProcessRestorePointRejectsWrongOrMissingBase(t *testing.T) {
 
 // A full backup replaced by a different one under the same name (same chain
 // ID and date) must be detected through the manifest checksum.
-func TestProcessRestorePointDetectsReplacedBase(t *testing.T) {
+func TestRestorePointDetectsReplacedBase(t *testing.T) {
 	t.Parallel()
 
 	fx, diff := diffFixture(t)

@@ -344,7 +344,7 @@ func TestDeriveSubkeySeparatesInfoAndSalt(t *testing.T) {
 	}
 }
 
-func TestChunkNonceDeterministic(t *testing.T) {
+func TestChunkParamsNonceIsDeterministic(t *testing.T) {
 	t.Parallel()
 
 	p := newChunkParams(nil)

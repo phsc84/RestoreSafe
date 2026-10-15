@@ -20,7 +20,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
-func TestBuildVerifyPreflightUsesInventory(t *testing.T) {
+func TestSelectionPreflightUsesInventory(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-preflight-pass"))
 	infos := inventory.Read(t, fx.BackupDir)
 	items := job.SelectionPreflight(infos, infos)
@@ -73,7 +73,7 @@ func TestValidateVerifyPreflight(t *testing.T) {
 	}
 }
 
-func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
+func TestVerifyPreflightReportShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 	t.Parallel()
 
 	entry := naming.BackupEntry{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-20"}
@@ -97,7 +97,7 @@ func TestPrintVerifyPreflightShowsItemsSizeAndYubiKeyStatus(t *testing.T) {
 	}
 }
 
-func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
+func TestOperationRunVerifiesFixture(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-pw"))
 	logPath := filepath.Join(t.TempDir(), "verify.log")
 	var out testutil.Output
@@ -109,7 +109,7 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 	log.Close()
 	output := out.String()
 	if err != nil {
-		t.Fatalf("runVerifyOperation: %v", err)
+		t.Fatalf("operation.run: %v", err)
 	}
 	if !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Verification completed successfully.") {
 		t.Fatalf("unexpected output: %q", output)
@@ -125,7 +125,7 @@ func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	}
 }
 
-func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
+func TestVerifyAllVerifiesSeveralSets(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
 	infos := inventory.Read(t, fx.BackupDir)

@@ -152,7 +152,7 @@ func TestValidateBackupPartCountAllowsBackupsWithinLimit(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
+func TestProposalReportOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -184,7 +184,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
+func TestProposalReportShowsErrorSourceAndWarnSource(t *testing.T) {
 	t.Parallel()
 	backupDir := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "info"}
@@ -214,7 +214,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+func TestProposalReportShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -250,7 +250,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+func TestProposalReportShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -286,7 +286,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSummary(t *testing.T) {
+func TestProposalReportOrdersSourceBeforeTargetAndPlacesNeededSpaceInSummary(t *testing.T) {
 	t.Parallel()
 
 	tempRoot := t.TempDir()
@@ -371,7 +371,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	}
 }
 
-func TestBackupPreflightReportStructure(t *testing.T) {
+func TestProposalReportStructure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, AuthenticationMode: config.AuthModeYubiKey, LogLevel: "info"}
@@ -472,7 +472,7 @@ func TestEstimateBackupSpaceCountsOnlyChangedFilesForDifferentials(t *testing.T)
 	}
 }
 
-func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
+func TestValidateTargetSpaceForBackupFailsOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	free, err := fsx.QueryFreeSpaceBytes(dir)

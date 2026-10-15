@@ -46,7 +46,7 @@ func findItem(items []healthItem, severity healthSeverity, scope, contains strin
 	return false
 }
 
-func TestCheckBackupInventoryHealthWarnsWhenNoBackups(t *testing.T) {
+func TestInventoryItemsWarnsWhenNoBackups(t *testing.T) {
 	t.Parallel()
 	items := checkBackupInventoryHealth(passwordConfig(), t.TempDir())
 	if !findItem(items, healthWarn, healthScopeBackupInventory, "No backup sets found") {
@@ -57,7 +57,7 @@ func TestCheckBackupInventoryHealthWarnsWhenNoBackups(t *testing.T) {
 	}
 }
 
-func TestCheckBackupInventoryHealthReportsCompleteSetAndKeys(t *testing.T) {
+func TestInventoryItemsReportsCompleteSetAndKeys(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	items := checkBackupInventoryHealth(passwordConfig(), fx.BackupDir)
 	if !findItem(items, healthOK, healthScopeBackupInventory, "structurally complete") {
@@ -73,7 +73,7 @@ func TestCheckBackupInventoryHealthReportsCompleteSetAndKeys(t *testing.T) {
 	}
 }
 
-func TestCheckBackupInventoryHealthReportsIncompleteAndOrphanSets(t *testing.T) {
+func TestInventoryItemsReportsIncompleteAndOrphanSets(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	// A differential part whose full backup does not exist.
 	orphan := naming.BackupEntry{DirectoryName: "Other", ChainID: "ORP001", Date: "2026-03-14", DiffNumber: 1}
@@ -89,7 +89,7 @@ func TestCheckBackupInventoryHealthReportsIncompleteAndOrphanSets(t *testing.T) 
 	}
 }
 
-func TestCheckBackupInventoryHealthWarnsAboutLegacyAndTempFiles(t *testing.T) {
+func TestInventoryItemsWarnsAboutLegacyAndTempFiles(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	for _, name := range []string{"[Docs]_2026-01-01_OLD001-001.enc", "[Docs]_ABC123_2026-03-14_FULL-001.enc.tmp"} {
@@ -138,7 +138,7 @@ func TestCheckArgon2HealthSilentWithoutNotices(t *testing.T) {
 	}
 }
 
-func TestCheckReportsAHealthyConfigWithoutBlocking(t *testing.T) {
+func TestInspectReportsAHealthyConfigWithoutBlocking(t *testing.T) {
 	exeDir := t.TempDir()
 	source := filepath.Join(exeDir, "Documents")
 	backup := filepath.Join(exeDir, "Backups")
@@ -241,7 +241,7 @@ func TestBlocksRestoreOrVerify(t *testing.T) {
 	}
 }
 
-func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing.T) {
+func TestInspectWarnsOnTrueIdenticalDuplicateSource(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -276,7 +276,7 @@ func TestCollectStartupHealthItemsWarnsOnTrueIdenticalDuplicateSource(t *testing
 	}
 }
 
-func TestCollectStartupHealthItemsNoAliasCollisionForEncodedSpecialCharacters(t *testing.T) {
+func TestInspectNoAliasCollisionForEncodedSpecialCharacters(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()

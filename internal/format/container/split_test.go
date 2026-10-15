@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestSplitWriterDistributesBytesAcrossParts(t *testing.T) {
+func TestWriterDistributesBytesAcrossParts(t *testing.T) {
 	dir := t.TempDir()
 	nameFunc := func(seq int) string {
 		return filepath.Join(dir, fmt.Sprintf("part-%03d.bin", seq))
@@ -58,7 +58,7 @@ func TestSplitWriterDistributesBytesAcrossParts(t *testing.T) {
 	}
 }
 
-func TestSplitWriterRejectsNonPositivePartSize(t *testing.T) {
+func TestWriterRejectsNonPositivePartSize(t *testing.T) {
 	w := NewWriter(func(seq int) string {
 		return filepath.Join(t.TempDir(), fmt.Sprintf("p-%03d.bin", seq))
 	}, 0)

@@ -109,7 +109,7 @@ func TestBuilderRejectsInvalidManifest(t *testing.T) {
 	}
 }
 
-func TestParseRejectsStructuralProblems(t *testing.T) {
+func TestDecodeRejectsStructuralProblems(t *testing.T) {
 	t.Parallel()
 
 	valid := buildFull(t)
@@ -244,7 +244,7 @@ func TestSerializationDoesNotEscapeHTML(t *testing.T) {
 	}
 }
 
-func FuzzParse(f *testing.F) {
+func FuzzDecode(f *testing.F) {
 	b := NewBuilder(fullHeader())
 	b.Add(Entry{Path: "a", Type: TypeDir})
 	b.Add(Entry{Path: "a/b", Type: TypeFile, Size: 3, Hash: testHash, Origin: OriginFull, Offset: off(0)})

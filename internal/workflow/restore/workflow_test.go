@@ -52,7 +52,7 @@ func assertTreesEqual(t *testing.T, want, got string) {
 	}
 }
 
-func TestRunRestoreOperationRestoresFixture(t *testing.T) {
+func TestOperationRunRestoresFixture(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
 	infos := inventory.Read(t, fx.BackupDir)
 	logPath := filepath.Join(t.TempDir(), "restore.log")
@@ -64,7 +64,7 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	log.Close()
 	output := out.String()
 	if err != nil {
-		t.Fatalf("runRestoreOperation: %v", err)
+		t.Fatalf("operation.run: %v", err)
 	}
 	if !strings.Contains(output, "Restore completed successfully.") || !strings.Contains(output, "successfully restored and checked") {
 		t.Fatalf("unexpected output: %q", output)
@@ -72,7 +72,7 @@ func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
 }
 
-func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
+func TestRestoreAllRestoresDifferential(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("edited"), 0o600); err != nil {
 		t.Fatal(err)

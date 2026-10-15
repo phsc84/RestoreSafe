@@ -95,7 +95,7 @@ func (s *unlockStub) unlock(t *testing.T, ks *container.KeySet, opts Options) ([
 	return got, s.out.String(), err
 }
 
-func TestUnlockKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
+func TestKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("right"))
 	stub := stubUnlockInputs(t, []string{"wrong", "right"}, 0, nil)
 
@@ -108,7 +108,7 @@ func TestUnlockKeySetPasswordRetriesAfterWrongPassword(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
+func TestKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 	ks, _ := testutil.NewPasswordKeySet(t, []byte("right"))
 	stub := stubUnlockInputs(t, []string{"a", "b", "c"}, 0, nil)
 
@@ -118,7 +118,7 @@ func TestUnlockKeySetPasswordGivesUpAfterThreeAttempts(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
+func TestKeySetPasswordAndYubiKey(t *testing.T) {
 	secret := bytes.Repeat([]byte{7}, 32)
 	ks, master := yubiKeySet(t, config.AuthModePasswordYubiKey, []byte("pw"), secret)
 	stub := stubUnlockInputs(t, []string{"pw"}, 0, secret)
@@ -129,7 +129,7 @@ func TestUnlockKeySetPasswordAndYubiKey(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
+func TestKeySetWithSpareYubiKey(t *testing.T) {
 	primary := bytes.Repeat([]byte{1}, 32)
 	spare := bytes.Repeat([]byte{2}, 32)
 	for _, mode := range []config.AuthMode{config.AuthModePasswordYubiKey, config.AuthModeYubiKey} {
@@ -146,7 +146,7 @@ func TestUnlockKeySetWithSpareYubiKey(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
+func TestKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
 	ks, master := yubiKeySet(t, config.AuthModeYubiKey, nil, bytes.Repeat([]byte{7}, 32))
 
 	stub := stubUnlockInputs(t, nil, 0, bytes.Repeat([]byte{7}, 32))
@@ -175,7 +175,7 @@ func keySetWithRecovery(t *testing.T) (*container.KeySet, []byte, recovery.Code)
 	return ks, master, code
 }
 
-func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
+func TestKeySetWithRecoveryCode(t *testing.T) {
 	ks, master, code := keySetWithRecovery(t)
 	other, _ := recovery.Generate()
 	typo := code.Display()
@@ -192,7 +192,7 @@ func TestUnlockKeySetWithRecoveryCode(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
+func TestKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
 	ks, master, _ := keySetWithRecovery(t)
 
 	// Without AllowRecovery no choice is asked; the password unlocks.
@@ -208,7 +208,7 @@ func TestUnlockKeySetRecoveryOfferedOnlyWhenAllowed(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetsAuthenticatesOncePerKeySet(t *testing.T) {
+func TestKeySetsAuthenticatesOncePerKeySet(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
 	infos, err := catalog.Inventory(fx.BackupDir)
@@ -275,7 +275,7 @@ func passwordOf(info catalog.SetInfo) string {
 	return "pw"
 }
 
-func TestUnlockKeySetsAsksAgainForOtherKeys(t *testing.T) {
+func TestKeySetsAsksAgainForOtherKeys(t *testing.T) {
 	infos := twoKeySets(t)
 	stub := stubUnlockInputs(t, nil, 0, nil)
 	answerByKeys(stub, passwordOf(infos[0]), passwordOf(infos[1]))
@@ -290,7 +290,7 @@ func TestUnlockKeySetsAsksAgainForOtherKeys(t *testing.T) {
 	}
 }
 
-func TestUnlockKeySetsFailsWhenTheOtherKeysStayLocked(t *testing.T) {
+func TestKeySetsFailsWhenTheOtherKeysStayLocked(t *testing.T) {
 	infos := twoKeySets(t)
 	stub := stubUnlockInputs(t, nil, 0, nil)
 	answerByKeys(stub, passwordOf(infos[0]), "wrong")
