@@ -15,6 +15,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 )
 
 var fastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
@@ -58,7 +59,7 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 		t.Fatalf("temporary parts left behind: %v", tmp)
 	}
 
-	info := setInfo(t, backupDir, entry)
+	info := inventory.Find(t, backupDir, entry)
 	if !info.Complete() {
 		t.Fatalf("set not complete: %v", info.Err)
 	}
@@ -173,20 +174,4 @@ func TestWriteFailingInASecondPartRemovesAllParts(t *testing.T) {
 			t.Errorf("left behind after the failed write: %s", e.Name())
 		}
 	}
-}
-
-// setInfo returns entry's SetInfo from the inventory of backupDir.
-func setInfo(t *testing.T, backupDir string, entry naming.BackupEntry) catalog.SetInfo {
-	t.Helper()
-	infos, err := catalog.Inventory(backupDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, info := range infos {
-		if info.Entry == entry {
-			return info
-		}
-	}
-	t.Fatalf("%s is not in the inventory", entry)
-	return catalog.SetInfo{}
 }

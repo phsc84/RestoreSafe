@@ -14,23 +14,15 @@ import (
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
-func fixtureInfos(t *testing.T, fx *testutil.BackupFixture) []catalog.SetInfo {
-	t.Helper()
-	infos, err := catalog.Inventory(fx.BackupDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return infos
-}
-
 func TestBuildVerifyPreflightUsesInventory(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-preflight-pass"))
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	items := job.SelectionPreflight(infos, infos)
 	if len(items) != 1 || items[0].Err != nil || items[0].PartCount != fx.Parts || items[0].TotalSizeBytes <= 0 {
 		t.Fatalf("unexpected preflight item: %+v", items)
@@ -48,7 +40,7 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +103,7 @@ func TestRunVerifyOperationVerifiesFixture(t *testing.T) {
 	var out testutil.Output
 	log, _ := logging.NewLogger(logPath, "info", &out)
 
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
 	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
 	log.Close()
@@ -136,7 +128,7 @@ func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 func TestVerifySelectedEntriesProcessesMultipleEntries(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	if len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d", len(infos))
 	}

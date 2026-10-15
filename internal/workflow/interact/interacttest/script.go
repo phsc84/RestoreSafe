@@ -265,3 +265,14 @@ func Answers(lines ...string) func(prompt string) (string, error) {
 
 // LogStarted records the log file; the script prints it with the result.
 func (s *Script) LogStarted(path string) { s.LogPath = path }
+
+// Answering returns a Script that writes to out and answers every line
+// prompt with line and every secret prompt with a copy of secret: a run that
+// asks to start and for one password, as often as it asks.
+func Answering(out io.Writer, line string, secret []byte) *Script {
+	return &Script{
+		Out:          out,
+		ReadLine:     func(string) (string, error) { return line, nil },
+		ReadPassword: func(string) ([]byte, error) { return append([]byte(nil), secret...), nil },
+	}
+}

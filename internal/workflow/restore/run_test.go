@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/format/setwriter"
@@ -16,29 +15,16 @@ import (
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/filelock"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
 
-// script answers the start question with answer and every password prompt
-// with password.
-func script(out *testutil.Output, answer string, password []byte) *interacttest.Script {
-	return &interacttest.Script{
-		Out:          out,
-		ReadLine:     func(string) (string, error) { return answer, nil },
-		ReadPassword: func(string) ([]byte, error) { return append([]byte(nil), password...), nil },
-	}
-}
-
 // request restores the fixture's set into a new destination.
 func request(t *testing.T, fx *testutil.BackupFixture) Request {
 	return Request{Sets: []naming.BackupEntry{fx.Entry}, Destination: filepath.Join(t.TempDir(), "restore")}
-}
-
-func fixtureConfig(fx *testutil.BackupFixture) *config.Config {
-	return &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}
 }
 
 // damagePart flips a byte in the middle of the set's second part file.
@@ -64,8 +50,8 @@ func TestRunRestoresAfterUnlockingWithThePassword(t *testing.T) {
 	req := request(t, fx)
 
 	var out testutil.Output
-	s := script(&out, "y", fx.Password)
-	if err := Run(context.Background(), s, fixtureConfig(fx), "", req); err != nil {
+	s := interacttest.Answering(&out, "y", fx.Password)
+	if err := Run(context.Background(), s, fx.Config(), "", req); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(req.Destination, fx.Entry.DirectoryName))
@@ -80,7 +66,7 @@ func TestRunWritesNothingWhenTheUserDeclinesTheStart(t *testing.T) {
 	req := request(t, fx)
 
 	var out testutil.Output
-	if err := Run(context.Background(), script(&out, "n", nil), fixtureConfig(fx), "", req); err != nil {
+	if err := Run(context.Background(), interacttest.Answering(&out, "n", nil), fx.Config(), "", req); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
 	if !strings.Contains(out.String(), "Restore cancelled.") {
@@ -101,7 +87,7 @@ func TestRunRefusesADestinationThatHoldsTheFolderBeforeAsking(t *testing.T) {
 	}
 
 	var out testutil.Output
-	err := Run(context.Background(), &interacttest.Script{Out: &out}, fixtureConfig(fx), "", req)
+	err := Run(context.Background(), &interacttest.Script{Out: &out}, fx.Config(), "", req)
 	if err == nil || !strings.Contains(err.Error(), "Restore preflight failed") {
 		t.Fatalf("expected the preflight to refuse the destination, got %v\n%s", err, out.String())
 	}
@@ -119,7 +105,7 @@ func TestRunRefusesWhileABackupHoldsTheDirectory(t *testing.T) {
 	}
 	defer lock.Release()
 
-	err = Run(context.Background(), &interacttest.Script{}, fixtureConfig(fx), "", request(t, fx))
+	err = Run(context.Background(), &interacttest.Script{}, fx.Config(), "", request(t, fx))
 	if err == nil || !strings.Contains(err.Error(), "A backup is running") {
 		t.Fatalf("expected the running backup to block the restore, got %v", err)
 	}
@@ -132,7 +118,7 @@ func TestRunReportsADamagedPartAndTheIncompleteFolder(t *testing.T) {
 
 	var out testutil.Output
 	log := logging.NewOutputLogger("info", &out)
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: log}
 	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
 	if err == nil || !strings.Contains(err.Error(), "Failed to restore directory") || !strings.Contains(err.Error(), "corrupted or modified") {
@@ -141,7 +127,7 @@ func TestRunReportsADamagedPartAndTheIncompleteFolder(t *testing.T) {
 	if !strings.Contains(out.String(), "is INCOMPLETE") {
 		t.Fatalf("expected the incomplete folder to be named, got %q", out.String())
 	}
-	lines := errorsIn(out.String())
+	lines := testutil.ErrorLines(out.String())
 	if len(lines) != 2 || !strings.Contains(lines[0], "is INCOMPLETE") || !strings.HasPrefix(lines[1], "Failed to restore directory") {
 		t.Fatalf("the incomplete folder and the failure must be ERROR lines, got %q", lines)
 	}
@@ -210,7 +196,7 @@ func TestRunCancelledBeforeTheFirstSetLeavesNoFolder(t *testing.T) {
 	var out testutil.Output
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
 	err := op.run(ctx, &interacttest.Script{Out: &out}, 0)
 	if !errors.Is(err, context.Canceled) || err.Error() != job.Cancelled("Restore").Error() {
@@ -222,20 +208,9 @@ func TestRunCancelledBeforeTheFirstSetLeavesNoFolder(t *testing.T) {
 	if !strings.Contains(out.String(), "Restore cancelled.") {
 		t.Fatalf("expected the cancellation in the log, got %q", out.String())
 	}
-	if lines := errorsIn(out.String()); len(lines) != 0 {
+	if lines := testutil.ErrorLines(out.String()); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
-}
-
-// errorsIn returns the messages of the ERROR lines in text.
-func errorsIn(text string) []string {
-	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		if l, ok := logging.ParseLine(line); ok && l.Severity == logging.SeverityError {
-			out = append(out, l.Message)
-		}
-	}
-	return out
 }
 
 // cancelOnRestore cancels the operation at its first report of restoring a
@@ -258,7 +233,7 @@ func TestRunCancelledWhileWritingMarksTheFolderIncompleteAsAWarning(t *testing.T
 	var out testutil.Output
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
 	err := op.run(ctx, cancelOnRestore{Script: &interacttest.Script{Out: &out}, cancel: cancel}, 0)
 	if !errors.Is(err, context.Canceled) {
@@ -267,7 +242,7 @@ func TestRunCancelledWhileWritingMarksTheFolderIncompleteAsAWarning(t *testing.T
 	if !strings.Contains(out.String(), "] "+logging.SeverityWarn+" -   The restore of ["+fx.Entry.DirectoryName+"] is INCOMPLETE") {
 		t.Fatalf("a cancelled folder is INCOMPLETE as a warning, got %q", out.String())
 	}
-	if lines := errorsIn(out.String()); len(lines) != 0 {
+	if lines := testutil.ErrorLines(out.String()); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
 }

@@ -185,3 +185,8 @@ func mustWriteFile(t testing.TB, path string, data []byte) {
 		t.Fatalf("failed to write file %s: %v", path, err)
 	}
 }
+
+// Config returns a configuration whose backup directory is the fixture's.
+func (f *BackupFixture) Config() *config.Config {
+	return &config.Config{BackupDirectory: f.BackupDir, LogLevel: "info"}
+}

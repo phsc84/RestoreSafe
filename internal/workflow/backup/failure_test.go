@@ -40,7 +40,7 @@ func TestBackupFailedRecordsAFailureOrTheCancellation(t *testing.T) {
 	if err == nil || err.Error() != "disk full" || readErr != nil || facts.Backup == nil || facts.Backup.Result != logging.ResultFailed || facts.Backup.Error != "disk full" {
 		t.Fatalf("a failure: err %v, fact %+v (%v)", err, facts.Backup, readErr)
 	}
-	if lines := errorLines(t, path); len(lines) != 1 || lines[0] != "disk full" {
+	if lines := testutil.LogErrors(t, path); len(lines) != 1 || lines[0] != "disk full" {
 		t.Fatalf("a failure must be an ERROR line with its reason, got %q", lines)
 	}
 
@@ -53,7 +53,7 @@ func TestBackupFailedRecordsAFailureOrTheCancellation(t *testing.T) {
 	if !errors.Is(err, context.Canceled) || err.Error() != job.Cancelled("Backup").Error() || readErr != nil || facts.Backup == nil || facts.Backup.Result != logging.ResultCancelled {
 		t.Fatalf("a cancellation: err %v, fact %+v (%v)", err, facts.Backup, readErr)
 	}
-	if lines := errorLines(t, path); len(lines) != 0 {
+	if lines := testutil.LogErrors(t, path); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
 }
@@ -112,20 +112,4 @@ func TestDeleteSetFilesSkipsGoneFilesAndStopsAtALockedOne(t *testing.T) {
 	if removed, err := deleteSetFiles(paths); err != nil || len(removed) != 1 || removed[0] != "b.enc" {
 		t.Fatalf("after the lock: removed %v, err %v", removed, err)
 	}
-}
-
-// errorLines returns the messages of the ERROR lines in the log at path.
-func errorLines(t *testing.T, path string) []string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n") {
-		if l, ok := logging.ParseLine(line); ok && l.Severity == logging.SeverityError {
-			out = append(out, l.Message)
-		}
-	}
-	return out
 }

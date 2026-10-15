@@ -14,6 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
@@ -54,7 +55,7 @@ func runBackupDirectory(t *testing.T, level string) (string, string) {
 
 func TestBackupDirectoryWritesCompleteSet(t *testing.T) {
 	_, backupDir := runBackupDirectory(t, "info")
-	info := setInfo(t, backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
+	info := inventory.Find(t, backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "ORD123", Date: "2026-03-18"})
 	if !info.Complete() {
 		t.Fatalf("expected a complete set, got %v", info.Err)
 	}
@@ -187,22 +188,6 @@ func TestNewRunIDAvoidsUsedIDs(t *testing.T) {
 			t.Fatalf("newRunID returned used ID %s", id)
 		}
 	}
-}
-
-// setInfo returns entry's SetInfo from the inventory of backupDir.
-func setInfo(t *testing.T, backupDir string, entry naming.BackupEntry) catalog.SetInfo {
-	t.Helper()
-	infos, err := catalog.Inventory(backupDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, info := range infos {
-		if info.Entry == entry {
-			return info
-		}
-	}
-	t.Fatalf("%s is not in the inventory", entry)
-	return catalog.SetInfo{}
 }
 
 func TestRemoveLeftoverTempPartsWarnsWhenItCannotLook(t *testing.T) {

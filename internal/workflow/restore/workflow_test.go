@@ -11,24 +11,15 @@ import (
 	"testing"
 
 	"github.com/phsc84/restoresafe/internal/config"
-	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
-
-func fixtureInfos(t *testing.T, fx *testutil.BackupFixture) []catalog.SetInfo {
-	t.Helper()
-	infos, err := catalog.Inventory(fx.BackupDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return infos
-}
 
 func masterKeys(fx *testutil.BackupFixture) unlock.MasterKeys {
 	return unlock.MasterKeys{fx.KeySet.ID: append([]byte(nil), fx.Master...)}
@@ -63,7 +54,7 @@ func assertTreesEqual(t *testing.T, want, got string) {
 
 func TestRunRestoreOperationRestoresFixture(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	logPath := filepath.Join(t.TempDir(), "restore.log")
 	var out testutil.Output
 	log, _ := logging.NewLogger(logPath, "info", &out)
@@ -87,7 +78,7 @@ func TestRestoreSelectedEntriesRestoresDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
 	if err != nil {
 		t.Fatal(err)

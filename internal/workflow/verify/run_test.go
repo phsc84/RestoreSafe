@@ -8,29 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
 )
-
-// script answers the start question with answer and every password prompt
-// with password.
-func script(out *testutil.Output, answer string, password []byte) *interacttest.Script {
-	return &interacttest.Script{
-		Out:          out,
-		ReadLine:     func(string) (string, error) { return answer, nil },
-		ReadPassword: func(string) ([]byte, error) { return append([]byte(nil), password...), nil },
-	}
-}
-
-func fixtureConfig(fx *testutil.BackupFixture) *config.Config {
-	return &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}
-}
 
 // partPaths returns the part files of the fixture's set, in order.
 func partPaths(t *testing.T, fx *testutil.BackupFixture) []string {
@@ -47,8 +33,8 @@ func TestRunVerifiesAfterUnlockingWithThePassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-run-pw"))
 
 	var out testutil.Output
-	s := script(&out, "y", fx.Password)
-	if err := Run(context.Background(), s, fixtureConfig(fx), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
+	s := interacttest.Answering(&out, "y", fx.Password)
+	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
 		t.Fatalf("Run: %v\n%s", err, out.String())
 	}
 	if s.LogPath == "" || !strings.Contains(out.String(), "Log file: "+s.LogPath) {
@@ -65,8 +51,8 @@ func TestRunStopsWhenTheUserDeclinesTheStart(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
 	var out testutil.Output
-	s := script(&out, "n", nil) // no password: unlocking would fail
-	if err := Run(context.Background(), s, fixtureConfig(fx), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
+	s := interacttest.Answering(&out, "n", nil) // no password: unlocking would fail
+	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
 	if !strings.Contains(out.String(), "Verification cancelled.") {
@@ -90,7 +76,7 @@ func TestRunRefusesADifferentialWithoutItsFullBackupBeforeAsking(t *testing.T) {
 
 	var out testutil.Output
 	s := &interacttest.Script{Out: &out} // any question would fail with "no scripted answer"
-	err = Run(context.Background(), s, fixtureConfig(fx), "", Request{Sets: []naming.BackupEntry{diff}})
+	err = Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{diff}})
 	if err == nil || !strings.Contains(err.Error(), "Verification preflight failed") {
 		t.Fatalf("expected the preflight to refuse the differential, got %v\n%s", err, out.String())
 	}
@@ -105,7 +91,7 @@ func TestRunRefusesWhileABackupHoldsTheDirectory(t *testing.T) {
 	}
 	defer lock.Release()
 
-	err = Run(context.Background(), &interacttest.Script{}, fixtureConfig(fx), "", Request{Sets: []naming.BackupEntry{fx.Entry}})
+	err = Run(context.Background(), &interacttest.Script{}, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}})
 	if err == nil || !strings.Contains(err.Error(), "A backup is running") {
 		t.Fatalf("expected the running backup to block the verification, got %v", err)
 	}
@@ -129,7 +115,7 @@ func TestVerifyAllReportsADamagedPartAndLogsTheFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
 	runErr := op.run(context.Background(), &interacttest.Script{}, 0)
 	log.Close()
@@ -140,7 +126,7 @@ func TestVerifyAllReportsADamagedPartAndLogsTheFailure(t *testing.T) {
 	if fact := facts.Verify[fx.Entry.String()]; err != nil || len(facts.Verify) != 1 || fact.Result != logging.ResultFailed || fact.Error == "" {
 		t.Fatalf("expected one failed verify fact with its reason, got %+v (%v)", facts.Verify, err)
 	}
-	if lines := errorLines(t, logPath); len(lines) != 1 || !strings.HasPrefix(lines[0], "Failed to verify directory") {
+	if lines := testutil.LogErrors(t, logPath); len(lines) != 1 || !strings.HasPrefix(lines[0], "Failed to verify directory") {
 		t.Fatalf("the failure must be an ERROR line with its reason, got %q", lines)
 	}
 }
@@ -156,7 +142,7 @@ func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	infos := fixtureInfos(t, fx)
+	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
 	runErr := op.run(ctx, &interacttest.Script{}, 0)
 	log.Close()
@@ -166,28 +152,7 @@ func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
 	if facts, err := logging.ReadFacts(logPath); err != nil || len(facts.Verify) != 0 {
 		t.Fatalf("a cancelled verification writes no fact, got %+v (%v)", facts.Verify, err)
 	}
-	if lines := errorLines(t, logPath); len(lines) != 0 {
+	if lines := testutil.LogErrors(t, logPath); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
-}
-
-// errorLines returns the messages of the ERROR lines in the log at path.
-func errorLines(t *testing.T, path string) []string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return errorsIn(string(data))
-}
-
-// errorsIn returns the messages of the ERROR lines in text.
-func errorsIn(text string) []string {
-	var out []string
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		if l, ok := logging.ParseLine(line); ok && l.Severity == logging.SeverityError {
-			out = append(out, l.Message)
-		}
-	}
-	return out
 }

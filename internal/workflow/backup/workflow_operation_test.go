@@ -12,6 +12,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
@@ -70,7 +71,7 @@ func TestRunBackupOperationWritesCompleteSet(t *testing.T) {
 	if !strings.Contains(output, "Backup completed successfully") {
 		t.Fatalf("expected completion message in output, got: %q", output)
 	}
-	info := setInfo(t, env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS001", Date: "2026-05-31"})
+	info := inventory.Find(t, env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS001", Date: "2026-05-31"})
 	if !info.Complete() {
 		t.Fatalf("expected complete set, got %v", info.Err)
 	}
@@ -106,7 +107,7 @@ func TestRunBackupOperationPrintsLogFileLast(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+env.logPath) {
 		t.Fatalf("expected log file line to be last, got: %q", output)
 	}
-	info := setInfo(t, env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
+	info := inventory.Find(t, env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
 	if !info.Complete() {
 		t.Fatalf("set not complete in backup directory: %v", info.Err)
 	}

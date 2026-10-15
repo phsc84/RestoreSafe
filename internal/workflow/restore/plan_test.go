@@ -8,6 +8,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 )
@@ -15,7 +16,7 @@ import (
 func TestRestorePlanDescribesTheRestore(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +56,7 @@ func TestRestorePlanDescribesTheRestore(t *testing.T) {
 
 func TestPlanDestinationIsThePlanOfRun(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
-	infos := fixtureInfos(t, fx.BackupFixture)
+	infos := inventory.Read(t, fx.BackupDir)
 	cfg := &config.Config{BackupDirectory: fx.BackupDir}
 	sets := []naming.BackupEntry{fx.Entry}
 
