@@ -548,3 +548,20 @@ func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.So
 func firstBackup(cfg *config.Config, backupDir string, sources []plan.Source) proposal {
 	return proposal{cfg: cfg, backupDir: backupDir, sources: sources, keys: plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, est: estimateBackupSpace(cfg, backupDir, sources, nil)}
 }
+
+func TestKeyPlanForSaysWhichKeysLockTheBackups(t *testing.T) {
+	t.Parallel()
+
+	existing := &container.KeySet{AuthMode: config.AuthModePasswordYubiKey, CreatedUTC: "2026-03-14T09:00:00Z"}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: existing}); kp.New || !kp.Password || kp.YubiKeys != 1 {
+		t.Fatalf("existing password and YubiKey keys: %+v", kp)
+	}
+	yubiOnly := &container.KeySet{AuthMode: config.AuthModeYubiKey}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: yubiOnly}); kp.Password || kp.YubiKeys != 1 {
+		t.Fatalf("existing YubiKey-only keys: %+v", kp)
+	}
+	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, YubiKeySpare: true, RecoveryCode: true}
+	if kp := keyPlanFor(cfg, plan.Keys{NewKeysReason: "recovery_code enabled"}); !kp.New || kp.NewKeysReason != "recovery_code enabled" || !kp.Password || kp.YubiKeys != 2 || !kp.RecoveryCode {
+		t.Fatalf("new keys with a spare YubiKey and a recovery code: %+v", kp)
+	}
+}

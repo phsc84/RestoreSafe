@@ -15,6 +15,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/testutil/filelock"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
@@ -334,5 +335,26 @@ func assertNotExists(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected file to be removed: %s", path)
+	}
+}
+
+func TestDeleteSetFilesSkipsGoneFilesAndStopsAtALockedOne(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	paths := []string{filepath.Join(dir, "a.enc"), filepath.Join(dir, "gone.enc"), filepath.Join(dir, "b.enc")}
+	for _, p := range []string{paths[0], paths[2]} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	release := filelock.Hold(t, paths[2])
+	removed, err := deleteSetFiles(paths)
+	if err == nil || len(removed) != 1 || removed[0] != "a.enc" {
+		t.Fatalf("a locked part: removed %v, err %v", removed, err)
+	}
+	release()
+	if removed, err := deleteSetFiles(paths); err != nil || len(removed) != 1 || removed[0] != "b.enc" {
+		t.Fatalf("after the lock: removed %v, err %v", removed, err)
 	}
 }

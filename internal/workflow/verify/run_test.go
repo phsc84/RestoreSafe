@@ -8,9 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
@@ -154,5 +156,119 @@ func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
 	}
 	if lines := testutil.LogErrors(t, logPath); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
+	}
+}
+
+func TestVerifyDifferentialRestorePoint(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("changed content"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	diff := testutil.WriteDiffSet(t, fx.SrcDir, fx.BackupDir, fx.Entry, 1, "2026-03-20", fx.KeySet, fx.Master)
+	infos := inventory.Read(t, fx.BackupDir)
+	selected, err := job.SelectSets(infos, []naming.BackupEntry{diff})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	items := job.SelectionPreflight(selected, infos)
+	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
+		t.Fatalf("differential must find its full backup: %+v", items[0])
+	}
+	var out testutil.Output
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewOutputLogger("info", &out)}
+	_, err = op.verifyAll(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("verify differential: %v", err)
+	}
+	if output := out.String(); !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Reading unchanged files from the full backup") {
+		t.Fatalf("expected the complete restore point to be verified: %q", output)
+	}
+}
+
+func TestOperationRunVerifiesFixture(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("verify-pw"))
+	logPath := filepath.Join(t.TempDir(), "verify.log")
+	var out testutil.Output
+	log, _ := logging.NewLogger(logPath, "info", &out)
+
+	infos := inventory.Read(t, fx.BackupDir)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
+	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
+	log.Close()
+	output := out.String()
+	if err != nil {
+		t.Fatalf("operation.run: %v", err)
+	}
+	if !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Verification completed successfully.") {
+		t.Fatalf("unexpected output: %q", output)
+	}
+}
+
+func TestVerifyEntryRejectsWrongKey(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("right"))
+	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
+	_, err := (&operation{backupDir: fx.BackupDir, log: logging.NewOutputLogger("info", nil)}).verifyEntry(context.Background(), nil, fx.Entry, nil, wrong)
+	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
+		t.Fatalf("expected authentication failure, got %v", err)
+	}
+}
+
+func TestVerifyAllVerifiesSeveralSets(t *testing.T) {
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	fx.CreateBackupInDir(t, naming.BackupEntry{DirectoryName: "Second", ChainID: "SEC001", Date: "2026-03-15"})
+	infos := inventory.Read(t, fx.BackupDir)
+	if len(infos) != 2 {
+		t.Fatalf("expected 2 sets, got %d", len(infos))
+	}
+	var out testutil.Output
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewOutputLogger("info", &out)}
+	_, err := op.verifyAll(context.Background(), nil)
+	output := out.String()
+	if err != nil || strings.Count(output, "successfully verified") != 2 {
+		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
+	}
+}
+
+func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
+	t.Parallel()
+	entry := naming.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
+	_, err := (&operation{backupDir: t.TempDir(), log: logging.NewOutputLogger("info", nil)}).verifyEntry(context.Background(), nil, entry, nil, make([]byte, 32))
+	if err == nil || !strings.Contains(err.Error(), "No part files found") {
+		t.Fatalf("expected no-parts error, got %v", err)
+	}
+}
+
+func TestRunReturnsErrorWhenBackupDirNotFound(t *testing.T) {
+	t.Parallel()
+	cfg := &config.Config{BackupDirectory: filepath.Join(t.TempDir(), "does-not-exist")}
+	req := Request{Sets: []naming.BackupEntry{{DirectoryName: "Docs", ChainID: "ABC123", Date: "2026-03-14"}}}
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", req); err == nil || !strings.Contains(err.Error(), "Failed to scan backup directory") {
+		t.Fatalf("expected scan-error message, got: %v", err)
+	}
+}
+
+func TestRunRejectsEmptyAndUnknownRequests(t *testing.T) {
+	t.Parallel()
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+	cfg := &config.Config{BackupDirectory: fx.BackupDir}
+
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", Request{}); err == nil || !strings.Contains(err.Error(), "No backup chosen") {
+		t.Fatalf("empty request: got %v", err)
+	}
+	unknown := Request{Sets: []naming.BackupEntry{{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-14"}}}
+	if err := Run(context.Background(), &interacttest.Script{}, cfg, "", unknown); err == nil || !strings.Contains(err.Error(), "no longer in the backup directory") {
+		t.Fatalf("unknown backup: got %v", err)
+	}
+}
+
+func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
+	t.Parallel()
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+
+	var out strings.Builder
+	runErr := Run(context.Background(), &interacttest.Script{Out: &out}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "", Request{Sets: []naming.BackupEntry{fx.Entry}})
+	if runErr == nil {
+		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}
 }
