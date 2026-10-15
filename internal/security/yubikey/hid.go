@@ -2,8 +2,6 @@
 
 package yubikey
 
-//lint:file-ignore ST1003 names follow setupapi.h, so they match the Windows API documentation
-
 import (
 	"fmt"
 	"strings"
@@ -12,15 +10,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// ── HID presence check (SetupDi) ─────────────────────────────────────────────
+// ── HID enumeration (SetupDi, configuration manager) ─────────────────────────
 
 var (
-	setupapiDLL = windows.NewLazySystemDLL("setupapi.dll")
-
-	procSetupDiGetClassDevsW             = setupapiDLL.NewProc("SetupDiGetClassDevsW")
-	procSetupDiEnumDeviceInterfaces      = setupapiDLL.NewProc("SetupDiEnumDeviceInterfaces")
-	procSetupDiGetDeviceInterfaceDetailW = setupapiDLL.NewProc("SetupDiGetDeviceInterfaceDetailW")
-	procSetupDiDestroyDeviceInfoList     = setupapiDLL.NewProc("SetupDiDestroyDeviceInfoList")
+	procCMGetParent   = windows.NewLazySystemDLL("cfgmgr32.dll").NewProc("CM_Get_Parent")
+	procCMGetDeviceID = windows.NewLazySystemDLL("cfgmgr32.dll").NewProc("CM_Get_Device_IDW")
 )
 
 var guidDevInterfaceHID = windows.GUID{
@@ -30,88 +24,90 @@ var guidDevInterfaceHID = windows.GUID{
 	Data4: [8]byte{0x88, 0xCB, 0x00, 0x11, 0x11, 0x00, 0x00, 0x30},
 }
 
-const (
-	digcfPresent         = 0x00000002
-	digcfDeviceInterface = 0x00000010
-	yubicoVID            = 0x1050
-)
+const yubicoVID = 0x1050
 
-type spDeviceInterfaceData struct {
-	Size               uint32
-	InterfaceClassGuid windows.GUID
-	Flags              uint32
-	Reserved           uintptr
+// hidDevice is a Yubico HID interface as Windows lists it, before it is
+// interpreted. Nothing in it needs the device to be opened.
+type hidDevice struct {
+	// Path is the device interface path, as CreateFile takes it.
+	Path string
+	// InstanceID is the HID device's instance ID, as in the registry.
+	InstanceID string
+	// Parent is the instance ID of the USB device the interface belongs to;
+	// the interfaces of one YubiKey share it.
+	Parent string
+	// HardwareIDs carry the product ID, the USB device version (REV_) and the
+	// HID usage page (UP:) and usage (U:).
+	HardwareIDs []string
 }
+
+// hidDevicesFn lists the connected Yubico HID interfaces; replaced in tests.
+var hidDevicesFn = yubicoHIDDevices
 
 // yubiKeyVIDVisible returns true if any HID device path contains the Yubico VID.
 // Used as a lightweight presence check that does not open any device handle.
 func yubiKeyVIDVisible() bool {
-	paths, err := HIDDevicePaths()
-	return err == nil && len(paths) > 0
+	devices, err := hidDevicesFn()
+	return err == nil && len(devices) > 0
 }
 
-func hidDevicePathsForVID(vendorID uint16) ([]string, error) {
-	devInfo, _, _ := procSetupDiGetClassDevsW.Call(
-		uintptr(unsafe.Pointer(&guidDevInterfaceHID)),
-		0, 0,
-		uintptr(digcfPresent|digcfDeviceInterface),
-	)
-	if devInfo == ^uintptr(0) {
-		return nil, fmt.Errorf("SetupDiGetClassDevsW failed")
+func yubicoHIDDevices() ([]hidDevice, error) {
+	set, err := windows.SetupDiGetClassDevsEx(&guidDevInterfaceHID, "", 0, windows.DIGCF_PRESENT|windows.DIGCF_DEVICEINTERFACE, 0, "")
+	if err != nil {
+		return nil, fmt.Errorf("SetupDiGetClassDevsEx: %w", err)
 	}
-	defer procSetupDiDestroyDeviceInfoList.Call(devInfo)
+	defer set.Close()
 
-	vidToken := fmt.Sprintf("VID_%04X", vendorID)
-	var paths []string
-	for idx := uint32(0); idx < 1000; idx++ {
-		var ifData spDeviceInterfaceData
-		ifData.Size = uint32(unsafe.Sizeof(ifData))
-		ret, _, _ := procSetupDiEnumDeviceInterfaces.Call(
-			devInfo, 0,
-			uintptr(unsafe.Pointer(&guidDevInterfaceHID)),
-			uintptr(idx),
-			uintptr(unsafe.Pointer(&ifData)),
-		)
-		if ret == 0 {
+	vidToken := fmt.Sprintf("VID_%04X", yubicoVID)
+	var devices []hidDevice
+	for i := 0; ; i++ {
+		data, err := set.EnumDeviceInfo(i)
+		if err == windows.ERROR_NO_MORE_ITEMS {
 			break
 		}
-		path, err := deviceInterfacePath(devInfo, &ifData)
-		if err == nil && strings.Contains(strings.ToUpper(path), vidToken) {
-			paths = append(paths, path)
+		if err != nil {
+			continue
 		}
+		id, err := set.DeviceInstanceID(data)
+		if err != nil || !strings.Contains(strings.ToUpper(id), vidToken) {
+			continue
+		}
+		paths, err := windows.CM_Get_Device_Interface_List(id, &guidDevInterfaceHID, windows.CM_GET_DEVICE_INTERFACE_LIST_PRESENT)
+		if err != nil || len(paths) == 0 {
+			continue
+		}
+		dev := hidDevice{Path: paths[0], InstanceID: id, Parent: usbParent(data.DevInst)}
+		if v, err := set.DeviceRegistryProperty(data, windows.SPDRP_HARDWAREID); err == nil {
+			dev.HardwareIDs, _ = v.([]string)
+		}
+		devices = append(devices, dev)
 	}
-	return paths, nil
+	return devices, nil
 }
 
-func deviceInterfacePath(devInfo uintptr, ifData *spDeviceInterfaceData) (string, error) {
-	var requiredSize uint32
-	procSetupDiGetDeviceInterfaceDetailW.Call(
-		devInfo,
-		uintptr(unsafe.Pointer(ifData)),
-		0, 0,
-		uintptr(unsafe.Pointer(&requiredSize)),
-		0,
-	)
-	if requiredSize == 0 {
-		return "", fmt.Errorf("SetupDiGetDeviceInterfaceDetail: zero size")
+// usbParent returns the instance ID of the USB device above a HID device:
+// the first ancestor under USB\ that isn't one interface of a composite
+// device (MI_xx). It returns "" when there is none.
+func usbParent(inst windows.DEVINST) string {
+	for range 4 {
+		var parent windows.DEVINST
+		if r, _, _ := procCMGetParent.Call(uintptr(unsafe.Pointer(&parent)), uintptr(inst), 0); r != 0 {
+			return ""
+		}
+		id := deviceID(parent)
+		upper := strings.ToUpper(id)
+		if strings.HasPrefix(upper, `USB\`) && !strings.Contains(upper, "&MI_") {
+			return id
+		}
+		inst = parent
 	}
-	buf := make([]byte, requiredSize)
-	if len(buf) < 4 {
-		return "", fmt.Errorf("SetupDiGetDeviceInterfaceDetail: buffer too small")
+	return ""
+}
+
+func deviceID(inst windows.DEVINST) string {
+	buf := make([]uint16, windows.MAX_DEVICE_ID_LEN+1)
+	if r, _, _ := procCMGetDeviceID.Call(uintptr(inst), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0); r != 0 {
+		return ""
 	}
-	// cbSize must be 8 on 64-bit Windows (pack(1) in SDK header notwithstanding).
-	*(*uint32)(unsafe.Pointer(&buf[0])) = 8
-	ret, _, err := procSetupDiGetDeviceInterfaceDetailW.Call(
-		devInfo,
-		uintptr(unsafe.Pointer(ifData)),
-		uintptr(unsafe.Pointer(&buf[0])),
-		uintptr(requiredSize),
-		uintptr(unsafe.Pointer(&requiredSize)),
-		0,
-	)
-	if ret == 0 {
-		return "", fmt.Errorf("SetupDiGetDeviceInterfaceDetail: %w", err)
-	}
-	pathUTF16 := unsafe.Slice((*uint16)(unsafe.Pointer(&buf[4])), (len(buf)-4)/2)
-	return windows.UTF16ToString(pathUTF16), nil
+	return windows.UTF16ToString(buf)
 }

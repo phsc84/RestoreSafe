@@ -470,7 +470,6 @@ This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, 
 | Folder | Content |
 |---|---|
 | `cmd/restoresafe` | Entry point of `RestoreSafe.exe` |
-| `cmd/yubidiag` | YubiKey diagnostic tool (see below) |
 | `internal/gui` | The window application: `gui/flow` (operation lifecycle and questions), `gui/view` (what every page and dialog shows, as plain Go), `gui/widget` (drawn controls and the theme), `gui/win32` (the Windows API it uses) |
 | `internal/workflow` | Backup, restore, verify, and the startup health check, plus what they share (unlocking, restore points); `workflow/interact` is the contract between the workflows and the GUI |
 | `internal/format` | The backup format: TAR archive, container, manifest, set writer, inventory, and file names |
@@ -484,18 +483,10 @@ Imports point downward only (`gui` → `workflow` → `format` → `security`, .
 
 The design of the 2.0 backup format (container, manifest, keys, full and differential backups) is described in [docs/SPEC-core.md](docs/SPEC-core.md), the window application in [docs/SPEC-gui.md](docs/SPEC-gui.md). The manual GUI test checklist is [docs/GUIDE-gui-test.md](docs/GUIDE-gui-test.md).
 
-### YubiKey diagnostic tool
+### YubiKey tests with a real key
 
-`cmd/yubidiag` is a developer utility that enumerates YubiKey HID devices, reports firmware version and registry entries, checks Windows WebAuthn API availability, and can optionally run a live FIDO2 hmac-secret test with Windows Security prompts. Use it to investigate YubiKey detection and authentication issues during development and testing. Set `RESTORESAFE_FIDO2_DEBUG=1` to print WebAuthn details in yubidiag (RestoreSafe itself has no console for them).
-
-It is not part of the release. To build it:
+The WebAuthn calls can only be tested with a YubiKey and its Windows Security prompts, so CI never runs them. `internal/security/yubikey/hardware_test.go` holds manual tests behind the build tag `yubikeyhw`: what Windows lists for a connected YubiKey, a registration, an assertion as unlock makes it, and an assertion for a credential no YubiKey holds. Each prints the HRESULT and the WebAuthn trace:
 
 ```bat
-go build -o yubidiag.exe ./cmd/yubidiag/
-```
-
-To run it:
-
-```bat
-yubidiag.exe
+go test -tags yubikeyhw -count=1 -v -run TestHWDiagnose ./internal/security/yubikey/
 ```

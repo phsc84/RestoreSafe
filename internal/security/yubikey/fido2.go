@@ -20,7 +20,7 @@ import (
 )
 
 // DebugOutput receives details of the WebAuthn calls; nil (the default) turns
-// them off. yubidiag sets it; RestoreSafe.exe has no console to show them.
+// them off. Only the YubiKey test sets it, for the duration of the test.
 var DebugOutput io.Writer
 
 func fido2Log(format string, args ...any) {
@@ -59,23 +59,20 @@ var fido2RuntimeReady = func() error {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-// CheckAvailability returns nil when the Windows WebAuthn API is present
-// and new enough to support PRF/hmac-secret salt values in GetAssertion options.
-func CheckAvailability() error {
-	return checkWebAuthnAPIVersion()
-}
-
 // CheckConnected returns nil when a Yubico FIDO2 authenticator is
 // detected and the WebAuthn platform is ready.
 func CheckConnected() error {
 	return fido2RuntimeReady()
 }
 
-// HIDDevicePaths returns HID device interface paths for connected
-// Yubico devices. It is used by diagnostics that need more detail than the
-// boolean runtime readiness check.
-func HIDDevicePaths() ([]string, error) {
-	return hidDevicePathsForVID(yubicoVID)
+// ProbeCapability tells whether the connected YubiKey can protect backups:
+// it registers a non-resident credential and derives one hmac-secret with a
+// random salt (PIN and two touches). Nothing stays on the YubiKey, and the
+// secret is zeroed.
+func ProbeCapability() error {
+	combined, _, err := CombineWithPassword(nil, false)
+	cryptox.ZeroBytes(combined)
+	return err
 }
 
 // CombineWithPassword creates a new FIDO2 credential, derives a 32-byte

@@ -19,7 +19,6 @@ var (
 	procWebAuthNAuthenticatorGetAssertion   = webauthnDLL.NewProc("WebAuthNAuthenticatorGetAssertion")
 	procWebAuthNFreeCredentialAttestation   = webauthnDLL.NewProc("WebAuthNFreeCredentialAttestation")
 	procWebAuthNFreeAssertion               = webauthnDLL.NewProc("WebAuthNFreeAssertion")
-	procGetConsoleWindow                    = windows.NewLazySystemDLL("kernel32.dll").NewProc("GetConsoleWindow")
 )
 
 const (

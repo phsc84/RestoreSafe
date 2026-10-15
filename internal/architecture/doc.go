@@ -4,7 +4,7 @@
 // The layers, from top to bottom (a package may import its own layer and
 // every layer below it):
 //
-//	cmd             restoresafe, yubidiag
+//	cmd             restoresafe
 //	gui             gui, gui/win32
 //	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job
 //	format          archive, container, manifest, catalog, naming, setwriter

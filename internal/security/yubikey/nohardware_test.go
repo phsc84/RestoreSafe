@@ -69,20 +69,23 @@ func TestFido2LogWritesOnlyWithDebugOutput(t *testing.T) {
 // The checks of the platform run on any Windows machine, with or without a
 // YubiKey; what they find depends on the machine.
 func TestPlatformChecksRunWithoutAYubiKey(t *testing.T) {
-	if err := CheckAvailability(); err != nil && !strings.Contains(err.Error(), "Windows 11") {
-		t.Fatalf("CheckAvailability: an error must say what Windows is needed, got %v", err)
+	if err := Diagnose().APIErr; err != nil && !strings.Contains(err.Error(), "Windows 11") {
+		t.Fatalf("Diagnose: an error of the WebAuthn API must say what Windows is needed, got %v", err)
 	}
-	paths, err := HIDDevicePaths()
+	devices, err := yubicoHIDDevices()
 	if err != nil {
-		t.Fatalf("HIDDevicePaths: %v", err)
+		t.Fatalf("yubicoHIDDevices: %v", err)
 	}
-	for _, p := range paths {
-		if !strings.Contains(strings.ToUpper(p), fmt.Sprintf("VID_%04X", yubicoVID)) {
-			t.Fatalf("a path of another vendor: %s", p)
+	for _, dev := range devices {
+		if !strings.Contains(strings.ToUpper(dev.InstanceID), fmt.Sprintf("VID_%04X", yubicoVID)) || dev.Path == "" {
+			t.Fatalf("a device of another vendor or without a path: %+v", dev)
 		}
 	}
-	if yubiKeyVIDVisible() != (len(paths) > 0) {
-		t.Fatal("yubiKeyVIDVisible must agree with HIDDevicePaths")
+	if yubiKeyVIDVisible() != (len(devices) > 0) {
+		t.Fatal("yubiKeyVIDVisible must agree with yubicoHIDDevices")
+	}
+	if d := Diagnose(); d.EnumErr != nil || len(d.Interfaces) != len(devices) {
+		t.Fatalf("Diagnose: %d interfaces, error %v; want %d", len(d.Interfaces), d.EnumErr, len(devices))
 	}
 }
 

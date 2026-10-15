@@ -26,12 +26,30 @@ func validateFIDO2Secret(secret []byte) error {
 	return nil
 }
 
-func checkWebAuthnAPIVersion() error {
+// webauthnVersionFn returns the API version of webauthn.dll, or the error of
+// loading it; replaced in tests.
+var webauthnVersionFn = func() (uint32, error) {
 	if err := webauthnDLL.Load(); err != nil {
-		return problem.Errorf("webauthn.dll not available: %w.", err).WithRemedy("Windows 11 version 22H2 or later is required.")
+		return 0, err
 	}
 	ver, _, _ := procWebAuthNGetApiVersionNumber.Call()
-	fido2Log("webauthn.dll API version: %d (minimum required: %d)", ver, webauthnMinAPIVersion)
+	return uint32(ver), nil
+}
+
+func checkWebAuthnAPIVersion() error {
+	ver, err := webauthnVersionFn()
+	if err == nil {
+		fido2Log("webauthn.dll API version: %d (minimum required: %d)", ver, webauthnMinAPIVersion)
+	}
+	return webauthnVersionError(ver, err)
+}
+
+// webauthnVersionError returns nil when ver is new enough, and otherwise
+// what Windows lacks.
+func webauthnVersionError(ver uint32, loadErr error) error {
+	if loadErr != nil {
+		return problem.Errorf("webauthn.dll not available: %w.", loadErr).WithRemedy("Windows 11 version 22H2 or later is required.")
+	}
 	if ver < webauthnMinAPIVersion {
 		return problem.Errorf("webauthn.dll API version %d is too old (need %d+).", ver, webauthnMinAPIVersion).WithRemedy("Windows 11 version 22H2 or later is required.")
 	}
@@ -39,24 +57,19 @@ func checkWebAuthnAPIVersion() error {
 }
 
 // parentWindow is the window the Windows Security dialogs (PIN, touch) belong
-// to; 0 means the console window.
+// to; 0 means no owner window.
 var parentWindow atomic.Uintptr
 
 // SetParentWindow sets the window that the Windows Security dialogs of
 // YubiKey operations belong to, so they appear in front of it and are modal
-// to it. A graphical frontend passes its main window; 0 restores the default,
-// the console window.
+// to it. The window passes its main window; 0 means no owner window.
 func SetParentWindow(hwnd uintptr) {
 	parentWindow.Store(hwnd)
 }
 
 // dialogParent returns the parent window for the WebAuthn calls.
 func dialogParent() uintptr {
-	if hwnd := parentWindow.Load(); hwnd != 0 {
-		return hwnd
-	}
-	hwnd, _, _ := procGetConsoleWindow.Call()
-	return hwnd
+	return parentWindow.Load()
 }
 
 // buildClientData constructs the clientDataJSON bytes and returns them along
@@ -78,6 +91,29 @@ func webauthnErrorString(hr uintptr) string {
 // hresultNTEExists is NTE_EXISTS, which Windows returns when the authenticator
 // already holds a credential from the exclude list.
 const hresultNTEExists = 0x8009000F
+
+// The HRESULTs of a cancel: NTE_USER_CANCELLED, and ERROR_CANCELLED as an
+// HRESULT, which WebAuthn is known to return as well.
+const (
+	hresultNTEUserCancelled = 0x80090036
+	hresultCancelled        = 0x800704C7
+)
+
+// HRESULTError is a WebAuthn call that Windows ended with an error.
+type HRESULTError struct {
+	// Op is the WebAuthn function that failed.
+	Op   string
+	Code uint32
+}
+
+func (e *HRESULTError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Op, webauthnErrorString(uintptr(e.Code)))
+}
+
+// Cancelled tells whether the user cancelled the Windows Security dialog.
+func (e *HRESULTError) Cancelled() bool {
+	return e.Code == hresultNTEUserCancelled || e.Code == hresultCancelled
+}
 
 // credentialList builds a WEBAUTHN_CREDENTIALS list. The returned slices must
 // stay alive until the WebAuthn call returns.
@@ -190,7 +226,7 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 		return nil, ErrAlreadyRegistered
 	}
 	if hr != 0 {
-		return nil, problem.Errorf("WebAuthNAuthenticatorMakeCredential: %s.", webauthnErrorString(hr)).WithRemedy("Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.")
+		return nil, problem.Errorf("%w.", &HRESULTError{Op: "WebAuthNAuthenticatorMakeCredential", Code: uint32(hr)}).WithRemedy("Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.")
 	}
 	if attestation == nil || attestation.cbCredentialId == 0 {
 		return nil, fmt.Errorf("WebAuthNAuthenticatorMakeCredential returned no credential ID")
@@ -260,7 +296,7 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 		uintptr(unsafe.Pointer(&assertion)),
 	)
 	if hr != 0 {
-		return 0, nil, problem.Errorf("WebAuthNAuthenticatorGetAssertion: %s.", webauthnErrorString(hr)).WithRemedy("Ensure a YubiKey registered for this backup is connected.")
+		return 0, nil, problem.Errorf("%w.", &HRESULTError{Op: "WebAuthNAuthenticatorGetAssertion", Code: uint32(hr)}).WithRemedy("Ensure a YubiKey registered for this backup is connected.")
 	}
 	if assertion == nil || assertion.pHmacSecret == nil {
 		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")

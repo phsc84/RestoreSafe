@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; not started |
+| Status | Agreed 2026-10-15; phase 1 done, phase 2 (the real key) next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -13,7 +13,7 @@
 
 1. **Every YK requirement is covered.** Section 3 maps each requirement to the phase that implements it. The spec's test rows "YubiKey diagnosis and test" and "YubiKey view" (16) are the tests' checklist.
 2. **YK-11 is answered early,** with the real key, before the view is written (phase 2), so the hero variants and texts are built once.
-3. **The build and tests pass after every phase.** A phase may leave the page missing, never broken. Each phase ends with gofmt, vet, staticcheck, `deadcode` and the full `go test -cover` with the floors checked locally, then a push and green CI.
+3. **The build and tests pass after every phase.** A phase may leave the page missing, never broken. Each phase ends with gofmt, vet, staticcheck and the full `go test -cover` with the floors checked locally, and a commit. `deadcode` (without `-test`) fails CI until phase 5: `Diagnose`, `ProbeCapability`, `keycheck` and the view have no production caller before the window uses them. So phases 1 to 4 stay local, and the first push comes after phase 5, with every job of `go run ./tools/ci fast` passing.
 4. **Delete, don't keep.** `cmd/yubidiag` goes in phase 1, when its code moves to `yubikey`. Until the page exists, the hardware test of phase 1 does its job.
 5. **No secret leaves `keycheck`.** The derived secret is zeroed in every path, and the technical details never hold a PIN, secret, salt or credential ID. Tests prove both.
 
@@ -22,7 +22,7 @@
 | # | Decision | Rationale |
 |---|---|---|
 | 1 | WebAuthn failures become a typed error, `yubikey.HRESULTError{Op, Code}`, wrapped by the existing `problem` errors. It has `Cancelled()` for `NTE_USER_CANCELLED` (0x80090036) and `HRESULT_FROM_WIN32(ERROR_CANCELLED)` (0x800704C7), until phase 2 shows which one Windows returns, plus whatever else phase 2 finds. | `keycheck` must tell cancel from failure and show the HRESULT (YK-7, YK-9). Today the HRESULT exists only inside a formatted string. The messages that restore and backup show stay the same. |
-| 2 | `Diagnose` reads the HID usage page with `HidD_GetPreparsedData` and `HidP_GetCaps` on a handle opened with zero access. | YK-4: FIDO is found by usage page `0xF1D0`, also on single-function keys without `MI_xx`. A zero-access open works for every interface, including the FIDO one that Windows doesn't open for writing without administrator rights. |
+| 2 | `Diagnose` reads the HID usage page, product ID and USB device version from the device's hardware IDs (`HID_DEVICE_UP:F1D0_U:0001`, `HID\VID_1050&PID_0407&REV_0543&MI_01`). The interfaces of one key are grouped by their USB parent (`CM_Get_Parent`). The device is opened only to learn whether write access is granted. (Changed in phase 1 from `HidP_GetCaps`, which needs an open handle.) | YK-4: FIDO is found by usage page `0xF1D0`, also on single-function keys without `MI_xx`. Hardware IDs need no handle, so the FIDO interface, which Windows may not open without administrator rights, is still found. |
 | 3 | Enumeration, attributes, capabilities, registry and WebAuthn version are function variables in `yubikey`, replaced in tests, like `fido2MakeCredFn` today. | The spec's test row asks for an injected HID enumeration. It follows the package's existing pattern, without a new interface. |
 | 4 | A manual hardware test, `internal/security/yubikey/hardware_test.go` with build tag `yubikeyhw`, prints `Diagnose` and runs the WebAuthn cases of phase 2, step by step. It is kept after phase 2. | It replaces `yubidiag` until the page exists, and it remains the way to answer YK-11 again for new firmware or a new Windows build. The build tag keeps it out of CI and coverage. |
 | 5 | Device changes come from `WM_DEVICECHANGE` with `DBT_DEVNODES_CHANGED`, which Windows sends to every top-level window without registration. A 500 ms timer restarts on each one (YK-3). | No `RegisterDeviceNotification` handle to manage. Diagnose is cheap, and a check after an unrelated USB device is harmless. If phase 2 shows that the message isn't sent for a YubiKey, `RegisterDeviceNotification` for the HID interface class takes its place. |
@@ -65,20 +65,20 @@
 
 ### Phase 1: `yubikey` diagnosis, test calls, and the end of `yubidiag`
 
-- [ ] `HRESULTError` (decision 1), returned through the existing errors of `realMakeCredential` and `realGetHmacSecret`. Restore and backup still show the same texts; a test checks `errors.As` through the wrapping.
-- [ ] `Diagnose() Diagnosis` with the seams of decision 3:
+- [x] `HRESULTError` (decision 1), returned through the existing errors of `realMakeCredential` and `realGetHmacSecret`. Restore and backup still show the same texts; a test checks `errors.As` through the wrapping. `CheckAvailability` is gone: yubidiag was its only caller, and `Diagnosis.APIErr` holds the same error.
+- [x] `Diagnose() Diagnosis` with the seams of decision 3 (`hidDevicesFn`, `hidOpenFn`, `hidDriversFn`, `webauthnVersionFn`):
   - WebAuthn API version, the minimum, and the error of `CheckAvailability`;
   - per Yubico HID interface: path, usage page, function (FIDO, OTP, other), product ID, USB device version, and write access or the open error;
   - the registry driver entries of `VID_1050`.
 
   No prompt, no write access kept open. Moved from `cmd/yubidiag`.
-- [ ] `Diagnosis` helpers the view needs: FIDO present, number of keys (grouped by device instance, not by interface), and the functions per key from the product ID.
-- [ ] `ProbeCapability() error`: a non-resident registration plus one hmac-secret with a random salt; the secret zeroed after its length check. It returns no credential ID.
-- [ ] `dialogParent`: the `GetConsoleWindow` fallback goes (13.4); 0 means no owner window.
-- [ ] `DebugOutput` comment: set only by the YubiKey test.
-- [ ] Tests (the spec's row "YubiKey diagnosis and test", `yubikey` part): FIDO by usage page with and without `MI_xx`, no Yubico device, two YubiKeys, an interface that can't be opened, WebAuthn missing and too old, `ProbeCapability` zeroing with fakes. The `yubikey` floor (62) holds or rises.
-- [ ] `hardware_test.go` with tag `yubikeyhw` (decision 4): prints the `Diagnose` report, and runs one case per `-run` name for phase 2.
-- [ ] Remove `cmd/yubidiag`, its line in [internal/architecture/doc.go](../internal/architecture/doc.go), and the README section "YubiKey diagnostic tool". In the README's folder table, `cmd/restoresafe` stays the only command.
+- [x] `Diagnosis` helpers the view needs: FIDO present, number of keys (grouped by device instance, not by interface), and the functions per key from the product ID.
+- [x] `ProbeCapability() error`: a non-resident registration plus one hmac-secret with a random salt; the secret zeroed after its length check. It returns no credential ID.
+- [x] `dialogParent`: the `GetConsoleWindow` fallback goes (13.4); 0 means no owner window.
+- [x] `DebugOutput` comment: set only by the YubiKey test.
+- [x] Tests (the spec's row "YubiKey diagnosis and test", `yubikey` part): FIDO by usage page with and without `MI_xx`, no Yubico device, two YubiKeys, an interface that can't be opened, WebAuthn missing and too old, `ProbeCapability` zeroing with fakes. The `yubikey` floor (62) holds or rises.
+- [x] `hardware_test.go` with tag `yubikeyhw` (decision 4): prints the `Diagnose` report, and runs one case per `-run` name for phase 2.
+- [x] Remove `cmd/yubidiag`, its line in [internal/architecture/doc.go](../internal/architecture/doc.go), and the README section "YubiKey diagnostic tool". In the README's folder table, `cmd/restoresafe` stays the only command.
 
 ### Phase 2: YK-11 with the real key (owner and Claude together)
 

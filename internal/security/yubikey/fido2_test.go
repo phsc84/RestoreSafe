@@ -459,15 +459,15 @@ func TestParseChallengeJSONRejectsInvalidContent(t *testing.T) {
 	}
 }
 
-func TestSetParentWindowOverridesConsoleWindow(t *testing.T) {
+func TestSetParentWindowSetsTheDialogParent(t *testing.T) {
 	t.Cleanup(func() { SetParentWindow(0) })
 	SetParentWindow(0x1234)
 	if got := dialogParent(); got != 0x1234 {
 		t.Fatalf("dialogParent() = %#x, want the window set by SetParentWindow", got)
 	}
 	SetParentWindow(0)
-	if got := dialogParent(); got == 0x1234 {
-		t.Fatal("SetParentWindow(0) must restore the console window default")
+	if got := dialogParent(); got != 0 {
+		t.Fatalf("SetParentWindow(0): dialogParent() = %#x, want no owner window", got)
 	}
 }
 
