@@ -44,7 +44,7 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 
 ## 4. Baseline
 
-Run on a clean checkout of the round's starting commit and record the results in the plan. Where CI runs a measure, its output for that commit is the baseline. The tools are pinned in `go.mod`.
+Run on a clean checkout of the round's starting commit and record the results in the plan. Where CI runs a measure, its output for that commit is the baseline. The tools are pinned in `go.mod`. `go run ./tools/ci all` runs formatting, vet, the build, staticcheck, govulncheck, both deadcode passes, the tests with coverage, the race detector (with a gcc) and fuzzing in one go ([SPEC-ci.md](SPEC-ci.md)); the table names the single commands. The throughput benchmarks run alone on the machine, nothing else at the same time, with the SSD data outside `%TEMP%`: a test run beside them, or a folder the virus scanner watches more closely, changed the numbers by a third (RF-75).
 
 | Measure | Command | Record |
 |---|---|---|
@@ -91,14 +91,14 @@ For each area: what to look at, and how to find it. Not every point yields an it
 - Allocations per chunk, per file, or per manifest entry in the backup and restore paths (`testing.B` with `b.ReportAllocs`).
 - Memory that grows with the number of files (manifest, maps) against the limits in SPEC-core section 5.3.
 - Blocking calls on the UI thread; snapshot and file-system work that can hang on a network drive.
-- Compare with the previous round's throughput; a drop of more than 10 % is a P1 finding.
+- Compare with the previous round's throughput; a drop of more than 10 % is a P1 finding. Before it is put down to the code, run the previous release and the current commit alternately on the same data: the machine changes too (a Windows or virus scanner update), and then both are slower (RF-75).
 
 ### 5.4 Security hardening
 
 - Untrusted input: every parser of bytes from the backup directory or the configuration (header, key set, trailer, chunk framing, manifest, file names, challenge JSON, recovery code, config.yaml) has a fuzz target and bounds on what it allocates.
 - Restore safety: paths from a backup can't leave the destination (lexical check, reparse points, `O_EXCL`).
 - Secrets: passwords, recovery codes and derived keys live in `[]byte` and are zeroed; no secret passes through a `string`, a log line, an error text, or the clipboard history.
-- Concurrency between RestoreSafe processes: what the backup-directory lock covers, and what happens without it.
+- Concurrency between RestoreSafe processes: what the backup-directory lock covers, and what happens without it. Readers share the lock, so a restore and a verification of one backup run at once and write the same log file (RF-95).
 - Windows specifics: DLL search order, file and directory permissions of what RestoreSafe writes, the application manifest.
 - Cryptography: algorithms, KDF bounds and defaults against current guidance (OWASP, RFC 9106); a change to defaults is a feature with its own spec, not a refactoring item.
 - Dependencies and supply chain: `govulncheck`, tool versions pinned, release checksums (and signing, if decided).
@@ -107,12 +107,14 @@ For each area: what to look at, and how to find it. Not every point yields an it
 ### 5.5 Quality assurance and testing
 
 - Per-package coverage against the floors in CI; packages that decide whether damage is detected (format, restorepoint) first.
+- Coverage counts only a package's own tests: code that only the tests of another package reach is not covered, and a split or a new method can lower a package that was not touched. Before a push, `go run ./tools/ci fast` checks every floor, not only those of the changed packages (RF-96).
+- Inputs that decide which branch runs are fixed in a test, not random: a random recovery code covered different branches from run to run, so the coverage of its package moved by 3 points and broke its floor (RF-40).
 - Tests that are flaky, slow (over 10 s per package), sleep, depend on today's date, or touch process-global state (`os.Stdout`, environment, working directory) while running in parallel.
 - The fault-injection matrix (damaged, missing, truncated parts; full disk; cancel in every phase) has a test per row.
 - The format fixtures restore bit-exact.
 - The GUI scripts in `scripts/gui-test` still find every control (`ids_test.go`) and run.
 - The manual checklist (`docs/GUI-TEST-CHECKLIST.md`) has no row that a script could cover instead.
-- Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference.
+- Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference. A test that needs a permission to be denied (an ACL deny entry) did not take effect on every runner; such a test skips with the reason, and a second test reaches the same code in a way that works everywhere, so the floor does not depend on the runner (RF-68).
 - A check that only a person can do (Process Monitor, real hardware) names who does it and before which release, in the item itself; otherwise it stays open unnoticed (refactoring 2.0 RF-52).
 
 ### 5.6 Tooling, build and CI
@@ -185,6 +187,9 @@ The standing constraints of SPEC-refactoring section 2 apply. <added constraints
 
 ## 4.-n. Items by area
 <RF items in the format of section 6>
+
+## n. Found during the work
+<items found after the plan was agreed, with IDs from the next free number; a defect found by a test of the round is a P1 or P2 item like any other>
 
 ## Phases
 | Phase | Items | When | Why then |

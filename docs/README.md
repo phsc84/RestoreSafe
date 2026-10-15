@@ -10,7 +10,7 @@
 | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) | Manual tests of the window before a release | Living |
 | [SPEC-ci.md](SPEC-ci.md) | One Go program, `tools/ci`, that runs the CI jobs locally and on GitHub; replaced the scripts in `scripts/ci/` (RF-87) | Living; implemented 2026-10-14 |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
-| [PLAN-refactoring.md](PLAN-refactoring.md) | The current refactoring round: the round after 2.0.0, items from RF-65 on, and RF-40 carried over | Agreed 2026-10-13 |
+| [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.0.0: RF-40 and RF-65 to RF-97, its result and what it carries over; replaced by the next round's plan after 2.1.0 | Done 2026-10-15 |
 
 An implementation plan is deleted once its work is released; the refactoring plan keeps its name and gets the next round's content. Git history keeps both: the GUI redesign plan and the plan of the round of 2.0 are at the tag `v2.0.0` (`git show v2.0.0:docs/PLAN-gui-redesign.md`).
 

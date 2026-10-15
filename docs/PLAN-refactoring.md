@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-13 |
+| Status | Done 2026-10-15 (agreed 2026-10-13) |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
 | Previous round | The round of 2.0 (RF-1 to RF-64), done 2026-10-09; its plan is in git history (`git show v2.0.0:docs/PLAN-refactoring.md`) |
-| Baseline | `dev` at `d4d192a` |
+| Baseline | `dev` at `d4d192a`; result at `7dc1742` |
 | Branch | `dev` |
 | Scope | Coverage (RF-40), code that only tests reach, duplicated checks and formats, console-era names, dependency updates, two large files. **No change to the backup format of 2.x** (standing constraint 1), and no user-visible change. |
 
@@ -17,27 +17,29 @@ New items start at RF-65 (IDs count on across rounds, SPEC-refactoring section 1
 
 ## 2. Baseline (measured 2026-10-13)
 
-| Measure | 2.0 round, start (2026-10-06) | 2.0 round, result (2026-10-09, `a5986bb`) | This round, start (2026-10-13, `d4d192a`) |
-|---|---|---|---|
-| Tracked files / Go lines | 262 / 40,636 | 337 / 44,303 | 340 / 44,341 |
-| Go toolchain | go 1.27.1 | go 1.27.2 | go 1.27.2 (the current release) |
-| Dependency updates | not recorded | not recorded | `x/crypto` 0.57.0 → 0.58.0, `x/sys` 0.48.0 → 0.49.0; tools: staticcheck 0.8.1 → 0.8.2, govulncheck 1.8.0 → 1.9.0, `x/tools` 0.51.0 → 0.52.0 |
-| `go vet`, `gofmt -l` | vet clean; 18 files (CRLF) | nothing reported | nothing reported |
-| staticcheck | 10 findings besides ST1005 | nothing reported | nothing reported, with the naming and doc-comment checks on since `2974fe1` |
-| `deadcode -test` | 16 unreachable functions | nothing reported | nothing reported |
-| `deadcode` (without `-test`) | not measured | not measured | 22 functions outside the test-support packages (RF-70) |
-| `govulncheck` | 0 called; 1 required-only | 0 called, 0 imported; 1 required-only (`x/crypto/openpgp`) | unchanged: 1 required-only, GO-2026-5932 (`x/crypto/openpgp`, no fix) |
-| `go test ./...` | passes; `-cover` failed in `gui/view` | passes, including the 2.0.0 format fixtures; race and fuzzing pass in CI | passes; slowest packages `e2e` 83 s, `container` 63 s, `backup` 56 s, `health` 31 s |
-| Race, fuzzing | not run | pass in CI | pass in CI (run 38073462386 on `d4d192a`) |
-| Markers (`TODO`, `FIXME`, `XXX`, `HACK`) | not counted | none | none |
-| CI | none | check, tests with coverage floors, race, fuzzing, GUI smoke test | the same five jobs; about 7 min, of which fuzzing 7 min, tests 2 min 15 s, race 2 min 10 s |
-| Coverage, total | 46.1 % | 54.5 % | 54.5 % |
-| Largest production files | `gui/backups.go` 948, `gui/wizard.go` 931, `yubikey/fido2.go` 917 | `yubikey/fido2.go` 908, `gui/view/strings.go` 516, `archive/build.go` 504 | `yubikey/fido2.go` 910, `gui/view/strings.go` 516, `archive/build.go` 504 |
-| Throughput, SSD (backup / restore) | not measured | 329–338 / 255 MiB/s | 316 / 178 MiB/s (RF-75) |
-| Throughput, network share (backup / restore) | not measured | 29.3 / 56.9 MiB/s | 24.2 / 43.9 MiB/s (RF-75) |
-| Docs index | not checked | complete | complete: every file in `docs/` is listed in `docs/README.md` |
+| Measure | 2.0 round, start (2026-10-06) | 2.0 round, result (2026-10-09, `a5986bb`) | This round, start (2026-10-13, `d4d192a`) | This round, result (2026-10-15, `7dc1742`) |
+|---|---|---|---|---|
+| Tracked files / Go lines | 262 / 40,636 | 337 / 44,303 | 340 / 44,341 | 376 / 47,720 |
+| Go toolchain | go 1.27.1 | go 1.27.2 | go 1.27.2 (the current release) | go 1.27.2 (the current release) |
+| Dependency updates | not recorded | not recorded | `x/crypto` 0.57.0 → 0.58.0, `x/sys` 0.48.0 → 0.49.0; tools: staticcheck 0.8.1 → 0.8.2, govulncheck 1.8.0 → 1.9.0, `x/tools` 0.51.0 → 0.52.0 | none for a direct dependency or tool |
+| `go vet`, `gofmt -l` | vet clean; 18 files (CRLF) | nothing reported | nothing reported | nothing reported |
+| staticcheck | 10 findings besides ST1005 | nothing reported | nothing reported, with the naming and doc-comment checks on since `2974fe1` | nothing reported |
+| `deadcode -test` | 16 unreachable functions | nothing reported | nothing reported | nothing reported; fails CI since RF-86 |
+| `deadcode` (without `-test`) | not measured | not measured | 22 functions outside the test-support packages (RF-70) | nothing outside the test-support packages; fails CI since RF-86 |
+| `govulncheck` | 0 called; 1 required-only | 0 called, 0 imported; 1 required-only (`x/crypto/openpgp`) | unchanged: 1 required-only, GO-2026-5932 (`x/crypto/openpgp`, no fix) | unchanged: 1 required-only, GO-2026-5932 |
+| `go test ./...` | passes; `-cover` failed in `gui/view` | passes, including the 2.0.0 format fixtures; race and fuzzing pass in CI | passes; slowest packages `e2e` 83 s, `container` 63 s, `backup` 56 s, `health` 31 s | passes, 610 tests; slowest packages `container` 56 s, `e2e` 26 s, `health` 17 s; the whole run 73 s on a slow day of the machine (50 s the day before) |
+| Race, fuzzing | not run | pass in CI | pass in CI (run 38073462386 on `d4d192a`) | pass in CI (run 38767528308 on `7dc1742`) |
+| Markers (`TODO`, `FIXME`, `XXX`, `HACK`) | not counted | none | none | none |
+| CI | none | check, tests with coverage floors, race, fuzzing, GUI smoke test | the same five jobs; about 7 min, of which fuzzing 7 min, tests 2 min 15 s, race 2 min 10 s | the same five jobs, each one run of `tools/ci` (RF-87), with annotations per failure; about 7 min 20 s, fuzzing the longest; a pre-push hook runs `fast` |
+| Coverage, total | 46.1 % | 54.5 % | 54.5 % | 56.6 %, every package at its target (the CI runner `tools/ci` and the window code `gui`, `gui/win32` keep the total low) |
+| Largest production files | `gui/backups.go` 948, `gui/wizard.go` 931, `yubikey/fido2.go` 917 | `yubikey/fido2.go` 908, `gui/view/strings.go` 516, `archive/build.go` 504 | `yubikey/fido2.go` 910, `gui/view/strings.go` 516, `archive/build.go` 504 | `archive/build.go` 554, `gui/view/strings.go` 516, `gui/win32/listview.go` 487 |
+| Throughput, SSD (backup / restore) | not measured | 329–338 / 255 MiB/s | 316 / 178 MiB/s (RF-75) | 217–254 / 144–150 MiB/s, alternating with `v2.0.0` at 252–254 / 142–150 on the same day (a single run before: 290 / 114) |
+| Throughput, network share (backup / restore) | not measured | 29.3 / 56.9 MiB/s | 24.2 / 43.9 MiB/s (RF-75) | 22.5 / 33.4 MiB/s (one backup run of three took 266 s instead of 75 s) |
+| Docs index | not checked | complete | complete: every file in `docs/` is listed in `docs/README.md` | complete, with SPEC-ci |
 
 Coverage by package is unchanged since the result of the 2.0 round: cryptox 89.1, recovery 94.0, yubikey 36.4; config 92.6, logging 88.5, problem 100; manifest 92.6, naming 92.5, container 85.5, setwriter 85.2, catalog 81.2, archive 78.1; fsx 82.7; health 95.1, plan 93.3, restorepoint 90.9, unlock 84.7, job 84.3, backup 83.3, restore 79.1, interact 78.3, verify 73.2; gui/view 91.0, gui/flow 77.0, gui/widget 73.6, gui/win32 10.4, gui 2.0; cmd/restoresafe 33.3.
+
+Coverage by package at the result of this round (CI run of `7dc1742`): cryptox 94.1, recovery 98.5, yubikey 62.3; config 92.6, logging 91.8, problem 100; manifest 92.4, naming 92.5, container 85.5, setwriter 85.2, catalog 94.0, archive 86.8; fsx 92.9; health 95.1, plan 93.3, restorepoint 90.9, unlock 87.4, job 90.8, backup 85.7, restore 90.3, interact 100, verify 93.9; gui/view 91.0, gui/flow 95.8, gui/widget 85.2; tools/ci/check 98.4.
 
 Looked at without a finding: the layer rules (`internal/architecture` unchanged since the release); package documentation; secrets passed as `string` (none); the DLL search order (both programs call `SetDefaultDllDirectories`); `.gitattributes` against the file types; `config-SAMPLE.yaml` against the configuration keys; every "core spec n", "GUI spec n" and "GUI spec XX-n" citation in the code against the specs; `ids_test.go` against the GUI scripts.
 
@@ -67,7 +69,7 @@ Done 2026-10-13: `logging/line.go` holds the severities, `FormatLine` (the logge
 **RF-68 (P3) `BuildTar` is 160 lines.** Evidence: [archive/build.go:101](../internal/format/archive/build.go#L101) `BuildTar` 160 lines, and `writeFile` ([:320](../internal/format/archive/build.go#L320)) 7 parameters; `archive` is at 78.1 % coverage (RF-40). The other functions over 80 lines are a window procedure and dialog builders in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), where a long switch or a list of controls reads better in one piece, and `setwriter.Write` (107), `backup.run` (109), each one sequence of steps.
 Change: after RF-40 has brought `archive` to its target, split `BuildTar` into the walk and the writing of one entry, with the per-run state in a struct instead of `writeFile`'s parameters.
 Acceptance: no function in `archive` over 80 lines or 5 parameters; a known-answer test, written before the change, shows that the tar output of a fixed tree is byte for byte the same after it.
-Done 2026-10-14: `BuildTar` keeps its per-run state in `tarBuilder`; the walk is its method `visit`, with `unlisted`, `unstatable`, `addDir`, `addFile` and `writeFile` (2 parameters instead of 7) for the cases. `TestBuildTarKnownAnswer`, committed before the split, passes unchanged after it. The split moved archive's coverage from 85.3 to 84.8 %; `TestBuildTarHandlesAFolderItCannotList` (a folder denied listing with `icacls`, by default and with `on_unreadable_file: skip`) tests the branch that was never reached. On the CI runner the deny entry has no effect (Go opens folders with backup semantics, and the runner's account can use the backup privilege), so that test skips there and CI measured 84.8 % again. `TestBuildTarCountsAFolderThatVanishes`, which works the same on every machine, found RF-97 and brings archive to 85.1 % without the `icacls` test (86.8 % with it).
+Done 2026-10-14: `BuildTar` keeps its per-run state in `tarBuilder`; the walk is its method `visit`, with `unlisted`, `unstatable`, `addDir`, `addFile` and `writeFile` (2 parameters instead of 7) for the cases. `TestBuildTarKnownAnswer`, committed before the split, passes unchanged after it. The split moved archive's coverage from 85.3 to 84.8 %; `TestBuildTarHandlesAFolderItCannotList` (a folder denied listing with `icacls`, by default and with `on_unreadable_file: skip`) tests the branch that was never reached. In the CI run of `6c4f9cb` that test did not count (CI measured 84.8 % again), while the run of `7dc1742` measured 86.8 %, so it ran there: whether the deny entry takes effect depends on the runner (a guess: one whose account may use the backup privilege, with which Go opens folders, ignores it). `TestBuildTarCountsAFolderThatVanishes`, which works the same on every machine, found RF-97 and brings archive to 85.1 % without the `icacls` test (86.8 % with it).
 
 **RF-69 (P3) `yubikey/fido2.go` holds four things in 910 lines.** Evidence: the file has the WebAuthn ABI structs (lines 105–298), the challenge data and its JSON (300–375), the public operations (379–525), the WebAuthn calls (526–810) and the HID enumeration through SetupAPI (811–910). It has been the largest production file for two rounds.
 Change: split by those parts into `webauthn.go`, `challenge.go`, `hid.go` and `fido2.go`; a move only, no change to a function.
@@ -97,7 +99,7 @@ Done 2026-10-13: `NewOutputLogger` and `HasFile` (the inverse of `IsConsoleOnly`
 **RF-75 (P1) Restore is slower than in the round of 2.0.** Evidence: the throughput benchmarks on 2026-10-13 (median of 3 runs, 1.7 GB; the SSD run alone on the machine, in `sandbox\bench`):
 
 | | 2.0 round (2026-10-08) | 2026-10-13 | Change |
-|---|---|---|---|
+|---|---|---|---|---|
 | SSD, backup | 318–338 MiB/s | 316 MiB/s (312–337) | within the variance |
 | SSD, restore | 255–257 MiB/s | 178 MiB/s (172–181) | −30 % |
 | Network share, backup | 29.3 MiB/s | 24.2 MiB/s (23.6–24.9) | −17 % |
@@ -191,7 +193,7 @@ Done 2026-10-14.
 ## Phases
 
 | Phase | Items | When | Why then |
-|---|---|---|---|
+|---|---|---|---|---|
 | 1. Tooling and safety net | RF-75, RF-85, RF-40 (floors raised to the current values), RF-90 | first | RF-75 compares with `v2.0.0` before the dependency update changes the code; the update and the raised floors guard everything after them |
 | 2. Tests | RF-40 (tests to the targets), RF-80 | after phase 1 | the safety net before code is changed or removed in phase 3 |
 | 3. Cleanup | RF-70, RF-71, RF-67, RF-65, RF-66, RF-72, then RF-86 | after phase 2 | small diffs inside single packages; RF-86 last, once RF-70 has brought `deadcode` to zero |
@@ -210,6 +212,8 @@ Phase 3 done 2026-10-13 (`960ad01`): RF-70, RF-71, RF-67, RF-65, RF-66, RF-72 an
 Phase 4 done 2026-10-14 (`f81ed7b`): RF-96, RF-68 and RF-69 done; RF-97 found by a test of RF-68 and fixed. The first CI run of the phase (`6c4f9cb`) failed on three coverage floors (archive, logging, restore), because only the packages changed directly had been measured before the push; the floors are now checked locally before every push. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; every package at its floor; CI passes on all five jobs.
 
 Phase 5 done 2026-10-14 (`910c18a`): RF-87 done; CI runs every job through `tools/ci`, and every push is checked by the pre-push hook. CI passes on all five jobs.
+
+Phase 6 done 2026-10-15 (`71dc61b`): RF-81 done; CI passes on all five jobs (`7dc1742`).
 
 ## Open questions
 
@@ -232,4 +236,16 @@ Answered 2026-10-13:
 - `go tool deadcode ./...` reports nothing outside the test-support packages.
 - The baseline of section 2 run again and recorded as this round's result, with throughput on the SSD and the network share.
 
+## Closed 2026-10-15
+
+Every P1 and P2 item is done or dropped with a reason, RF-40 is done, `deadcode` reports nothing outside the test-support packages, and the baseline was run again (section 2, last column). Throughput: on the day of the close the machine was slower again, as during RF-75; alternating runs of `v2.0.0` and `7dc1742` on the same SSD data gave the same numbers (backup 252–254 against 217–254, restore 142–150 against 144–150 MiB/s), so the round changed neither. What the round taught is in SPEC-refactoring: the runner of SPEC-ci as the way to measure (section 4), throughput only alone on the machine and against the previous release (4 and 5.3), the shared read lock and the log file (5.4), coverage that counts only a package's own tests, fixed inputs for branches, and tests that depend on the runner (5.5), and a section for items found during the work in the template (9).
+
 ## Carried over (filled in when the round closes)
+
+For the round after 2.1.0. None of these is an item yet; the next round's review decides.
+
+- **The cryptography point of SPEC-refactoring 5.4** was not looked at (section 2). The next round starts its review with it. A change to the KDF defaults is a feature with its own spec, not a refactoring item.
+- **`archive/build.go` has 554 lines**, over the 500 of SPEC-refactoring 5.1 (found at the close): the split of RF-68 made it longer by its doc comments. The walk (`tarBuilder` and its methods) could go to a file of its own.
+- **The throughput of the development machine varies by a third from day to day** (RF-75, the close). The next round compares only with alternating runs of the previous release, as SPEC-refactoring 5.3 now says, and records both.
+
+Not carried over: the yubidiag overhaul (section "Not part of this round") is specified as the YubiKey page in SPEC-gui 10.2, which removes `cmd/yubidiag`; it is feature work, done with that spec.
