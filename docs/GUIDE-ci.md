@@ -40,6 +40,8 @@ go run ./tools/ci test race   # any jobs, in this order
 
 It ends with a summary (`PASS`, `FAIL` or `SKIP` per job, and the steps that failed) and writes its logs and artifacts to `sandbox\ci\<job>\` (`-out` changes that; `-fuzztime` the time per fuzz target). Exit code 0 when every job passed or was skipped, 1 when one failed; the runner prints "exit status 2" when it could not run at all (no `go.mod`, a command not found, an unreadable floors file). Without a gcc, `race` is skipped locally (section 5).
 
+A pre-push hook runs `go run ./tools/ci fast` before every push and stops the push when a job fails. It is off until turned on once per clone; how to turn it on, skip it and turn it off is in [GUIDE-development.md](GUIDE-development.md#the-pre-push-hook). It does not replace CI: it checks the working tree, not the pushed commits, on your machine, and `--no-verify` skips it.
+
 ### Reading a result
 
 - On the pull request: the list of checks at the bottom of the **Conversation** tab, or the **Checks** tab. A red check has **Details**, which opens the log of that job.
