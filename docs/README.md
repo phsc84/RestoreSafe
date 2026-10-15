@@ -8,7 +8,7 @@
 | [SPEC-core.md](SPEC-core.md) | Container format 2, keys, manifest, what backup, restore, verify and retention do, configuration, security | Living; the format part is frozen for 2.x |
 | [SPEC-gui.md](SPEC-gui.md) | The window: pages, dialogs, requirement IDs (`OV-1`, `BP-3`, ...), the workflow interface the window needs | Living |
 | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) | Manual tests of the window before a release | Living |
-| [SPEC-ci.md](SPEC-ci.md) | One Go program, `tools/ci`, that runs the CI jobs locally and on GitHub; replaced the scripts in `scripts/ci/` (RF-87) | Living; implemented 2026-10-14 |
+| [SPEC-ci.md](SPEC-ci.md) | The CI runner `tools/ci`: command line, jobs and their steps, GitHub annotations, its tests, the pre-push hook; for whoever changes it (using CI: CI.md) | Living |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
 | [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.0.0: RF-40 and RF-65 to RF-97, its result and what it carries over; replaced by the next round's plan after 2.1.0 | Done 2026-10-15 |
 
