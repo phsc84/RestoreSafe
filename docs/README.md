@@ -11,6 +11,7 @@
 | [SPEC-ci.md](SPEC-ci.md) | The CI runner `tools/ci`: command line, jobs and their steps, GitHub annotations, its tests, the pre-push hook; for whoever changes it (using CI: GUIDE-ci.md) | Living |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
 | [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.0.0: RF-40 and RF-65 to RF-97, its result and what it carries over; replaced by the next round's plan after 2.1.0 | Done 2026-10-15 |
+| [PLAN-yubikey-page.md](PLAN-yubikey-page.md) | The YubiKey page of SPEC-gui 10.2 for 2.1.0, in six phases: diagnosis in `yubikey`, the YK-11 session with the real key, `keycheck`, view, window, docs; `cmd/yubidiag` goes | Agreed 2026-10-15 |
 
 The names say what kind of document it is: `GUIDE-` how to do something (set up a machine, use CI, test the window), `SPEC-` what the program or a tool must do (living, kept up to date with the code), `PLAN-` work in progress. [CONTRIBUTING.md](CONTRIBUTING.md), the rules of the project, keeps the name GitHub recognises, which links it where pull requests and issues are opened.
 

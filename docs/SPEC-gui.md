@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-09. |
-| Planned | Editing the configuration and dark mode in 2.1.0 (decisions 1 and 4). The YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10); release to be decided. |
+| Planned | For 2.1.0: editing the configuration and dark mode (decisions 1 and 4), and the YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10; plan: [PLAN-yubikey-page.md](PLAN-yubikey-page.md)). |
 | Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
 | Manual tests | [GUIDE-gui-test.md](GUIDE-gui-test.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
