@@ -291,9 +291,6 @@ func (o *createPage) fillKeys() {
 	if v.Warning != "" {
 		o.para(c, v.Warning, toneColor(t.Palette, view.ToneWarning))
 	}
-	if v.Link != nil {
-		c.row(cardRowHeight, cell{hwnd: c.acts.link(c.panel, *v.Link, c.linkID), px: measure(t, v.Link.Text, widget.TextSmall) + t.Scale.Px(linkPadding)})
-	}
 }
 
 // para adds small text that wraps over the card's width.

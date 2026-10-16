@@ -43,7 +43,7 @@
 | YK-7 | Results to hero variants; cancel hint; HRESULT in details | 3, 4 |
 | YK-8 | Setup guide: four steps, warning, footnote and link, Open Windows settings…, when it is expanded, strings in `view/strings.go` | 4, 5 |
 | YK-9 | Technical details: versions, interfaces, registry, last test, WebAuthn trace; no secrets; Copy details | 1, 3, 4, 5 |
-| YK-10 | "Check your YubiKey" links on the Keys card (OV-6) and on Keys and unlocking (ST-8) | 4, 5 |
+| YK-10 | Retired 2026-10-16 (owner's review): no links to the page; the sidebar is the way there | — |
 | YK-11 | Confirm with the real key, record in the spec, adapt variants and texts | 2 |
 | 14 | `cmd/yubidiag` and `RESTORESAFE_FIDO2_DEBUG` removed; no `GetConsoleWindow` fallback (13.4) | 1 |
 
@@ -149,6 +149,7 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 - [ ] The GUI smoke test (`scripts/ci/gui-smoke.ps1`) still passes. If the item is visible in its configuration, it opens the page once; the page must render without a YubiKey.
 - [x] Found while wiring the test: the health check can log WebAuthn details while the test collects its trace. `yubikey.DebugOutput` became `SetDebugOutput`, which serializes the writes; `keycheck` reads the trace only after switching it off.
 - [x] Owner's review of the first build (2026-10-16), all fixed: (1) slow scrolling left controls painted over each other on every page; the panel now repaints after each scroll step; (2) the sidebar had no hover effect; (3) the Keys card of Create backup says how the first backup sets up the YubiKey, carries the reset warning (moved from the guide), and its "YubiKey connected" follows the key, because a device change takes a new snapshot; (4) the Checks card has a FIDO2 line and, under Connected, which YubiKeys work; (5) the guide is a how-to: set or change the PIN (Windows Settings), turn on FIDO2 (starts Yubico Authenticator as administrator, or opens its download page), test, register; (6) Technical details is an expander, and Copy details shows only while it is open.
+- [x] Owner's second review (2026-10-16), all done: the Check your YubiKey links went (YK-10 retired); Set up your YubiKey became **YubiKey help** with the PIN and FIDO2 parts only, opening on its own when FIDO2 is off or a test didn't pass; Connected shows the number of keys and the firmware only (OTP and smart card don't matter to RestoreSafe), so `yubikey.FunctionsOf` went; the icon, label and text of a check share the first line; YubiKey help and Technical details have a heading that opens and closes them, the new `widget.Expander`.
 
 ### Phase 6: Manual test, docs, release notes
 

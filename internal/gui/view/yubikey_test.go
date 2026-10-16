@@ -127,7 +127,7 @@ func TestYubiKeyChecksLines(t *testing.T) {
 	}
 
 	d := yubiKey5(0x0574, true)
-	want := []string{"Windows: Ready for YubiKeys", "Connected: 1 YubiKey with FIDO2, OTP and smart card, firmware 5.7.4", "FIDO2: On", "Your keys: Not tested"}
+	want := []string{"Windows: Ready for YubiKeys", "Connected: 1 YubiKey, firmware 5.7.4", "FIDO2: On", "Your keys: Not tested"}
 	if got := text(yubiKeys, YubiKeyState{Diagnosis: d}); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("connected: %q", got)
 	}
@@ -146,7 +146,7 @@ func TestYubiKeyChecksLines(t *testing.T) {
 	}{
 		{"Windows too old", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{APIErr: errors.New("old")}}, "Windows: Needs Windows 11 version 22H2 or later"},
 		{"none connected", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{}}, "Connected: No YubiKey connected|FIDO2: Shown when a YubiKey is connected"},
-		{"no FIDO", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, "Connected: 1 YubiKey with FIDO2, OTP and smart card, firmware 5.7.4|FIDO2: Off or missing"},
+		{"no FIDO", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, "Connected: 1 YubiKey, firmware 5.7.4|FIDO2: Off or missing"},
 		{"old firmware", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, "Connected: Firmware 4.3.7: FIDO2 needs 5.2 or later"},
 		{"two keys", yubiKeys, YubiKeyState{Diagnosis: twoKeys()}, "Connected: 2 YubiKeys"},
 		{"no keys", noKeys, YubiKeyState{Diagnosis: d}, "Your keys: None yet. Your first backup registers your YubiKey."},
@@ -172,12 +172,12 @@ func twoKeys() *yubikey.Diagnosis {
 	return d
 }
 
-func TestConnectedTextWithoutKnownFunctionsOrFirmware(t *testing.T) {
+func TestConnectedTextWithoutFirmware(t *testing.T) {
 	t.Parallel()
 	if got := connectedText([]yubikey.Key{{ProductID: 0x9999}}); got != "1 YubiKey" {
-		t.Fatalf("unknown product ID: %q", got)
+		t.Fatalf("no USB device version: %q", got)
 	}
-	if got := connectedText([]yubikey.Key{{ProductID: 0x0120, Known: true, Functions: yubikey.USBFunctions{FIDO: true}, Revision: 0x0571}}); got != "1 YubiKey with FIDO2, firmware 5.7.1" {
+	if got := connectedText([]yubikey.Key{{ProductID: 0x0120, Revision: 0x0571}}); got != "1 YubiKey, firmware 5.7.1" {
 		t.Fatalf("Security Key: %q", got)
 	}
 }
@@ -191,10 +191,10 @@ func TestYubiKeyGuideOpensWhenItHelps(t *testing.T) {
 		st   YubiKeyState
 		want bool
 	}{
-		{"no YubiKey keys", noKeys, YubiKeyState{Diagnosis: d}, true},
+		{"no YubiKey keys", noKeys, YubiKeyState{Diagnosis: d}, false},
 		{"YubiKey keys", yubiKeys, YubiKeyState{Diagnosis: d}, false},
 		{"no FIDO2", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, true},
-		{"old firmware", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, true},
+		{"old firmware: the help doesn't help", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, false},
 		{"passed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, nil, false, 0)}, false},
 		{"cancelled", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("c"), true, 0x800704C7)}, true},
 		{"failed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("f"), false, 1)}, true},
@@ -203,7 +203,7 @@ func TestYubiKeyGuideOpensWhenItHelps(t *testing.T) {
 		if g.Expanded != tc.want {
 			t.Errorf("%s: expanded %v, want %v", tc.name, g.Expanded, tc.want)
 		}
-		if len(g.Steps) != 4 || g.Steps[0].Action == nil || g.Steps[0].Action.Action != ActionOpenSignInSettings || g.Steps[1].Action == nil || g.Steps[1].Action.Action != ActionOpenAuthenticator {
+		if g.Title != "YubiKey help" || len(g.Steps) != 2 || g.Steps[0].Action == nil || g.Steps[0].Action.Action != ActionOpenSignInSettings || g.Steps[1].Action == nil || g.Steps[1].Action.Action != ActionOpenAuthenticator {
 			t.Fatalf("%s: %+v", tc.name, g)
 		}
 	}
@@ -244,28 +244,20 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	}
 }
 
-func TestCheckYubiKeyLinks(t *testing.T) {
+// With a YubiKey, the Keys card of Create backup says how the first backup
+// sets it up, and never to reset it (OV-6).
+func TestKeysCardWithAYubiKey(t *testing.T) {
 	t.Parallel()
 	yk := &config.Config{AuthenticationMode: config.AuthModeYubiKey}
 	pw := &config.Config{AuthenticationMode: config.AuthModePassword}
 	s := snapshotWith(noKeys)
-	if c := keysOf(s, yk); c.Link == nil || c.Link.Action != ActionOpenYubiKeyPage {
-		t.Fatalf("Keys card with a YubiKey: %+v", c.Link)
-	}
-	if c := keysOf(s, pw); c.Link != nil || c.Setup != "" || c.Warning != "" {
+	if c := keysOf(s, pw); c.Setup != "" || c.Warning != "" {
 		t.Fatalf("Keys card without a YubiKey: %+v", c)
 	}
-	// With a YubiKey: how the first backup sets it up, and never to reset it.
 	if c := keysOf(s, yk); !strings.Contains(c.Setup, "first backup sets up your YubiKey") || !strings.Contains(c.Warning, "Never reset your YubiKey") {
 		t.Fatalf("Keys card with a YubiKey, no keys yet: %+v", c)
 	}
 	if c := keysOf(snapshotWith(yubiKeys), yk); c.Setup != "" || c.Warning == "" {
 		t.Fatalf("Keys card with YubiKey keys: %+v", c)
-	}
-	if p := SettingsOf(yk, "config.yaml", "C:/Backup", s, nil, false, ""); p.Keys.Link == nil || p.Keys.Link.Text != "Check your YubiKey" {
-		t.Fatalf("Settings with a YubiKey: %+v", p.Keys.Link)
-	}
-	if p := SettingsOf(pw, "config.yaml", "C:/Backup", s, nil, false, ""); p.Keys.Link != nil {
-		t.Fatalf("Settings without a YubiKey: %+v", p.Keys.Link)
 	}
 }

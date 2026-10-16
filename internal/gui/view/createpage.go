@@ -89,8 +89,6 @@ type KeysCard struct {
 	Setup string
 	// Warning warns not to reset the YubiKey, while one is used (YK-8).
 	Warning string
-	// Link opens the YubiKey page while the sidebar shows it (YK-10).
-	Link *Button
 }
 
 // CreatePage is everything the Create backup page shows.
@@ -399,9 +397,6 @@ func lastRunNote(s *health.Snapshot, now time.Time) (string, Tone) {
 func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 	k := s.Keys
 	card := KeysCard{Title: cardKeys}
-	if YubiKeyVisible(cfg, s) {
-		card.Link = &Button{Text: linkCheckYubiKey, Action: ActionOpenYubiKeyPage, Enabled: true}
-	}
 	if cfg.UseYubiKey() {
 		card.Warning = keysNeverReset
 		if !k.Exists {

@@ -454,3 +454,9 @@ func ShellOpenWith(hwnd HWND, exe, args string) error {
 func ShellRunAs(hwnd HWND, exe string) error {
 	return windows.ShellExecute(windows.Handle(hwnd), UTF16("runas"), UTF16(exe), nil, nil, SW_SHOWNORMAL)
 }
+
+// MsgParam returns the MSG of a WM_GETDLGCODE lparam; nil when there is
+// none.
+func MsgParam(lparam uintptr) *Msg {
+	return *(**Msg)(unsafe.Pointer(&lparam))
+}

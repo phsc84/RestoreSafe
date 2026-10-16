@@ -39,8 +39,6 @@ type SettingsCard struct {
 	MoreLink string
 	More     []Setting
 	MoreNote string
-	// Link is a link at the end of the card, nil for none.
-	Link *Button
 }
 
 // SettingsPage is the Settings page (GUI spec 10): read-only in 2.0.0.
@@ -184,9 +182,6 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 		{Label: settingArgonThreads, Value: fmt.Sprintf("%d", cfg.Argon2.Threads), Key: "argon2.threads"},
 	}
 	p.Keys.MoreNote = argon2Note
-	if YubiKeyVisible(cfg, s) {
-		p.Keys.Link = &Button{Text: linkCheckYubiKey, Action: ActionOpenYubiKeyPage, Enabled: true}
-	}
 	if s != nil && s.Keys.NewKeysReason != "" {
 		p.Keys.Note, p.Keys.NoteTone = fmt.Sprintf(keysNewNeeded, s.Keys.NewKeysReason), ToneInfo
 	}

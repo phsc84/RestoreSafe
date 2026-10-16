@@ -24,21 +24,18 @@ type CheckLine struct {
 	Note string
 }
 
-// GuideStep is a numbered step or the warning of the setup guide.
+// GuideStep is a part of the YubiKey help: what to do, and its button.
 type GuideStep struct {
-	Number      string
 	Title, Text string
 	// Action is the step's button, if it has one.
 	Action *Button
 }
 
-// YubiKeyGuide is the card "Set up your YubiKey" (GUI spec YK-8).
+// YubiKeyGuide is the card "YubiKey help" (GUI spec YK-8).
 type YubiKeyGuide struct {
-	// Title is the expanded card's title, Collapsed the line it shows
-	// collapsed.
-	Title, Collapsed string
-	Expanded         bool
-	Steps            []GuideStep
+	Title    string
+	Expanded bool
+	Steps    []GuideStep
 }
 
 // YubiKeyPage is everything the YubiKey page shows (GUI spec 10.2).
@@ -91,7 +88,7 @@ func YubiKeyPageOf(s *health.Snapshot, st YubiKeyState, now time.Time) YubiKeyPa
 		Hero:         yubiKeyHero(keys, st, now),
 		ChecksTitle:  ykChecksTitle,
 		Checks:       yubiKeyChecks(keys, st),
-		Guide:        yubiKeyGuide(keys, st),
+		Guide:        yubiKeyGuide(st),
 		DetailsTitle: ykDetailsTitle,
 		Details:      YubiKeyDetails(st),
 		CopyDetails:  Button{Text: buttonCopyDetails, Action: ActionCopyDetails, Enabled: true},
@@ -249,51 +246,32 @@ func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 	return lines
 }
 
-// connectedText words the connected YubiKeys: "1 YubiKey with FIDO2, OTP
-// and smart card, firmware 5.7.4". The product ID never names a model,
-// because YubiKey 4 and 5 share them (YK-4).
+// connectedText words the connected YubiKeys: "1 YubiKey, firmware 5.7.4".
+// Its other USB functions don't matter to RestoreSafe, and FIDO2 has a
+// line of its own (YK-4).
 func connectedText(keys []yubikey.Key) string {
 	if len(keys) > 1 {
 		return fmt.Sprintf(ykManyKeys, len(keys))
 	}
 	k := keys[0]
 	text := ykOneKey
-	if k.Known {
-		var functions []string
-		if k.Functions.FIDO {
-			functions = append(functions, ykFunctionFIDO)
-		}
-		if k.Functions.OTP {
-			functions = append(functions, ykFunctionOTP)
-		}
-		if k.Functions.CCID {
-			functions = append(functions, ykFunctionCCID)
-		}
-		if len(functions) > 0 {
-			text = fmt.Sprintf(ykWithFunctions, text, joinAnd(functions))
-		}
-	}
 	if k.Revision != 0 {
 		text = fmt.Sprintf(ykWithFirmware, text, yubikey.FormatRevision(k.Revision))
 	}
 	return text
 }
 
-func yubiKeyGuide(keys health.KeysSummary, st YubiKeyState) YubiKeyGuide {
+func yubiKeyGuide(st YubiKeyState) YubiKeyGuide {
 	f, _ := faultOf(st.Diagnosis)
 	r := st.Test
 	return YubiKeyGuide{
-		Title:     ykGuideTitle,
-		Collapsed: ykGuideCollapsed,
-		// Open when there are no YubiKey keys yet, when the YubiKey can't
-		// protect backups, and after a test that didn't pass: a cancel may
-		// be a blocked PIN (YK-7, YK-8).
-		Expanded: !keys.YubiKeyInBackups || f == faultNoFIDO || f == faultFirmware || r != nil && !r.Passed(),
+		Title: ykGuideTitle,
+		// Open when it helps: FIDO2 is off, or a test didn't pass, which may
+		// be the PIN (YK-7, YK-8).
+		Expanded: f == faultNoFIDO || r != nil && !r.Passed(),
 		Steps: []GuideStep{
-			{Number: "1", Title: ykStep1, Text: ykStep1Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
-			{Number: "2", Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
-			{Number: "3", Title: ykStep3, Text: ykStep3Text},
-			{Number: "4", Title: ykStep4, Text: ykStep4Text},
+			{Title: ykStep1, Text: ykStep1Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
+			{Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
 		},
 	}
 }

@@ -72,7 +72,7 @@ func TestDiagnoseFindsTheFIDOInterfaceByItsUsagePage(t *testing.T) {
 		t.Fatalf("FIDO %v, drivers %v", d.FIDO(), d.Drivers)
 	}
 	keys := d.Keys()
-	if len(keys) != 1 || !keys[0].FIDO || !keys[0].Known || keys[0].Functions != (USBFunctions{OTP: true, FIDO: true, CCID: true}) || keys[0].Revision != 0x0543 {
+	if len(keys) != 1 || !keys[0].FIDO || keys[0].ProductID != 0x0407 || keys[0].Revision != 0x0543 {
 		t.Fatalf("keys: %+v", keys)
 	}
 }
@@ -87,7 +87,7 @@ func TestDiagnoseFindsFIDOOnAKeyWithoutMI(t *testing.T) {
 	stubDiagnose(t, []hidDevice{sky}, nil, 7, nil)
 	d := Diagnose()
 	keys := d.Keys()
-	if !d.FIDO() || len(keys) != 1 || !keys[0].FIDO || keys[0].Functions != (USBFunctions{FIDO: true}) {
+	if !d.FIDO() || len(keys) != 1 || !keys[0].FIDO || keys[0].ProductID != 0x0120 {
 		t.Fatalf("Security Key: %+v", keys)
 	}
 }
@@ -141,28 +141,6 @@ func TestDiagnoseReportsWhatWindowsLacks(t *testing.T) {
 	}
 	if err := CheckConnected(); err == nil || !strings.Contains(err.Error(), "too old") {
 		t.Fatalf("CheckConnected must report the same error, got %v", err)
-	}
-}
-
-func TestFunctionsOfProductIDs(t *testing.T) {
-	for pid, want := range map[uint16]USBFunctions{
-		0x0401: {OTP: true},
-		0x0402: {FIDO: true},
-		0x0403: {OTP: true, FIDO: true},
-		0x0406: {FIDO: true, CCID: true},
-		0x0407: {OTP: true, FIDO: true, CCID: true},
-		0x0110: {OTP: true},
-		0x0116: {OTP: true, FIDO: true, CCID: true},
-		0x0120: {FIDO: true},
-		0x0410: {OTP: true, FIDO: true},
-		0x0010: {OTP: true},
-	} {
-		if got, known := FunctionsOf(pid); !known || got != want {
-			t.Errorf("FunctionsOf(%#04x) = %+v, %v; want %+v", pid, got, known, want)
-		}
-	}
-	if _, known := FunctionsOf(0x9999); known {
-		t.Error("an unknown product ID must not be known")
 	}
 }
 

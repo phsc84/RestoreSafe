@@ -24,12 +24,13 @@ const (
 // Sizes of the YubiKey page, in DIPs.
 const (
 	checkLabelWidth   = 110
-	guideIndent       = 28
+	guideIndent       = 16
 	detailsTextHeight = 260
+	expanderHeight    = 28
 )
 
 // yubiKeyPage is the YubiKey page (GUI spec 10.2): the hero, the Checks
-// card, the setup guide and the technical details.
+// card, the YubiKey help and the technical details.
 type yubiKeyPage struct {
 	a     *app
 	panel *widget.Panel
@@ -42,12 +43,14 @@ type yubiKeyPage struct {
 	heroPrimary         win32.HWND
 
 	checks, guide, details *card
-	// text is the read-only rich edit of the technical details; it belongs
-	// to the details card but outlives its rebuilds.
-	text win32.HWND
-	// showGuide and showDetails are what the user expanded.
-	showGuide, showDetails bool
-	builtWidth             int32
+	// The headings of the help and the details open and close them; they
+	// and the rich edit of the details outlive the cards' rebuilds.
+	guideHead, detailsHead *widget.Expander
+	text                   win32.HWND
+	// guideAuto is whether the view opened the help at the last update:
+	// it opens it when that starts, and the user closes it again.
+	guideAuto  bool
+	builtWidth int32
 }
 
 func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
@@ -74,6 +77,14 @@ func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
 		}
 		(*c).panel.OnCommand = p.command
 	}
+	if p.guideHead, err = widget.NewExpander(t, p.guide.panel.HWND(), t.Palette.Surface, idYubiKeyGuide); err != nil {
+		return nil, err
+	}
+	if p.detailsHead, err = widget.NewExpander(t, p.details.panel.HWND(), t.Palette.Surface, idYubiKeyDetails); err != nil {
+		return nil, err
+	}
+	p.guideHead.OnToggle = func(bool) { p.update() }
+	p.detailsHead.OnToggle = func(bool) { p.update() }
 	p.text, err = win32.CreateWindow(0, win32.MSFTEDIT_CLASS, "",
 		win32.WS_CHILD|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL,
 		0, 0, 0, 0, p.details.panel.HWND(), idYubiKeyText)
@@ -88,16 +99,6 @@ func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
 
 func (p *yubiKeyPage) command(id, code uint16) {
 	if code != win32.BN_CLICKED && code != 0 {
-		return
-	}
-	switch id {
-	case idYubiKeyGuide:
-		p.showGuide = !p.showGuide
-		p.update()
-		return
-	case idYubiKeyDetails:
-		p.showDetails = !p.showDetails
-		p.update()
 		return
 	}
 	if action, ok := p.acts[id]; ok {
@@ -145,101 +146,105 @@ func (p *yubiKeyPage) setButton(h win32.HWND, b view.Button, id uint16) {
 	win32.Invalidate(h)
 }
 
+// fillChecks shows a line per check: the icon, the label and the text on
+// one baseline, at the top of a line whose text wraps; a note goes under
+// the text.
 func (p *yubiKeyPage) fillChecks() {
 	t := p.a.theme
 	s := t.Scale
+	pal := t.Palette
 	c := p.checks
 	c.reset()
 	c.heading(p.view.ChecksTitle, nil)
+	line := p.lineHeight(widget.TextBody)
 	// The note starts under the text: past the icon, the label and their
 	// gap (para adds the gap after the indent).
 	noteIndent := int32(iconWidth + checkLabelWidth + 8)
 	for _, l := range p.view.Checks {
-		color := toneColor(t.Palette, l.Tone)
+		color := toneColor(pal, l.Tone)
 		if l.Tone == view.ToneNeutral {
-			color = t.Palette.Text
+			color = pal.Text
 		}
-		icon := cell{dip: iconWidth}
+		icon := cell{dip: iconWidth, height: line, top: true}
 		if l.Glyph != view.GlyphNone {
-			if i, err := widget.NewIcon(t, c.panel.HWND(), t.Palette.Surface, widget.TextIconSmall); err == nil {
+			if i, err := widget.NewIcon(t, c.panel.HWND(), pal.Surface, widget.TextIconSmall); err == nil {
 				c.panel.Adopt(i.HWND())
 				i.Set(glyphOf(l.Glyph), color, widget.NoCircle, "")
 				icon.hwnd = i.HWND()
 			}
 		}
-		text := c.panel.Paragraph(l.Text, widget.TextBody, color)
 		width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(noteIndent+8)
-		c.row(p.dips(max(t.Fonts.MeasureWrapped(l.Text, widget.TextBody, max(width, s.Px(80))), s.Px(cardRowHeight))),
+		c.row(p.dips(max(t.Fonts.MeasureWrapped(l.Text, widget.TextBody, max(width, s.Px(80))), s.Px(line))),
 			icon,
-			cell{hwnd: c.label(l.Label, widget.TextSmall, t.Palette.TextSecondary), dip: checkLabelWidth},
-			cell{hwnd: text, fill: true})
+			cell{hwnd: c.panel.Paragraph(l.Label, widget.TextBody, pal.TextSecondary), dip: checkLabelWidth},
+			cell{hwnd: c.panel.Paragraph(l.Text, widget.TextBody, color), fill: true})
 		if l.Note != "" {
-			p.para(c, l.Note, widget.TextSmall, t.Palette.TextSecondary, noteIndent)
+			p.para(c, l.Note, widget.TextSmall, pal.TextSecondary, noteIndent)
 		}
 	}
 }
 
-// guideIDs are the control IDs of the guide steps' buttons, in order.
+// guideIDs are the control IDs of the help's buttons, in order.
 var guideIDs = []uint16{idYubiKeySignIn, idYubiKeyAuthenticator}
 
+// fillGuide shows the YubiKey help: its heading opens and closes it. The
+// view opens it when it helps; the user can close it again.
 func (p *yubiKeyPage) fillGuide() {
 	t := p.a.theme
 	pal := t.Palette
 	g := p.view.Guide
 	c := p.guide
 	c.reset()
-	if !g.Expanded && !p.showGuide {
-		c.row(cardRowHeight, p.linkCell(c, view.Button{Text: g.Collapsed, Enabled: true}, idYubiKeyGuide))
+	open := p.guideHead.Open()
+	if g.Expanded && !p.guideAuto {
+		open = true
+	}
+	p.guideAuto = g.Expanded
+	p.guideHead.Set(g.Title, open)
+	c.row(expanderHeight, cell{hwnd: p.guideHead.HWND(), px: p.guideHead.Width()})
+	if !open {
 		return
 	}
-	c.heading(g.Title, nil)
-	buttons := 0
-	for _, s := range g.Steps {
-		c.row(cardRowHeight,
-			cell{hwnd: c.label(s.Number, widget.TextStrong, pal.AccentText), dip: guideIndent},
-			cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
+	for i, s := range g.Steps {
+		c.row(cardRowHeight, cell{dip: guideIndent}, cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
 		p.para(c, s.Text, widget.TextSmall, pal.TextSecondary, guideIndent)
-		if s.Action != nil && buttons < len(guideIDs) {
-			h := c.acts.button(c.panel, *s.Action, guideIDs[buttons], false)
-			buttons++
+		if s.Action != nil && i < len(guideIDs) {
+			h := c.acts.button(c.panel, *s.Action, guideIDs[i], false)
 			c.row(widget.ButtonHeight+4, cell{dip: guideIndent}, cell{hwnd: h, px: buttonWidth(t, h), height: widget.ButtonHeight})
 		}
 	}
 }
 
-// fillDetails shows the technical details as an expander: the button opens
-// and closes them; Copy details shows only while they are open.
+// fillDetails shows the technical details: the heading opens and closes
+// them; Copy details shows only while they are open.
 func (p *yubiKeyPage) fillDetails() {
 	t := p.a.theme
 	c := p.details
 	c.reset()
-	chevron := " ▾"
-	if p.showDetails {
-		chevron = " ▴"
-	}
-	toggle := c.acts.button(c.panel, view.Button{Text: p.view.DetailsTitle + chevron, Enabled: true}, idYubiKeyDetails, false)
-	win32.SetAccessibleName(toggle, p.view.DetailsTitle)
-	cells := []cell{{hwnd: toggle, px: buttonWidth(t, toggle), height: widget.ButtonHeight}, {fill: true}}
-	if p.showDetails {
+	open := p.detailsHead.Open()
+	p.detailsHead.Set(p.view.DetailsTitle, open)
+	cells := []cell{{hwnd: p.detailsHead.HWND(), px: p.detailsHead.Width()}, {fill: true}}
+	if open {
 		copyButton := c.acts.button(c.panel, p.view.CopyDetails, idYubiKeyCopy, false)
 		cells = append(cells, cell{hwnd: copyButton, px: buttonWidth(t, copyButton), height: widget.ButtonHeight})
 	}
-	c.row(widget.ButtonHeight+4, cells...)
+	c.row(expanderHeight, cells...)
 	text := strings.ReplaceAll(p.view.Details, "\n", "\r\n")
 	if win32.Text(p.text) != text {
 		win32.SetText(p.text, text)
 	}
 	win32.SetAccessibleName(p.text, p.view.DetailsTitle)
-	setShown(p.text, p.showDetails)
-	if p.showDetails {
+	setShown(p.text, open)
+	if open {
 		c.row(detailsTextHeight, cell{hwnd: p.text, fill: true})
 	}
 }
 
-// linkCell creates a link for b that fits its text.
-func (p *yubiKeyPage) linkCell(c *card, b view.Button, id uint16) cell {
-	w, _ := p.a.theme.Fonts.Measure(b.Text, widget.TextSmall)
-	return cell{hwnd: c.acts.link(c.panel, b, id), px: w + p.a.theme.Scale.Px(linkPadding)}
+// lineHeight returns the height of a line of text in style, in DIPs.
+func (p *yubiKeyPage) lineHeight(style widget.TextStyle) int32 {
+	t := p.a.theme
+	_, h := t.Fonts.Measure("Ag", style)
+	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
 }
 
 // para adds text that wraps over the card's width, indented by indent DIPs.

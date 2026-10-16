@@ -53,8 +53,7 @@ const (
 	ActionOpenRestored
 	ActionReload
 	ActionAddMissing
-	// The YubiKey page (GUI spec 10.2) and its links (YK-10).
-	ActionOpenYubiKeyPage
+	// The YubiKey page (GUI spec 10.2).
 	ActionTestYubiKey
 	ActionOpenSignInSettings
 	ActionOpenWindowsUpdate

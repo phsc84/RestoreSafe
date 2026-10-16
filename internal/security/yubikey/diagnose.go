@@ -72,38 +72,6 @@ type Key struct {
 	Revision  uint16
 	// FIDO tells whether one of its interfaces is a FIDO interface.
 	FIDO bool
-	// Functions are the USB functions its product ID stands for; Known is
-	// false for a product ID RestoreSafe doesn't know.
-	Functions USBFunctions
-	Known     bool
-}
-
-// USBFunctions are the USB functions a YubiKey has turned on.
-type USBFunctions struct {
-	OTP, FIDO, CCID bool
-}
-
-// FunctionsOf returns the USB functions that a Yubico product ID stands for.
-// The IDs 0x0402 to 0x0407 are shared by YubiKey 4 and 5, so the product ID
-// never names a model.
-func FunctionsOf(pid uint16) (USBFunctions, bool) {
-	switch {
-	case pid >= 0x0401 && pid <= 0x0407: // YubiKey 4 and 5: one bit per function
-		bits := pid - 0x0400
-		return USBFunctions{OTP: bits&1 != 0, FIDO: bits&2 != 0, CCID: bits&4 != 0}, true
-	case pid >= 0x0110 && pid <= 0x0116: // YubiKey NEO
-		return [...]USBFunctions{
-			{OTP: true}, {OTP: true, CCID: true}, {CCID: true}, {FIDO: true},
-			{OTP: true, FIDO: true}, {FIDO: true, CCID: true}, {OTP: true, FIDO: true, CCID: true},
-		}[pid-0x0110], true
-	case pid == 0x0120: // Security Key
-		return USBFunctions{FIDO: true}, true
-	case pid == 0x0410: // YubiKey Plus
-		return USBFunctions{OTP: true, FIDO: true}, true
-	case pid == 0x0010: // YubiKey Standard
-		return USBFunctions{OTP: true}, true
-	}
-	return USBFunctions{}, false
 }
 
 // DriverEntry is a HID driver entry of a Yubico device in the registry.
@@ -141,8 +109,7 @@ func (d Diagnosis) Keys() []Key {
 		}
 		i, ok := index[device]
 		if !ok {
-			functions, known := FunctionsOf(iface.ProductID)
-			keys = append(keys, Key{ProductID: iface.ProductID, Revision: iface.Revision, Functions: functions, Known: known})
+			keys = append(keys, Key{ProductID: iface.ProductID, Revision: iface.Revision})
 			i = len(keys) - 1
 			index[device] = i
 		}

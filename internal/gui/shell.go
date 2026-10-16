@@ -179,9 +179,6 @@ func (a *app) do(action view.Action) {
 		if a.page == view.PageYubiKey {
 			a.diagnoseYubiKey()
 		}
-	case view.ActionOpenYubiKeyPage:
-		a.showPage(view.PageYubiKey)
-		a.focusPage()
 	case view.ActionTestYubiKey:
 		a.testYubiKey()
 	case view.ActionOpenSignInSettings:

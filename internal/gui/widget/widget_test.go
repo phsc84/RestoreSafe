@@ -475,3 +475,37 @@ func TestTrailReportsClicksOnDoneSteps(t *testing.T) {
 		t.Fatalf("clicks %v", clicked)
 	}
 }
+
+func TestExpanderToggles(t *testing.T) {
+	th, host := testTheme(t)
+	e, err := NewExpander(th, host, Light.Surface, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []bool
+	e.OnToggle = func(open bool) { got = append(got, open) }
+	e.Set("Technical details", false)
+	if e.Open() || e.Width() <= 0 {
+		t.Fatalf("closed: open %v, width %d", e.Open(), e.Width())
+	}
+	px := render(t, e.HWND(), 300, 24)
+	expect(t, "background", px(299, 12), Light.Surface)
+
+	win32.SendMessage(e.HWND(), win32.WM_LBUTTONDOWN, 0, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_RETURN, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_SPACE, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_DOWN, 0)
+	if len(got) != 3 || !got[0] || got[1] || !got[2] || !e.Open() {
+		t.Fatalf("a click, Enter and Space toggle it, other keys don't: %v", got)
+	}
+	m := win32.Msg{Message: win32.WM_KEYDOWN, WParam: win32.VK_RETURN}
+	if r := win32.SendMessage(e.HWND(), win32.WM_GETDLGCODE, 0, uintptr(unsafe.Pointer(&m))); r != win32.DLGC_WANTMESSAGE {
+		t.Fatalf("Enter must reach the expander: %#x", r)
+	}
+	if r := win32.SendMessage(e.HWND(), win32.WM_GETDLGCODE, 0, 0); r != 0 {
+		t.Fatalf("without a message: %#x", r)
+	}
+	win32.SendMessage(e.HWND(), win32.WM_MOUSEMOVE, 0, 0)
+	win32.SendMessage(e.HWND(), win32.WM_MOUSELEAVE, 0, 0)
+	render(t, e.HWND(), 300, 24) // paints open, with the focus outline after the keys
+}

@@ -36,6 +36,9 @@ type cell struct {
 	// weight is the share of a fill cell in the free width; 0 counts as 1.
 	weight int32
 	height int32
+	// top puts a cell of height at the row's top instead of its middle:
+	// next to text that wraps, it stays on the first line.
+	top bool
 }
 
 func newCard(t *widget.Theme, parent win32.HWND, linkID uint16, acts actions) (*card, error) {
@@ -133,7 +136,9 @@ func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
 		cr := win32.Rect{Left: x, Top: r.Top, Right: min(x+w, r.Right), Bottom: r.Bottom}
 		if c.height > 0 {
 			h := s.Px(c.height)
-			cr.Top += (r.Height() - h) / 2
+			if !c.top {
+				cr.Top += (r.Height() - h) / 2
+			}
 			cr.Bottom = cr.Top + h
 		}
 		if c.icon != 0 {

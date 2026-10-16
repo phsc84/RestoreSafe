@@ -54,7 +54,7 @@ func TestHWDiagnose(t *testing.T) {
 			i.Path, i.InstanceID, i.Device, i.UsagePage, i.Usage, i.Function(), i.ProductID, i.Revision, FormatRevision(i.Revision), i.WriteAccess, i.OpenErr)
 	}
 	for _, k := range d.Keys() {
-		t.Logf("key: PID 0x%04X, REV %s, FIDO interface %v, functions %+v (known %v)", k.ProductID, FormatRevision(k.Revision), k.FIDO, k.Functions, k.Known)
+		t.Logf("key: PID 0x%04X, REV %s, FIDO interface %v", k.ProductID, FormatRevision(k.Revision), k.FIDO)
 	}
 	for _, e := range d.Drivers {
 		t.Logf("driver HID\\%s: %s", e.Key, e.Service)
