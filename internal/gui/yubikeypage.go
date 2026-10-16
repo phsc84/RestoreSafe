@@ -290,6 +290,12 @@ func (p *yubiKeyPage) layout() {
 		total += s.Px(widget.CardGap) + s.Px(c.height())
 	}
 	p.panel.SetScroll(total)
+	if win32.ClientRect(p.panel.HWND()).Width() != client.Width() {
+		// A scroll bar came or went: the cards and the wrapped lines need
+		// the new width, or they reach under the scroll bar.
+		p.update()
+		return
+	}
 
 	page := client
 	page.Top -= p.panel.ScrollOffset()

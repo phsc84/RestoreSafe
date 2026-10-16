@@ -131,6 +131,10 @@ func TestYubiKeyChecksLines(t *testing.T) {
 	if got := text(yubiKeys, YubiKeyState{Diagnosis: d}); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("connected: %q", got)
 	}
+	// Two YubiKeys work, but the user may touch the wrong one: a warning.
+	if l := YubiKeyPageOf(snapshotWith(yubiKeys), YubiKeyState{Diagnosis: twoKeys()}, ykNow).Checks[1]; l.Tone != ToneWarning || l.Glyph != GlyphWarning || !strings.Contains(l.Text, "connect only the one you back up with") {
+		t.Fatalf("two YubiKeys: %+v", l)
+	}
 	// Which YubiKeys work is noted under Connected, connected or not.
 	for _, st := range []YubiKeyState{{Diagnosis: d}, {Diagnosis: &yubikey.Diagnosis{}}, {Diagnosis: yubiKey5(0x0437, true)}} {
 		if l := YubiKeyPageOf(snapshotWith(yubiKeys), st, ykNow).Checks[1]; l.Label != "Connected" || !strings.Contains(l.Note, "YubiKey 5 Series") {
