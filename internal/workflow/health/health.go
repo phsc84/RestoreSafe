@@ -20,6 +20,7 @@ import (
 // Injectable for tests.
 var (
 	checkYubiKeyConnected = yubikey.CheckConnected
+	countYubiKeys         = yubikey.CountConnected
 	queryDiskSpace        = fsx.QueryDiskSpace
 )
 
@@ -37,6 +38,10 @@ const (
 	healthScopeSourceDirectory = "Source directory(s)"
 	healthScopeBackupDirectory = "Backup directory"
 	healthScopeYubiKey         = "YubiKey"
+	// healthScopeYubiKeys is more than one connected YubiKey: it blocks
+	// backups, whose new keys would register the one the user touched,
+	// but not restore or verify.
+	healthScopeYubiKeys        = "YubiKeys"
 	healthScopeBackupInventory = "Backup inventory"
 	healthScopeBackupSet       = "Backup set"
 	healthScopeKeys            = "Keys"
@@ -62,7 +67,8 @@ func (r Result) BlocksBackup() bool {
 	return r.errorScopes[healthScopeConfig] ||
 		r.errorScopes[healthScopeSourceDirectory] ||
 		r.errorScopes[healthScopeBackupDirectory] ||
-		r.errorScopes[healthScopeYubiKey]
+		r.errorScopes[healthScopeYubiKey] ||
+		r.errorScopes[healthScopeYubiKeys]
 }
 
 // BlocksRestoreOrVerify reports whether any health check error prevents restore or verify.
@@ -294,11 +300,20 @@ func checkYubiKeyHealth(cfg *config.Config) (items []healthItem, connected *bool
 			Detail:   "YubiKey not connected. Remedy: Connect the YubiKey before running backup, restore, or verify.",
 		}}, &ok
 	}
-	return []healthItem{{
+	items = []healthItem{{
 		Severity: healthOK,
 		Scope:    healthScopeYubiKey,
 		Detail:   "YubiKey connected",
-	}}, &ok
+	}}
+	if n, err := countYubiKeys(); err == nil && n > 1 {
+		items = append(items, healthItem{
+			Severity: healthError,
+			Code:     interact.CodeYubiKeysConnected,
+			Scope:    healthScopeYubiKeys,
+			Detail:   yubikey.SeveralError(n).Error(),
+		})
+	}
+	return items, &ok
 }
 
 func scanInventory(backupDir string) inventory {

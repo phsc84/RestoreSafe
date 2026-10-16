@@ -20,6 +20,7 @@ import (
 // Injectable for tests.
 var (
 	checkYubiKeyConnectedFn = yubikey.CheckConnected
+	countYubiKeysFn         = yubikey.CountConnected
 	combineWithPasswordFn   = yubikey.CombineWithPassword
 	generateRecoveryCodeFn  = recovery.Generate
 	unlockKeySetFn          = unlock.KeySet

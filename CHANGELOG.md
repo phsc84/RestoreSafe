@@ -7,6 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.1.0] - Unreleased
 
 ### Changed
+- A backup doesn't start while more than one YubiKey is connected: new keys would register the one you touch, and nothing would say which. Restore and verify work as before.
 - With a YubiKey (`authentication_mode` 2 or 3), new keys always come with a recovery code, whatever `recovery_code` says, so a lost or broken YubiKey doesn't lose your backups.
 - A setting RestoreSafe no longer uses is named as such when `config.yaml` loads ("a setting that is no longer used"), with the remedy to remove the line, instead of being reported as unknown.
 

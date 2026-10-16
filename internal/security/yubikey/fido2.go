@@ -78,6 +78,31 @@ func CheckConnected() error {
 	return fido2RuntimeReady()
 }
 
+// SeveralError says that n YubiKeys are connected, where a backup needs one:
+// new keys would register the one the user touches, and nothing would say
+// which.
+func SeveralError(n int) error {
+	return problem.Errorf("%d YubiKeys are connected.", n).WithRemedy("Connect only the YubiKey you back up with, so it's clear which one the backup uses.")
+}
+
+// CountConnected returns how many YubiKeys are connected: Yubico USB
+// devices, each with one or more HID interfaces. It opens none of them.
+func CountConnected() (int, error) {
+	devices, err := hidDevicesFn()
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	for _, d := range devices {
+		key := d.Parent
+		if key == "" {
+			key = d.InstanceID
+		}
+		seen[key] = true
+	}
+	return len(seen), nil
+}
+
 // ProbeCapability tells whether the connected YubiKey can protect backups:
 // it registers a non-resident credential and derives one hmac-secret with a
 // random salt (PIN and two touches). Nothing stays on the YubiKey, and the

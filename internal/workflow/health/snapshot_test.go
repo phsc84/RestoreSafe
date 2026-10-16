@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -198,6 +199,35 @@ func TestSnapshotNotesADisconnectedYubiKey(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected the YubiKey note, got %v", codes(s.Notes))
+	}
+}
+
+// Two YubiKeys block a backup, whose new keys would register the one the
+// user touches, but not a restore or verification.
+func TestSnapshotBlocksBackupsWithTwoYubiKeys(t *testing.T) {
+	sc := scenario.Build(t, scenario.Protected)
+	defer func(f func() error, g func() (int, error)) { checkYubiKeyConnected, countYubiKeys = f, g }(checkYubiKeyConnected, countYubiKeys)
+	checkYubiKeyConnected = func() error { return nil }
+	countYubiKeys = func() (int, error) { return 2, nil }
+
+	sc.Config.AuthenticationMode = 2
+	s := snapshotOf(t, sc)
+	if len(s.Problems) == 0 || s.Problems[0].Code != interact.CodeYubiKeysConnected || s.Problems[0].Status != interact.StatusError || !strings.Contains(s.Problems[0].Detail, "2 YubiKeys are connected") {
+		t.Fatalf("expected YUBIKEYS_CONNECTED first, got %+v", s.Problems)
+	}
+	if !s.Check.BlocksBackup() || s.Check.BlocksRestoreOrVerify() {
+		t.Fatalf("blocks backup %v, restore %v", s.Check.BlocksBackup(), s.Check.BlocksRestoreOrVerify())
+	}
+
+	// One YubiKey, or none in a password mode: no problem.
+	countYubiKeys = func() (int, error) { return 1, nil }
+	if s := snapshotOf(t, sc); s.Check.BlocksBackup() {
+		t.Fatalf("one YubiKey: %+v", s.Problems)
+	}
+	sc.Config.AuthenticationMode = 1
+	countYubiKeys = func() (int, error) { return 2, nil }
+	if s := snapshotOf(t, sc); s.Check.BlocksBackup() {
+		t.Fatalf("two YubiKeys without a YubiKey mode: %+v", s.Problems)
 	}
 }
 

@@ -205,9 +205,6 @@ func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 	neutral := func(label, text string) CheckLine {
 		return CheckLine{Label: label, Text: text, Tone: ToneNeutral}
 	}
-	warn := func(label, text string) CheckLine {
-		return CheckLine{Label: label, Text: text, Tone: ToneWarning, Glyph: GlyphWarning}
-	}
 
 	lines := []CheckLine{ok(ykCheckWindows, ykWindowsReady)}
 	if d.APIErr != nil {
@@ -228,10 +225,10 @@ func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 	default:
 		connected, fido = ok(ykCheckConnected, connectedText(d.Keys())), ok(ykCheckFIDO, ykFIDOOn)
 	}
-	// Two YubiKeys work, but the user may touch the one that isn't
-	// registered.
+	// More than one YubiKey blocks backups: new keys would register the one
+	// the user touches (decision 12).
 	if len(d.Keys()) > 1 {
-		connected = warn(ykCheckConnected, connectedText(d.Keys()))
+		connected = bad(ykCheckConnected, connectedText(d.Keys()))
 	}
 	connected.Note = ykSupported
 	lines = append(lines, connected, fido)

@@ -228,6 +228,8 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 		return Hero{Title: heroSpaceLow, Line: fmt.Sprintf(heroSpaceLowLine, Size(p.Bytes), Size(s.Storage.FreeBytes)), Primary: showBackups}
 	case interact.CodeArgon2Capped:
 		return Hero{Title: heroArgon2, Line: heroArgon2Line, Primary: *editConfig}
+	case interact.CodeYubiKeysConnected:
+		return Hero{Title: heroYubiKeys, Line: heroYubiKeysLine, Primary: checkAgain}
 	}
 	return Hero{Title: string(p.Code), Line: p.Detail, Primary: checkAgain}
 }

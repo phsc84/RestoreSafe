@@ -206,3 +206,25 @@ func TestProbeCapabilityZeroesTheSecret(t *testing.T) {
 		t.Fatalf("cancelled probe: %v", err)
 	}
 }
+
+func TestCountConnectedCountsUSBDevices(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		devices []hidDevice
+		want    int
+	}{
+		{"none", nil, 0},
+		{"one YubiKey, two interfaces", yubiKey5("1"), 1},
+		{"two YubiKeys", append(yubiKey5("1"), yubiKey5("2")...), 2},
+	} {
+		stubDiagnose(t, tc.devices, nil, 4, nil)
+		if n, err := CountConnected(); err != nil || n != tc.want {
+			t.Errorf("%s: %d, %v; want %d", tc.name, n, err, tc.want)
+		}
+	}
+	stubDiagnose(t, nil, nil, 4, nil)
+	hidDevicesFn = func() ([]hidDevice, error) { return nil, errors.New("denied") }
+	if _, err := CountConnected(); err == nil {
+		t.Fatal("the listing error must come back")
+	}
+}

@@ -352,7 +352,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 1}
 	sources := []plan.Source{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	issues, err := backupPreflightIssues(root, sources, estimateBackupSpace(cfg, root, sources, nil), validateBackupPartCount(cfg, sources))
+	issues, err := backupPreflightIssues(root, sources, estimateBackupSpace(cfg, root, sources, nil), validateBackupPartCount(cfg, sources), nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
 		t.Fatalf("expected the source error first, got %v", err)
 	}
@@ -366,8 +366,42 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 		t.Fatalf("issue text must not repeat the error prefix: %q", issues[0].Text)
 	}
 
-	if issues, err := backupPreflightIssues(root, nil, spaceEstimate{}, nil); err != nil || len(issues) != 0 {
+	if issues, err := backupPreflightIssues(root, nil, spaceEstimate{}, nil, nil); err != nil || len(issues) != 0 {
 		t.Fatalf("no sources to check: got %+v, %v", issues, err)
+	}
+}
+
+// Two YubiKeys block a backup whose keys need a YubiKey (decision 12).
+// Not parallel: it replaces the count of connected YubiKeys.
+func TestSeveralYubiKeysBlockTheBackup(t *testing.T) {
+	prev := countYubiKeysFn
+	t.Cleanup(func() { countYubiKeysFn = prev })
+	countYubiKeysFn = func() (int, error) { return 2, nil }
+
+	yk := &config.Config{AuthenticationMode: config.AuthModeYubiKey}
+	pw := &config.Config{AuthenticationMode: config.AuthModePassword}
+	err := severalYubiKeys(yk, plan.Keys{})
+	if err == nil || !strings.Contains(err.Error(), "2 YubiKeys are connected") {
+		t.Fatalf("new YubiKey keys: %v", err)
+	}
+	if severalYubiKeys(pw, plan.Keys{}) != nil {
+		t.Fatal("new password keys need no YubiKey")
+	}
+	// The existing keys decide, not the configuration.
+	if severalYubiKeys(pw, plan.Keys{Existing: &container.KeySet{AuthMode: config.AuthModePasswordYubiKey}}) == nil {
+		t.Fatal("existing YubiKey keys")
+	}
+	if severalYubiKeys(yk, plan.Keys{Existing: &container.KeySet{AuthMode: config.AuthModePassword}}) != nil {
+		t.Fatal("existing password keys")
+	}
+	countYubiKeysFn = func() (int, error) { return 1, nil }
+	if severalYubiKeys(yk, plan.Keys{}) != nil {
+		t.Fatal("one YubiKey")
+	}
+
+	issues, blockErr := backupPreflightIssues(t.TempDir(), nil, spaceEstimate{}, nil, err)
+	if blockErr == nil || len(issues) != 1 || issues[0].Code != interact.CodeYubiKeysConnected || issues[0].Status != interact.StatusError || issues[0].Remedy == "" {
+		t.Fatalf("the issue must block: %+v, %v", issues, blockErr)
 	}
 }
 
@@ -520,7 +554,7 @@ func TestBackupPreflightIssuesWarnsForALargeDifferential(t *testing.T) {
 		t.Skip("free space unknown")
 	}
 	est := spaceEstimate{full: int64(free) + 1<<30, likely: 1, anyDiff: true}
-	issues, err := backupPreflightIssues(dir, nil, est, nil)
+	issues, err := backupPreflightIssues(dir, nil, est, nil, nil)
 	if err != nil || len(issues) != 1 || issues[0].Status != interact.StatusWarn || issues[0].Code != interact.CodeSpaceEstimateOnly {
 		t.Fatalf("expected one warning and no error, got %+v, %v", issues, err)
 	}

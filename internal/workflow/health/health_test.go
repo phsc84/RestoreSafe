@@ -199,6 +199,7 @@ func TestBlocksBackup(t *testing.T) {
 		healthScopeSourceDirectory,
 		healthScopeBackupDirectory,
 		healthScopeYubiKey,
+		healthScopeYubiKeys,
 	}
 	for _, scope := range blockingScopes {
 		result := Result{errorScopes: map[string]bool{scope: true}}

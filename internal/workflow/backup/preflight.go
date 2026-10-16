@@ -11,6 +11,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/problem"
+	"github.com/phsc84/restoresafe/internal/security/yubikey"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
@@ -136,7 +137,7 @@ func keyPlanRows(keys plan.Keys) []interact.Row {
 // partErr is the result of validateBackupPartCount, which does not depend on
 // the plan. A differential whose estimate fits, but that would not fit if it
 // stored every file again, gets a warning instead of an error.
-func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEstimate, partErr error) ([]interact.Issue, error) {
+func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEstimate, partErr, yubiKeysErr error) ([]interact.Issue, error) {
 	var issues []interact.Issue
 	var first error
 	targetWarn, targetErr := validateTargetSpaceForBackup(backupDir, est)
@@ -147,6 +148,7 @@ func backupPreflightIssues(backupDir string, sources []plan.Source, est spaceEst
 		{validateSourceDirectories(sources), sourceProblemCode(sources)},
 		{targetErr, interact.CodeSpaceInsufficient},
 		{partErr, interact.CodePartLimit},
+		{yubiKeysErr, interact.CodeYubiKeysConnected},
 	} {
 		if check.err == nil {
 			continue
@@ -437,4 +439,21 @@ func keyPlanFor(cfg *config.Config, keys plan.Keys) interact.KeyPlan {
 		return interact.KeyPlan{Created: ks.Created(), Summary: ks.Summary(), Password: mode != config.AuthModeYubiKey, YubiKey: mode.UsesYubiKey()}
 	}
 	return interact.KeyPlan{New: true, NewKeysReason: keys.NewKeysReason, Password: !cfg.IsYubiKeyOnly(), YubiKey: cfg.UseYubiKey(), RecoveryCode: cfg.CreatesRecoveryCode()}
+}
+
+// severalYubiKeys returns an error when the keys the backup uses need a
+// YubiKey and more than one is connected: new keys would register the one
+// the user touches, and nothing would say which (GUI spec decision 12).
+func severalYubiKeys(cfg *config.Config, keys plan.Keys) error {
+	mode := cfg.AuthenticationMode
+	if keys.Existing != nil {
+		mode = keys.Existing.AuthMode
+	}
+	if !mode.UsesYubiKey() {
+		return nil
+	}
+	if n, err := countYubiKeysFn(); err == nil && n > 1 {
+		return yubikey.SeveralError(n)
+	}
+	return nil
 }
