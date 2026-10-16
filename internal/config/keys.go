@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,7 +41,6 @@ var settings = []setting{
 	{"verify_after_backup", "false"},
 	{"reminder_days", strconv.Itoa(DefaultReminderDays)},
 	{"authentication_mode", strconv.Itoa(int(AuthModePassword))},
-	{"yubikey_spare", "false"},
 	{"recovery_code", "false"},
 	{"password_min_length", strconv.Itoa(DefaultPasswordMinLength)},
 	{"argon2.time", strconv.Itoa(int(cryptox.DefaultArgon2Params.Time))},
@@ -126,14 +126,18 @@ var unknownField = regexp.MustCompile(`^line (\d+): field (.+) not found in type
 // blockOfType maps the Go types of the blocks to their config.yaml names.
 var blockOfType = map[string]string{"Config": "", "Differential": "differential", "Argon2": "argon2"}
 
-// unknownKeysError rewrites the error of a file with unknown keys, nil when
-// err isn't only about unknown keys.
+// retiredKeys are settings that earlier versions had. A file that still has
+// one is told so, not that the setting is unknown.
+var retiredKeys = []string{"io_diagnostics", "yubikey_spare"}
+
+// unknownKeysError rewrites the error of a file with unknown or retired keys,
+// nil when err isn't only about such keys.
 func unknownKeysError(err error) error {
 	var te *yaml.TypeError
 	if !errors.As(err, &te) || len(te.Errors) == 0 {
 		return nil
 	}
-	var found []string
+	var unknown, retired []string
 	for _, e := range te.Errors {
 		m := unknownField.FindStringSubmatch(e)
 		if m == nil {
@@ -143,13 +147,33 @@ func unknownKeysError(err error) error {
 		if block := blockOfType[m[3]]; block != "" {
 			key = block + "." + key
 		}
-		found = append(found, fmt.Sprintf("'%s' (line %s)", key, m[1]))
+		found := fmt.Sprintf("'%s' (line %s)", key, m[1])
+		if slices.Contains(retiredKeys, key) {
+			retired = append(retired, found)
+		} else {
+			unknown = append(unknown, found)
+		}
 	}
-	const remedy = "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
-	if len(found) == 1 {
-		return problem.Errorf("Config file has an unknown setting: %s.", found[0]).WithRemedyOnOwnLine(remedy)
+	var msg []string
+	switch len(unknown) {
+	case 0:
+	case 1:
+		msg = append(msg, "Config file has an unknown setting: "+unknown[0]+".")
+	default:
+		msg = append(msg, "Config file has unknown settings: "+strings.Join(unknown, ", ")+".")
 	}
-	return problem.Errorf("Config file has unknown settings: %s.", strings.Join(found, ", ")).WithRemedyOnOwnLine(remedy)
+	switch len(retired) {
+	case 0:
+	case 1:
+		msg = append(msg, "Config file has a setting that is no longer used: "+retired[0]+".")
+	default:
+		msg = append(msg, "Config file has settings that are no longer used: "+strings.Join(retired, ", ")+".")
+	}
+	remedy := "Remove the line; config-SAMPLE.yaml describes every setting."
+	if len(unknown) > 0 {
+		remedy = "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
+	}
+	return problem.New(strings.Join(msg, " ")).WithRemedyOnOwnLine(remedy)
 }
 
 // AddMissing adds the settings that the configuration file at path lacks,

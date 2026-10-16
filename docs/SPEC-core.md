@@ -11,7 +11,7 @@ This document specifies the backup format and what backup, restore, verify and r
 Main topics:
 
 - Container format 2 with embedded manifest (sections 4-5).
-- Key sets: spare YubiKey and recovery code (section 4.4).
+- Key sets with a recovery code (section 4.4).
 - Differential backups (sections 6-9).
 - Restore of timestamps and attributes (section 7.6).
 - Exclude patterns, unreadable-file policy, and a password minimum (sections 6.4-6.6).
@@ -23,7 +23,7 @@ Main topics:
 1. **Bullet-proof.** A restore either produces exactly the recorded state of the source directory or fails loudly. No silent partial restores, no silently missing or stale files.
 2. **Self-contained.** RestoreSafe.exe alone creates, verifies, and restores full and differential backups. No external tools, no local state database, no files outside the backup directory.
 3. **User friendly.** The user chooses "Create backup"; RestoreSafe decides between full and differential, explains the decision in the preflight, and lets the user override it with one choice (full backup, or new keys + full backup).
-4. **No single point of failure in the credentials.** Losing one YubiKey or forgetting the password does not have to mean losing all backups (spare YubiKey, recovery code).
+4. **No single point of failure in the credentials.** Losing the YubiKey or forgetting the password does not have to mean losing all backups (recovery code; always created with a YubiKey).
 
 ### 1.2 Not supported (see section 13 for optional enhancements)
 
@@ -63,8 +63,8 @@ Main topics:
 | D1 | Differential, not incremental. | A restore never needs more than two backup sets (full + one differential). Losing one differential never breaks another restore point. |
 | D2 | Every backup set carries an encrypted **manifest** section with a SHA-256 per file. | Enables change detection without reading the base's data, records deletions, and allows end-to-end hash verification on every restore and verify. |
 | D3 | The manifest is embedded in the `.enc` part files (second encrypted section + trailer), not a separate file and not inside the TAR. | Hidden from the user, cannot be lost or overwritten independently. The trailer allows reading the manifest without decrypting the (possibly very large) data section. |
-| D4 | Key sets with slots (like BitLocker/LUKS) instead of deriving the data key directly from the credential. | Enables a spare YubiKey and a recovery code without weakening encryption. YubiKey challenges live in the header; `.challenge` files are removed. |
-| D5 | One key set is reused for all backups in the backup directory until the user creates new keys. | One password entry and at most one YubiKey touch per backup run (1.x: two prompts per run). A spare YubiKey is only needed at enrollment. A differential and its base always share a key set, so restoring a differential needs one unlock. |
+| D4 | Key sets with slots (like BitLocker/LUKS) instead of deriving the data key directly from the credential. | Enables a recovery code without weakening encryption. YubiKey challenges live in the header; `.challenge` files are removed. |
+| D5 | One key set is reused for all backups in the backup directory until the user creates new keys. | One password entry and at most one YubiKey touch per backup run (1.x: two prompts per run). A differential and its base always share a key set, so restoring a differential needs one unlock. |
 | D6 | Change detection compares size, last-write time, and NTFS change time for exact equality. | Fast (metadata only). Equality (not "newer than") makes it immune to clock changes. NTFS change time is updated on every write and attribute change and cannot be reset by ordinary applications, closing the "tool preserved the modification time" gap. |
 | D7 | Retention operates on chains. | A full is never deleted while a kept differential depends on it. |
 | D8 | Part files are written under temporary names and renamed only after the set is complete. | An interrupted backup never looks like a valid backup set or a usable base. |
@@ -169,8 +169,7 @@ A key set is created at enrollment (6.3) and copied unchanged into the header of
   "created_utc": "2026-09-01T08:12:44Z",
   "auth_mode": 2,
   "slots": [
-    {"type": "password_yubikey", "label": "YubiKey 1", "kdf": {...}, "challenge": {...}, "nonce": "b64", "wrapped": "b64"},
-    {"type": "password_yubikey", "label": "YubiKey 2 (spare)", "kdf": {...}, "challenge": {...}, "nonce": "b64", "wrapped": "b64"},
+    {"type": "password_yubikey", "label": "YubiKey", "kdf": {...}, "challenge": {...}, "nonce": "b64", "wrapped": "b64"},
     {"type": "recovery", "label": "Recovery code", "kdf": {...}, "check": "b64", "nonce": "b64", "wrapped": "b64"}
   ]
 }
@@ -181,8 +180,10 @@ Slot types per authentication mode:
 | `auth_mode` | Regular slots | Optional |
 |---|---|---|
 | 1 Password | 1 × `password` | `recovery` |
-| 2 Password + YubiKey | `password_yubikey` per registered YubiKey (1 or 2) | `recovery` |
-| 3 YubiKey only | `yubikey` per registered YubiKey (1 or 2) | `recovery` |
+| 2 Password + YubiKey | 1 × `password_yubikey` | `recovery`, always created (4.4.2) |
+| 3 YubiKey only | 1 × `yubikey` | `recovery`, always created (4.4.2) |
+
+Every key set has exactly one regular slot and at most one recovery slot; validation rejects any other count.
 
 Slot fields:
 
@@ -213,14 +214,11 @@ man_key   = HKDF-SHA256(V, salt = header_hash, info = "RestoreSafe v2 manifest")
 - Input is case-insensitive and ignores spaces and dashes. The checksum catches typos before the slow Argon2 derivation.
 - `check` in the slot stores the checksum group only (not secret; it's derivable from the code).
 - The recovery code alone unlocks the key set, **in every mode including 2FA**. The enrollment screen says so explicitly and tells the user to store the code in a password manager or offline (paper, safe), never next to the backups.
+- Modes 2 and 3 always create a recovery code, whatever `recovery_code` says: it is the only way into the backups when the YubiKey is lost or broken. `recovery_code` decides only in mode 1.
 
-#### 4.4.3 Multiple YubiKey slots
+#### 4.4.3 The YubiKey slot
 
-All YubiKey slots of a key set share one hmac-secret salt: the spare YubiKey is registered with YubiKey 1's salt. This costs no security, because each YubiKey's hmac-secret output is keyed by its own credential secret, so the outputs still differ. Validation rejects key sets whose YubiKey slots use different salts.
-
-To unlock, RestoreSafe sends one WebAuthn hmac-secret request with all YubiKey credential IDs in the allow list and the shared salt. The YubiKey that is plugged in answers, and the response identifies which credential was used; RestoreSafe then unwraps that slot. This behavior must be confirmed on real hardware. If it isn't reliable, the fallback is that the user picks the YubiKey by its slot label ("YubiKey 1" / "YubiKey 2 (spare)") before the touch.
-
-Registering the spare passes YubiKey 1's credential ID as exclude list. Windows reports `NTE_EXISTS` (0x8009000F) when the connected YubiKey already holds it, and RestoreSafe asks for the spare again.
+A key set has one YubiKey slot. To unlock, RestoreSafe sends one WebAuthn hmac-secret request with the slot's credential ID in the allow list and its salt: the PIN and one touch.
 
 ### 4.5 Encrypted sections
 
@@ -317,7 +315,7 @@ About 250-300 bytes per entry: 15,000 files ≈ 5 MB, 1,000,000 files ≈ 300 MB
 
 ### 6.1 Automatic type selection (per source directory, before the password prompt)
 
-First, the **current key set** is determined: the key set of the newest complete set in the backup directory (by `created_utc`), if it matches the configuration (`authentication_mode`, `yubikey_spare`, `recovery_code`). Otherwise a new key set is needed, which means a full backup for every directory (reason shown in the preflight, e.g. "New keys needed: spare YubiKey enabled in config.yaml").
+First, the **current key set** is determined: the key set of the newest complete set in the backup directory (by `created_utc`), if it matches the configuration (`authentication_mode`; `recovery_code` in mode 1 only). Otherwise a new key set is needed, which means a full backup for every directory (reason shown in the preflight, e.g. "New keys needed: recovery_code enabled in config.yaml").
 
 If the backup directory contains no complete 2.0 backup set (first run, or the user deleted all backups), the preflight says: *"No existing keys found in the backup directory: new keys will be created."* Whenever new keys are created, the preflight also states that YubiKey registrations and any recovery code from earlier keys do not work for the new backups (they still open older backups that carry the old key set).
 
@@ -357,17 +355,16 @@ The preflight shows, per directory, the planned type with its base or the reason
 
 **Existing key set** (the normal case):
 - Modes 1/2: prompt the password **once** (no confirmation needed; the slot validates it). Wrong password: up to 3 attempts, as in 1.x.
-- Modes 2/3: one YubiKey touch (4.4.3).
+- Modes 2/3: the YubiKey PIN and one touch (4.4.3).
 - The unlocked key set is used for every directory in the run, full and differential alike.
 
 **Enrollment** (no usable key set, configuration changed, or new keys chosen in the preflight):
 1. Modes 1/2: new password + confirmation; minimum length enforced (6.6).
-2. Modes 2/3: register YubiKey 1 and derive its secret (two Windows prompts, as in 1.x).
-3. If `yubikey_spare: true`: *"Remove YubiKey 1 and insert your spare YubiKey."* Register and derive (two prompts). Registration passes YubiKey 1's credential ID as exclude list, so registering the **same** YubiKey twice is refused by the key itself; RestoreSafe reports this and asks again for the spare.
-4. If `recovery_code: true`: show the code with the warning of 4.4.2; the user stores it (copy button or paper) before the backup starts. There is no retype step.
-5. Generate V, create all slots, and check each slot unwraps with the in-memory KEK before anything is written.
+2. Modes 2/3: register the YubiKey and derive its secret (two Windows prompts, as in 1.x). A YubiKey without a FIDO2 PIN gets one in the first prompt: Windows asks for a new PIN.
+3. If `recovery_code: true`, and always in modes 2/3: show the code with the warning of 4.4.2; the user stores it (copy button or paper) before the backup starts. There is no retype step.
+4. Generate V, create all slots, and check each slot unwraps with the in-memory KEK before anything is written.
 
-The preflight states exactly which prompts will appear (password, number of YubiKey prompts, recovery code).
+The preflight states exactly which prompts will appear (password, YubiKey, recovery code).
 
 ### 6.4 Exclude patterns
 
@@ -523,13 +520,9 @@ exclude: []
 # "skip" = continue, list the file as skipped, and mark the backup with a warning
 on_unreadable_file: "fail"
 
-# Modes 2 and 3: register a second YubiKey as spare when new keys are created.
-# Either YubiKey can then restore every backup made with those keys.
-# Default: false
-yubikey_spare: false
-
 # Create a recovery code when new keys are created. The code can restore every
 # backup made with those keys, even without password or YubiKey. Store it offline.
+# Modes 2 and 3 always create one, so a lost YubiKey doesn't lose the backups.
 # Default: false
 recovery_code: false
 
@@ -551,9 +544,9 @@ differential:
   retention_keep_differentials: 0
 ```
 
-Changing `authentication_mode`, `yubikey_spare`, or `recovery_code` requires new keys; the next backup announces this in the preflight and creates full backups.
+Changing `authentication_mode`, or `recovery_code` in mode 1, requires new keys; the next backup announces this in the preflight and creates full backups.
 
-Removed: `io_diagnostics`. `log_level: "debug"` includes the I/O diagnostics of a backup (progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes). 2.0 doesn't promise to load a 1.x configuration file: a file that still contains `io_diagnostics` fails with an unknown key (GUI spec 11.6), and users start from the new `config-SAMPLE.yaml`.
+Removed settings: `io_diagnostics` (2.0; `log_level: "debug"` includes the I/O diagnostics of a backup: progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes) and `yubikey_spare` (2.1; there is no spare YubiKey). A file that still contains one doesn't load: the error names the setting as no longer used, with its line, and the remedy is to remove the line (GUI spec 11.6).
 
 ## 13. Optional future enhancements (not implemented)
 
@@ -603,7 +596,7 @@ Allow `exclude` per source directory in addition to the global list.
 ### 15.1 Unit tests
 
 - Header: encode/decode, every field validated, unknown fields rejected, length bounds, `compression` other than `"none"` rejected, bit flip in any header byte causes authentication failure of the sections.
-- Key sets: each slot type unwraps with the correct credential and fails with a wrong one; slot swap/reorder fails (AAD); modified slot fails; recovery code format, checksum, normalization (case, dashes, spaces); spare registration with the same YubiKey refused (mocked FIDO2); key material zeroed.
+- Key sets: each slot type unwraps with the correct credential and fails with a wrong one; slot swap/reorder fails (AAD); modified slot fails; recovery code format, checksum, normalization (case, dashes, spaces); a second YubiKey slot rejected; key material zeroed.
 - Trailer: checksum, bounds, part-count mismatch, trailer spanning two parts.
 - Sections: key separation (data key cannot decrypt manifest), section swap between sets fails, truncation of each section detected.
 - Manifest: round trip, every rule in 5.2, fuzz tests for the header JSON and manifest parsers.
@@ -621,7 +614,7 @@ Allow `exclude` per source directory in addition to the global list.
 - Full -> modify (add, change, delete, delete directory, empty directory, rename, case-only rename, attribute change) -> differential -> restore differential == modified source; restore full == original source.
 - Two differentials on the same base; each restores its own state.
 - Differential with no changes.
-- Restore with recovery code; restore with the spare YubiKey slot (mocked FIDO2).
+- Restore with recovery code.
 - YubiKey modes 2/3 with mocked FIDO2 functions: one touch per backup run and per restore of a differential.
 - Read-only and hidden files and directories restored with their attributes.
 

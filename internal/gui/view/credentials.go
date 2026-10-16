@@ -83,7 +83,7 @@ func otherKeysNotice(k *interact.OtherKeys, a interact.Attempt) string {
 // NewPasswordDialogOf words the first step of creating keys (figure 9.2).
 func NewPasswordDialogOf(q interact.NewPasswordQuestion, keys interact.KeyPlan) CredentialDialog {
 	d := CredentialDialog{
-		Title:  stepTitle(createKeysTitle, keys, keyStepPassword),
+		Title:  createKeysTitle,
 		Intro:  newPasswordIntro,
 		Hint:   newPasswordHint,
 		Fields: []Field{{Label: fieldPassword, Masked: true}, {Label: fieldConfirmPassword, Masked: true}},
@@ -96,19 +96,6 @@ func NewPasswordDialogOf(q interact.NewPasswordQuestion, keys interact.KeyPlan) 
 		d.Hint = fmt.Sprintf(newPasswordHintN, q.MinLength)
 	}
 	return d
-}
-
-// SpareYubiKeyDialogOf asks to connect the spare YubiKey (GUI spec CR-2).
-func SpareYubiKeyDialogOf(q interact.SpareQuestion, keys interact.KeyPlan) CredentialDialog {
-	return CredentialDialog{
-		Title: stepTitle(createKeysTitle, keys, keyStepSpare),
-		Intro: spareIntro,
-		Hint:  spareHint,
-		// Why it asks again, e.g. that this is YubiKey 1.
-		Error:  retryError(q.Attempt),
-		OK:     buttonContinue,
-		Cancel: buttonCancel,
-	}
 }
 
 // RecoveryCodeDialogOf shows the new recovery code once (figure 9.3), with a
@@ -129,7 +116,6 @@ func RecoveryCodeDialogOf(code []byte, _ interact.KeyPlan) CredentialDialog {
 const (
 	keyStepPassword = iota
 	keyStepYubiKey
-	keyStepSpare
 	keyStepRecovery
 )
 
@@ -139,11 +125,8 @@ func keySteps(k interact.KeyPlan) []int {
 	if k.Password {
 		steps = append(steps, keyStepPassword)
 	}
-	if k.YubiKeys >= 1 {
+	if k.YubiKey {
 		steps = append(steps, keyStepYubiKey)
-	}
-	if k.YubiKeys >= 2 {
-		steps = append(steps, keyStepSpare)
 	}
 	if k.RecoveryCode {
 		steps = append(steps, keyStepRecovery)
@@ -151,30 +134,8 @@ func keySteps(k interact.KeyPlan) []int {
 	return steps
 }
 
-// stepTitle is "<title> · Step n of N", or title alone for a single step.
-// Only the steps that ask in a dialog of their own are numbered: YubiKey
-// registration is the Windows Security prompt, and the recovery code
-// dialog asks nothing.
-func stepTitle(title string, k interact.KeyPlan, step int) string {
-	var steps []int
-	for _, s := range keySteps(k) {
-		if s != keyStepYubiKey && s != keyStepRecovery {
-			steps = append(steps, s)
-		}
-	}
-	if len(steps) < 2 {
-		return title
-	}
-	for i, s := range steps {
-		if s == step {
-			return fmt.Sprintf(stepOf, title, i+1, len(steps))
-		}
-	}
-	return title
-}
-
-// stepsLine lists the steps: "Steps: password › register your YubiKey and
-// spare › recovery code"; "" for a single step.
+// stepsLine lists the steps: "Steps: password › register your YubiKey ›
+// recovery code"; "" for a single step.
 func stepsLine(k interact.KeyPlan) string {
 	steps := keySteps(k)
 	if len(steps) < 2 {
@@ -187,8 +148,6 @@ func stepsLine(k interact.KeyPlan) string {
 			names = append(names, stepNamePassword)
 		case keyStepYubiKey:
 			names = append(names, stepNameYubiKey)
-		case keyStepSpare:
-			names = append(names, stepNameSpare)
 		case keyStepRecovery:
 			names = append(names, stepNameRecovery)
 		}

@@ -174,15 +174,14 @@ func BaseOf(infos []SetInfo, diff naming.BackupEntry) (*SetInfo, error) {
 }
 
 // KeySetMismatch returns why ks no longer matches the configuration (so the
-// next backup must create new keys), or "" when it matches.
+// next backup must create new keys), or "" when it matches. recovery_code is
+// compared only without a YubiKey: with one, new keys always get a recovery
+// code.
 func KeySetMismatch(cfg *config.Config, ks *container.KeySet) string {
 	switch {
 	case ks.AuthMode != cfg.AuthenticationMode:
 		return "authentication_mode changed in config.yaml"
-	case cfg.YubiKeySpare && ks.YubiKeyCount() < 2:
-		return "yubikey_spare enabled in config.yaml"
-	case !cfg.YubiKeySpare && ks.YubiKeyCount() > 1:
-		return "yubikey_spare disabled in config.yaml"
+	case cfg.UseYubiKey():
 	case cfg.RecoveryCode && !ks.HasSlotType(container.SlotRecovery):
 		return "recovery_code enabled in config.yaml"
 	case !cfg.RecoveryCode && ks.HasSlotType(container.SlotRecovery):

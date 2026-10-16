@@ -50,7 +50,6 @@ log_level: "info"
 verify_after_backup: true
 reminder_days: 7
 authentication_mode: 1
-yubikey_spare: false
 recovery_code: true
 password_min_length: 12
 argon2:

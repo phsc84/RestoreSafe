@@ -28,8 +28,6 @@ type Dialogs interface {
 	NewPassword(q interact.NewPasswordQuestion, answer func(password, confirm []byte, ok bool))
 	// RecoveryCode shows a new recovery code once; ok=false cancels.
 	RecoveryCode(code []byte, answer func(ok bool))
-	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
-	SpareYubiKey(q interact.SpareQuestion, answer func(ok bool))
 }
 
 // UI implements interact.UI for one operation: every question goes through
@@ -155,13 +153,4 @@ func (u *UI) ShowRecoveryCode(code []byte) error {
 		})
 	}, nil, interact.ErrCancelled)
 	return err
-}
-
-// WaitForSpareYubiKey waits until the user confirms the spare YubiKey is
-// connected.
-func (u *UI) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
-	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.SpareYubiKey(q, func(ok bool) { answer(ok, nil) })
-	}, false, nil)
-	return v.(bool), err
 }

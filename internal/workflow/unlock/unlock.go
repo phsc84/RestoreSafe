@@ -5,7 +5,6 @@ package unlock
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
@@ -22,7 +21,7 @@ const maxPasswordAttempts = 3
 // Injectable for tests.
 var (
 	checkYubiKeyConnectedFn = yubikey.CheckConnected
-	deriveYubiKeySecretFn   = yubikey.DeriveFIDO2SecretAny
+	deriveYubiKeySecretFn   = yubikey.DeriveFIDO2Secret
 )
 
 // Options configures KeySet.
@@ -61,11 +60,10 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 	var yubiSecret []byte
 	slotIndex := indexes[0]
 	if slotType != container.SlotPassword {
-		idx, secret, err := deriveYubiKeySecret(u, ks, indexes)
+		secret, err := deriveYubiKeySecret(u, ks.Slots[slotIndex])
 		if err != nil {
 			return nil, err
 		}
-		slotIndex = idx
 		yubiSecret = secret
 		defer cryptox.ZeroBytes(yubiSecret)
 	}
@@ -191,29 +189,17 @@ func KeySets(u interact.UI, sets []catalog.SetInfo, action string, log *logging.
 }
 
 // deriveYubiKeySecret asks the connected YubiKey for the hmac-secret of the
-// key set's YubiKey slots in one request: whichever registered YubiKey is
-// connected answers. It returns the slot index of that YubiKey with the
-// secret.
-func deriveYubiKeySecret(u interact.UI, ks *container.KeySet, indexes []int) (int, []byte, error) {
+// key set's YubiKey slot.
+func deriveYubiKeySecret(u interact.UI, slot container.Slot) ([]byte, error) {
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return 0, nil, yubikey.ErrRequired
+		return nil, yubikey.ErrRequired
 	}
-	challenges := make([]yubikey.ChallengeData, len(indexes))
-	labels := make([]string, len(indexes))
-	for i, idx := range indexes {
-		challenges[i] = *ks.Slots[idx].Challenge
-		labels[i] = ks.Slots[idx].Label
-	}
-	if len(indexes) > 1 {
-		fmt.Fprintf(u.Output(), "Use any registered YubiKey (%s). Follow the on-screen prompts to authenticate.\n", strings.Join(labels, " or "))
-	} else {
-		fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
-	}
-	i, secret, err := deriveYubiKeySecretFn(challenges)
+	fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
+	secret, err := deriveYubiKeySecretFn(*slot.Challenge)
 	if err != nil {
-		return 0, nil, fmt.Errorf("YubiKey authentication failed: %w", err)
+		return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
 	}
-	return indexes[i], secret, nil
+	return secret, nil
 }
 
 func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {

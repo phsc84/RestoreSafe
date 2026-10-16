@@ -167,10 +167,11 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 	}}
 
 	p.Keys = SettingsCard{Title: cardKeysUnlock, Rows: []Setting{{Label: settingUnlock, Value: capitalize(cfg.AuthenticationMode.Label()), Key: "authentication_mode"}}}
+	recovery := onOff(cfg.RecoveryCode)
 	if cfg.UseYubiKey() {
-		p.Keys.Rows = append(p.Keys.Rows, Setting{Label: settingSpare, Value: onOff(cfg.YubiKeySpare), Key: "yubikey_spare"})
+		recovery = recoveryAlways
 	}
-	p.Keys.Rows = append(p.Keys.Rows, Setting{Label: settingRecovery, Value: onOff(cfg.RecoveryCode), Key: "recovery_code"})
+	p.Keys.Rows = append(p.Keys.Rows, Setting{Label: settingRecovery, Value: recovery, Key: "recovery_code"})
 	if !cfg.IsYubiKeyOnly() {
 		p.Keys.Rows = append(p.Keys.Rows, Setting{Label: settingPwLength, Value: fmt.Sprintf(atLeastChars, cfg.PasswordMinLength), Key: "password_min_length"})
 	}

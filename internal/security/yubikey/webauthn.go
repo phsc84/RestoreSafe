@@ -3,7 +3,6 @@
 package yubikey
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -88,10 +87,6 @@ func webauthnErrorString(hr uintptr) string {
 	return fmt.Sprintf("HRESULT 0x%08X", hr)
 }
 
-// hresultNTEExists is NTE_EXISTS, which Windows returns when the authenticator
-// already holds a credential from the exclude list.
-const hresultNTEExists = 0x8009000F
-
 // The HRESULTs of a cancel: NTE_USER_CANCELLED, and ERROR_CANCELLED as an
 // HRESULT, which WebAuthn is known to return as well.
 const (
@@ -115,31 +110,23 @@ func (e *HRESULTError) Cancelled() bool {
 	return e.Code == hresultNTEUserCancelled || e.Code == hresultCancelled
 }
 
-// credentialList builds a WEBAUTHN_CREDENTIALS list. The returned slices must
-// stay alive until the WebAuthn call returns.
-func credentialList(credIDs [][]byte) (webauthnCredentials, []webauthnCredential) {
-	if len(credIDs) == 0 {
-		return webauthnCredentials{}, nil
+// allowList builds the WEBAUTHN_CREDENTIALS list of one credential. The
+// returned credential must stay alive until the WebAuthn call returns.
+func allowList(credID []byte) (webauthnCredentials, *webauthnCredential) {
+	cred := &webauthnCredential{
+		dwVersion:          webauthnCredentialVersion,
+		cbId:               uint32(len(credID)),
+		pbId:               &credID[0],
+		pwszCredentialType: windows.StringToUTF16Ptr(webAuthnCredTypePublicKey),
 	}
-	credTypeW := windows.StringToUTF16Ptr(webAuthnCredTypePublicKey)
-	creds := make([]webauthnCredential, len(credIDs))
-	for i, id := range credIDs {
-		creds[i] = webauthnCredential{
-			dwVersion:          webauthnCredentialVersion,
-			cbId:               uint32(len(id)),
-			pbId:               &id[0],
-			pwszCredentialType: credTypeW,
-		}
-	}
-	return webauthnCredentials{cCredentials: uint32(len(creds)), pCredentials: &creds[0]}, creds
+	return webauthnCredentials{cCredentials: 1, pCredentials: cred}, cred
 }
 
 // realMakeCredential calls WebAuthNAuthenticatorMakeCredential to create a new
 // non-resident FIDO2 credential with the hmac-secret extension enabled.
 // The returned credential ID is an opaque blob that the authenticator uses to
-// derive the hmac-secret on subsequent GetAssertion calls. An authenticator
-// holding one of the exclude credentials refuses the registration.
-func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
+// derive the hmac-secret on subsequent GetAssertion calls.
+func realMakeCredential() (credID []byte, err error) {
 	clientDataBytes, err := buildClientData("webauthn.create")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build client data: %w", err)
@@ -199,13 +186,9 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 		pExtensions: &ext,
 	}
 
-	excludeList, excludeCreds := credentialList(exclude)
-	defer runtimeKeepAlive(excludeCreds, exclude)
-
 	opts := webauthnMakeCredentialOptions{
 		dwVersion:                         webauthnMakeCredOptVersion,
 		dwTimeoutMilliseconds:             fido2TimeoutMs,
-		CredentialList:                    excludeList,
 		Extensions:                        exts,
 		dwAuthenticatorAttachment:         webauthnAttachmentCrossPlatform,
 		dwUserVerificationRequirement:     webauthnUVRequired,
@@ -222,9 +205,6 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 		uintptr(unsafe.Pointer(&opts)),
 		uintptr(unsafe.Pointer(&attestation)),
 	)
-	if hr == hresultNTEExists && len(exclude) > 0 {
-		return nil, ErrAlreadyRegistered
-	}
 	if hr != 0 {
 		return nil, problem.Errorf("%w.", &HRESULTError{Op: "WebAuthNAuthenticatorMakeCredential", Code: uint32(hr)}).WithRemedy("Ensure the YubiKey is connected, supports FIDO2 hmac-secret, and has a FIDO2 PIN configured.")
 	}
@@ -240,20 +220,18 @@ func realMakeCredential(exclude [][]byte) (credID []byte, err error) {
 }
 
 // realGetHmacSecret calls WebAuthNAuthenticatorGetAssertion with the hmac-secret
-// extension to derive a 32-byte secret for salt. credIDs is the allow list:
-// the connected authenticator answers with whichever credential it holds, and
-// the index of that credential is returned.
-func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
+// extension to derive a 32-byte secret of credential credID for salt.
+func realGetHmacSecret(credID, salt []byte) ([]byte, error) {
 	if len(salt) != fido2SaltSize {
-		return 0, nil, fmt.Errorf("hmac-secret salt must be %d bytes, got %d", fido2SaltSize, len(salt))
+		return nil, fmt.Errorf("hmac-secret salt must be %d bytes, got %d", fido2SaltSize, len(salt))
 	}
-	if len(credIDs) == 0 {
-		return 0, nil, fmt.Errorf("no credential to authenticate with")
+	if len(credID) == 0 {
+		return nil, fmt.Errorf("no credential to authenticate with")
 	}
 
 	clientDataBytes, err := buildClientData("webauthn.get")
 	if err != nil {
-		return 0, nil, fmt.Errorf("failed to build client data: %w", err)
+		return nil, fmt.Errorf("failed to build client data: %w", err)
 	}
 
 	rpIdW := windows.StringToUTF16Ptr(fido2RPID)
@@ -266,8 +244,8 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 		pwszHashAlgId:    hashAlgW,
 	}
 
-	allowedList, allowedCreds := credentialList(credIDs)
-	defer runtimeKeepAlive(allowedCreds, credIDs)
+	allowed, cred := allowList(credID)
+	defer runtimeKeepAlive(cred, credID)
 
 	hmacSalt := webauthnHmacSecretSalt{
 		cbFirst: uint32(len(salt)),
@@ -280,7 +258,7 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 	opts := webauthnGetAssertionOptions{
 		dwVersion:                     webauthnGetAssertionOptVersion,
 		dwTimeoutMilliseconds:         fido2TimeoutMs,
-		CredentialList:                allowedList,
+		CredentialList:                allowed,
 		dwAuthenticatorAttachment:     webauthnAttachmentCrossPlatform,
 		dwUserVerificationRequirement: webauthnUVRequired,
 		dwFlags:                       webauthnHmacSecretValuesFlag,
@@ -296,44 +274,21 @@ func realGetHmacSecret(credIDs [][]byte, salt []byte) (int, []byte, error) {
 		uintptr(unsafe.Pointer(&assertion)),
 	)
 	if hr != 0 {
-		return 0, nil, problem.Errorf("%w.", &HRESULTError{Op: "WebAuthNAuthenticatorGetAssertion", Code: uint32(hr)}).WithRemedy("Ensure a YubiKey registered for this backup is connected.")
+		return nil, problem.Errorf("%w.", &HRESULTError{Op: "WebAuthNAuthenticatorGetAssertion", Code: uint32(hr)}).WithRemedy("Ensure the YubiKey registered for this backup is connected.")
 	}
 	if assertion == nil || assertion.pHmacSecret == nil {
-		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")
+		return nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned no hmac-secret output")
 	}
 	defer procWebAuthNFreeAssertion.Call(uintptr(unsafe.Pointer(assertion)))
 	hmacSecret := assertion.pHmacSecret
 	if hmacSecret.cbFirst == 0 {
-		return 0, nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned empty hmac-secret first output")
+		return nil, fmt.Errorf("WebAuthNAuthenticatorGetAssertion returned empty hmac-secret first output")
 	}
 
-	index, err := answeringCredential(credIDs, assertion.Credential)
-	if err != nil {
-		return 0, nil, err
-	}
 	out := make([]byte, hmacSecret.cbFirst)
 	copy(out, unsafe.Slice(hmacSecret.pbFirst, hmacSecret.cbFirst))
-	fido2Log("hmac-secret output length: %d bytes, credential index %d", len(out), index)
-	return index, out, nil
-}
-
-// answeringCredential returns the index in credIDs of the credential the
-// authenticator used. With a single allowed credential an empty response
-// credential is accepted.
-func answeringCredential(credIDs [][]byte, used webauthnCredential) (int, error) {
-	if used.cbId == 0 || used.pbId == nil {
-		if len(credIDs) == 1 {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("WebAuthNAuthenticatorGetAssertion did not report which YubiKey answered")
-	}
-	usedID := unsafe.Slice(used.pbId, used.cbId)
-	for i, id := range credIDs {
-		if bytes.Equal(id, usedID) {
-			return i, nil
-		}
-	}
-	return 0, fmt.Errorf("YubiKey answered with an unknown credential")
+	fido2Log("hmac-secret output length: %d bytes", len(out))
+	return out, nil
 }
 
 // runtimeKeepAlive keeps Go memory referenced by raw pointers passed to the

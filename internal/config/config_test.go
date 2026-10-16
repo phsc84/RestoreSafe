@@ -55,22 +55,29 @@ func TestLoadKeyOptions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.PasswordMinLength != DefaultPasswordMinLength || cfg.YubiKeySpare || cfg.RecoveryCode {
-		t.Fatalf("unexpected defaults: min=%d spare=%v recovery=%v", cfg.PasswordMinLength, cfg.YubiKeySpare, cfg.RecoveryCode)
+	if cfg.PasswordMinLength != DefaultPasswordMinLength || cfg.RecoveryCode || cfg.CreatesRecoveryCode() {
+		t.Fatalf("unexpected defaults: min=%d recovery=%v", cfg.PasswordMinLength, cfg.RecoveryCode)
 	}
 
-	cfg, err = loadConfigText(t, "authentication_mode: 2\nyubikey_spare: true\nrecovery_code: true\npassword_min_length: 8\n")
+	cfg, err = loadConfigText(t, "recovery_code: true\npassword_min_length: 8\n")
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.YubiKeySpare || !cfg.RecoveryCode || cfg.PasswordMinLength != 8 {
+	if !cfg.RecoveryCode || !cfg.CreatesRecoveryCode() || cfg.PasswordMinLength != 8 {
 		t.Fatalf("options not parsed: %+v", cfg)
+	}
+
+	// With a YubiKey, new keys always get a recovery code.
+	for _, mode := range []string{"2", "3"} {
+		cfg, err = loadConfigText(t, "authentication_mode: "+mode+"\nrecovery_code: false\n")
+		if err != nil || !cfg.CreatesRecoveryCode() {
+			t.Fatalf("mode %s: CreatesRecoveryCode must be true (%v)", mode, err)
+		}
 	}
 
 	for _, tc := range []struct{ extra, want string }{
 		{"password_min_length: 7\n", "password_min_length"},
 		{"password_min_length: 257\n", "password_min_length"},
-		{"authentication_mode: 1\nyubikey_spare: true\n", "yubikey_spare"},
 	} {
 		if _, err := loadConfigText(t, tc.extra); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%q: expected error about %s, got %v", tc.extra, tc.want, err)
@@ -174,7 +181,7 @@ func TestConfigSampleIsValid(t *testing.T) {
 	}
 	d := cfg.Differential
 	switch {
-	case cfg.AuthenticationMode != AuthModePassword, cfg.YubiKeySpare, cfg.RecoveryCode,
+	case cfg.AuthenticationMode != AuthModePassword, cfg.RecoveryCode,
 		cfg.PasswordMinLength != DefaultPasswordMinLength, cfg.OnUnreadableFile != OnUnreadableFail,
 		!cfg.ExcludeMatcher.Empty(), cfg.RetentionKeep != 3, cfg.ReminderLimit() != DefaultReminderDays,
 		!d.IsEnabled(), d.IntervalDays() != DefaultFullBackupIntervalDays, d.SizePercent() != DefaultMaxSizePercent, d.RetentionKeepDifferentials != 0:

@@ -39,7 +39,7 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | BP-4 | **Full backup instead**: plan switches to full for every folder and back with **Back to plan** | Scripted walk possible. |
 | BP-4 | **New keys + full backup…**: confirmation (figure 6.2), then key setup, then full backups | |
 | CR-2 | First backup, mode 1 with recovery code: password twice, code shown on one line, can't be selected; **Copy** puts the whole code on the clipboard (one line with dashes), the button then reads Copied, and the code doesn't appear in the clipboard history (Win+V); **I have stored it** continues without a retype step; the title has no "Step n of N"; closing it with × or Esc ends the backup as cancelled, with nothing written | The smoke test enters the password and reads the code; Copy and the clipboard history by hand. |
-| CR-2 | Mode 2 with spare YubiKey: two prompts per key, the swap step, inserting the first key again is refused | Needs two YubiKeys. |
+| CR-2 | Mode 2 with `recovery_code: false`: password twice, two Windows prompts to register the YubiKey (a YubiKey without a PIN is asked to create one), then the recovery code shows anyway | Needs a YubiKey. |
 | CR-2 | Mode 3 (YubiKey only): no password dialog, "Follow the Windows Security prompt" shows | Needs a YubiKey. |
 | CR-1 | Wrong password: "Wrong password. 2 attempts left." under the field; the right one continues | Scripted walk possible. |
 | BR-1 | Progress card: step trail, folder n of N, bytes, speed appear as specified, no time left; Folders card follows; a done folder shows the size of its set (for a differential the same as on the Restore backup page) | Use about 1 GB of data to see it change. |
@@ -83,7 +83,6 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | RW-8 | Restore of a backup with skipped files: amber lines "not in this backup" and "older version" | Needs a differential made while a file was held open. |
 | RW-8 | `Damaged`: "Restore incomplete" in red, naming the folder | |
 | CR-1 | Restore unlocked with the recovery code only | |
-| CR-1 | Restore with the spare YubiKey only | Needs two YubiKeys. |
 
 ## 5. Cancel and close
 

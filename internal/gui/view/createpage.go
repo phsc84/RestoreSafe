@@ -405,9 +405,6 @@ func keysOf(s *health.Snapshot) KeysCard {
 	}
 	card.Methods = capitalize(k.Methods)
 	details := []string{fmt.Sprintf(keysCreated, ShortDay(k.Created, s.Checked))}
-	if k.SpareYubiKey {
-		details = append(details, keysSpare)
-	}
 	if k.RecoveryCode {
 		details = append(details, keysRecovery)
 	}

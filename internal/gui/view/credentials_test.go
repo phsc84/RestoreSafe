@@ -40,22 +40,14 @@ func TestUnlockDialog(t *testing.T) {
 
 func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 	t.Parallel()
-	all := interact.KeyPlan{New: true, Password: true, YubiKeys: 2, RecoveryCode: true}
+	all := interact.KeyPlan{New: true, Password: true, YubiKey: true, RecoveryCode: true}
 	q := interact.NewPasswordQuestion{MinLength: 12, Attempt: interact.Attempt{N: 1, Left: 3}}
 	d := NewPasswordDialogOf(q, all)
-	if d.Title != "Create your keys · Step 1 of 2" || !strings.HasPrefix(d.Hint, "At least 12 characters.") || len(d.Fields) != 2 {
+	if d.Title != "Create your keys" || !strings.HasPrefix(d.Hint, "At least 12 characters.") || len(d.Fields) != 2 {
 		t.Fatalf("password step %+v", d)
 	}
-	if d.Note != "Steps: password › register your YubiKey › register your spare YubiKey › recovery code" {
+	if d.Note != "Steps: password › register your YubiKey › recovery code" {
 		t.Fatalf("steps %q", d.Note)
-	}
-	if s := SpareYubiKeyDialogOf(interact.SpareQuestion{Attempt: interact.Attempt{N: 1}}, all); s.Title != "Create your keys · Step 2 of 2" || s.Error != "" {
-		t.Fatalf("spare step %+v", s)
-	}
-	isOne := errors.New("This is YubiKey 1. Remove it and insert your spare YubiKey.")
-	s := SpareYubiKeyDialogOf(interact.SpareQuestion{Attempt: interact.Attempt{N: 2, Failure: isOne}}, all)
-	if s.Error != "This is YubiKey 1. Remove it and insert your spare YubiKey." {
-		t.Fatalf("spare retry %q", s.Error)
 	}
 	r := RecoveryCodeDialogOf([]byte("K7QF-9M2D-XW4P-HT6N-3JBV-R8LC"), all)
 	if r.Title != "Your recovery code" || r.Cancel != "" || string(r.Code) != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {

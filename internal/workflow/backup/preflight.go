@@ -434,18 +434,7 @@ func (p proposal) plan(removes []catalog.SetInfo, fullRequested bool, details in
 func keyPlanFor(cfg *config.Config, keys plan.Keys) interact.KeyPlan {
 	if ks := keys.Existing; ks != nil {
 		mode := ks.AuthMode
-		kp := interact.KeyPlan{Created: ks.Created(), Summary: ks.Summary(), Password: mode != config.AuthModeYubiKey}
-		if mode != config.AuthModePassword {
-			kp.YubiKeys = 1
-		}
-		return kp
+		return interact.KeyPlan{Created: ks.Created(), Summary: ks.Summary(), Password: mode != config.AuthModeYubiKey, YubiKey: mode.UsesYubiKey()}
 	}
-	kp := interact.KeyPlan{New: true, NewKeysReason: keys.NewKeysReason, Password: !cfg.IsYubiKeyOnly(), RecoveryCode: cfg.RecoveryCode}
-	if cfg.UseYubiKey() {
-		kp.YubiKeys = 1
-		if cfg.YubiKeySpare {
-			kp.YubiKeys = 2
-		}
-	}
-	return kp
+	return interact.KeyPlan{New: true, NewKeysReason: keys.NewKeysReason, Password: !cfg.IsYubiKeyOnly(), YubiKey: cfg.UseYubiKey(), RecoveryCode: cfg.CreatesRecoveryCode()}
 }

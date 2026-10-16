@@ -91,18 +91,15 @@ reminder_days: 7
 # 3 = YubiKey only, no password
 #     The YubiKey FIDO2 credential is the sole RestoreSafe authentication
 #     factor. No password is prompted during backup or restore.
-#     The YubiKey must support FIDO2 hmac-secret and have a FIDO2 PIN configured.
+#     The YubiKey must support FIDO2 hmac-secret. If it has no FIDO2 PIN yet,
+#     Windows asks you to create one when the keys are created.
 authentication_mode: 1
-
-# Modes 2 and 3: register a second YubiKey as spare when new keys are created.
-# Either YubiKey can then restore every backup made with those keys. The spare
-# YubiKey is only needed once, when the keys are created.
-# Default: false
-yubikey_spare: false
 
 # Create a recovery code when new keys are created. The code alone restores
 # every backup made with those keys, even without password or YubiKey (also in
 # mode 2). Store it in a password manager or on paper, never next to your backups.
+# Modes 2 and 3 always create a recovery code, whatever this setting says, so a
+# lost or broken YubiKey doesn't lose your backups.
 # Default: false
 recovery_code: false
 

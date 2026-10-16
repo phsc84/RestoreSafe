@@ -21,13 +21,13 @@ func fakeSlot(slotType, label string) Slot {
 	}
 }
 
-// yubiKeySet is a valid key set of mode 2: two YubiKeys and a recovery code.
+// yubiKeySet is a valid key set of mode 2: a YubiKey and a recovery code.
 func yubiKeySet() KeySet {
-	one, two := fakeSlot(SlotPasswordYubiKey, "YubiKey 1"), fakeSlot(SlotPasswordYubiKey, "YubiKey 2 (spare)")
-	one.Challenge, two.Challenge = testChallenge(false), testChallenge(false)
+	yk := fakeSlot(SlotPasswordYubiKey, "YubiKey")
+	yk.Challenge = testChallenge(false)
 	rec := fakeSlot(SlotRecovery, "Recovery code")
 	rec.Check = "ABCDE"
-	return KeySet{ID: strings.Repeat("ab", keySetIDLen), CreatedUTC: "2026-09-01T10:00:00Z", AuthMode: config.AuthModePasswordYubiKey, Slots: []Slot{one, two, rec}}
+	return KeySet{ID: strings.Repeat("ab", keySetIDLen), CreatedUTC: "2026-09-01T10:00:00Z", AuthMode: config.AuthModePasswordYubiKey, Slots: []Slot{yk, rec}}
 }
 
 // TestKeySetValidateRejectsEveryInconsistency breaks each rule of
@@ -46,14 +46,9 @@ func TestKeySetValidateRejectsEveryInconsistency(t *testing.T) {
 		{"ID", func(ks *KeySet) { ks.ID = "xyz" }, "invalid key set ID"},
 		{"creation time", func(ks *KeySet) { ks.CreatedUTC = "yesterday" }, "creation time"},
 		{"authentication mode", func(ks *KeySet) { ks.AuthMode = 9 }, "authentication mode 9"},
-		{"two recovery slots", func(ks *KeySet) { ks.Slots = append(ks.Slots, ks.Slots[2]) }, "slot counts"},
-		{"only a recovery slot", func(ks *KeySet) { ks.Slots = ks.Slots[2:] }, "slot counts"},
-		{"three YubiKeys", func(ks *KeySet) { ks.Slots = append(ks.Slots, ks.Slots[0]) }, "at most two YubiKey slots"},
-		{"different salts", func(ks *KeySet) {
-			c := *ks.Slots[1].Challenge
-			c.Salt = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWY="
-			ks.Slots[1].Challenge = &c
-		}, "different salts"},
+		{"two recovery slots", func(ks *KeySet) { ks.Slots = append(ks.Slots, ks.Slots[1]) }, "slot counts"},
+		{"only a recovery slot", func(ks *KeySet) { ks.Slots = ks.Slots[1:] }, "slot counts"},
+		{"two YubiKeys", func(ks *KeySet) { ks.Slots = append(ks.Slots, ks.Slots[0]) }, "slot counts"},
 		{"empty label", func(ks *KeySet) { ks.Slots[0].Label = "" }, "invalid label"},
 		{"long label", func(ks *KeySet) { ks.Slots[0].Label = strings.Repeat("x", 101) }, "invalid label"},
 		{"KDF algorithm", func(ks *KeySet) { ks.Slots[0].KDF.Alg = "scrypt" }, "key derivation settings"},
@@ -68,8 +63,8 @@ func TestKeySetValidateRejectsEveryInconsistency(t *testing.T) {
 			ks.Slots[0].Challenge = &c
 		}, "slot 0"},
 		{"challenge without password in mode 2", func(ks *KeySet) { ks.Slots[0].Challenge = testChallenge(true) }, "does not match the slot type"},
-		{"challenge on the recovery slot", func(ks *KeySet) { ks.Slots[2].Challenge = testChallenge(false) }, "unexpected YubiKey challenge"},
-		{"recovery check", func(ks *KeySet) { ks.Slots[2].Check = "abc" }, "invalid recovery check"},
+		{"challenge on the recovery slot", func(ks *KeySet) { ks.Slots[1].Challenge = testChallenge(false) }, "unexpected YubiKey challenge"},
+		{"recovery check", func(ks *KeySet) { ks.Slots[1].Check = "abc" }, "invalid recovery check"},
 		{"check on a YubiKey slot", func(ks *KeySet) { ks.Slots[0].Check = "ABCDE" }, "unexpected recovery check"},
 	}
 	for _, tc := range cases {
@@ -83,7 +78,7 @@ func TestKeySetValidateRejectsEveryInconsistency(t *testing.T) {
 	// Password mode has exactly one password slot.
 	pw := KeySet{ID: strings.Repeat("ab", keySetIDLen), CreatedUTC: "2026-09-01T10:00:00Z", AuthMode: config.AuthModePassword,
 		Slots: []Slot{fakeSlot(SlotPassword, "Password"), fakeSlot(SlotPassword, "Password")}}
-	if err := pw.Validate(); err == nil || !strings.Contains(err.Error(), "exactly one password slot") {
+	if err := pw.Validate(); err == nil || !strings.Contains(err.Error(), "slot counts") {
 		t.Errorf("two password slots: got %v", err)
 	}
 }
@@ -163,19 +158,22 @@ func TestKeySetQueriesAndSummary(t *testing.T) {
 	t.Parallel()
 
 	ks := yubiKeySet()
-	if got := ks.SlotIndexes(SlotPasswordYubiKey); len(got) != 2 || got[0] != 0 || got[1] != 1 {
+	if got := ks.SlotIndexes(SlotPasswordYubiKey); len(got) != 1 || got[0] != 0 {
 		t.Errorf("SlotIndexes = %v", got)
 	}
-	if !ks.HasSlotType(SlotRecovery) || ks.HasSlotType(SlotYubiKey) || ks.YubiKeyCount() != 2 {
-		t.Errorf("HasSlotType or YubiKeyCount wrong for %+v", ks)
+	if !ks.HasSlotType(SlotRecovery) || ks.HasSlotType(SlotYubiKey) {
+		t.Errorf("HasSlotType wrong for %+v", ks)
 	}
-	if !ks.Slots[0].UsesPassword() || ks.Slots[2].UsesPassword() {
+	if _, err := ks.Unlock(len(ks.Slots), nil); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("Unlock of a slot that doesn't exist: %v", err)
+	}
+	if !ks.Slots[0].UsesPassword() || ks.Slots[1].UsesPassword() {
 		t.Error("UsesPassword: a password + YubiKey slot needs the password, a recovery slot doesn't")
 	}
 	if ks.Created().IsZero() {
 		t.Error("Created must parse CreatedUTC")
 	}
-	if s := ks.Summary(); !strings.HasPrefix(s, "created 2026-09-01, ") || !strings.Contains(s, "(2 YubiKeys), recovery code") {
+	if s := ks.Summary(); !strings.HasPrefix(s, "created 2026-09-01, ") || !strings.HasSuffix(s, "YubiKey, recovery code") {
 		t.Errorf("Summary = %q", s)
 	}
 	if got := RegularSlotType(config.AuthModeYubiKey); got != SlotYubiKey {

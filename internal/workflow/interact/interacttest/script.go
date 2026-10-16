@@ -217,20 +217,6 @@ func (s *Script) ShowRecoveryCode(code []byte) error {
 	return nil
 }
 
-// WaitForSpareYubiKey waits for Enter, after the reason the previous try
-// failed; "q" cancels.
-func (s *Script) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
-	if q.Failure != nil {
-		s.println(q.Failure)
-	}
-	answer, err := s.readLine("Press Enter when the spare YubiKey is connected (q = cancel): ")
-	if err != nil {
-		return false, err
-	}
-	return !strings.EqualFold(strings.TrimSpace(answer), "q"), nil
-}
-
-// ShowBackupPlan prints the preflight summary of the plan.
 func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.Output(), p.Details) }
 
 // ShowRestorePlan prints the preflight summary of the plan.

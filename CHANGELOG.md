@@ -7,6 +7,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.1.0] - Unreleased
 
 ### Changed
+- With a YubiKey (`authentication_mode` 2 or 3), new keys always come with a recovery code, whatever `recovery_code` says, so a lost or broken YubiKey doesn't lose your backups.
+- A setting RestoreSafe no longer uses is named as such when `config.yaml` loads ("a setting that is no longer used"), with the remedy to remove the line, instead of being reported as unknown.
+
+### Removed
+- The spare YubiKey and its setting `yubikey_spare`: a key set has one YubiKey, and the recovery code is the fallback. Remove `yubikey_spare` from `config.yaml`. Backups whose keys have a spare YubiKey can no longer be opened.
+- The developer tool `yubidiag`.
 - The windows that show the plan of a backup and of a restore are titled **Create backup** and **Restore backup**, like the pages they open from.
 - A failed backup, restore or verification, and a backup set that fails its check after the backup, are logged as **ERROR** lines with the reason. They used to be warnings, and the reason of a failed run was missing from the log. **Warnings and errors** in the log window shows them.
 

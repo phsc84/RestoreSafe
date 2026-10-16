@@ -188,9 +188,9 @@ func TestHRESULTErrorSurvivesTheWrapping(t *testing.T) {
 	if !strings.HasPrefix(cause.Error(), "WebAuthNAuthenticatorGetAssertion: HRESULT 0x80090036.") {
 		t.Fatalf("text: %q", cause.Error())
 	}
-	stubWebAuthn(t, nil, func([][]byte, []byte) (int, []byte, error) { return 0, nil, cause })
+	stubWebAuthn(t, nil, func(_, _ []byte) ([]byte, error) { return nil, cause })
 	good := ChallengeData{CredID: base64.StdEncoding.EncodeToString([]byte("cred")), Salt: base64.StdEncoding.EncodeToString(make([]byte, fido2SaltSize))}
-	_, _, err := DeriveFIDO2SecretAny([]ChallengeData{good})
+	_, err := DeriveFIDO2Secret(good)
 	var hr *HRESULTError
 	if !errors.As(fmt.Errorf("YubiKey authentication failed: %w", err), &hr) || !hr.Cancelled() || hr.Code != hresultNTEUserCancelled {
 		t.Fatalf("errors.As through the wrapping: %v", err)
@@ -204,25 +204,23 @@ func TestHRESULTErrorSurvivesTheWrapping(t *testing.T) {
 
 func TestProbeCapabilityZeroesTheSecret(t *testing.T) {
 	var secret []byte
-	var gotExclude [][]byte
-	stubWebAuthn(t, func(exclude [][]byte) ([]byte, error) {
-		gotExclude = exclude
+	stubWebAuthn(t, func() ([]byte, error) {
 		return []byte("cred"), nil
-	}, func(credIDs [][]byte, salt []byte) (int, []byte, error) {
-		if len(credIDs) != 1 || len(salt) != fido2SaltSize || bytes.Equal(salt, make([]byte, fido2SaltSize)) {
-			return 0, nil, fmt.Errorf("asked with %d credentials and salt %x", len(credIDs), salt)
+	}, func(credID, salt []byte) ([]byte, error) {
+		if string(credID) != "cred" || len(salt) != fido2SaltSize || bytes.Equal(salt, make([]byte, fido2SaltSize)) {
+			return nil, fmt.Errorf("asked for %q with salt %x", credID, salt)
 		}
 		secret = bytes.Repeat([]byte{0xAB}, fido2SaltSize)
-		return 0, secret, nil
+		return secret, nil
 	})
 	if err := ProbeCapability(); err != nil {
 		t.Fatal(err)
 	}
-	if gotExclude != nil || !bytes.Equal(secret, make([]byte, fido2SaltSize)) {
-		t.Fatalf("exclude %v, secret after the probe %x", gotExclude, secret)
+	if !bytes.Equal(secret, make([]byte, fido2SaltSize)) {
+		t.Fatalf("secret after the probe %x", secret)
 	}
 
-	stubWebAuthn(t, func([][]byte) ([]byte, error) {
+	stubWebAuthn(t, func() ([]byte, error) {
 		return nil, &HRESULTError{Op: "WebAuthNAuthenticatorMakeCredential", Code: hresultCancelled}
 	}, nil)
 	var hr *HRESULTError

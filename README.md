@@ -72,7 +72,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 - Tamper detection: the data, the key boxes, the header, and the order and completeness of every backup are authenticated; a modified backup is reported as damaged and never restored as if it were intact
 - Argon2id key derivation
 - Password-only, password + YubiKey 2FA, or YubiKey-only authentication modes
-- Optional spare YubiKey and recovery code, so losing one YubiKey or forgetting the password does not have to mean losing your backups
+- A recovery code (optional with a password, always created with a YubiKey), so losing your YubiKey or forgetting the password does not have to mean losing your backups
 - A restore stops when its destination folder, or a folder in it, is a link to another place (a junction or symbolic link), so that no other program can redirect the restored files
 
 ### Reliability
@@ -135,7 +135,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
    In `authentication_mode: 3` the YubiKey is the sole RestoreSafe authentication factor. Keep your YubiKey and FIDO2 PIN safe - anyone who can complete the YubiKey prompt can restore the backup.
 
-   Consider `yubikey_spare: true` and `recovery_code: true`; see [How your backups are locked](#how-your-backups-are-locked).
+   With a YubiKey, RestoreSafe always creates a recovery code, so a lost or broken YubiKey doesn't lose your backups; see [How your backups are locked](#how-your-backups-are-locked).
 
 ### Main configuration options
 
@@ -148,8 +148,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 | `differential.retention_keep_differentials` | `0` | Differentials kept per chain (0 = keep all) |
 | `exclude` | none | Files and directories to leave out (e.g. `*.tmp`, `node_modules`, `/Cache`) |
 | `on_unreadable_file` | `fail` | `fail` aborts when a file cannot be read (e.g. locked); `skip` continues and lists the file as a warning |
-| `yubikey_spare` | `false` | Register a second YubiKey when new keys are created (modes 2 and 3) |
-| `recovery_code` | `false` | Create a recovery code when new keys are created |
+| `recovery_code` | `false` | Create a recovery code when new keys are created (modes 2 and 3 always create one) |
 | `password_min_length` | `12` | Minimum password length for new keys (at least 8) |
 | `verify_after_backup` | `false` | Re-read and check each backup right after writing it |
 | `reminder_days` | `7` | Remind on the Create backup page when the newest backup is older than this many days (0 = no reminder) |
@@ -242,7 +241,7 @@ A file counts as changed when its size, last modification time, or NTFS change t
 ### In short
 
 - Your backups are encrypted with a **master key** that RestoreSafe creates at random.
-- The master key is stored inside every backup, but only in **locked boxes**. Each box opens with one of your unlock methods: your password, your YubiKey, your spare YubiKey, or your recovery code.
+- The master key is stored inside every backup, but only in **locked boxes**. Each box opens with one of your unlock methods: your password, your YubiKey, or your recovery code.
 - To restore, you only need to open **one** box. Any of your unlock methods works.
 
 ### The picture
@@ -251,8 +250,7 @@ A file counts as changed when its size, last modification time, or NTFS change t
 Every backup file contains:
 
   Box 1: master key, locked with your password + YubiKey
-  Box 2: master key, locked with your password + spare YubiKey    (optional)
-  Box 3: master key, locked with your recovery code               (optional)
+  Box 2: master key, locked with your recovery code   (always with a YubiKey)
 
 Open any one box  ->  master key  ->  your files
 ```
@@ -270,34 +268,33 @@ Everything inside a backup is encrypted: the contents of your files, their names
 
 ### Your unlock methods
 
-| `authentication_mode` | You unlock with | Optional extras |
+| `authentication_mode` | You unlock with | Recovery code |
 |---|---|---|
-| `1` | Password | Recovery code |
-| `2` | Password + YubiKey | Spare YubiKey, recovery code |
-| `3` | YubiKey | Spare YubiKey, recovery code |
+| `1` | Password | Optional: `recovery_code: true` in `config.yaml` |
+| `2` | Password + YubiKey | Always |
+| `3` | YubiKey | Always |
 
-Turn the extras on in `config.yaml` with `yubikey_spare: true` and `recovery_code: true`.
+With a YubiKey, RestoreSafe always creates a recovery code, whatever `recovery_code` says: without it, a lost or broken YubiKey would mean losing your backups.
 
 ### What you will see
 
 **Your first backup (key setup).** RestoreSafe creates your keys:
 
 1. You choose a password (at least `password_min_length` characters, 12 by default) and enter it twice.
-2. You register your YubiKey (two Windows Security prompts).
-3. With `yubikey_spare: true`: RestoreSafe asks you to swap in your spare YubiKey and register it too (two more prompts). Accidentally inserting the first YubiKey again is detected and refused.
-4. With `recovery_code: true`: RestoreSafe shows your recovery code once. Click **Copy** to put it in your password manager, or write it down on paper. Windows keeps the copied code out of the clipboard history and the cloud clipboard.
-5. Then every source directory gets a full backup.
+2. You register your YubiKey (two Windows Security prompts). If it has no PIN yet, Windows asks you to create one.
+3. With a YubiKey or `recovery_code: true`: RestoreSafe shows your recovery code once. Click **Copy** to put it in your password manager, or write it down on paper. Windows keeps the copied code out of the clipboard history and the cloud clipboard.
+4. Then every source directory gets a full backup.
 
-**Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups, so your spare YubiKey can stay in its safe place.
+**Every backup after that.** Enter your password once and/or touch your YubiKey once. RestoreSafe reuses your keys automatically, for differential **and** new full backups.
 
-**Restore and verify.** Enter your password and/or touch whichever of your YubiKeys you have. If your keys have a recovery code, the unlock dialog offers **Use your recovery code instead**.
+**Restore and verify.** Enter your password and/or touch your YubiKey. If your keys have a recovery code, the unlock dialog offers **Use your recovery code instead**.
 
 ### When RestoreSafe creates new keys
 
 New keys mean: a new master key, new boxes, and a new full backup of every source directory. This happens when:
 
 - you run your first backup, or the backup directory contains no RestoreSafe 2.0 backup anymore (for example because you deleted all backups);
-- you change `authentication_mode`, `yubikey_spare`, or `recovery_code` in `config.yaml`;
+- you change `authentication_mode` in `config.yaml`, or `recovery_code` in password-only mode;
 - you click **New keys + full backup…** in the Create backup window, to change your password, replace a lost YubiKey, or get a new recovery code.
 
 The Create backup window always tells you in advance when new keys will be created and why; so does the Keys card on the Create backup page.
@@ -310,7 +307,6 @@ The Create backup window always tells you in advance when new keys will be creat
 |---|---|---|
 | Password | In your head or a password manager | In a file next to your backups |
 | YubiKey | With you | - |
-| Spare YubiKey | At a different, safe place (home safe, trusted person) | In the same bag as your main YubiKey |
 | Recovery code | In a password manager, or on paper in a safe place | Next to your backups, or unencrypted on your computer |
 
 The recovery code opens your backups **on its own**, even in password + YubiKey mode. Treat it like the key to a safe.
@@ -319,7 +315,7 @@ The recovery code opens your backups **on its own**, even in password + YubiKey 
 
 | Situation | What to do |
 |---|---|
-| I lost my YubiKey. | Restore with your spare YubiKey or your recovery code. Then click **New keys + full backup** at your next backup to create new keys with a new YubiKey, so you have a spare again. Without spare and recovery code, backups locked with that YubiKey cannot be restored by anyone. |
+| I lost my YubiKey. | Restore with your recovery code. Then click **New keys + full backup** at your next backup to create new keys with a new YubiKey. |
 | I forgot my password. | Restore with your recovery code; it works alone, no password or YubiKey needed. Then click **New keys + full backup** at your next backup to set a new password. Without a recovery code, the backups cannot be restored by anyone. |
 | I want to change my password. | Click **New keys + full backup** at the next backup. Your older backups keep opening with the old password. |
 | Someone stole my backup drive. | Without your unlock methods, they cannot read anything. If you think your password or recovery code was exposed too, click **New keys + full backup** at your next backup and delete the old backups once the new ones are in place. |
@@ -418,15 +414,14 @@ Other FIDO2 security keys may support similar technology, but RestoreSafe curren
 
 ### Before first use
 
-1. Install [Yubico Authenticator](https://www.yubico.com/products/yubico-authenticator/) and open it with the YubiKey inserted.
-2. Go to **Passkeys** -> **PIN** and set a FIDO2 PIN if you have not done so already (also on your spare YubiKey). Windows may prompt for administrator rights when you open this section - this is expected. The PIN is used to authorize the Windows Security prompts that appear during backup, restore, and verify.
-3. Set `authentication_mode` in `config.yaml`:
+1. Set `authentication_mode` in `config.yaml`:
    - `2` - password + YubiKey (2FA)
    - `3` - YubiKey-only (no password)
+2. Your YubiKey needs a FIDO2 PIN, which authorizes the Windows Security prompts during backup, restore, and verify. A YubiKey without one gets it at the first backup: Windows asks you to create it. To change it later, use Windows Settings > Accounts > Sign-in options > Security key > Manage. No other software is needed.
 
 ### What RestoreSafe stores
 
-For each registered YubiKey, the header of every backup file contains:
+For your YubiKey, the header of every backup file contains:
 
 - A credential ID, which tells the YubiKey which RestoreSafe credential to use.
 - A random salt, which is safe helper data used to reproduce the same YubiKey response.
@@ -441,10 +436,10 @@ The important part: the YubiKey secret stays inside the YubiKey. Windows is the 
 
 ### What to expect
 
-- **Key setup (first backup, or new keys):** two Windows Security prompts per YubiKey - **Register security key** (enter PIN, touch) and **Use your security key** (enter PIN if asked, touch).
-- **Every other backup, restore, and verify:** one **Use your security key** prompt. With a spare YubiKey registered, either YubiKey works; connect the one you have.
+- **Key setup (first backup, or new keys):** two Windows Security prompts - **Register security key** (enter PIN, touch) and **Use your security key** (enter PIN, touch).
+- **Every other backup, restore, and verify:** one **Use your security key** prompt.
 
-If all registered YubiKeys are lost and you have no recovery code, backups locked with them cannot be restored by anyone.
+If your YubiKey is lost or broken, restore with your recovery code, which RestoreSafe always creates with a YubiKey.
 
 ## Development setup
 

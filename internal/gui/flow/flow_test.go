@@ -27,7 +27,6 @@ type fakeDialogs struct {
 	confirmStart bool
 	codes        [][]byte
 	codeOK       bool
-	spareOK      bool
 }
 
 func (f *fakeDialogs) BackupPlan(p interact.BackupPlan, answer func()) {
@@ -57,7 +56,6 @@ func (f *fakeDialogs) RecoveryCode(code []byte, answer func(bool)) {
 	f.codes = append(f.codes, code)
 	answer(f.codeOK)
 }
-func (f *fakeDialogs) SpareYubiKey(_ interact.SpareQuestion, answer func(bool)) { answer(f.spareOK) }
 func (f *fakeDialogs) Password(q interact.SecretQuestion, answer func([]byte, error)) {
 	f.questions = append(f.questions, q)
 	answer(f.password(q))
@@ -169,23 +167,17 @@ func TestUIRestoreAndVerifyReachTheDialogs(t *testing.T) {
 	}
 }
 
-func TestUIRecoveryCodeAndSpareYubiKeyAnswers(t *testing.T) {
+func TestUIRecoveryCodeAnswers(t *testing.T) {
 	t.Parallel()
-	d := &fakeDialogs{codeOK: true, spareOK: true}
+	d := &fakeDialogs{codeOK: true}
 	u := newTestUI(t, d)
 	if err := u.ShowRecoveryCode([]byte("CODE")); err != nil || len(d.codes) != 1 || string(d.codes[0]) != "CODE" {
 		t.Fatalf("shown code: %v, %q", err, d.codes)
 	}
-	if ok, err := u.WaitForSpareYubiKey(interact.SpareQuestion{}); !ok || err != nil {
-		t.Fatalf("spare YubiKey connected: %v, %v", ok, err)
-	}
 
-	d.codeOK, d.spareOK = false, false
+	d.codeOK = false
 	if err := u.ShowRecoveryCode([]byte("CODE")); !errors.Is(err, interact.ErrCancelled) {
 		t.Fatalf("closing the code without confirming cancels, got %v", err)
-	}
-	if ok, err := u.WaitForSpareYubiKey(interact.SpareQuestion{}); ok || err != nil {
-		t.Fatalf("spare YubiKey declined: %v, %v", ok, err)
 	}
 }
 
@@ -245,9 +237,6 @@ func TestUICancelAnswersQuestions(t *testing.T) {
 	}
 	if _, err := u.Password(interact.SecretQuestion{Action: "backup"}); !errors.Is(err, interact.ErrCancelled) {
 		t.Fatalf("password after cancel: %v", err)
-	}
-	if ok, _ := u.WaitForSpareYubiKey(interact.SpareQuestion{}); ok {
-		t.Fatal("spare YubiKey after cancel")
 	}
 }
 

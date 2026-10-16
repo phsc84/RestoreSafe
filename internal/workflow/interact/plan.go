@@ -73,9 +73,9 @@ type KeyPlan struct {
 	Summary string
 	// Password is set when a password is asked (twice for new keys).
 	Password bool
-	// YubiKeys counts the YubiKeys to touch (existing keys) or to register
-	// (new keys).
-	YubiKeys int
+	// YubiKey is set when the YubiKey is touched (existing keys) or
+	// registered (new keys).
+	YubiKey bool
 	// RecoveryCode is set when new keys come with a recovery code to write
 	// down.
 	RecoveryCode bool

@@ -24,7 +24,6 @@ func keySet(mode config.AuthMode, slots ...string) *container.KeySet {
 func TestKeySetMismatchNamesTheChangedSetting(t *testing.T) {
 	t.Parallel()
 
-	twoKeys := keySet(config.AuthModePasswordYubiKey, container.SlotPasswordYubiKey, container.SlotPasswordYubiKey)
 	for _, tc := range []struct {
 		cfg  config.Config
 		ks   *container.KeySet
@@ -32,8 +31,8 @@ func TestKeySetMismatchNamesTheChangedSetting(t *testing.T) {
 	}{
 		{config.Config{AuthenticationMode: config.AuthModePassword}, keySet(config.AuthModePassword, container.SlotPassword), ""},
 		{config.Config{AuthenticationMode: config.AuthModeYubiKey}, keySet(config.AuthModePassword, container.SlotPassword), "authentication_mode changed"},
-		{config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, YubiKeySpare: true}, keySet(config.AuthModePasswordYubiKey, container.SlotPasswordYubiKey), "yubikey_spare enabled"},
-		{config.Config{AuthenticationMode: config.AuthModePasswordYubiKey}, twoKeys, "yubikey_spare disabled"},
+		// With a YubiKey, recovery_code is not compared: new keys always get a code.
+		{config.Config{AuthenticationMode: config.AuthModePasswordYubiKey}, keySet(config.AuthModePasswordYubiKey, container.SlotPasswordYubiKey, container.SlotRecovery), ""},
 		{config.Config{AuthenticationMode: config.AuthModePassword, RecoveryCode: true}, keySet(config.AuthModePassword, container.SlotPassword), "recovery_code enabled"},
 		{config.Config{AuthenticationMode: config.AuthModePassword}, keySet(config.AuthModePassword, container.SlotPassword, container.SlotRecovery), "recovery_code disabled"},
 	} {

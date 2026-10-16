@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1 and 2 done, phase 3 next |
+| Status | Agreed 2026-10-15; phases 1, 2 and 2b done, phase 3 next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -37,7 +37,7 @@
 | YK-1 | Sidebar item at the bottom below a line; visibility from `authentication_mode` and `Keys.YubiKeyInBackups`; switch to Settings when it disappears; `Ctrl+4`; one tab stop | 3 (data), 4 (view), 5 (widget, app) |
 | YK-2 | Page order: title, Check again, hero, Checks, guide, details; own verdict, never changes 3.5 or the Create backup hero | 4, 5 |
 | YK-3 | Automatic checks: on show, Check again, F5, Reload, 500 ms after a device change; worker goroutine; stale results dropped; "Checking your YubiKey…" | 1 (`Diagnose`), 5 |
-| YK-4 | Checks card: Windows, Connected (usage page, product IDs, no model names), Your keys, spare line | 1, 4 |
+| YK-4 | Checks card: Windows, Connected (usage page, product IDs, firmware, no model names), Your keys | 1, 4 |
 | YK-5 | Test: Match over all YubiKey slots of the current key set, or Capability; secret zeroed after its length check | 1 (`ProbeCapability`), 3 (`keycheck`) |
 | YK-6 | During the test: "Follow the Windows Security prompt", actions disabled, one worker slot, not during an operation; result per session and when it is cleared | 4, 5 |
 | YK-7 | Results to hero variants; cancel hint; HRESULT in details | 3, 4 |
@@ -58,7 +58,7 @@
 | Fresh key without a PIN | After the reset that unblocks the PIN, register before setting a PIN | Phase 2 |
 | FIDO2 turned off | Turned off with Yubico Authenticator (run as administrator), then turned on again | Phase 2, optional |
 | `bcdDevice` versus firmware | `Diagnose` compared with the firmware Yubico Authenticator shows; one data point only | Phase 2 |
-| Spare answers, spare not tested, two keys connected | Not possible with one key | Fakes in `keycheck` and `view` tests only |
+| Two keys connected | Not possible with one key | Fakes in `yubikey` and `view` tests only |
 | FIDO-only Security Key (no `MI_xx`) | Not possible | Fakes in `yubikey` tests only |
 
 ## 5. Phases
@@ -92,14 +92,30 @@ Done 2026-10-16 with the owner's YubiKey 5 (firmware 5.7.4), which was reset on 
 
 Moved to phase 5: whether `DBT_DEVNODES_CHANGED` arrives when the key is plugged in (decision 5). It needs a window, which the hardware tests don't have.
 
+### Phase 2b: No spare YubiKey (owner's decision, 2026-10-16)
+
+The spare YubiKey goes completely, as if it had never existed. The owner is the only user with a YubiKey, so there is no migration, no reason for new keys and no compatibility text. The fallback for a lost YubiKey is the recovery code, which is always created in modes 2 and 3. Format 2 is unchanged; the reader is only stricter. The release stays 2.1.0.
+
+- [x] `yubikey`: `RegisterSpare`, `ErrAlreadyRegistered`, the exclude list and `NTE_EXISTS` go. `DeriveFIDO2SecretAny` becomes `DeriveFIDO2Secret(ChallengeData)` with one credential, and `answeringCredential` goes.
+- [x] `container`: exactly one YubiKey slot in modes 2 and 3; the shared-salt rule and `YubiKeyCount` go; the label is "YubiKey".
+- [x] `config`: `yubikey_spare` goes. New: a list of retired settings, reported with a generic message ("Config file has a setting that is no longer used: 'yubikey_spare' (line N)." Remedy: remove the line). A recovery code is always created in modes 2 and 3; `recovery_code` matters only in mode 1.
+- [x] `catalog`: new-keys reasons without the spare; `recovery_code` compared only in mode 1.
+- [x] `unlock`, `backup` (key creation, preflight), `interact` and `interacttest`, `gui/flow`, `gui` (questions), `gui/view` (credentials, create page, settings, strings), `health` (`SpareYubiKey`): everything about the spare goes. The texts say "your YubiKey", never "any of".
+- [x] Settings (ST-8) and config-SAMPLE.yaml: "With a YubiKey, a recovery code is always created, so a lost YubiKey doesn't lose your backups."
+- [x] Tests follow; the 2.0.0 format fixtures still pass (none has a spare). `container` and `unlock` got tests of their own to stay at their floors, and `stepTitle` went: with one numbered step, no dialog says "Step n of N" any more.
+- [x] Docs:
+  - SPEC-core: 1, 3 D4/D5, 4.4, 4.4.3, 6.1, 6.3, 12 and 15.
+  - SPEC-gui: decision 11, the credential dialogs, ST-8, and YK-4, YK-5, YK-7, YK-8 and figures 10.2 to 10.4 without the spare.
+  - README, GUIDE-gui-test (CR-1, CR-2), `scripts/ci/gui-smoke.ps1`, CHANGELOG.
+
 ### Phase 3: Data — `health` and `keycheck`
 
-- [ ] `health.KeysSummary.YubiKeySlots` (labels of the current key set's YubiKey slots, in slot order) and `YubiKeyInBackups` (any set's key set has a YubiKey slot). Tests in `health`; floor 95 holds.
+- [ ] `health.KeysSummary.YubiKey` (the current key set has a YubiKey slot) and `YubiKeyInBackups` (any set's key set has one). Tests in `health`; floor 95 holds.
 - [ ] New package `internal/workflow/keycheck`:
-  - `Run(ctx, ks *container.KeySet, now func() time.Time) Result`. Match when `ks` has YubiKey slots, with their challenges in slot order as unlock builds them; Capability otherwise.
-  - `Result{Kind, Slot, Time, Cancelled, HRESULT, Err, Trace}`.
+  - `Run(ctx, ks *container.KeySet, now func() time.Time) Result`. Match when `ks` has a YubiKey slot, with its challenge as unlock uses it; Capability otherwise.
+  - `Result{Kind, Time, Cancelled, HRESULT, Err, Trace}`.
   - `DebugOutput` set to a buffer for the duration and reset afterwards. The test uses the one worker slot (12.2).
-- [ ] `keycheck` calls `yubikey` through function variables, faked in its tests: Match and Capability, the slot label of the answering credential, cancel, the HRESULTs of phase 2, the secret zeroed in every path, the trace captured and `DebugOutput` reset, and no salt or credential ID in the trace or the `Result`.
+- [ ] `keycheck` calls `yubikey` through function variables, faked in its tests: Match and Capability, cancel, the HRESULTs of phase 2, the secret zeroed in every path, the trace captured and `DebugOutput` reset, and no salt or credential ID in the trace or the `Result`.
 - [ ] `keycheck` in the layer list of [internal/architecture/doc.go](../internal/architecture/doc.go) (workflow layer); the architecture test passes.
 - [ ] Coverage floor for `internal/workflow/keycheck` in [scripts/ci/test-coverage-floors.txt](../scripts/ci/test-coverage-floors.txt), at its measured value (target 90).
 
@@ -108,14 +124,14 @@ Moved to phase 5: whether `DBT_DEVNODES_CHANGED` arrives when the key is plugged
 - [ ] `view.Navigation` with the YubiKey item and its visibility (YK-1); the selection falls back to Settings when the item disappears.
 - [ ] `view.YubiKeyPage(snapshot, cfg, diagnosis, test, busy) YubiKeyPage`:
   - every hero variant of figure 10.4, including "Error: firmware too old" (firmware from `Key.Revision` below 5.2), and the cancel hero with both hints;
-  - the Checks lines, including "No FIDO2 function", and the spare line;
+  - the Checks lines, including "No FIDO2 function" and firmware below 5.2;
   - the test button: shown when, and enabled when;
   - guide expanded or collapsed (also after a cancel);
   - the technical details text, with the RestoreSafe and Windows versions passed in.
 - [ ] Every text in `view/strings.go` (3.6), with the time in the existing format ("tested today, 08:52").
 - [ ] "Check your YubiKey" on the Keys card of `view.CreatePage` and on Keys and unlocking of `view.Settings`, while the item is visible (YK-10).
 - [ ] YK-8 in SPEC-gui gets the target of Open Windows Update… (decision 6).
-- [ ] Tests (the spec's row "YubiKey view"): visibility for each `authentication_mode` with and without YubiKey sets, every hero variant, the Checks and spare lines, guide expansion, actions disabled during a test or an operation, and details free of secret, salt and credential ID (checked against the fakes' values). Clearing on device change, Reload and new keys is tested in phase 5 if it lives in `gui`, or here if it fits into a `view` helper. Floor 91 holds.
+- [ ] Tests (the spec's row "YubiKey view"): visibility for each `authentication_mode` with and without YubiKey sets, every hero variant, the Checks lines, guide expansion, actions disabled during a test or an operation, and details free of secret, salt and credential ID (checked against the fakes' values). Clearing on device change, Reload and new keys is tested in phase 5 if it lives in `gui`, or here if it fits into a `view` helper. Floor 91 holds.
 
 ### Phase 5: Window — `gui/widget`, `gui/win32`, `gui`
 

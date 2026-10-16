@@ -193,11 +193,8 @@ func unlockText(k interact.KeyPlan) string {
 		if k.Password {
 			steps = append(steps, unlockNewPassword)
 		}
-		switch k.YubiKeys {
-		case 1:
+		if k.YubiKey {
 			steps = append(steps, unlockRegisterOne)
-		case 2:
-			steps = append(steps, unlockRegisterTwo)
 		}
 		if k.RecoveryCode {
 			steps = append(steps, unlockRecoveryCode)
@@ -205,9 +202,9 @@ func unlockText(k interact.KeyPlan) string {
 		return capitalize(strings.Join(steps, ", "))
 	}
 	switch {
-	case k.Password && k.YubiKeys > 0:
+	case k.Password && k.YubiKey:
 		return unlockTouchAndPassword
-	case k.YubiKeys > 0:
+	case k.YubiKey:
 		return unlockTouch
 	}
 	return unlockPassword
@@ -355,7 +352,7 @@ func NewKeysConfirm(cfg *config.Config) Confirm {
 	if cfg.UseYubiKey() {
 		locks = append(locks, lockYubiKey)
 	}
-	if cfg.RecoveryCode {
+	if cfg.CreatesRecoveryCode() {
 		locks = append(locks, lockRecoveryCode)
 	}
 	return Confirm{

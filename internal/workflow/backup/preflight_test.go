@@ -553,15 +553,19 @@ func TestKeyPlanForSaysWhichKeysLockTheBackups(t *testing.T) {
 	t.Parallel()
 
 	existing := &container.KeySet{AuthMode: config.AuthModePasswordYubiKey, CreatedUTC: "2026-03-14T09:00:00Z"}
-	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: existing}); kp.New || !kp.Password || kp.YubiKeys != 1 {
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: existing}); kp.New || !kp.Password || !kp.YubiKey {
 		t.Fatalf("existing password and YubiKey keys: %+v", kp)
 	}
 	yubiOnly := &container.KeySet{AuthMode: config.AuthModeYubiKey}
-	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: yubiOnly}); kp.Password || kp.YubiKeys != 1 {
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: yubiOnly}); kp.Password || !kp.YubiKey {
 		t.Fatalf("existing YubiKey-only keys: %+v", kp)
 	}
-	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey, YubiKeySpare: true, RecoveryCode: true}
-	if kp := keyPlanFor(cfg, plan.Keys{NewKeysReason: "recovery_code enabled"}); !kp.New || kp.NewKeysReason != "recovery_code enabled" || !kp.Password || kp.YubiKeys != 2 || !kp.RecoveryCode {
-		t.Fatalf("new keys with a spare YubiKey and a recovery code: %+v", kp)
+	// With a YubiKey, new keys always get a recovery code.
+	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey}
+	if kp := keyPlanFor(cfg, plan.Keys{NewKeysReason: "authentication_mode changed"}); !kp.New || kp.NewKeysReason != "authentication_mode changed" || !kp.Password || !kp.YubiKey || !kp.RecoveryCode {
+		t.Fatalf("new keys with a YubiKey: %+v", kp)
+	}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{}); kp.YubiKey || kp.RecoveryCode {
+		t.Fatalf("new password keys without recovery_code: %+v", kp)
 	}
 }

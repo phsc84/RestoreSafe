@@ -108,7 +108,7 @@ func TestSnapshotDescribesTheBackups(t *testing.T) {
 		t.Fatalf("unexpected storage: %+v", st)
 	}
 	k := s.Keys
-	if !k.Exists || k.Methods == "" || k.Created.IsZero() || k.SpareYubiKey || k.RecoveryCode || k.YubiKeyConnected != nil || k.NewKeysReason != "" {
+	if !k.Exists || k.Methods == "" || k.Created.IsZero() || k.RecoveryCode || k.YubiKeyConnected != nil || k.NewKeysReason != "" {
 		t.Fatalf("unexpected keys: %+v", k)
 	}
 	if len(s.Retention) != 0 || s.Check.BlocksBackup() || !s.Checked.Equal(sc.Now) {

@@ -94,7 +94,7 @@ func TestBackupPlanDescribesTheRun(t *testing.T) {
 	if folder.AllBytes != auto.AllBytes || auto.NeededBytes > auto.AllBytes || auto.FreeBytes <= 0 {
 		t.Fatalf("unexpected sizes: %+v", auto)
 	}
-	if auto.Keys.New || auto.Keys.Summary == "" || !auto.Keys.Password || auto.Keys.YubiKeys != 0 {
+	if auto.Keys.New || auto.Keys.Summary == "" || !auto.Keys.Password || auto.Keys.YubiKey {
 		t.Fatalf("unexpected key plan: %+v", auto.Keys)
 	}
 	if !auto.VerifyAfter || len(auto.Removes) != 0 || auto.HasErrors() || auto.Details.Title != "Backup preflight" {

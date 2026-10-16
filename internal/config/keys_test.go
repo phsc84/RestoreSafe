@@ -24,12 +24,25 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 		{"argon2:\n  memroy_mb: 1024\n", "'argon2.memroy_mb' (line 5)"},
 		{"differential:\n  enabled: true\n  interval: 3\n", "'differential.interval' (line 6)"},
 		{"foo: 1\nbar: 2\n", "unknown settings: 'foo' (line 4), 'bar' (line 5)"},
-		// Removed in 2.0: log_level "debug" includes the I/O diagnostics.
-		{"io_diagnostics: false\n", "'io_diagnostics' (line 4)"},
 	} {
 		_, err := loadConfigText(t, tc.extra)
-		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "\nRemedy: ") {
+		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "\nRemedy: Check the spelling") {
 			t.Errorf("%q: got %v, want an error with %s", tc.extra, err, tc.want)
+		}
+	}
+}
+
+func TestLoadNamesRetiredKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ extra, want, remedy string }{
+		{"yubikey_spare: false\n", "a setting that is no longer used: 'yubikey_spare' (line 4).", "Remove the line"},
+		{"io_diagnostics: false\nyubikey_spare: true\n", "settings that are no longer used: 'io_diagnostics' (line 4), 'yubikey_spare' (line 5).", "Remove the line"},
+		{"yubikey_spare: true\nfoo: 1\n", "an unknown setting: 'foo' (line 5). Config file has a setting that is no longer used: 'yubikey_spare' (line 4).", "Check the spelling"},
+	} {
+		_, err := loadConfigText(t, tc.extra)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "\nRemedy: "+tc.remedy) {
+			t.Errorf("%q: got %v, want %s", tc.extra, err, tc.want)
 		}
 	}
 }
@@ -112,7 +125,7 @@ func TestMissingKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{"split_size_mb", "retention_keep", "differential", "exclude", "on_unreadable_file", "log_level",
-		"verify_after_backup", "reminder_days", "authentication_mode", "yubikey_spare",
+		"verify_after_backup", "reminder_days", "authentication_mode",
 		"recovery_code", "password_min_length", "argon2"}
 	if !slices.Equal(cfg.MissingKeys, want) {
 		t.Fatalf("minimal file: missing %v, want %v", cfg.MissingKeys, want)

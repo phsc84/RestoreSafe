@@ -89,10 +89,9 @@ func TestHWMatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	index, secret, err := DeriveFIDO2SecretAny([]ChallengeData{cd})
+	secret, err := DeriveFIDO2Secret(cd)
 	clear(secret)
 	logResult(t, "assertion", err)
-	t.Logf("answering index %d", index)
 }
 
 // TestHWUnknownCredential asks for the secret of a credential no YubiKey
@@ -109,7 +108,7 @@ func TestHWUnknownCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	cd := ChallengeData{CredID: base64.StdEncoding.EncodeToString(credID), Salt: base64.StdEncoding.EncodeToString(salt)}
-	_, secret, err := DeriveFIDO2SecretAny([]ChallengeData{cd})
+	secret, err := DeriveFIDO2Secret(cd)
 	clear(secret)
 	logResult(t, "assertion with an unknown credential", err)
 }

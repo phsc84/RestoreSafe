@@ -71,8 +71,3 @@ type NewPasswordQuestion struct {
 	MinLength int
 	Attempt
 }
-
-// SpareQuestion asks to connect the spare YubiKey for its registration.
-type SpareQuestion struct {
-	Attempt
-}

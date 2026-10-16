@@ -88,7 +88,6 @@ type Config struct {
 	VerifyAfterBackup  bool         `yaml:"verify_after_backup"`
 	ReminderDays       *int         `yaml:"reminder_days"`
 	AuthenticationMode AuthMode     `yaml:"authentication_mode"`
-	YubiKeySpare       bool         `yaml:"yubikey_spare"`
 	RecoveryCode       bool         `yaml:"recovery_code"`
 	PasswordMinLength  int          `yaml:"password_min_length"`
 	Exclude            []string     `yaml:"exclude"`
@@ -131,6 +130,13 @@ func (c *Config) ReminderLimit() int {
 // UseYubiKey reports whether the configured authentication mode requires a YubiKey.
 func (c *Config) UseYubiKey() bool {
 	return c.AuthenticationMode.UsesYubiKey()
+}
+
+// CreatesRecoveryCode reports whether new keys get a recovery code: when
+// recovery_code asks for one, and always with a YubiKey, so that a lost
+// YubiKey doesn't lose the backups.
+func (c *Config) CreatesRecoveryCode() bool {
+	return c.RecoveryCode || c.UseYubiKey()
 }
 
 // IsYubiKeyOnly reports whether authentication relies solely on the YubiKey (no password).
@@ -302,9 +308,6 @@ func (c *Config) validate() error {
 	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:
 	default:
 		return problem.Errorf("Invalid 'authentication_mode': %d (allowed: 1 = password only, 2 = password + YubiKey, 3 = YubiKey only).", c.AuthenticationMode).WithRemedy("Set 'authentication_mode' to 1, 2, or 3.")
-	}
-	if c.YubiKeySpare && !c.UseYubiKey() {
-		return problem.New("'yubikey_spare: true' requires a YubiKey mode.").WithRemedy("Set 'authentication_mode' to 2 or 3, or set 'yubikey_spare' to false.")
 	}
 	switch c.OnUnreadableFile {
 	case OnUnreadableFail, OnUnreadableSkip:

@@ -129,8 +129,3 @@ func (q questions) newKeys() interact.KeyPlan {
 func (q questions) RecoveryCode(code []byte, answer func(bool)) {
 	answer(q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys())).ok)
 }
-
-// SpareYubiKey asks to connect the spare YubiKey.
-func (q questions) SpareYubiKey(qu interact.SpareQuestion, answer func(bool)) {
-	answer(q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys())).ok)
-}

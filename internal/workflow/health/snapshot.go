@@ -87,7 +87,6 @@ type KeysSummary struct {
 	Exists       bool
 	Created      time.Time
 	Methods      string
-	SpareYubiKey bool
 	RecoveryCode bool
 	// YubiKeyConnected is nil when the configuration uses no YubiKey.
 	YubiKeyConnected *bool
@@ -311,7 +310,6 @@ func keysSummary(cfg *config.Config, infos []catalog.SetInfo, keys plan.Keys, co
 	k.Exists = true
 	k.Created = ks.Created()
 	k.Methods = ks.AuthMode.Label()
-	k.SpareYubiKey = ks.YubiKeyCount() > 1
 	k.RecoveryCode = ks.HasSlotType(container.SlotRecovery)
 	if keys.Existing == nil {
 		k.NewKeysReason = keys.NewKeysReason
