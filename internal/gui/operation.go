@@ -58,7 +58,8 @@ type opRequest struct {
 // started it, and shows its progress on Restore backup too.
 func (a *app) startOperation(req opRequest) {
 	op := req.op
-	if !a.machine.Start(op) {
+	// The YubiKey test holds the one worker slot (GUI spec YK-6).
+	if a.yk.testing || !a.machine.Start(op) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())

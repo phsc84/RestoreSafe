@@ -107,7 +107,7 @@ type restoreDialog struct {
 
 // openRestore opens the Restore backup window on the run runID with sets checked.
 func (a *app) openRestore(runID naming.BackupID, sets []naming.BackupEntry) {
-	if a.restore != nil || a.snapshot == nil || a.machine.Busy() {
+	if a.restore != nil || a.snapshot == nil || a.machine.Busy() || a.yk.testing {
 		return
 	}
 	win, err := newDialogWindow(a.theme, a.hwnd, restoreClass, view.RestoreTitle)

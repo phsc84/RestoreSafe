@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -44,16 +45,19 @@ type fake struct {
 	asked   []yubikey.ChallengeData
 	probes  int
 	failure error
+	// debug is the debug output the test set; nil after the test.
+	debug io.Writer
 }
 
 func stub(t *testing.T, failure error) *fake {
 	t.Helper()
 	f := &fake{failure: failure}
-	prevDerive, prevProbe := deriveSecretFn, probeFn
-	t.Cleanup(func() { deriveSecretFn, probeFn = prevDerive, prevProbe })
+	prevDerive, prevProbe, prevDebug := deriveSecretFn, probeFn, setDebugFn
+	t.Cleanup(func() { deriveSecretFn, probeFn, setDebugFn = prevDerive, prevProbe, prevDebug })
+	setDebugFn = func(w io.Writer) { f.debug = w }
 	deriveSecretFn = func(cd yubikey.ChallengeData) ([]byte, error) {
 		f.asked = append(f.asked, cd)
-		fmt.Fprintln(yubikey.DebugOutput, "[fido2-debug] hmac-secret output length: 32 bytes")
+		fmt.Fprintln(f.debug, "[fido2-debug] hmac-secret output length: 32 bytes")
 		if f.failure != nil {
 			return nil, f.failure
 		}
@@ -62,7 +66,7 @@ func stub(t *testing.T, failure error) *fake {
 	}
 	probeFn = func() error {
 		f.probes++
-		fmt.Fprintln(yubikey.DebugOutput, "[fido2-debug] credential ID length: 64 bytes")
+		fmt.Fprintln(f.debug, "[fido2-debug] credential ID length: 64 bytes")
 		return f.failure
 	}
 	return f
@@ -84,8 +88,8 @@ func TestMatchAsksForTheSecretOfTheCurrentKeys(t *testing.T) {
 		if !strings.Contains(r.Trace, "hmac-secret output length") {
 			t.Fatalf("mode %d: trace %q", mode, r.Trace)
 		}
-		if yubikey.DebugOutput != nil {
-			t.Fatal("DebugOutput must be reset after the test")
+		if f.debug != nil {
+			t.Fatal("the debug output must be reset after the test")
 		}
 	}
 }
@@ -102,7 +106,7 @@ func TestCapabilityWithoutYubiKeyKeys(t *testing.T) {
 		if r.Kind != Capability || !r.Passed() || f.probes != 1 || len(f.asked) != 0 {
 			t.Fatalf("%s: %+v, probes %d", name, r, f.probes)
 		}
-		if !strings.Contains(r.Trace, "credential ID length") || yubikey.DebugOutput != nil {
+		if !strings.Contains(r.Trace, "credential ID length") || f.debug != nil {
 			t.Fatalf("%s: trace %q", name, r.Trace)
 		}
 	}
@@ -125,13 +129,13 @@ func TestFailuresKeepTheirHRESULT(t *testing.T) {
 		{"cancelled capability", nil, wrap(0x80090036), Capability, true, 0x80090036},
 		{"error without a code", nil, errors.New("no FIDO2 authenticator detected"), Capability, false, 0},
 	} {
-		stub(t, tc.err)
+		f := stub(t, tc.err)
 		r := Run(tc.ks, now)
 		if r.Passed() || r.Kind != tc.kind || r.Cancelled != tc.cancelled || r.HRESULT != tc.hresult || !errors.Is(r.Err, tc.err) {
 			t.Errorf("%s: %+v", tc.name, r)
 		}
-		if yubikey.DebugOutput != nil {
-			t.Fatalf("%s: DebugOutput must be reset after a failed test", tc.name)
+		if f.debug != nil {
+			t.Fatalf("%s: the debug output must be reset after a failed test", tc.name)
 		}
 	}
 }

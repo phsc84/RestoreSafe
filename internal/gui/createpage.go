@@ -281,6 +281,9 @@ func (o *createPage) fillKeys() {
 	if v.Methods == "" && v.YubiKey != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), fill: true})
 	}
+	if v.Link != nil {
+		c.row(cardRowHeight, cell{hwnd: c.acts.link(c.panel, *v.Link, c.linkID), px: measure(t, v.Link.Text, widget.TextSmall) + t.Scale.Px(linkPadding)})
+	}
 }
 
 // restyle applies new fonts after a DPI change.

@@ -25,7 +25,7 @@ func (a *app) reload() { a.reloadWith(false) }
 func (a *app) addMissing() { a.reloadWith(true) }
 
 func (a *app) reloadWith(add bool) {
-	if a.reloading || a.machine.Busy() {
+	if a.reloading || a.machine.Busy() || a.yk.testing {
 		return
 	}
 	a.reloading = true
@@ -80,5 +80,11 @@ func (a *app) useConfig(cfg *config.Config) {
 	a.deferredConfig = nil
 	a.recheck = a.checking
 	a.startCheck()
+	// The YubiKey is checked again too; a test result may be of other keys
+	// (GUI spec YK-3, YK-6).
+	a.clearYubiKeyTest()
+	if a.yubiKeyVisible() {
+		a.diagnoseYubiKey()
+	}
 	a.refreshShell()
 }

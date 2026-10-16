@@ -25,9 +25,9 @@ import (
 // without a parent window (NTE_INVALID_PARAMETER).
 func prepare(t *testing.T) {
 	t.Helper()
-	DebugOutput = os.Stdout
+	SetDebugOutput(os.Stdout)
 	SetParentWindow(uintptr(windows.GetForegroundWindow()))
-	t.Cleanup(func() { DebugOutput = nil; SetParentWindow(0) })
+	t.Cleanup(func() { SetDebugOutput(nil); SetParentWindow(0) })
 }
 
 // logResult prints an error with its HRESULT, if it has one.

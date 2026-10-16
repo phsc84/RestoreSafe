@@ -13,6 +13,7 @@ const (
 	idSettingsOpen
 	idSettingsMore
 	idSettingsAdd
+	idSettingsYubiKey
 )
 
 // Sizes of the Settings page, in DIPs.
@@ -160,6 +161,10 @@ func (sp *settingsPage) fillCard(c *card, v view.SettingsCard) {
 	}
 	if v.Note != "" {
 		sp.para(c, v.Note, widget.TextSmall, toneColor(pal, v.NoteTone))
+	}
+	if v.Link != nil {
+		w, _ := t.Fonts.Measure(v.Link.Text, widget.TextSmall)
+		c.row(cardRowHeight, cell{hwnd: c.acts.link(c.panel, *v.Link, idSettingsYubiKey), px: w + t.Scale.Px(linkPadding)})
 	}
 }
 

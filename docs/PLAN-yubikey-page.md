@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1 to 4 done, phase 5 next |
+| Status | Agreed 2026-10-15; phases 1 to 4 done; phase 5 waits for the check with the real key and the GUI smoke test |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -135,18 +135,19 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 
 ### Phase 5: Window — `gui/widget`, `gui/win32`, `gui`
 
-- [ ] `widget.Sidebar`: hidden items, a bottom group anchored to the bottom edge below a line; arrow keys skip hidden items; UI Automation names and selection state as before.
+- [x] `widget.Sidebar`: hidden items, a bottom group anchored to the bottom edge below a line; arrow keys skip hidden items; UI Automation names and selection state as before.
 - [ ] `win32`: `WM_DEVICECHANGE` and `DBT_DEVNODES_CHANGED`, and the `ShellExecute` helpers if not already there. Check with the real key that the message arrives when the key is plugged in and pulled out (moved from phase 2); if it doesn't, use `RegisterDeviceNotification` (decision 5). `ms-settings:` and `https:` links go through the existing `ShellExecute` wrapper.
-- [ ] `gui/yubikeypage.go`: the page from `view.YubiKeyPage`. Hero, Checks card and guide card are drawn like the other cards (decision 7 of the GUI redesign: text in standard controls). Technical details is a read-only rich edit in Consolas, with **Copy details** through `win32.CopyText`.
-- [ ] App:
+- [x] `gui/yubikeypage.go`: the page from `view.YubiKeyPage`. Hero, Checks card and guide card are drawn like the other cards (decision 7 of the GUI redesign: text in standard controls). Technical details is a read-only rich edit in Consolas, with **Copy details** through `win32.CopyText`.
+- [x] App (`gui/yubikey.go`):
   - `Ctrl+4`;
   - F5 on this page runs `Diagnose` besides the health check;
   - the debounce timer, and `Diagnose` on a worker goroutine with a request number so stale results are dropped (YK-3);
-  - the test on the worker slot, with operations and Check again disabled meanwhile (YK-6), and "Follow the Windows Security prompt";
+  - the test on a worker goroutine in place of an operation: no operation, restore or reload starts while it runs, and it doesn't start while one runs (YK-6); "Follow the Windows Security prompt";
   - result kept and cleared (decision 8);
   - visibility recomputed after each snapshot and Reload.
-- [ ] The links of YK-10 select the page.
+- [x] The links of YK-10 select the page.
 - [ ] The GUI smoke test (`scripts/ci/gui-smoke.ps1`) still passes. If the item is visible in its configuration, it opens the page once; the page must render without a YubiKey.
+- [x] Found while wiring the test: the health check can log WebAuthn details while the test collects its trace. `yubikey.DebugOutput` became `SetDebugOutput`, which serializes the writes; `keycheck` reads the trace only after switching it off.
 
 ### Phase 6: Manual test, docs, release notes
 

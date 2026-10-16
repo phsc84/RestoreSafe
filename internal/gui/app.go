@@ -107,6 +107,8 @@ type app struct {
 
 	// The shell of the new interface.
 	shell shell
+	// yk is the state of the YubiKey page.
+	yk yubiKeyState
 
 	// The message font and a monospaced font for the viewers, and the base
 	// font of their RTF.
@@ -310,6 +312,7 @@ func (a *app) snapshotDone() {
 	first := a.snapshot == nil
 	a.snapshot = s
 	a.checking = false
+	a.keysChecked()
 	if a.recheck {
 		a.recheck = false
 		a.startCheck()
@@ -401,6 +404,22 @@ func (a *app) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 	case msgReloaded:
 		a.reloadDone()
 		return 0
+	case msgYubiKeyDiagnosed:
+		a.yubiKeyDiagnosed()
+		return 0
+	case msgYubiKeyTested:
+		a.yubiKeyTested()
+		return 0
+	case win32.WM_DEVICECHANGE:
+		if wparam == win32.DBT_DEVNODES_CHANGED {
+			a.deviceChanged()
+		}
+		return 1
+	case win32.WM_TIMER:
+		if wparam == yubiKeyTimerID {
+			a.devicesSettled()
+			return 0
+		}
 	case msgDestChecked:
 		a.mu.Lock()
 		c := a.pendingDest

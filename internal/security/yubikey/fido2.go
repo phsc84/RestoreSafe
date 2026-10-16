@@ -13,18 +13,34 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/phsc84/restoresafe/internal/problem"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 )
 
-// DebugOutput receives details of the WebAuthn calls; nil (the default) turns
+// debugOutput receives details of the WebAuthn calls; nil (the default)
+// turns them off. The mutex serializes the writes: the health check may log
+// while the YubiKey test collects its trace.
+var debugOutput struct {
+	sync.Mutex
+	w io.Writer
+}
+
+// SetDebugOutput sets where details of the WebAuthn calls go; nil turns
 // them off. Only the YubiKey test sets it, for the duration of the test.
-var DebugOutput io.Writer
+// No write reaches w after SetDebugOutput has returned with another writer.
+func SetDebugOutput(w io.Writer) {
+	debugOutput.Lock()
+	debugOutput.w = w
+	debugOutput.Unlock()
+}
 
 func fido2Log(format string, args ...any) {
-	if DebugOutput != nil {
-		fmt.Fprintf(DebugOutput, "[fido2-debug] "+format+"\n", args...)
+	debugOutput.Lock()
+	defer debugOutput.Unlock()
+	if debugOutput.w != nil {
+		fmt.Fprintf(debugOutput.w, "[fido2-debug] "+format+"\n", args...)
 	}
 }
 

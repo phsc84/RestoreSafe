@@ -15,16 +15,17 @@ type shell struct {
 	create   *createPage
 	restore  *restorePage
 	settings *settingsPage
+	yubiKey  *yubiKeyPage
 }
 
 // sidebarGlyphs are the icons of the pages, in the order of view.Navigation.
-var sidebarGlyphs = []widget.Glyph{widget.GlyphArchive, widget.GlyphHistory, widget.GlyphSettings}
+var sidebarGlyphs = []widget.Glyph{widget.GlyphArchive, widget.GlyphHistory, widget.GlyphSettings, widget.GlyphKey}
 
 func (a *app) createShell() error {
 	t := a.theme
 	var items []widget.SidebarItem
 	for i, name := range view.Navigation() {
-		items = append(items, widget.SidebarItem{Glyph: sidebarGlyphs[i], Text: name})
+		items = append(items, widget.SidebarItem{Glyph: sidebarGlyphs[i], Text: name, Bottom: i == view.PageYubiKey})
 	}
 	sidebar, err := widget.NewSidebar(t, a.hwnd, idSidebar, items)
 	if err != nil {
@@ -48,23 +49,43 @@ func (a *app) createShell() error {
 	if a.shell.settings, err = newSettingsPage(a); err != nil {
 		return err
 	}
+	if a.shell.yubiKey, err = newYubiKeyPage(a); err != nil {
+		return err
+	}
 	a.refreshShell()
 	return nil
 }
 
 // pagePanels returns the panels of the navigation's pages, in order.
 func (a *app) pagePanels() []*widget.Panel {
-	return []*widget.Panel{a.shell.create.panel, a.shell.restore.panel, a.shell.settings.panel}
+	return []*widget.Panel{a.shell.create.panel, a.shell.restore.panel, a.shell.settings.panel, a.shell.yubiKey.panel}
 }
 
-// showPage shows a page of the navigation.
+// showPage shows a page of the navigation. The YubiKey page checks the
+// YubiKey each time it is shown (GUI spec YK-3).
 func (a *app) showPage(page int) {
+	if page == view.PageYubiKey && !a.yubiKeyVisible() {
+		return
+	}
 	a.page = page
 	for i, p := range a.pagePanels() {
 		p.Show(i == page)
 	}
 	a.shell.sidebar.Select(page)
 	a.layout()
+	if page == view.PageYubiKey {
+		a.diagnoseYubiKey()
+	}
+}
+
+// showYubiKeyItem shows the YubiKey item while YubiKeys are in use; when it
+// goes while its page is shown, Settings takes its place (YK-1).
+func (a *app) showYubiKeyItem() {
+	visible := a.yubiKeyVisible()
+	if !visible && a.page == view.PageYubiKey {
+		a.showPage(view.PageSettings)
+	}
+	a.shell.sidebar.SetHidden(view.PageYubiKey, !visible)
 }
 
 // layoutShell places the sidebar, the status bar and the shown page.
@@ -79,6 +100,7 @@ func (a *app) layoutShell(client win32.Rect) {
 	a.shell.create.layout()
 	a.shell.restore.layout()
 	a.shell.settings.layout()
+	a.shell.yubiKey.layout()
 	for i, p := range a.pagePanels() {
 		if i == a.page {
 			win32.RedrawAll(p.HWND())
@@ -94,6 +116,8 @@ func (a *app) refreshShell() {
 	a.shell.create.update()
 	a.shell.restore.update()
 	a.shell.settings.update()
+	a.shell.yubiKey.update()
+	a.showYubiKeyItem()
 	a.layout()
 }
 
@@ -105,6 +129,7 @@ func (a *app) restyleShell() {
 	a.shell.restore.restyle()
 	a.shell.restore.update()
 	a.shell.settings.restyle()
+	a.shell.yubiKey.restyle()
 }
 
 // shortcut handles the keyboard shortcuts of GUI spec 3.2; it reports whether
@@ -115,8 +140,8 @@ func (a *app) shortcut(vk uintptr) bool {
 	}
 	ctrl := win32.KeyDown(win32.VK_CONTROL)
 	switch {
-	case ctrl && vk >= '1' && vk <= '3':
-		a.showPage(int(vk - '1'))
+	case ctrl && vk >= '1' && vk <= '4':
+		a.showPage(int(vk - '1')) // the YubiKey page only while it is visible
 	case ctrl && vk == 'B':
 		a.do(view.ActionBackUp)
 	case vk == win32.VK_F5:
@@ -151,6 +176,22 @@ func (a *app) do(action view.Action) {
 		}
 	case view.ActionCheckAgain:
 		a.reload() // re-reads config.yaml, then checks again
+		if a.page == view.PageYubiKey {
+			a.diagnoseYubiKey()
+		}
+	case view.ActionOpenYubiKeyPage:
+		a.showPage(view.PageYubiKey)
+		a.focusPage()
+	case view.ActionTestYubiKey:
+		a.testYubiKey()
+	case view.ActionOpenSignInSettings:
+		a.open(view.SignInSettingsURI, false)
+	case view.ActionOpenWindowsUpdate:
+		a.open(view.WindowsUpdateURI, false)
+	case view.ActionGetAuthenticator:
+		a.open(view.YubicoAuthenticatorURL, false)
+	case view.ActionCopyDetails:
+		a.copyYubiKeyDetails()
 	case view.ActionShowInBackups:
 		a.showPage(view.PageRestore)
 	case view.ActionOpenSettings:
@@ -181,6 +222,8 @@ func (a *app) focusPage() {
 		a.shell.create.focus()
 	case view.PageRestore:
 		a.shell.restore.focus()
+	case view.PageYubiKey:
+		a.shell.yubiKey.focus()
 	default:
 		win32.SetFocus(a.shell.sidebar.HWND())
 	}
@@ -219,7 +262,7 @@ func (a *app) paletteChanged() {
 		return
 	}
 	a.theme.Palette = p
-	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.create.panel.HWND(), a.shell.restore.panel.HWND(), a.shell.settings.panel.HWND()} {
+	for _, h := range []win32.HWND{a.shell.sidebar.HWND(), a.shell.status.HWND(), a.shell.create.panel.HWND(), a.shell.restore.panel.HWND(), a.shell.settings.panel.HWND(), a.shell.yubiKey.panel.HWND()} {
 		win32.DestroyWindow(h)
 	}
 	a.shell = shell{}

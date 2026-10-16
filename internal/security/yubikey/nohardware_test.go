@@ -25,19 +25,35 @@ func TestAllowListPointsAtTheCredential(t *testing.T) {
 	}
 }
 
-// Not parallel: DebugOutput is a package variable.
+// Not parallel: the debug output is package state.
 func TestFido2LogWritesOnlyWithDebugOutput(t *testing.T) {
-	prev := DebugOutput
-	t.Cleanup(func() { DebugOutput = prev })
+	t.Cleanup(func() { SetDebugOutput(nil) })
 
-	DebugOutput = nil
+	SetDebugOutput(nil)
 	fido2Log("silent %d", 1)
 
 	var buf bytes.Buffer
-	DebugOutput = &buf
+	SetDebugOutput(&buf)
 	fido2Log("API version: %d", 7)
 	if buf.String() != "[fido2-debug] API version: 7\n" {
 		t.Fatalf("got %q", buf.String())
+	}
+
+	// Writes from several goroutines are serialized (go test -race).
+	buf.Reset()
+	done := make(chan struct{})
+	for range 4 {
+		go func() {
+			fido2Log("concurrent")
+			done <- struct{}{}
+		}()
+	}
+	for range 4 {
+		<-done
+	}
+	SetDebugOutput(nil)
+	if n := strings.Count(buf.String(), "[fido2-debug] concurrent\n"); n != 4 {
+		t.Fatalf("got %d lines: %q", n, buf.String())
 	}
 }
 

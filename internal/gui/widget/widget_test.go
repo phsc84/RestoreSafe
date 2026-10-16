@@ -180,7 +180,7 @@ func TestIconAndBar(t *testing.T) {
 
 func TestSidebarSelection(t *testing.T) {
 	th, host := testTheme(t)
-	items := []SidebarItem{{GlyphArchive, "Create backup"}, {GlyphHistory, "Restore backup"}, {GlyphSettings, "Settings"}}
+	items := []SidebarItem{{Glyph: GlyphArchive, Text: "Create backup"}, {Glyph: GlyphHistory, Text: "Restore backup"}, {Glyph: GlyphSettings, Text: "Settings"}}
 	s, err := NewSidebar(th, host, 0, items)
 	if err != nil {
 		t.Fatal(err)
@@ -208,6 +208,64 @@ func TestSidebarSelection(t *testing.T) {
 	s.Select(2)
 	if len(chosen) != 4 {
 		t.Fatal("Select must not call OnSelect")
+	}
+}
+
+// The YubiKey item sits at the bottom below a line and can be hidden; the
+// keys and the mouse skip a hidden item (GUI spec YK-1).
+func TestSidebarBottomGroupAndHiddenItems(t *testing.T) {
+	th, host := testTheme(t)
+	items := []SidebarItem{{Glyph: GlyphArchive, Text: "Create backup"}, {Glyph: GlyphHistory, Text: "Restore backup"}, {Glyph: GlyphSettings, Text: "Settings"}, {Glyph: GlyphKey, Text: "YubiKey", Bottom: true}}
+	s, err := NewSidebar(th, host, 0, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chosen []int
+	s.OnSelect = func(i int) { chosen = append(chosen, i) }
+
+	const height = 400
+	px := render(t, s.HWND(), SidebarWidth, height)
+	client := win32.ClientRect(s.HWND())
+	yk := s.rowRect(3, client)
+	if yk.Bottom != client.Bottom-th.Scale.Px(sidebarPadding) || yk.Top <= s.rowRect(2, client).Bottom {
+		t.Fatalf("the bottom item must sit at the bottom edge: %+v in %+v", yk, client)
+	}
+	line, ok := s.lineRect(client)
+	if !ok || line.Bottom > yk.Top {
+		t.Fatalf("a line must separate the bottom group: %+v, %v", line, ok)
+	}
+	expect(t, "line", px(client.Width()/2, line.Top), Light.Lines)
+
+	for _, key := range []uintptr{win32.VK_END, win32.VK_UP} {
+		win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, key, 0)
+	}
+	if len(chosen) != 2 || chosen[0] != 3 || chosen[1] != 2 {
+		t.Fatalf("End reaches the bottom item: %v", chosen)
+	}
+
+	s.SetHidden(3, true)
+	if !s.Hidden(3) {
+		t.Fatal("SetHidden")
+	}
+	if _, ok := s.lineRect(client); ok {
+		t.Fatal("no line without a shown bottom item")
+	}
+	chosen = nil
+	for _, key := range []uintptr{win32.VK_DOWN, win32.VK_END} {
+		win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, key, 0)
+	}
+	win32.SendMessage(s.HWND(), win32.WM_LBUTTONDOWN, 0, uintptr(yk.Top+2)<<16|uintptr(yk.Left+2))
+	s.Select(3)
+	if len(chosen) != 0 || s.Selected() != 2 {
+		t.Fatalf("a hidden item can't be chosen: %v, selected %d", chosen, s.Selected())
+	}
+
+	// Hiding the top item: Home goes to the first shown one.
+	s.SetHidden(3, false)
+	s.SetHidden(0, true)
+	win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, win32.VK_HOME, 0)
+	if s.Selected() != 1 || s.rowRect(1, client).Top != client.Top+th.Scale.Px(sidebarPadding) {
+		t.Fatalf("Home with the first item hidden: selected %d", s.Selected())
 	}
 }
 

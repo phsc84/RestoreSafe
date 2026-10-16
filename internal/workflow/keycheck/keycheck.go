@@ -40,7 +40,7 @@ type Result struct {
 	// HRESULT is the error code of the WebAuthn call that failed; 0 when
 	// none failed or the error has no code.
 	HRESULT uint32
-	// Trace is the WebAuthn trace of the test (yubikey.DebugOutput).
+	// Trace is the WebAuthn trace of the test (yubikey.SetDebugOutput).
 	Trace string
 }
 
@@ -51,18 +51,25 @@ func (r Result) Passed() bool { return r.Err == nil }
 var (
 	deriveSecretFn = yubikey.DeriveFIDO2Secret
 	probeFn        = yubikey.ProbeCapability
+	setDebugFn     = yubikey.SetDebugOutput
 )
 
 // Run tests the connected YubiKey against ks, the current keys (nil when
 // there are none): Match when ks has a YubiKey slot, Capability otherwise.
 // It blocks until the Windows Security prompts are closed; now gives the
-// time of the result. Only one test may run at a time: it sets
-// yubikey.DebugOutput for its duration.
+// time of the result. Only one test may run at a time: it sets the
+// debug output of yubikey for its duration.
 func Run(ks *container.KeySet, now func() time.Time) Result {
 	var trace bytes.Buffer
-	yubikey.DebugOutput = &trace
-	defer func() { yubikey.DebugOutput = nil }()
+	setDebugFn(&trace)
+	r := run(ks)
+	setDebugFn(nil) // no write reaches trace after this
+	r.Time = now()
+	r.Trace = trace.String()
+	return r
+}
 
+func run(ks *container.KeySet) Result {
 	r := Result{Kind: Capability}
 	if slot, ok := yubiKeySlot(ks); ok {
 		r.Kind = Match
@@ -77,8 +84,6 @@ func Run(ks *container.KeySet, now func() time.Time) Result {
 	if errors.As(r.Err, &hr) {
 		r.HRESULT, r.Cancelled = hr.Code, hr.Cancelled()
 	}
-	r.Time = now()
-	r.Trace = trace.String()
 	return r
 }
 
