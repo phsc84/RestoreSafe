@@ -85,6 +85,8 @@ type KeysCard struct {
 	// YubiKey is whether the YubiKey is connected, "" when none is used.
 	YubiKey     string
 	YubiKeyTone Tone
+	// Link opens the YubiKey page while the sidebar shows it (YK-10).
+	Link *Button
 }
 
 // CreatePage is everything the Create backup page shows.
@@ -109,7 +111,7 @@ func CreatePageOf(s *health.Snapshot, cfg *config.Config, now time.Time) CreateP
 		Hero:    heroOf(s, cfg, now),
 		Folders: foldersOf(s, now),
 		Storage: storageOf(s),
-		Keys:    keysOf(s),
+		Keys:    keysOf(s, cfg),
 		Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain, Enabled: true},
 	}
 	return o
@@ -390,9 +392,12 @@ func lastRunNote(s *health.Snapshot, now time.Time) (string, Tone) {
 	return laterRunNote(s, run.Created, now)
 }
 
-func keysOf(s *health.Snapshot) KeysCard {
+func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 	k := s.Keys
 	card := KeysCard{Title: cardKeys}
+	if YubiKeyVisible(cfg, s) {
+		card.Link = &Button{Text: linkCheckYubiKey, Action: ActionOpenYubiKeyPage, Enabled: true}
+	}
 	switch {
 	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:
 		card.YubiKey, card.YubiKeyTone = yubiKeyConnected, ToneSecondary

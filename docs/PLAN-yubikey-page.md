@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1 to 3 done, phase 4 next |
+| Status | Agreed 2026-10-15; phases 1 to 4 done, phase 5 next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -121,17 +121,17 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 
 ### Phase 4: View — `gui/view`
 
-- [ ] `view.Navigation` with the YubiKey item and its visibility (YK-1); the selection falls back to Settings when the item disappears.
-- [ ] `view.YubiKeyPage(snapshot, cfg, diagnosis, test, busy) YubiKeyPage`:
+- [x] `view.YubiKeyVisible(cfg, snapshot)` (YK-1). `view.Navigation` gets the item in phase 5, with the sidebar that can hide it: a fourth item now would show a page that doesn't exist yet.
+- [x] `view.YubiKeyPageOf(snapshot, YubiKeyState{Diagnosis, Test, Testing, Busy, AppVersion, WindowsVersion}, now) YubiKeyPage`:
   - every hero variant of figure 10.4, including "Error: firmware too old" (firmware from `Key.Revision` below 5.2), and the cancel hero with both hints;
   - the Checks lines, including "No FIDO2 function" and firmware below 5.2;
   - the test button: shown when, and enabled when;
   - guide expanded or collapsed (also after a cancel);
   - the technical details text, with the RestoreSafe and Windows versions passed in.
-- [ ] Every text in `view/strings.go` (3.6), with the time in the existing format ("tested today, 08:52").
-- [ ] "Check your YubiKey" on the Keys card of `view.CreatePage` and on Keys and unlocking of `view.Settings`, while the item is visible (YK-10).
-- [ ] YK-8 in SPEC-gui gets the target of Open Windows Update… (decision 6).
-- [ ] Tests (the spec's row "YubiKey view"): visibility for each `authentication_mode` with and without YubiKey sets, every hero variant, the Checks lines, guide expansion, actions disabled during a test or an operation, and details free of secret, salt and credential ID (checked against the fakes' values). Clearing on device change, Reload and new keys is tested in phase 5 if it lives in `gui`, or here if it fits into a `view` helper. Floor 91 holds.
+- [x] Every text in `view/strings.go` (3.6), with the time in the existing format ("tested today, 08:52").
+- [x] "Check your YubiKey" on the Keys card of `view.CreatePage` and on Keys and unlocking of `view.Settings`, while the item is visible (YK-10).
+- [x] YK-8 in SPEC-gui gets the target of Open Windows Update… (decision 6).
+- [x] Tests (the spec's row "YubiKey view"): visibility for each `authentication_mode` with and without YubiKey sets, every hero variant, the Checks lines, guide expansion, actions disabled during a test or an operation, and details free of secret, salt and credential ID (by construction: neither `Diagnosis` nor `keycheck.Result` holds one, which the `keycheck` tests check). Clearing the result on a device change, Reload and new keys lives in `gui` (decision 8) and is done in phase 5. Floor raised to 92 (92.1 %). The tests found one bug, fixed: with Windows too old and no YubiKey, the Connected line crashed.
 
 ### Phase 5: Window — `gui/widget`, `gui/win32`, `gui`
 

@@ -24,7 +24,7 @@ internal/workflow/interact       100
 internal/workflow/keycheck       100
 internal/fsx                     92
 internal/logging                 91
-internal/gui/view                91
+internal/gui/view                92
 internal/gui/flow                95
 internal/gui/widget              85
 internal/security/yubikey        72
