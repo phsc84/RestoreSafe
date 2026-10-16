@@ -14,10 +14,10 @@ internal/format/archive          85
 internal/format/catalog          94
 internal/format/container        85
 internal/format/setwriter        85
-internal/workflow/backup         85
+internal/workflow/backup         86
 internal/workflow/restore        90
 internal/workflow/verify         93
-internal/workflow/unlock         87
+internal/workflow/unlock         89
 internal/workflow/restorepoint   90
 internal/workflow/job            89
 internal/workflow/interact       100
