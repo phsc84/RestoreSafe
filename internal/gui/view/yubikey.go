@@ -20,6 +20,8 @@ type CheckLine struct {
 	Label, Text string
 	Tone        Tone
 	Glyph       Glyph
+	// Note is small text under the line, "" for none.
+	Note string
 }
 
 // GuideStep is a numbered step or the warning of the setup guide.
@@ -37,9 +39,6 @@ type YubiKeyGuide struct {
 	Title, Collapsed string
 	Expanded         bool
 	Steps            []GuideStep
-	Warning          GuideStep
-	Footnote         string
-	FootnoteLink     Button
 }
 
 // YubiKeyPage is everything the YubiKey page shows (GUI spec 10.2).
@@ -215,17 +214,22 @@ func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 		lines[0] = bad(ykCheckWindows, ykWindowsOld)
 	}
 
+	// Connected says which YubiKey it is, with a note on which kinds work;
+	// FIDO2 whether its FIDO2 function is on.
+	var connected, fido CheckLine
 	f, firmware := keyFault(d)
 	switch f {
 	case faultNoKey:
-		lines = append(lines, neutral(ykCheckConnected, ykNoneConnected))
+		connected, fido = neutral(ykCheckConnected, ykNoneConnected), neutral(ykCheckFIDO, ykFIDOUnknown)
 	case faultNoFIDO:
-		lines = append(lines, bad(ykCheckConnected, ykNoFIDO))
+		connected, fido = ok(ykCheckConnected, connectedText(d.Keys())), bad(ykCheckFIDO, ykFIDOOff)
 	case faultFirmware:
-		lines = append(lines, bad(ykCheckConnected, fmt.Sprintf(ykFirmwareOld, firmware)))
+		connected, fido = bad(ykCheckConnected, fmt.Sprintf(ykFirmwareOld, firmware)), ok(ykCheckFIDO, ykFIDOOn)
 	default:
-		lines = append(lines, ok(ykCheckConnected, connectedText(d.Keys())))
+		connected, fido = ok(ykCheckConnected, connectedText(d.Keys())), ok(ykCheckFIDO, ykFIDOOn)
 	}
+	connected.Note = ykSupported
+	lines = append(lines, connected, fido)
 
 	r := st.Test
 	switch {
@@ -286,14 +290,11 @@ func yubiKeyGuide(keys health.KeysSummary, st YubiKeyState) YubiKeyGuide {
 		// be a blocked PIN (YK-7, YK-8).
 		Expanded: !keys.YubiKeyInBackups || f == faultNoFIDO || f == faultFirmware || r != nil && !r.Passed(),
 		Steps: []GuideStep{
-			{Number: "1", Title: ykStep1, Text: ykStep1Text},
-			{Number: "2", Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
+			{Number: "1", Title: ykStep1, Text: ykStep1Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
+			{Number: "2", Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
 			{Number: "3", Title: ykStep3, Text: ykStep3Text},
 			{Number: "4", Title: ykStep4, Text: ykStep4Text},
 		},
-		Warning:      GuideStep{Title: ykWarning, Text: ykWarningText},
-		Footnote:     ykFootnote,
-		FootnoteLink: Button{Text: linkAuthenticator, Action: ActionGetAuthenticator, Enabled: true},
 	}
 }
 

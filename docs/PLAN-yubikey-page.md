@@ -148,6 +148,7 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 - [x] The links of YK-10 select the page.
 - [ ] The GUI smoke test (`scripts/ci/gui-smoke.ps1`) still passes. If the item is visible in its configuration, it opens the page once; the page must render without a YubiKey.
 - [x] Found while wiring the test: the health check can log WebAuthn details while the test collects its trace. `yubikey.DebugOutput` became `SetDebugOutput`, which serializes the writes; `keycheck` reads the trace only after switching it off.
+- [x] Owner's review of the first build (2026-10-16), all fixed: (1) slow scrolling left controls painted over each other on every page; the panel now repaints after each scroll step; (2) the sidebar had no hover effect; (3) the Keys card of Create backup says how the first backup sets up the YubiKey, carries the reset warning (moved from the guide), and its "YubiKey connected" follows the key, because a device change takes a new snapshot; (4) the Checks card has a FIDO2 line and, under Connected, which YubiKeys work; (5) the guide is a how-to: set or change the PIN (Windows Settings), turn on FIDO2 (starts Yubico Authenticator as administrator, or opens its download page), test, register; (6) Technical details is an expander, and Copy details shows only while it is open.
 
 ### Phase 6: Manual test, docs, release notes
 

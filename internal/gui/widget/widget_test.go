@@ -209,6 +209,16 @@ func TestSidebarSelection(t *testing.T) {
 	if len(chosen) != 4 {
 		t.Fatal("Select must not call OnSelect")
 	}
+
+	// The row under the mouse is filled, until the mouse leaves.
+	first := s.rowRect(0, win32.ClientRect(s.HWND()))
+	win32.SendMessage(s.HWND(), win32.WM_MOUSEMOVE, 0, uintptr(first.Top+2)<<16|uintptr(first.Left+2))
+	px = render(t, s.HWND(), SidebarWidth, 200)
+	expect(t, "hovered row", px(first.Right-10, first.Top+first.Height()/2), Light.Control)
+	expect(t, "no bar on the hovered row", px(first.Left+1, first.Top+first.Height()/2), Light.Control)
+	win32.SendMessage(s.HWND(), win32.WM_MOUSELEAVE, 0, 0)
+	px = render(t, s.HWND(), SidebarWidth, 200)
+	expect(t, "row after the mouse left", px(first.Right-10, first.Top+first.Height()/2), Light.SurfaceAlt)
 }
 
 // The YubiKey item sits at the bottom below a line and can be hidden; the

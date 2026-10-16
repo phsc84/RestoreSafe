@@ -58,7 +58,7 @@ const (
 	ActionTestYubiKey
 	ActionOpenSignInSettings
 	ActionOpenWindowsUpdate
-	ActionGetAuthenticator
+	ActionOpenAuthenticator
 	ActionCopyDetails
 )
 

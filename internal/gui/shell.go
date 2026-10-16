@@ -188,8 +188,8 @@ func (a *app) do(action view.Action) {
 		a.open(view.SignInSettingsURI, false)
 	case view.ActionOpenWindowsUpdate:
 		a.open(view.WindowsUpdateURI, false)
-	case view.ActionGetAuthenticator:
-		a.open(view.YubicoAuthenticatorURL, false)
+	case view.ActionOpenAuthenticator:
+		a.openAuthenticator()
 	case view.ActionCopyDetails:
 		a.copyYubiKeyDetails()
 	case view.ActionShowInBackups:

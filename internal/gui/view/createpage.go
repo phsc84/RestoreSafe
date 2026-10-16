@@ -85,6 +85,10 @@ type KeysCard struct {
 	// YubiKey is whether the YubiKey is connected, "" when none is used.
 	YubiKey     string
 	YubiKeyTone Tone
+	// Setup tells how a YubiKey gets set up, before the first backup.
+	Setup string
+	// Warning warns not to reset the YubiKey, while one is used (YK-8).
+	Warning string
 	// Link opens the YubiKey page while the sidebar shows it (YK-10).
 	Link *Button
 }
@@ -397,6 +401,12 @@ func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 	card := KeysCard{Title: cardKeys}
 	if YubiKeyVisible(cfg, s) {
 		card.Link = &Button{Text: linkCheckYubiKey, Action: ActionOpenYubiKeyPage, Enabled: true}
+	}
+	if cfg.UseYubiKey() {
+		card.Warning = keysNeverReset
+		if !k.Exists {
+			card.Setup = keysYubiKeySetup
+		}
 	}
 	switch {
 	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:

@@ -1,7 +1,10 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -143,11 +146,15 @@ func (a *app) deviceChanged() {
 }
 
 // devicesSettled clears the test result, which may be of another YubiKey,
-// and checks again (YK-3, YK-6).
+// and checks again (YK-3, YK-6): the YubiKey for its page, the backups for
+// "YubiKey connected" on the Keys card of Create backup.
 func (a *app) devicesSettled() {
 	win32.KillTimer(a.hwnd, yubiKeyTimerID)
 	a.clearYubiKeyTest()
 	a.diagnoseYubiKey()
+	if a.run == nil {
+		a.startCheck()
+	}
 	a.shell.yubiKey.update()
 }
 
@@ -169,6 +176,37 @@ func (a *app) keysChecked() {
 		a.clearYubiKeyTest()
 	}
 	a.yk.keysCreated = created
+}
+
+// authenticatorPaths are where Yubico Authenticator installs itself: the
+// current version (authenticator.exe) and older ones (yubioath-desktop.exe).
+func authenticatorPaths() []string {
+	var out []string
+	for _, env := range []string{"ProgramFiles", "ProgramFiles(x86)"} {
+		dir := os.Getenv(env)
+		if dir == "" {
+			continue
+		}
+		for _, exe := range []string{"authenticator.exe", "yubioath-desktop.exe"} {
+			out = append(out, filepath.Join(dir, "Yubico", "Yubico Authenticator", exe))
+		}
+	}
+	return out
+}
+
+// openAuthenticator starts Yubico Authenticator as administrator, which it
+// needs to turn FIDO2 on; without it, its download page opens (YK-8). When
+// the user refuses the permission, nothing else opens.
+func (a *app) openAuthenticator() {
+	for _, p := range authenticatorPaths() {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		if err := win32.ShellRunAs(a.hwnd, p); err == nil || errors.Is(err, windows.ERROR_CANCELLED) {
+			return
+		}
+	}
+	a.open(view.YubicoAuthenticatorURL, false)
 }
 
 // copyYubiKeyDetails copies the technical details for a bug report (YK-9).

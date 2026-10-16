@@ -41,8 +41,11 @@ const (
 	// window when a device is added or removed; no registration needed.
 	WM_DEVICECHANGE      = 0x0219
 	DBT_DEVNODES_CHANGED = 0x0007
-	WM_QUERYENDSESSION   = 0x0011
-	WM_ENDSESSION        = 0x0016
+	// WM_MOUSELEAVE is sent once after TrackMouseLeave, when the mouse
+	// leaves the window.
+	WM_MOUSELEAVE      = wmMouseLeave
+	WM_QUERYENDSESSION = 0x0011
+	WM_ENDSESSION      = 0x0016
 
 	IDOK     = 1
 	IDCANCEL = 2

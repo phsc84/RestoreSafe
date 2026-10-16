@@ -62,6 +62,9 @@ type createPage struct {
 	// sizer is the splitter below the Folders card that sets the table's
 	// height.
 	sizer *tableSizer
+	// builtWidth is the page width the wrapped lines were measured for; a
+	// new width measures them again.
+	builtWidth int32
 }
 
 func newCreatePage(a *app) (*createPage, error) {
@@ -149,6 +152,7 @@ func (o *createPage) update() {
 	o.fillFolders()
 	o.fillStorage()
 	o.fillKeys()
+	o.builtWidth = win32.ClientRect(o.panel.HWND()).Width()
 	o.layout()
 	// Moving a card copies its old pixels, painted before its labels were
 	// rebuilt: the run card taking the hero's place left parts of the old
@@ -281,9 +285,24 @@ func (o *createPage) fillKeys() {
 	if v.Methods == "" && v.YubiKey != "" {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), fill: true})
 	}
+	if v.Setup != "" {
+		o.para(c, v.Setup, t.Palette.TextSecondary)
+	}
+	if v.Warning != "" {
+		o.para(c, v.Warning, toneColor(t.Palette, view.ToneWarning))
+	}
 	if v.Link != nil {
 		c.row(cardRowHeight, cell{hwnd: c.acts.link(c.panel, *v.Link, c.linkID), px: measure(t, v.Link.Text, widget.TextSmall) + t.Scale.Px(linkPadding)})
 	}
+}
+
+// para adds small text that wraps over the card's width.
+func (o *createPage) para(c *card, text string, color widget.Color) {
+	t := o.a.theme
+	s := t.Scale
+	width := win32.ClientRect(o.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX) - 2*s.Px(widget.CardPadding)
+	px := max(t.Fonts.MeasureWrapped(text, widget.TextSmall, max(width, s.Px(200))), s.Px(stackLineHeight))
+	c.row(px*96/int32(s)+1, cell{hwnd: c.panel.Paragraph(text, widget.TextSmall, color), fill: true})
 }
 
 // restyle applies new fonts after a DPI change.

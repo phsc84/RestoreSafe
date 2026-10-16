@@ -21,7 +21,9 @@ type Sidebar struct {
 	items    []SidebarItem
 	hidden   []bool
 	selected int
-	focused  bool
+	// hover is the row under the mouse, -1 for none.
+	hover   int
+	focused bool
 	// keyboard is whether the user reached or moved the sidebar with the
 	// keyboard: only then does the selected row show the focus outline,
 	// as in standard Windows controls.
@@ -35,7 +37,7 @@ const sidebarPadding = 8
 
 // NewSidebar creates the navigation on parent.
 func NewSidebar(t *Theme, parent win32.HWND, id uintptr, items []SidebarItem) (*Sidebar, error) {
-	s := &Sidebar{theme: t, items: items, hidden: make([]bool, len(items))}
+	s := &Sidebar{theme: t, items: items, hidden: make([]bool, len(items)), hover: -1}
 	hwnd, err := create(s, classSidebar, parent, win32.WS_TABSTOP, 0, id)
 	if err != nil {
 		return nil, err
@@ -173,6 +175,15 @@ func (s *Sidebar) paint(hdc uintptr, r win32.Rect) {
 		}
 		row := s.rowRect(i, r)
 		color := pal.TextSecondary
+		if i == s.hover && i != s.selected {
+			// The row under the mouse gets the selected row's fill, without
+			// its bar.
+			back := row
+			back.Right--
+			back.Bottom--
+			roundRect(hdc, back, sc.Px(ControlRadius*2), pal.Control, pal.Control)
+			color = pal.Text
+		}
 		if i == s.selected {
 			color = pal.Text
 			back := row
@@ -232,16 +243,18 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 			return 0, false
 		}
 		return 0, true
+	case win32.WM_MOUSEMOVE:
+		s.setHover(s.rowAt(int32(int16(win32.HiWord(lparam)))))
+		return 0, true
+	case win32.WM_MOUSELEAVE:
+		s.setHover(-1)
+		return 0, true
 	case win32.WM_LBUTTONDOWN:
 		s.keyboard = false
 		win32.SetFocus(hwnd)
 		win32.Invalidate(hwnd)
-		y := int32(int16(win32.HiWord(lparam)))
-		client := win32.ClientRect(hwnd)
-		for i := range s.items {
-			if r := s.rowRect(i, client); !s.hidden[i] && y >= r.Top && y < r.Bottom {
-				s.choose(i)
-			}
+		if i := s.rowAt(int32(int16(win32.HiWord(lparam)))); i >= 0 {
+			s.choose(i)
 		}
 		return 0, true
 	case win32.WM_SETFOCUS, win32.WM_KILLFOCUS:
@@ -255,4 +268,27 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 		return 0, true
 	}
 	return 0, false
+}
+
+// rowAt returns the shown row at y, or -1.
+func (s *Sidebar) rowAt(y int32) int {
+	client := win32.ClientRect(s.hwnd)
+	for i := range s.items {
+		if r := s.rowRect(i, client); !s.hidden[i] && y >= r.Top && y < r.Bottom {
+			return i
+		}
+	}
+	return -1
+}
+
+// setHover marks row i as the one under the mouse (-1: none).
+func (s *Sidebar) setHover(i int) {
+	if i == s.hover {
+		return
+	}
+	if s.hover == -1 {
+		win32.TrackMouseLeave(s.hwnd)
+	}
+	s.hover = i
+	win32.Invalidate(s.hwnd)
 }

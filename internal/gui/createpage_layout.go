@@ -8,6 +8,10 @@ import (
 // layout places the title, the hero or the run card below it, like on
 // Restore backup, and the cards. The page scrolls when they don't fit.
 func (o *createPage) layout() {
+	if w := win32.ClientRect(o.panel.HWND()).Width(); w != o.builtWidth && w > 0 {
+		o.update() // the wrapped lines need the new width
+		return
+	}
 	t := o.a.theme
 	s := t.Scale
 	client := win32.ClientRect(o.panel.HWND())

@@ -294,6 +294,9 @@ func (p *Panel) ScrollTo(offset int32) {
 	win32.SetVScroll(p.hwnd, p.content, view, offset)
 	if p.OnScroll != nil {
 		p.OnScroll()
+		// Moving the children copies their old pixels; small steps left
+		// parts of them painted over each other. Paint everything anew.
+		win32.RedrawAll(p.hwnd)
 	}
 }
 

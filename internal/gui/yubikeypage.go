@@ -147,9 +147,13 @@ func (p *yubiKeyPage) setButton(h win32.HWND, b view.Button, id uint16) {
 
 func (p *yubiKeyPage) fillChecks() {
 	t := p.a.theme
+	s := t.Scale
 	c := p.checks
 	c.reset()
 	c.heading(p.view.ChecksTitle, nil)
+	// The note starts under the text: past the icon, the label and their
+	// gap (para adds the gap after the indent).
+	noteIndent := int32(iconWidth + checkLabelWidth + 8)
 	for _, l := range p.view.Checks {
 		color := toneColor(t.Palette, l.Tone)
 		if l.Tone == view.ToneNeutral {
@@ -164,13 +168,19 @@ func (p *yubiKeyPage) fillChecks() {
 			}
 		}
 		text := c.panel.Paragraph(l.Text, widget.TextBody, color)
-		width := p.cardWidth() - 2*t.Scale.Px(widget.CardPadding) - t.Scale.Px(iconWidth+checkLabelWidth+16)
-		c.row(p.dips(max(t.Fonts.MeasureWrapped(l.Text, widget.TextBody, max(width, t.Scale.Px(80))), t.Scale.Px(cardRowHeight))),
+		width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(noteIndent+8)
+		c.row(p.dips(max(t.Fonts.MeasureWrapped(l.Text, widget.TextBody, max(width, s.Px(80))), s.Px(cardRowHeight))),
 			icon,
 			cell{hwnd: c.label(l.Label, widget.TextSmall, t.Palette.TextSecondary), dip: checkLabelWidth},
 			cell{hwnd: text, fill: true})
+		if l.Note != "" {
+			p.para(c, l.Note, widget.TextSmall, t.Palette.TextSecondary, noteIndent)
+		}
 	}
 }
+
+// guideIDs are the control IDs of the guide steps' buttons, in order.
+var guideIDs = []uint16{idYubiKeySignIn, idYubiKeyAuthenticator}
 
 func (p *yubiKeyPage) fillGuide() {
 	t := p.a.theme
@@ -183,38 +193,38 @@ func (p *yubiKeyPage) fillGuide() {
 		return
 	}
 	c.heading(g.Title, nil)
+	buttons := 0
 	for _, s := range g.Steps {
 		c.row(cardRowHeight,
 			cell{hwnd: c.label(s.Number, widget.TextStrong, pal.AccentText), dip: guideIndent},
 			cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
 		p.para(c, s.Text, widget.TextSmall, pal.TextSecondary, guideIndent)
-		if s.Action != nil {
-			id := uint16(idYubiKeySignIn)
-			h := c.acts.button(c.panel, *s.Action, id, false)
+		if s.Action != nil && buttons < len(guideIDs) {
+			h := c.acts.button(c.panel, *s.Action, guideIDs[buttons], false)
+			buttons++
 			c.row(widget.ButtonHeight+4, cell{dip: guideIndent}, cell{hwnd: h, px: buttonWidth(t, h), height: widget.ButtonHeight})
 		}
 	}
-	warn := cell{dip: guideIndent}
-	if i, err := widget.NewIcon(t, c.panel.HWND(), pal.Surface, widget.TextIconSmall); err == nil {
-		c.panel.Adopt(i.HWND())
-		i.Set(widget.GlyphWarning, pal.Warning, widget.NoCircle, "")
-		warn.hwnd = i.HWND()
-	}
-	c.row(cardRowHeight, warn, cell{hwnd: c.label(g.Warning.Title, widget.TextStrong, pal.Text), fill: true})
-	p.para(c, g.Warning.Text, widget.TextSmall, pal.TextSecondary, guideIndent)
-	p.para(c, g.Footnote, widget.TextSmall, pal.TextSecondary, 0)
-	c.row(cardRowHeight, p.linkCell(c, g.FootnoteLink, idYubiKeyAuthenticator))
 }
 
+// fillDetails shows the technical details as an expander: the button opens
+// and closes them; Copy details shows only while they are open.
 func (p *yubiKeyPage) fillDetails() {
 	t := p.a.theme
 	c := p.details
 	c.reset()
-	copyButton := c.acts.button(c.panel, p.view.CopyDetails, idYubiKeyCopy, false)
-	c.row(widget.ButtonHeight+4,
-		p.linkCell(c, view.Button{Text: p.view.DetailsTitle, Enabled: true}, idYubiKeyDetails),
-		cell{fill: true},
-		cell{hwnd: copyButton, px: buttonWidth(t, copyButton), height: widget.ButtonHeight})
+	chevron := " ▾"
+	if p.showDetails {
+		chevron = " ▴"
+	}
+	toggle := c.acts.button(c.panel, view.Button{Text: p.view.DetailsTitle + chevron, Enabled: true}, idYubiKeyDetails, false)
+	win32.SetAccessibleName(toggle, p.view.DetailsTitle)
+	cells := []cell{{hwnd: toggle, px: buttonWidth(t, toggle), height: widget.ButtonHeight}, {fill: true}}
+	if p.showDetails {
+		copyButton := c.acts.button(c.panel, p.view.CopyDetails, idYubiKeyCopy, false)
+		cells = append(cells, cell{hwnd: copyButton, px: buttonWidth(t, copyButton), height: widget.ButtonHeight})
+	}
+	c.row(widget.ButtonHeight+4, cells...)
 	text := strings.ReplaceAll(p.view.Details, "\n", "\r\n")
 	if win32.Text(p.text) != text {
 		win32.SetText(p.text, text)
@@ -237,7 +247,10 @@ func (p *yubiKeyPage) para(c *card, text string, style widget.TextStyle, color w
 	t := p.a.theme
 	s := t.Scale
 	h := c.panel.Paragraph(text, style, color)
-	width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(indent)
+	width := p.cardWidth() - 2*s.Px(widget.CardPadding)
+	if indent > 0 {
+		width -= s.Px(indent + 8) // the spacer and the gap after it
+	}
 	px := max(t.Fonts.MeasureWrapped(text, style, max(width, s.Px(200))), s.Px(stackLineHeight))
 	if indent > 0 {
 		c.row(p.dips(px), cell{dip: indent}, cell{hwnd: h, fill: true})

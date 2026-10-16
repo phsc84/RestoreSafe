@@ -448,3 +448,9 @@ func RectParam(lparam uintptr) *Rect {
 func ShellOpenWith(hwnd HWND, exe, args string) error {
 	return windows.ShellExecute(windows.Handle(hwnd), UTF16("open"), UTF16(exe), UTF16(args), nil, SW_SHOWNORMAL)
 }
+
+// ShellRunAs starts exe as administrator: Windows asks the user for
+// permission first. A refusal returns windows.ERROR_CANCELLED.
+func ShellRunAs(hwnd HWND, exe string) error {
+	return windows.ShellExecute(windows.Handle(hwnd), UTF16("runas"), UTF16(exe), nil, nil, SW_SHOWNORMAL)
+}
