@@ -16,12 +16,18 @@ import (
 	"errors"
 	"os"
 	"testing"
+
+	"golang.org/x/sys/windows"
 )
 
-func traceToStdout(t *testing.T) {
+// prepare prints the WebAuthn trace and gives the Windows Security dialogs
+// the foreground window (the terminal) as parent: WebAuthn refuses a call
+// without a parent window (NTE_INVALID_PARAMETER).
+func prepare(t *testing.T) {
 	t.Helper()
 	DebugOutput = os.Stdout
-	t.Cleanup(func() { DebugOutput = nil })
+	SetParentWindow(uintptr(windows.GetForegroundWindow()))
+	t.Cleanup(func() { DebugOutput = nil; SetParentWindow(0) })
 }
 
 // logResult prints an error with its HRESULT, if it has one.
@@ -64,7 +70,7 @@ func TestHWDiagnose(t *testing.T) {
 // PIN and two touches. Cancel in a dialog to record the cancel HRESULT; run
 // it on a key without a PIN to see whether Windows asks for a new one.
 func TestHWCapability(t *testing.T) {
-	traceToStdout(t)
+	prepare(t)
 	logResult(t, "ProbeCapability", ProbeCapability())
 }
 
@@ -72,7 +78,7 @@ func TestHWCapability(t *testing.T) {
 // does: the Match test of YK-5. Enter a wrong PIN at the second prompt to
 // record the HRESULT of a wrong or blocked PIN.
 func TestHWMatch(t *testing.T) {
-	traceToStdout(t)
+	prepare(t)
 	combined, challengeJSON, err := CombineWithPassword(nil, true)
 	clear(combined)
 	logResult(t, "registration", err)
@@ -93,7 +99,7 @@ func TestHWMatch(t *testing.T) {
 // holds, as an unregistered YubiKey would be asked: what does Windows show,
 // and which HRESULT does it return?
 func TestHWUnknownCredential(t *testing.T) {
-	traceToStdout(t)
+	prepare(t)
 	credID := make([]byte, 64)
 	salt := make([]byte, fido2SaltSize)
 	if _, err := rand.Read(credID); err != nil {

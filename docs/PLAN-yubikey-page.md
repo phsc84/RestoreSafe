@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phase 1 done, phase 2 (the real key) next |
+| Status | Agreed 2026-10-15; phases 1 and 2 done, phase 3 next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -82,20 +82,15 @@
 
 ### Phase 2: YK-11 with the real key (owner and Claude together)
 
-Before the reset: **the key must not be the only way into backups that matter.** Either a password, recovery code or another key opens them, or they are test backups. The reset in step 5 makes the key forget every registration for good.
+Done 2026-10-16 with the owner's YubiKey 5 (firmware 5.7.4), which was reset on purpose. The answers are in SPEC-gui YK-11:
+- Every refusal ends in the same `0x800704C7` (`ERROR_CANCELLED`): an unknown credential, wrong PINs, the soft block, the blocked PIN, and a cancel in either dialog. So there is no "doesn't open your backups" variant. The cancel hero gets a second hint (a PIN entered wrong too often), and the guide opens after a cancel (YK-7, YK-8).
+- A reset key without a PIN gets one during the registration, so the guide's step 2 says so.
+- `bcdDevice` equals the firmware. The Connected line shows it, and firmware below 5.2 gets the new hero "Error: firmware too old" (YK-4, figure 10.4).
+- A WebAuthn call without a parent window fails with `NTE_INVALID_PARAMETER` (`0x80090027`); 13.4 is corrected. The hardware tests use the foreground window.
+- Capability asks for the PIN twice with two touches (figure 10.3); Match asks for the PIN once with one touch.
+- `HRESULTError` needed no new codes: `Cancelled()` already accepts `0x800704C7`.
 
-1. `Diagnose` report: the usage pages and paths of the key's interfaces, and whether `DBT_DEVNODES_CHANGED` arrives when it is plugged in (decision 5). Compare the USB device version with the firmware that Yubico Authenticator shows.
-2. Capability (registration and hmac-secret) with the key's PIN: passes. Record the number of prompts and touches, for the text "PIN and two touches".
-3. Assertion with a random credential ID: record the HRESULT and what Windows shows. Then cancel in the PIN dialog and record that HRESULT.
-4. Wrong PINs: record the HRESULT after the first wrong PIN, after 3 (soft block), and after 8 (blocked).
-5. Reset in Windows Settings (Accounts > Sign-in options > Security key > Reset). Without a PIN, run Capability and record whether Windows asks for a new PIN. If it does, set one there; if not, set it in Windows Settings.
-6. Optional: turn FIDO2 off over USB with Yubico Authenticator, then record `Diagnose` ("No FIDO2 function") and whether Windows Settings can turn it on. Turn it on again.
-7. Record the answers in SPEC-gui YK-11, as a short "Confirmed 2026-…" paragraph with the Windows build and firmware. Update YK-4, YK-7, YK-8 and figure 10.4 where the answers change them:
-   - a distinct HRESULT for "no credential" makes the variant "This YubiKey doesn't open your backups" live;
-   - a distinct HRESULT for a blocked PIN gets its own variant, pointing to the warning;
-   - a PIN asked during registration changes step 2 of the guide;
-   - a firmware match in `bcdDevice` makes the Connected line show the firmware and flag versions below 5.2.
-8. Adapt `HRESULTError` with the codes found, and add a test for each.
+Moved to phase 5: whether `DBT_DEVNODES_CHANGED` arrives when the key is plugged in (decision 5). It needs a window, which the hardware tests don't have.
 
 ### Phase 3: Data — `health` and `keycheck`
 
@@ -112,10 +107,10 @@ Before the reset: **the key must not be the only way into backups that matter.**
 
 - [ ] `view.Navigation` with the YubiKey item and its visibility (YK-1); the selection falls back to Settings when the item disappears.
 - [ ] `view.YubiKeyPage(snapshot, cfg, diagnosis, test, busy) YubiKeyPage`:
-  - every hero variant of figure 10.4, plus those phase 2 adds;
+  - every hero variant of figure 10.4, including "Error: firmware too old" (firmware from `Key.Revision` below 5.2), and the cancel hero with both hints;
   - the Checks lines, including "No FIDO2 function", and the spare line;
   - the test button: shown when, and enabled when;
-  - guide expanded or collapsed;
+  - guide expanded or collapsed (also after a cancel);
   - the technical details text, with the RestoreSafe and Windows versions passed in.
 - [ ] Every text in `view/strings.go` (3.6), with the time in the existing format ("tested today, 08:52").
 - [ ] "Check your YubiKey" on the Keys card of `view.CreatePage` and on Keys and unlocking of `view.Settings`, while the item is visible (YK-10).
@@ -125,7 +120,7 @@ Before the reset: **the key must not be the only way into backups that matter.**
 ### Phase 5: Window — `gui/widget`, `gui/win32`, `gui`
 
 - [ ] `widget.Sidebar`: hidden items, a bottom group anchored to the bottom edge below a line; arrow keys skip hidden items; UI Automation names and selection state as before.
-- [ ] `win32`: `WM_DEVICECHANGE` and `DBT_DEVNODES_CHANGED`, and the `HidP` and `ShellExecute` helpers if not already there. `ms-settings:` and `https:` links go through the existing `ShellExecute` wrapper.
+- [ ] `win32`: `WM_DEVICECHANGE` and `DBT_DEVNODES_CHANGED`, and the `ShellExecute` helpers if not already there. Check with the real key that the message arrives when the key is plugged in and pulled out (moved from phase 2); if it doesn't, use `RegisterDeviceNotification` (decision 5). `ms-settings:` and `https:` links go through the existing `ShellExecute` wrapper.
 - [ ] `gui/yubikeypage.go`: the page from `view.YubiKeyPage`. Hero, Checks card and guide card are drawn like the other cards (decision 7 of the GUI redesign: text in standard controls). Technical details is a read-only rich edit in Consolas, with **Copy details** through `win32.CopyText`.
 - [ ] App:
   - `Ctrl+4`;
