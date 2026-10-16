@@ -9,12 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil/scenario"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 func snapshotOf(t *testing.T, s scenario.Scenario) Snapshot {
@@ -120,6 +122,34 @@ func TestSnapshotDescribesTheBackups(t *testing.T) {
 	sc.Config.RetentionKeep = 1
 	if s := snapshotOf(t, sc); len(s.Retention) != 0 {
 		t.Fatalf("a differential next removes nothing: %+v", s.Retention)
+	}
+}
+
+func TestKeysSummaryFindsYubiKeysAlsoInOlderBackups(t *testing.T) {
+	t.Parallel()
+	set := func(mode config.AuthMode, complete bool) catalog.SetInfo {
+		info := catalog.SetInfo{Header: &container.Header{KeySet: container.KeySet{AuthMode: mode, CreatedUTC: "2026-09-01T10:00:00Z"}}}
+		if !complete {
+			info.Err = errors.New("incomplete")
+		}
+		return info
+	}
+	damaged := catalog.SetInfo{Err: errors.New("damaged")}
+	for _, tc := range []struct {
+		name                      string
+		infos                     []catalog.SetInfo // newest first
+		exists, yubiKey, inBackup bool
+	}{
+		{"YubiKey keys", []catalog.SetInfo{set(config.AuthModePasswordYubiKey, true)}, true, true, true},
+		{"password now, YubiKey before", []catalog.SetInfo{set(config.AuthModePassword, true), set(config.AuthModeYubiKey, true)}, true, false, true},
+		{"password only", []catalog.SetInfo{set(config.AuthModePassword, true), damaged}, true, false, false},
+		{"only an incomplete YubiKey set", []catalog.SetInfo{set(config.AuthModeYubiKey, false)}, false, false, true},
+		{"no backups", nil, false, false, false},
+	} {
+		k := keysSummary(&config.Config{}, tc.infos, plan.Keys{}, nil)
+		if k.Exists != tc.exists || k.YubiKey != tc.yubiKey || k.YubiKeyInBackups != tc.inBackup {
+			t.Errorf("%s: %+v", tc.name, k)
+		}
 	}
 }
 

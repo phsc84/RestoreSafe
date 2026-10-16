@@ -6,7 +6,7 @@
 //
 //	cmd             restoresafe
 //	gui             gui, gui/win32
-//	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job
+//	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job, keycheck
 //	format          archive, container, manifest, catalog, naming, setwriter
 //	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo
 //	security        cryptox, recovery, yubikey (recovery and yubikey -> cryptox)

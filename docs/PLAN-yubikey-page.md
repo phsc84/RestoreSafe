@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1, 2 and 2b done, phase 3 next |
+| Status | Agreed 2026-10-15; phases 1 to 3 done, phase 4 next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -110,14 +110,14 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 
 ### Phase 3: Data — `health` and `keycheck`
 
-- [ ] `health.KeysSummary.YubiKey` (the current key set has a YubiKey slot) and `YubiKeyInBackups` (any set's key set has one). Tests in `health`; floor 95 holds.
-- [ ] New package `internal/workflow/keycheck`:
-  - `Run(ctx, ks *container.KeySet, now func() time.Time) Result`. Match when `ks` has a YubiKey slot, with its challenge as unlock uses it; Capability otherwise.
+- [x] `health.KeysSummary.YubiKey` (the current key set has a YubiKey slot) and `YubiKeyInBackups` (any set's key set has one). Tests in `health`; floor 95 holds.
+- [x] New package `internal/workflow/keycheck`:
+  - `Run(ks *container.KeySet, now func() time.Time) Result`. Match when `ks` has a YubiKey slot, with its challenge as unlock uses it; Capability otherwise. No context: a WebAuthn call can't be cancelled from outside its dialog.
   - `Result{Kind, Time, Cancelled, HRESULT, Err, Trace}`.
   - `DebugOutput` set to a buffer for the duration and reset afterwards. The test uses the one worker slot (12.2).
-- [ ] `keycheck` calls `yubikey` through function variables, faked in its tests: Match and Capability, cancel, the HRESULTs of phase 2, the secret zeroed in every path, the trace captured and `DebugOutput` reset, and no salt or credential ID in the trace or the `Result`.
-- [ ] `keycheck` in the layer list of [internal/architecture/doc.go](../internal/architecture/doc.go) (workflow layer); the architecture test passes.
-- [ ] Coverage floor for `internal/workflow/keycheck` in [scripts/ci/test-coverage-floors.txt](../scripts/ci/test-coverage-floors.txt), at its measured value (target 90).
+- [x] `keycheck` calls `yubikey` through function variables, faked in its tests: Match and Capability, cancel, the HRESULTs of phase 2, the secret zeroed in every path, the trace captured and `DebugOutput` reset, and no salt or credential ID in the trace or the `Result`.
+- [x] `keycheck` in the layer list of [internal/architecture/doc.go](../internal/architecture/doc.go) (workflow layer); the architecture test passes.
+- [x] Coverage floor for `internal/workflow/keycheck` in [scripts/ci/test-coverage-floors.txt](../scripts/ci/test-coverage-floors.txt), at its measured value: 100.
 
 ### Phase 4: View — `gui/view`
 
