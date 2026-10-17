@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1 to 4 done; phase 5 waits for the check with the real key and the GUI smoke test |
+| Status | Agreed 2026-10-15; phases 1 to 5 done, phase 6 next |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -146,7 +146,7 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
   - result kept and cleared (decision 8);
   - visibility recomputed after each snapshot and Reload.
 - [x] The links of YK-10 select the page.
-- [ ] The GUI smoke test (`scripts/ci/gui-smoke.ps1`) still passes. If the item is visible in its configuration, it opens the page once; the page must render without a YubiKey.
+- [x] The GUI smoke test (`scripts/ci/gui-smoke.ps1`) still passes (2026-10-17: backups, restore, verify and all 13 conditions). Its configuration uses password mode, so the YubiKey item stays hidden: the test covers the sidebar with a hidden item, not the page; the page is checked by hand in phase 6.
 - [x] Found while wiring the test: the health check can log WebAuthn details while the test collects its trace. `yubikey.DebugOutput` became `SetDebugOutput`, which serializes the writes; `keycheck` reads the trace only after switching it off.
 - [x] Owner's review of the first build (2026-10-16), all fixed: (1) slow scrolling left controls painted over each other on every page; the panel now repaints after each scroll step; (2) the sidebar had no hover effect; (3) the Keys card of Create backup says how the first backup sets up the YubiKey, carries the reset warning (moved from the guide), and its "YubiKey connected" follows the key, because a device change takes a new snapshot; (4) the Checks card has a FIDO2 line and, under Connected, which YubiKeys work; (5) the guide is a how-to: set or change the PIN (Windows Settings), turn on FIDO2 (starts Yubico Authenticator as administrator, or opens its download page), test, register; (6) Technical details is an expander, and Copy details shows only while it is open.
 - [x] Owner's second review (2026-10-16), all done: the Check your YubiKey links went (YK-10 retired); Set up your YubiKey became **YubiKey help** with the PIN and FIDO2 parts only, opening on its own when FIDO2 is off or a test didn't pass; Connected shows the number of keys and the firmware only (OTP and smart card don't matter to RestoreSafe), so `yubikey.FunctionsOf` went; the icon, label and text of a check share the first line; YubiKey help and Technical details have a heading that opens and closes them, the new `widget.Expander`.
