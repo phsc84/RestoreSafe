@@ -22,18 +22,15 @@ func TestConfigNotice(t *testing.T) {
 		want    []string
 		not     []string
 	}{
-		{"one missing", []string{"reminder_days"}, nil,
-			[]string{"reminder_days isn't in work.yaml, so its default applies.", "then adds the missing settings with their default values and explanations."},
-			[]string{"no longer used"}},
-		{"three missing", []string{"reminder_days", "recovery_code", "differential"}, nil,
-			[]string{"3 settings aren't in work.yaml, so their defaults apply: reminder_days, recovery_code, differential."}, nil},
-		{"one retired", nil, []config.Retired{{Key: "yubikey_spare", Line: 101}},
-			[]string{"yubikey_spare (line 101) is no longer used by this version of RestoreSafe and is ignored.", "then removes the settings that are no longer used."},
-			[]string{"adds the missing"}},
+		{"missing", []string{"reminder_days", "recovery_code", "differential"}, nil,
+			[]string{"Missing (defaults apply):\n• reminder_days\n• recovery_code\n• differential\n\nUpdate fixes"},
+			[]string{"No longer used"}},
+		{"retired", nil, []config.Retired{{Key: "yubikey_spare", Line: 101}},
+			[]string{"No longer used (ignored):\n• yubikey_spare (line 101)\n\nUpdate fixes"},
+			[]string{"Missing"}},
 		{"both", []string{"argon2"}, []config.Retired{{Key: "io_diagnostics", Line: 4}, {Key: "yubikey_spare", Line: 9}},
-			[]string{"2 settings are no longer used by this version of RestoreSafe and are ignored: io_diagnostics (line 4), yubikey_spare (line 9).",
-				"Update work.yaml saves a copy of the file next to it, then removes the settings that are no longer used and adds the missing settings",
-				"RestoreSafe asks again at the next start."}, nil},
+			[]string{"No longer used (ignored):\n• io_diagnostics (line 4)\n• yubikey_spare (line 9)\n\nMissing (defaults apply):\n• argon2\n\n" +
+				"Update fixes the file and keeps a copy of the old one. Not now asks again at the next start."}, nil},
 	} {
 		cfg.MissingKeys, cfg.RetiredKeys = tc.missing, tc.retired
 		n := ConfigNoticeOf(cfg, `C:\RestoreSafe\work.yaml`)

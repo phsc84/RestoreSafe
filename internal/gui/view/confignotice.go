@@ -25,37 +25,30 @@ func ConfigNoticeOf(cfg *config.Config, configPath string) *ConfigNotice {
 		return nil
 	}
 	name := filepath.Base(configPath)
-	var paras, does []string
-	switch n := len(cfg.RetiredKeys); {
-	case n == 1:
-		paras = append(paras, fmt.Sprintf(retiredOne, cfg.RetiredKeys[0]))
-	case n > 1:
-		keys := make([]string, n)
+	var paras []string
+	// list is a heading with one bullet per setting.
+	list := func(heading string, keys []string) string {
+		lines := []string{heading}
+		for _, k := range keys {
+			lines = append(lines, bullet+k)
+		}
+		return strings.Join(lines, "\n")
+	}
+	if len(cfg.RetiredKeys) > 0 {
+		keys := make([]string, len(cfg.RetiredKeys))
 		for i, r := range cfg.RetiredKeys {
 			keys[i] = r.String()
 		}
-		paras = append(paras, fmt.Sprintf(retiredMany, n, strings.Join(keys, ", ")))
-	}
-	if len(cfg.RetiredKeys) > 0 {
-		does = append(does, updateRemoves)
-	}
-	switch n := len(cfg.MissingKeys); {
-	case n == 1:
-		paras = append(paras, fmt.Sprintf(missingOne, cfg.MissingKeys[0], name))
-	case n > 1:
-		paras = append(paras, fmt.Sprintf(missingMany, n, name, strings.Join(cfg.MissingKeys, ", ")))
+		paras = append(paras, list(retiredHeading, keys))
 	}
 	if len(cfg.MissingKeys) > 0 {
-		does = append(does, updateAdds)
+		paras = append(paras, list(missingHeading, cfg.MissingKeys))
 	}
-	update := fmt.Sprintf(buttonUpdateConfig, name)
-	paras = append(paras,
-		fmt.Sprintf(updateDoes, strings.ReplaceAll(update, "&", ""), strings.Join(does, " and ")),
-		fmt.Sprintf(updateLater, name))
+	paras = append(paras, updateDoes)
 	return &ConfigNotice{
 		Instruction: fmt.Sprintf(updateInstruction, name),
 		Content:     strings.Join(paras, "\n\n"),
-		Update:      update,
+		Update:      fmt.Sprintf(buttonUpdateConfig, name),
 		Later:       buttonNotNow,
 	}
 }

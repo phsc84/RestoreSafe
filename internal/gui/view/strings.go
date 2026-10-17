@@ -454,14 +454,10 @@ const (
 // longer used (GUI spec ST-10).
 const (
 	updateInstruction     = "Update %s?"
-	retiredOne            = "%s is no longer used by this version of RestoreSafe and is ignored."
-	retiredMany           = "%d settings are no longer used by this version of RestoreSafe and are ignored: %s."
-	missingOne            = "%s isn't in %s, so its default applies."
-	missingMany           = "%d settings aren't in %s, so their defaults apply: %s."
-	updateDoes            = "%s saves a copy of the file next to it, then %s. Nothing else in the file changes."
-	updateRemoves         = "removes the settings that are no longer used"
-	updateAdds            = "adds the missing settings with their default values and explanations"
-	updateLater           = "Not now keeps %s as it is; RestoreSafe asks again at the next start."
+	retiredHeading        = "No longer used (ignored):"
+	missingHeading        = "Missing (defaults apply):"
+	bullet                = "• "
+	updateDoes            = "Update fixes the file and keeps a copy of the old one. Not now asks again at the next start."
 	buttonUpdateConfig    = "&Update %s"
 	buttonNotNow          = "&Not now"
 	updatedInstruction    = "%s is up to date"
