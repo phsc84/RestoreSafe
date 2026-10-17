@@ -186,65 +186,91 @@ func TestConnectedTextWithoutFirmware(t *testing.T) {
 	}
 }
 
-func TestYubiKeyGuideOpensWhenItHelps(t *testing.T) {
+func TestYubiKeyHelpIsAlwaysThere(t *testing.T) {
 	t.Parallel()
-	d := yubiKey5(0x0574, true)
-	for _, tc := range []struct {
-		name string
-		keys health.KeysSummary
-		st   YubiKeyState
-		want bool
-	}{
-		{"no YubiKey keys", noKeys, YubiKeyState{Diagnosis: d}, false},
-		{"YubiKey keys", yubiKeys, YubiKeyState{Diagnosis: d}, false},
-		{"no FIDO2", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, true},
-		{"old firmware: the help doesn't help", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, false},
-		{"passed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, nil, false, 0)}, false},
-		{"cancelled", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("c"), true, 0x800704C7)}, true},
-		{"failed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("f"), false, 1)}, true},
-	} {
-		g := YubiKeyPageOf(snapshotWith(tc.keys), tc.st, ykNow).Guide
-		if g.Expanded != tc.want {
-			t.Errorf("%s: expanded %v, want %v", tc.name, g.Expanded, tc.want)
-		}
+	for _, st := range []YubiKeyState{{}, {Diagnosis: yubiKey5(0x0574, true)}, {Diagnosis: yubiKey5(0x0574, false)}} {
+		g := YubiKeyPageOf(snapshotWith(yubiKeys), st, ykNow).Guide
 		if g.Title != "YubiKey help" || len(g.Steps) != 2 || g.Steps[0].Action == nil || g.Steps[0].Action.Action != ActionOpenSignInSettings || g.Steps[1].Action == nil || g.Steps[1].Action.Action != ActionOpenAuthenticator {
-			t.Fatalf("%s: %+v", tc.name, g)
+			t.Fatalf("%+v", g)
 		}
 	}
 }
 
+// The technical details go from the overview to the raw data, in sections
+// with the values in one column.
 func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	t.Parallel()
 	d := yubiKey5(0x0574, true)
 	st := YubiKeyState{Diagnosis: d, AppVersion: "2.1.0", WindowsVersion: "10.0.26200",
 		Test: result(keycheck.Match, errors.New("FIDO2 hmac-secret failed: WebAuthNAuthenticatorGetAssertion: HRESULT 0x800704C7."), true, 0x800704C7)}
-	got := YubiKeyDetails(st)
-	for _, want := range []string{
-		"RestoreSafe 2.1.0", "Windows 10.0.26200", "WebAuthn API version 9 (needs 4)",
-		`FIDO  \\?\hid#vid_1050&pid_0407&mi_01#fido`, "product ID 0x0407, USB device version 0x0574 (5.7.4), usage page 0xF1D0",
-		"write access denied: Access is denied.", "write access granted", `VID_1050&PID_0407&MI_00\8&1&0&0000: kbdhid`,
-		"Match, Fri 16 Oct 2026, 08:52:00, cancelled", "HRESULT 0x800704C7", "WebAuthn trace", "hmac-secret output length: 32 bytes",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("details lack %q:\n%s", want, got)
+	keys := yubiKeys
+	keys.Methods, keys.RecoveryCode = "password + YubiKey", true
+	got := YubiKeyDetails(keys, st)
+	want := []string{
+		"RestoreSafe 2.1.0\n\nSUMMARY\n",
+		"  Windows         Ready for YubiKeys\n",
+		"  YubiKeys        1 connected\n",
+		"  FIDO2           On\n",
+		"  Firmware        5.7.4 (RestoreSafe needs 5.2 or later)\n",
+		"  Your keys       Password + YubiKey, created 2026-09-01, with recovery code\n",
+		"  In backups      Some backups need a YubiKey\n",
+		"  Last test       Match, Fri 16 Oct 2026, 08:52:00: cancelled\n",
+		"\nYUBIKEY 1\n  Product ID      0x0407\n  Firmware        5.7.4 (USB device version 0x0574)\n  USB device      usb1\n",
+		"  Interface       FIDO  usage page 0xF1D0, usage 0x0001, write access denied (normal: Windows keeps the FIDO interface for itself)\n                  " + `\\?\hid#vid_1050&pid_0407&mi_01#fido` + "\n",
+		"  Interface       OTP   usage page 0x0001, usage 0x0006, write access granted\n",
+		"\nLAST TEST\n  Kind            Match: asks the YubiKey",
+		"  Result          Cancelled\n",
+		"  Error code      0x800704C7: ended as cancelled.",
+		"  Message         FIDO2 hmac-secret failed",
+		"  WebAuthn trace  [fido2-debug] hmac-secret output length: 32 bytes\n",
+		"\nWINDOWS\n  Version         Windows 11 (10.0.26200)\n  WebAuthn API    9 (RestoreSafe needs 4)\n",
+		"  HID drivers     " + `VID_1050&PID_0407&MI_00\8&1&0&0000` + ": kbdhid\n",
+	}
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("details lack %q:\n%s", w, got)
 		}
 	}
 
-	// Without a diagnosis or a test, the details say so.
-	got = YubiKeyDetails(YubiKeyState{AppVersion: "2.1.0"})
-	if !strings.Contains(got, "Not checked yet.") || !strings.Contains(got, "Last test\n  None") {
-		t.Fatalf("empty details:\n%s", got)
-	}
-	windows := &yubikey.Diagnosis{APIMinimum: 4, APIErr: errors.New("webauthn.dll not available"), EnumErr: errors.New("SetupDiGetClassDevsEx: denied")}
-	got = YubiKeyDetails(YubiKeyState{Diagnosis: windows, Test: result(keycheck.Capability, nil, false, 0)})
-	for _, want := range []string{"WebAuthn: webauthn.dll not available", "Listing failed: SetupDiGetClassDevsEx: denied\n  None", "Capability", "passed"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("details lack %q:\n%s", want, got)
+	// Before the first check, without keys or a test: the summary says so.
+	got = YubiKeyDetails(noKeys, YubiKeyState{AppVersion: "2.1.0", WindowsVersion: "10.0.19045"})
+	for _, w := range []string{"  Windows         Not checked yet\n", "  YubiKeys        Not checked yet\n", "  Your keys       None yet: your first backup creates them\n",
+		"  In backups      No backup needs a YubiKey\n", "  Last test       None in this session\n", "  Version         Windows 10 (10.0.19045)\n"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("empty details lack %q:\n%s", w, got)
 		}
 	}
-	got = YubiKeyDetails(YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("failed"), false, 0x80090029)})
-	if !strings.Contains(got, "failed") || !strings.Contains(got, "HRESULT 0x80090029") {
-		t.Fatalf("failed test:\n%s", got)
+	if strings.Contains(got, "LAST TEST") || strings.Contains(got, "YUBIKEY 1") || strings.Contains(got, "WebAuthn API") {
+		t.Fatalf("sections without data:\n%s", got)
+	}
+
+	// Windows too old, no YubiKey, a listing error, a failed capability test.
+	windows := &yubikey.Diagnosis{APIMinimum: 4, APIErr: errors.New("webauthn.dll not available"), EnumErr: errors.New("SetupDiGetClassDevsEx: denied")}
+	got = YubiKeyDetails(noKeys, YubiKeyState{Diagnosis: windows, WindowsVersion: "odd", Test: result(keycheck.Capability, errors.New("failed"), false, 0x12345678)})
+	for _, w := range []string{"Not ready: needs Windows 11 version 22H2 or later", "  YubiKeys        None connected\n", "  FIDO2           Unknown: no YubiKey connected\n",
+		"Capability, Fri 16 Oct 2026, 08:52:00: failed", "  Kind            Capability: registers", "  Error code      0x12345678\n",
+		"  Version         odd\n", "  WebAuthn error  webauthn.dll not available\n", "  Listing error   SetupDiGetClassDevsEx: denied\n", "  HID drivers     None\n"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("details lack %q:\n%s", w, got)
+		}
+	}
+
+	// Two YubiKeys, old firmware, an interface that can't be opened, a
+	// passed test.
+	two := twoKeys()
+	two.Interfaces[0].WriteAccess, two.Interfaces[0].OpenErr = false, errors.New("in use")
+	old := yubiKey5(0x0437, true)
+	got = YubiKeyDetails(yubiKeys, YubiKeyState{Diagnosis: two, Test: result(keycheck.Match, nil, false, 0)})
+	for _, w := range []string{"2 connected: no backup until only one is", "YUBIKEY 2", "write access denied: in use", "Match, Fri 16 Oct 2026, 08:52:00: passed", "  Result          Passed\n"} {
+		if !strings.Contains(got, w) {
+			t.Errorf("details lack %q:\n%s", w, got)
+		}
+	}
+	if got := YubiKeyDetails(yubiKeys, YubiKeyState{Diagnosis: old}); !strings.Contains(got, "4.3.7: too old, RestoreSafe needs 5.2 or later") {
+		t.Fatalf("old firmware:\n%s", got)
+	}
+	if got := windowsName("10.0.x"); got != "10.0.x" {
+		t.Fatalf("windowsName of an odd version: %q", got)
 	}
 }
 

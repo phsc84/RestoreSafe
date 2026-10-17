@@ -68,10 +68,14 @@ func (i Interface) Function() Function {
 
 // Key is one connected YubiKey: the interfaces of one USB device.
 type Key struct {
+	// Device is the instance ID of its USB device ("" when Windows didn't
+	// name it).
+	Device    string
 	ProductID uint16
 	Revision  uint16
 	// FIDO tells whether one of its interfaces is a FIDO interface.
-	FIDO bool
+	FIDO       bool
+	Interfaces []Interface
 }
 
 // DriverEntry is a HID driver entry of a Yubico device in the registry.
@@ -109,10 +113,11 @@ func (d Diagnosis) Keys() []Key {
 		}
 		i, ok := index[device]
 		if !ok {
-			keys = append(keys, Key{ProductID: iface.ProductID, Revision: iface.Revision})
+			keys = append(keys, Key{Device: iface.Device, ProductID: iface.ProductID, Revision: iface.Revision})
 			i = len(keys) - 1
 			index[device] = i
 		}
+		keys[i].Interfaces = append(keys[i].Interfaces, iface)
 		if iface.Function() == FunctionFIDO {
 			keys[i].FIDO = true
 		}

@@ -593,3 +593,79 @@ const (
 	WindowsUpdateURI       = "ms-settings:windowsupdate"
 	YubicoAuthenticatorURL = "https://www.yubico.com/products/yubico-authenticator/"
 )
+
+// The technical details of the YubiKey page (GUI spec YK-9): sections,
+// labels and values, for an overview at a glance and for a bug report.
+const (
+	ydSummary         = "SUMMARY"
+	ydYubiKey         = "YUBIKEY %d"
+	ydLastTest        = "LAST TEST"
+	ydWindows         = "WINDOWS"
+	ydLabelWindows    = "Windows"
+	ydLabelYubiKeys   = "YubiKeys"
+	ydLabelFIDO       = "FIDO2"
+	ydLabelFirmware   = "Firmware"
+	ydLabelKeys       = "Your keys"
+	ydLabelInBackups  = "In backups"
+	ydLabelTest       = "Last test"
+	ydLabelProduct    = "Product ID"
+	ydLabelDevice     = "USB device"
+	ydLabelInterface  = "Interface"
+	ydLabelKind       = "Kind"
+	ydLabelTime       = "Time"
+	ydLabelResult     = "Result"
+	ydLabelCode       = "Error code"
+	ydLabelMessage    = "Message"
+	ydLabelTrace      = "WebAuthn trace"
+	ydLabelVersion    = "Version"
+	ydLabelAPI        = "WebAuthn API"
+	ydLabelAPIError   = "WebAuthn error"
+	ydLabelDrivers    = "HID drivers"
+	ydLabelListing    = "Listing error"
+	ydNotChecked      = "Not checked yet"
+	ydReady           = "Ready for YubiKeys"
+	ydNotReady        = "Not ready: needs Windows 11 version 22H2 or later"
+	ydNoneConnected   = "None connected"
+	ydOneConnected    = "1 connected"
+	ydManyConnected   = "%d connected: no backup until only one is"
+	ydFIDOOn          = "On"
+	ydFIDOOff         = "Off or missing"
+	ydUnknown         = "Unknown: no YubiKey connected"
+	ydFirmware        = "%s (RestoreSafe needs 5.2 or later)"
+	ydFirmwareOld     = "%s: too old, RestoreSafe needs 5.2 or later"
+	ydFirmwareRev     = "%s (USB device version 0x%04X)"
+	ydKeysNone        = "None yet: your first backup creates them"
+	ydKeys            = "%s, created %s"
+	ydKeysRecovery    = "%s, created %s, with recovery code"
+	ydInBackupsYes    = "Some backups need a YubiKey"
+	ydInBackupsNo     = "No backup needs a YubiKey"
+	ydTestNone        = "None in this session"
+	ydTestLine        = "%s, %s: %s"
+	ydMatch           = "Match"
+	ydMatchMeans      = "Match: asks the YubiKey for the secret of your current keys (PIN and one touch)"
+	ydCapability      = "Capability"
+	ydCapabilityMeans = "Capability: registers a credential that stays on no YubiKey and derives one secret (PIN twice, two touches)"
+	ydPassed          = "passed"
+	ydCancelled       = "cancelled"
+	ydFailed          = "failed"
+	ydUsage           = "%-5s usage page 0x%04X, usage 0x%04X"
+	ydWriteGranted    = "write access granted"
+	ydWriteDeniedFIDO = "write access denied (normal: Windows keeps the FIDO interface for itself)"
+	ydWriteDenied     = "write access denied: %v"
+	ydNone            = "None"
+	ydAPI             = "%d (RestoreSafe needs %d)"
+	ydWindowsName     = "Windows %d (%s)"
+	ydCodeUnknown     = "0x%08X"
+	ydCodeKnown       = "0x%08X: %s"
+)
+
+// hresultMeanings are the WebAuthn errors RestoreSafe knows, in words
+// (GUI spec YK-11).
+var hresultMeanings = map[uint32]string{
+	0x800704C7: "ended as cancelled. Windows returns this for a cancel, a YubiKey that isn't registered and a locked PIN alike; its own dialog said which (ERROR_CANCELLED)",
+	0x80090036: "cancelled by the user (NTE_USER_CANCELLED)",
+	0x80090027: "invalid parameter, for example no window for the Windows Security dialog (NTE_INVALID_PARAMETER)",
+	0x8009000F: "the YubiKey already holds this credential (NTE_EXISTS)",
+	0x80090029: "not supported by the YubiKey or by Windows (NTE_NOT_SUPPORTED)",
+	0x800705B4: "timed out: no touch in time (ERROR_TIMEOUT)",
+}

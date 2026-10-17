@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,9 +34,8 @@ type GuideStep struct {
 
 // YubiKeyGuide is the card "YubiKey help" (GUI spec YK-8).
 type YubiKeyGuide struct {
-	Title    string
-	Expanded bool
-	Steps    []GuideStep
+	Title string
+	Steps []GuideStep
 }
 
 // YubiKeyPage is everything the YubiKey page shows (GUI spec 10.2).
@@ -88,9 +88,9 @@ func YubiKeyPageOf(s *health.Snapshot, st YubiKeyState, now time.Time) YubiKeyPa
 		Hero:         yubiKeyHero(keys, st, now),
 		ChecksTitle:  ykChecksTitle,
 		Checks:       yubiKeyChecks(keys, st),
-		Guide:        yubiKeyGuide(st),
+		Guide:        yubiKeyGuide(),
 		DetailsTitle: ykDetailsTitle,
-		Details:      YubiKeyDetails(st),
+		Details:      YubiKeyDetails(keys, st),
 		CopyDetails:  Button{Text: buttonCopyDetails, Action: ActionCopyDetails, Enabled: true},
 	}
 	if st.Testing {
@@ -266,14 +266,9 @@ func connectedText(keys []yubikey.Key) string {
 	return text
 }
 
-func yubiKeyGuide(st YubiKeyState) YubiKeyGuide {
-	f, _ := faultOf(st.Diagnosis)
-	r := st.Test
+func yubiKeyGuide() YubiKeyGuide {
 	return YubiKeyGuide{
 		Title: ykGuideTitle,
-		// Open when it helps: FIDO2 is off, or a test didn't pass, which may
-		// be the PIN (YK-7, YK-8).
-		Expanded: f == faultNoFIDO || r != nil && !r.Passed(),
 		Steps: []GuideStep{
 			{Title: ykStep1, Text: ykStep1Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
 			{Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
@@ -281,83 +276,212 @@ func yubiKeyGuide(st YubiKeyState) YubiKeyGuide {
 	}
 }
 
-// YubiKeyDetails is the text of the technical details, for a bug report
-// (YK-9). It holds no PIN, secret, salt or credential ID: the diagnosis and
-// the test result have none.
-func YubiKeyDetails(st YubiKeyState) string {
-	var b strings.Builder
-	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
-	line("RestoreSafe %s", st.AppVersion)
-	line("Windows %s", st.WindowsVersion)
+// detailsLabelWidth is the width of the labels in the technical details, in
+// characters: the values start in one column.
+const detailsLabelWidth = 16
 
-	d := st.Diagnosis
-	if d == nil {
-		line("")
-		line("Not checked yet.")
-	} else {
-		line("WebAuthn API version %d (needs %d)", d.APIVersion, d.APIMinimum)
-		if d.APIErr != nil {
-			line("WebAuthn: %v", d.APIErr)
+// details writes the technical details: sections of labeled lines, the
+// values in one column, continuation lines under the value.
+type details struct{ b strings.Builder }
+
+func (d *details) section(title string) {
+	if d.b.Len() > 0 {
+		d.b.WriteString("\n")
+	}
+	d.b.WriteString(title + "\n")
+}
+
+// line writes label and value; a value of several lines goes on under the
+// first.
+func (d *details) line(label, value string) {
+	for i, v := range strings.Split(strings.TrimRight(value, "\n"), "\n") {
+		if i > 0 {
+			label = ""
 		}
-		line("")
-		line("Yubico HID interfaces")
-		if d.EnumErr != nil {
-			line("  Listing failed: %v", d.EnumErr)
+		fmt.Fprintf(&d.b, "  %-*s%s\n", detailsLabelWidth, label, v)
+	}
+}
+
+// YubiKeyDetails is the text of the technical details (YK-9), from the
+// overview to the raw data: the summary, each connected YubiKey, the last
+// test and Windows. It holds no PIN, secret, salt or credential ID: the
+// diagnosis, the test result and the key summary have none.
+func YubiKeyDetails(keys health.KeysSummary, st YubiKeyState) string {
+	var d details
+	dg := st.Diagnosis
+
+	d.section(ydSummary)
+	d.line(ydLabelWindows, detailsWindowsState(dg))
+	d.line(ydLabelYubiKeys, detailsCount(dg))
+	if dg != nil && len(dg.Keys()) > 0 {
+		k := fidoKey(dg)
+		d.line(ydLabelFIDO, map[bool]string{true: ydFIDOOn, false: ydFIDOOff}[dg.FIDO()])
+		if k.Revision == 0 {
+			k = dg.Keys()[0]
 		}
-		if len(d.Interfaces) == 0 {
-			line("  None")
+		if k.Revision != 0 {
+			format := ydFirmware
+			if k.Revision < minFirmware {
+				format = ydFirmwareOld
+			}
+			d.line(ydLabelFirmware, fmt.Sprintf(format, yubikey.FormatRevision(k.Revision)))
 		}
-		for _, i := range d.Interfaces {
-			line("  %s  %s", i.Function(), i.Path)
-			line("    product ID 0x%04X, USB device version 0x%04X (%s), usage page 0x%04X, usage 0x%04X",
-				i.ProductID, i.Revision, yubikey.FormatRevision(i.Revision), i.UsagePage, i.Usage)
-			if i.WriteAccess {
-				line("    write access granted")
-			} else {
-				line("    write access denied: %v", i.OpenErr)
+	} else if dg != nil {
+		d.line(ydLabelFIDO, ydUnknown)
+	}
+	d.line(ydLabelKeys, detailsKeys(keys))
+	d.line(ydLabelInBackups, map[bool]string{true: ydInBackupsYes, false: ydInBackupsNo}[keys.YubiKeyInBackups])
+	d.line(ydLabelTest, detailsTestLine(st.Test))
+
+	if dg != nil {
+		for i, k := range dg.Keys() {
+			d.section(fmt.Sprintf(ydYubiKey, i+1))
+			d.line(ydLabelProduct, fmt.Sprintf("0x%04X", k.ProductID))
+			if k.Revision != 0 {
+				d.line(ydLabelFirmware, fmt.Sprintf(ydFirmwareRev, yubikey.FormatRevision(k.Revision), k.Revision))
+			}
+			if k.Device != "" {
+				d.line(ydLabelDevice, k.Device)
+			}
+			for _, iface := range k.Interfaces {
+				d.line(ydLabelInterface, detailsInterface(iface))
 			}
 		}
-		line("")
-		line(`HID drivers (HKLM\SYSTEM\CurrentControlSet\Enum\HID)`)
-		if len(d.Drivers) == 0 {
-			line("  None")
+	}
+
+	if r := st.Test; r != nil {
+		d.section(ydLastTest)
+		kind := ydCapabilityMeans
+		if r.Kind == keycheck.Match {
+			kind = ydMatchMeans
 		}
-		for _, e := range d.Drivers {
-			line("  %s: %s", e.Key, e.Service)
+		d.line(ydLabelKind, kind)
+		d.line(ydLabelTime, Exact(r.Time))
+		d.line(ydLabelResult, capitalize(testResult(r)))
+		if r.HRESULT != 0 {
+			d.line(ydLabelCode, hresultText(r.HRESULT))
+		}
+		if r.Err != nil {
+			d.line(ydLabelMessage, r.Err.Error())
+		}
+		if r.Trace != "" {
+			d.line(ydLabelTrace, r.Trace)
 		}
 	}
 
-	line("")
-	line("Last test")
-	r := st.Test
+	d.section(ydWindows)
+	d.line(ydLabelVersion, windowsName(st.WindowsVersion))
+	if dg != nil {
+		d.line(ydLabelAPI, fmt.Sprintf(ydAPI, dg.APIVersion, dg.APIMinimum))
+		if dg.APIErr != nil {
+			d.line(ydLabelAPIError, dg.APIErr.Error())
+		}
+		if dg.EnumErr != nil {
+			d.line(ydLabelListing, dg.EnumErr.Error())
+		}
+		drivers := ydNone
+		if len(dg.Drivers) > 0 {
+			var lines []string
+			for _, e := range dg.Drivers {
+				lines = append(lines, e.Key+": "+e.Service)
+			}
+			drivers = strings.Join(lines, "\n")
+		}
+		d.line(ydLabelDrivers, drivers)
+	}
+	return "RestoreSafe " + st.AppVersion + "\n\n" + d.b.String()
+}
+
+func detailsWindowsState(d *yubikey.Diagnosis) string {
+	switch {
+	case d == nil:
+		return ydNotChecked
+	case d.APIErr != nil:
+		return ydNotReady
+	}
+	return ydReady
+}
+
+func detailsCount(d *yubikey.Diagnosis) string {
+	if d == nil {
+		return ydNotChecked
+	}
+	switch n := len(d.Keys()); n {
+	case 0:
+		return ydNoneConnected
+	case 1:
+		return ydOneConnected
+	default:
+		return fmt.Sprintf(ydManyConnected, n)
+	}
+}
+
+func detailsKeys(k health.KeysSummary) string {
+	if !k.Exists {
+		return ydKeysNone
+	}
+	format := ydKeys
+	if k.RecoveryCode {
+		format = ydKeysRecovery
+	}
+	return fmt.Sprintf(format, capitalize(k.Methods), k.Created.Local().Format("2006-01-02"))
+}
+
+func detailsTestLine(r *keycheck.Result) string {
 	if r == nil {
-		line("  None")
-		return b.String()
+		return ydTestNone
 	}
-	kind := "Capability"
+	kind := ydCapability
 	if r.Kind == keycheck.Match {
-		kind = "Match"
+		kind = ydMatch
 	}
-	result := "passed"
+	return fmt.Sprintf(ydTestLine, kind, Exact(r.Time), testResult(r))
+}
+
+func testResult(r *keycheck.Result) string {
 	switch {
 	case r.Cancelled:
-		result = "cancelled"
+		return ydCancelled
 	case !r.Passed():
-		result = "failed"
+		return ydFailed
 	}
-	line("  %s, %s, %s", kind, Exact(r.Time), result)
-	if r.HRESULT != 0 {
-		line("  HRESULT 0x%08X", r.HRESULT)
+	return ydPassed
+}
+
+// detailsInterface describes one HID interface on two lines: its function,
+// usage and access, then its path.
+func detailsInterface(i yubikey.Interface) string {
+	access := ydWriteGranted
+	switch {
+	case !i.WriteAccess && i.Function() == yubikey.FunctionFIDO:
+		access = ydWriteDeniedFIDO
+	case !i.WriteAccess:
+		access = fmt.Sprintf(ydWriteDenied, i.OpenErr)
 	}
-	if r.Err != nil {
-		line("  %v", r.Err)
+	return fmt.Sprintf(ydUsage, i.Function(), i.UsagePage, i.Usage) + ", " + access + "\n" + i.Path
+}
+
+func hresultText(code uint32) string {
+	if meaning, ok := hresultMeanings[code]; ok {
+		return fmt.Sprintf(ydCodeKnown, code, meaning)
 	}
-	if r.Trace != "" {
-		line("")
-		line("WebAuthn trace")
-		for _, t := range strings.Split(strings.TrimRight(r.Trace, "\n"), "\n") {
-			line("  %s", t)
-		}
+	return fmt.Sprintf(ydCodeUnknown, code)
+}
+
+// windowsName names Windows by its version "10.0.26200": builds from 22000
+// on are Windows 11.
+func windowsName(version string) string {
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 {
+		return version
 	}
-	return b.String()
+	build, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return version
+	}
+	major := 10
+	if build >= 22000 {
+		major = 11
+	}
+	return fmt.Sprintf(ydWindowsName, major, version)
 }

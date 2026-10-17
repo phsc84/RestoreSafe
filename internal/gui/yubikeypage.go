@@ -13,7 +13,6 @@ import (
 const (
 	idYubiKeyCheck = 901 + iota
 	idYubiKeyTest
-	idYubiKeyGuide
 	idYubiKeySignIn
 	idYubiKeyAuthenticator
 	idYubiKeyDetails
@@ -43,14 +42,11 @@ type yubiKeyPage struct {
 	heroPrimary         win32.HWND
 
 	checks, guide, details *card
-	// The headings of the help and the details open and close them; they
-	// and the rich edit of the details outlive the cards' rebuilds.
-	guideHead, detailsHead *widget.Expander
-	text                   win32.HWND
-	// guideAuto is whether the view opened the help at the last update:
-	// it opens it when that starts, and the user closes it again.
-	guideAuto  bool
-	builtWidth int32
+	// The heading of the details opens and closes them; it and their rich
+	// edit outlive the card's rebuilds.
+	detailsHead *widget.Expander
+	text        win32.HWND
+	builtWidth  int32
 }
 
 func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
@@ -77,16 +73,13 @@ func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
 		}
 		(*c).panel.OnCommand = p.command
 	}
-	if p.guideHead, err = widget.NewExpander(t, p.guide.panel.HWND(), t.Palette.Surface, idYubiKeyGuide); err != nil {
-		return nil, err
-	}
 	if p.detailsHead, err = widget.NewExpander(t, p.details.panel.HWND(), t.Palette.Surface, idYubiKeyDetails); err != nil {
 		return nil, err
 	}
-	p.guideHead.OnToggle = func(bool) { p.update() }
 	p.detailsHead.OnToggle = func(bool) { p.update() }
 	p.text, err = win32.CreateWindow(0, win32.MSFTEDIT_CLASS, "",
-		win32.WS_CHILD|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL,
+		// No word wrap: the details are in columns; long paths scroll.
+		win32.WS_CHILD|win32.WS_TABSTOP|win32.WS_VSCROLL|win32.WS_HSCROLL|win32.WS_BORDER|win32.ES_MULTILINE|win32.ES_READONLY|win32.ES_AUTOVSCROLL|win32.ES_AUTOHSCROLL,
 		0, 0, 0, 0, p.details.panel.HWND(), idYubiKeyText)
 	if err != nil {
 		return nil, err
@@ -187,24 +180,14 @@ func (p *yubiKeyPage) fillChecks() {
 // guideIDs are the control IDs of the help's buttons, in order.
 var guideIDs = []uint16{idYubiKeySignIn, idYubiKeyAuthenticator}
 
-// fillGuide shows the YubiKey help: its heading opens and closes it. The
-// view opens it when it helps; the user can close it again.
+// fillGuide shows the YubiKey help, always open.
 func (p *yubiKeyPage) fillGuide() {
 	t := p.a.theme
 	pal := t.Palette
 	g := p.view.Guide
 	c := p.guide
 	c.reset()
-	open := p.guideHead.Open()
-	if g.Expanded && !p.guideAuto {
-		open = true
-	}
-	p.guideAuto = g.Expanded
-	p.guideHead.Set(g.Title, open)
-	c.row(expanderHeight, cell{hwnd: p.guideHead.HWND(), px: p.guideHead.Width()})
-	if !open {
-		return
-	}
+	c.heading(g.Title, nil)
 	for i, s := range g.Steps {
 		c.row(cardRowHeight, cell{dip: guideIndent}, cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
 		p.para(c, s.Text, widget.TextSmall, pal.TextSecondary, guideIndent)

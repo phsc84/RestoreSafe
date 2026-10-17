@@ -72,7 +72,7 @@ func TestDiagnoseFindsTheFIDOInterfaceByItsUsagePage(t *testing.T) {
 		t.Fatalf("FIDO %v, drivers %v", d.FIDO(), d.Drivers)
 	}
 	keys := d.Keys()
-	if len(keys) != 1 || !keys[0].FIDO || keys[0].ProductID != 0x0407 || keys[0].Revision != 0x0543 {
+	if len(keys) != 1 || !keys[0].FIDO || keys[0].ProductID != 0x0407 || keys[0].Revision != 0x0543 || len(keys[0].Interfaces) != 2 || keys[0].Device == "" {
 		t.Fatalf("keys: %+v", keys)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/gui/view"
 	"github.com/phsc84/restoresafe/internal/gui/win32"
 	"github.com/phsc84/restoresafe/internal/security/yubikey"
+	"github.com/phsc84/restoresafe/internal/workflow/health"
 	"github.com/phsc84/restoresafe/internal/workflow/keycheck"
 
 	"golang.org/x/sys/windows"
@@ -212,6 +213,10 @@ func (a *app) openAuthenticator() {
 // copyYubiKeyDetails copies the technical details for a bug report (YK-9).
 // They hold no secret, so the clipboard needs no protection.
 func (a *app) copyYubiKeyDetails() {
-	text := view.YubiKeyDetails(a.yubiKeyView())
+	var keys health.KeysSummary
+	if a.snapshot != nil {
+		keys = a.snapshot.Keys
+	}
+	text := view.YubiKeyDetails(keys, a.yubiKeyView())
 	win32.CopyText(a.hwnd, strings.ReplaceAll(text, "\n", "\r\n")) //nolint:errcheck // nothing to copy then
 }
