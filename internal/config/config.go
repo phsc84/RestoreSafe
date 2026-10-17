@@ -109,6 +109,10 @@ type Config struct {
 	// is listed by its name ("differential"), single keys of a block by
 	// their path ("differential.max_size_percent"). Set by Load.
 	MissingKeys []string `yaml:"-"`
+
+	// RetiredKeys lists the settings of earlier versions that the file still
+	// has, in the order of the file; they are ignored. Set by Load.
+	RetiredKeys []Retired `yaml:"-"`
 }
 
 // Backup reminder: the start screen warns when the newest backup is older
@@ -215,23 +219,24 @@ func Load(path string) (*Config, error) {
 }
 
 // parse decodes and validates the contents of a configuration file. Unknown
-// keys are an error; missing keys get their defaults and are listed in
-// MissingKeys (GUI spec 11.6).
+// keys are an error; retired keys are ignored and listed in RetiredKeys;
+// missing keys get their defaults and are listed in MissingKeys (GUI spec
+// 11.6).
 func parse(data []byte) (*Config, error) {
 	var cfg Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
-		if unknown := unknownKeysError(err); unknown != nil {
+		// yaml decodes the other keys even when some are unknown, so a file
+		// whose only unknown keys are retired ones is complete in cfg.
+		retired, unknown, ok := unknownKeys(err)
+		if unknown != nil {
 			return nil, unknown
 		}
-		remedy := "Check YAML syntax (space indentation, correct colons, no tabs)."
-		errMsg := strings.ToLower(err.Error())
-		if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
-			remedy += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
+		if !ok {
+			return nil, syntaxError(err)
 		}
-
-		return nil, problem.Errorf("Config file is invalid: %w", err).WithRemedyOnOwnLine(remedy)
+		cfg.RetiredKeys = retired
 	}
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err == nil {
@@ -241,6 +246,16 @@ func parse(data []byte) (*Config, error) {
 	cfg.withDefaults()
 	cfg.clampArgon2()
 	return &cfg, cfg.validate()
+}
+
+// syntaxError explains an error of yaml that isn't about unknown keys.
+func syntaxError(err error) error {
+	remedy := "Check YAML syntax (space indentation, correct colons, no tabs)."
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "hexdecimal number") || strings.Contains(errMsg, "hexadecimal number") {
+		remedy += " For Windows paths, prefer forward slashes (e.g. C:/Users/Name) or escaped backslashes inside quotes (C:\\\\Users\\\\Name)."
+	}
+	return problem.Errorf("Config file is invalid: %w", err).WithRemedyOnOwnLine(remedy)
 }
 
 // clampArgon2 lowers any argon2 value that exceeds its enforced maximum and

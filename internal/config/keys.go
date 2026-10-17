@@ -127,61 +127,66 @@ var unknownField = regexp.MustCompile(`^line (\d+): field (.+) not found in type
 var blockOfType = map[string]string{"Config": "", "Differential": "differential", "Argon2": "argon2"}
 
 // retiredKeys are settings that earlier versions had. A file that still has
-// one is told so, not that the setting is unknown.
+// one loads; the setting is ignored and listed in RetiredKeys (GUI spec
+// 11.6). A key belongs here only when ignoring its value is harmless: a
+// setting that is renamed, or whose meaning moves to another, needs its
+// value carried over instead.
 var retiredKeys = []string{"io_diagnostics", "yubikey_spare"}
 
-// unknownKeysError rewrites the error of a file with unknown or retired keys,
-// nil when err isn't only about such keys.
-func unknownKeysError(err error) error {
+// Retired is a setting of an earlier version that a file still has: its
+// path and the line it is on.
+type Retired struct {
+	Key  string
+	Line int
+}
+
+// String returns the key and its line: "yubikey_spare (line 101)".
+func (r Retired) String() string { return fmt.Sprintf("%s (line %d)", r.Key, r.Line) }
+
+// unknownKeys sorts the keys of an error of yaml about unknown keys into
+// retired ones and an error that names the others, nil when there are none.
+// ok is false when err isn't only about unknown keys.
+func unknownKeys(err error) (retired []Retired, unknownErr error, ok bool) {
 	var te *yaml.TypeError
 	if !errors.As(err, &te) || len(te.Errors) == 0 {
-		return nil
+		return nil, nil, false
 	}
-	var unknown, retired []string
+	var unknown []string
 	for _, e := range te.Errors {
 		m := unknownField.FindStringSubmatch(e)
 		if m == nil {
-			return nil
+			return nil, nil, false
 		}
 		key := m[2]
 		if block := blockOfType[m[3]]; block != "" {
 			key = block + "." + key
 		}
-		found := fmt.Sprintf("'%s' (line %s)", key, m[1])
 		if slices.Contains(retiredKeys, key) {
-			retired = append(retired, found)
+			line, _ := strconv.Atoi(m[1])
+			retired = append(retired, Retired{Key: key, Line: line})
 		} else {
-			unknown = append(unknown, found)
+			unknown = append(unknown, fmt.Sprintf("'%s' (line %s)", key, m[1]))
 		}
 	}
-	var msg []string
+	remedy := "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
 	switch len(unknown) {
 	case 0:
 	case 1:
-		msg = append(msg, "Config file has an unknown setting: "+unknown[0]+".")
+		unknownErr = problem.New("Config file has an unknown setting: " + unknown[0] + ".").WithRemedyOnOwnLine(remedy)
 	default:
-		msg = append(msg, "Config file has unknown settings: "+strings.Join(unknown, ", ")+".")
+		unknownErr = problem.New("Config file has unknown settings: " + strings.Join(unknown, ", ") + ".").WithRemedyOnOwnLine(remedy)
 	}
-	switch len(retired) {
-	case 0:
-	case 1:
-		msg = append(msg, "Config file has a setting that is no longer used: "+retired[0]+".")
-	default:
-		msg = append(msg, "Config file has settings that are no longer used: "+strings.Join(retired, ", ")+".")
-	}
-	remedy := "Remove the line; config-SAMPLE.yaml describes every setting."
-	if len(unknown) > 0 {
-		remedy = "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
-	}
-	return problem.New(strings.Join(msg, " ")).WithRemedyOnOwnLine(remedy)
+	return retired, unknownErr, true
 }
 
-// AddMissing adds the settings that the configuration file at path lacks,
-// with their default values and their explanation from config-SAMPLE.yaml
-// (GUI spec ST-10). It first saves a copy of the file next to it and returns the
-// copy's path; "" when nothing was missing. The new file is written only when
-// it loads, lacks nothing and gives the same configuration as before.
-func AddMissing(path string, now time.Time) (string, error) {
+// Update brings the configuration file at path up to date (GUI spec
+// ST-10): it removes the retired settings and adds the missing ones with
+// their default values and their explanation from config-SAMPLE.yaml. It
+// first saves a copy of the file next to it and returns the copy's path; ""
+// when there was nothing to do. The new file is written only when it loads,
+// lacks nothing, has no retired settings and gives the same configuration as
+// before.
+func Update(path string, now time.Time) (string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("Config file can't be read: %w", err)
@@ -190,22 +195,25 @@ func AddMissing(path string, now time.Time) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(before.MissingKeys) == 0 {
+	if len(before.MissingKeys) == 0 && len(before.RetiredKeys) == 0 {
 		return "", nil
 	}
-	text, err := withMissing(data, now)
+	text, err := updated(data, now)
 	if err != nil {
 		return "", err
 	}
 	after, err := parse(text)
-	if err == nil && len(after.MissingKeys) > 0 {
+	switch {
+	case err != nil:
+	case len(after.MissingKeys) > 0:
 		err = fmt.Errorf("still missing: %s", strings.Join(after.MissingKeys, ", "))
-	}
-	if err == nil && !reflect.DeepEqual(effective(before), effective(after)) {
+	case len(after.RetiredKeys) > 0:
+		err = fmt.Errorf("still there: %s", after.RetiredKeys[0].Key)
+	case !reflect.DeepEqual(effective(before), effective(after)):
 		err = errors.New("the values would change")
 	}
 	if err != nil {
-		return "", problem.Errorf("RestoreSafe couldn't add the missing settings to %s: %v.", path, err).WithRemedyOnOwnLine("Add them by hand; config-SAMPLE.yaml describes every setting.")
+		return "", problem.Errorf("RestoreSafe couldn't update %s: %v.", path, err).WithRemedyOnOwnLine(byHand)
 	}
 
 	mode := os.FileMode(0o600)
@@ -253,7 +261,7 @@ func replaceFile(path string, data []byte, mode os.FileMode) error {
 // configurations compare equal when they do the same.
 func effective(c *Config) Config {
 	e := *c
-	e.MissingKeys, e.ExcludeMatcher, e.Argon2Notices = nil, nil, nil
+	e.MissingKeys, e.RetiredKeys, e.ExcludeMatcher, e.Argon2Notices = nil, nil, nil, nil
 	if len(e.Exclude) == 0 {
 		e.Exclude = nil
 	}
@@ -266,18 +274,34 @@ func effective(c *Config) Config {
 	return e
 }
 
-// withMissing returns data with the missing settings added: keys of a block
+// byHand is the remedy when RestoreSafe can't update the file.
+const byHand = "Add the missing settings and remove the ones no longer used by hand; config-SAMPLE.yaml describes every setting."
+
+// updated returns data with the retired settings removed, with the comment
+// lines directly above them, and the missing settings added: keys of a block
 // that exists at the end of that block, everything else at the end of the
-// file. The lines of data are kept as they are.
-func withMissing(data []byte, now time.Time) ([]byte, error) {
+// file. The other lines of data are kept as they are.
+func updated(data []byte, now time.Time) ([]byte, error) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("Config file is invalid: %w", err)
 	}
 	root := topMapping(&doc)
-	flow := problem.New("Config file is written in YAML flow style ({ … }), so RestoreSafe can't add settings to it.").WithRemedyOnOwnLine("Add them by hand; config-SAMPLE.yaml describes every setting.")
+	flow := problem.New("Config file is written in YAML flow style ({ … }), so RestoreSafe can't change it.").WithRemedyOnOwnLine(byHand)
 	if root == nil || root.Style&yaml.FlowStyle != 0 {
 		return nil, flow
+	}
+	eol := "\n"
+	if strings.Contains(string(data), "\r\n") {
+		eol = "\r\n"
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	if lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	drop, err := retiredLines(root, lines)
+	if err != nil {
+		return nil, err
 	}
 	comments, err := sampleComments()
 	if err != nil {
@@ -336,17 +360,11 @@ func withMissing(data []byte, now time.Time) ([]byte, error) {
 		}
 	}
 
-	eol := "\n"
-	if strings.Contains(string(data), "\r\n") {
-		eol = "\r\n"
-	}
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	if lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
 	var out []string
 	for i, line := range lines {
-		out = append(out, line)
+		if !drop[i+1] {
+			out = append(out, line)
+		}
 		out = append(out, inserts[i+1]...)
 	}
 	if len(tail) > 0 {
@@ -357,6 +375,54 @@ func withMissing(data []byte, now time.Time) ([]byte, error) {
 		}
 	}
 	return []byte(strings.Join(out, eol) + eol), nil
+}
+
+// retiredLines returns the lines (1-based) of the retired settings of root:
+// the key, the lines of its value, the comment lines directly above it at
+// its indentation, and one blank line when it stood between two.
+func retiredLines(root *yaml.Node, lines []string) (map[int]bool, error) {
+	blank := func(n int) bool { return n < 1 || n > len(lines) || strings.TrimSpace(lines[n-1]) == "" }
+	indent := func(n int) int { return len(lines[n-1]) - len(strings.TrimLeft(lines[n-1], " ")) }
+	drop := make(map[int]bool)
+	for _, key := range retiredKeys {
+		m, name := root, key
+		if block, child, nested := strings.Cut(key, "."); nested {
+			_, m = lookup(root, block)
+			name = child
+		}
+		k, v := lookup(m, name)
+		if k == nil {
+			continue
+		}
+		if m.Style&yaml.FlowStyle != 0 {
+			return nil, problem.New("Config file is written in YAML flow style ({ … }), so RestoreSafe can't change it.").WithRemedyOnOwnLine(byHand)
+		}
+		col := k.Column - 1
+		first, last := k.Line, max(k.Line, lastLine(v))
+		// The value goes on while lines are indented deeper than the key,
+		// or start a list item at its column; blank lines inside count.
+		for n := last + 1; n <= len(lines); n++ {
+			if blank(n) {
+				continue
+			}
+			trimmed := strings.TrimSpace(lines[n-1])
+			if indent(n) > col || v.Kind == yaml.SequenceNode && indent(n) == col && strings.HasPrefix(trimmed, "-") {
+				last = n
+				continue
+			}
+			break
+		}
+		for first > 1 && !blank(first-1) && indent(first-1) == col && strings.HasPrefix(strings.TrimSpace(lines[first-2]), "#") {
+			first--
+		}
+		for n := first; n <= last; n++ {
+			drop[n] = true
+		}
+		if blank(first-1) && blank(last+1) && first > 1 {
+			drop[first-1] = true
+		}
+	}
+	return drop, nil
 }
 
 // lastLine returns the last line that n or any node below it starts on.

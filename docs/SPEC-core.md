@@ -546,7 +546,7 @@ differential:
 
 Changing `authentication_mode`, or `recovery_code` in mode 1, requires new keys; the next backup announces this in the preflight and creates full backups.
 
-Removed settings: `io_diagnostics` (2.0; `log_level: "debug"` includes the I/O diagnostics of a backup: progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes) and `yubikey_spare` (2.1; there is no spare YubiKey). A file that still contains one doesn't load: the error names the setting as no longer used, with its line, and the remedy is to remove the line (GUI spec 11.6).
+Removed settings: `io_diagnostics` (2.0; `log_level: "debug"` includes the I/O diagnostics of a backup: progress every 2 seconds, a warning when no data moves for 10 seconds, write calls and part sizes) and `yubikey_spare` (2.1; there is no spare YubiKey). A file that still contains one loads and the setting is ignored; at start, RestoreSafe names it and offers to remove it (GUI spec 11.6, ST-10).
 
 ## 13. Optional future enhancements (not implemented)
 

@@ -43,10 +43,11 @@ const (
 	msgSnapshot    = win32.WM_APP + 1
 	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone  = win32.WM_APP + 3
-	msgRunLog      = win32.WM_APP + 4 // wparam: the backups list group whose Show log was clicked
-	msgListFocus   = win32.WM_APP + 5 // the backups list may have moved the focus to a group
-	msgDestChecked = win32.WM_APP + 6 // the Restore backup window's check of the choices is done
-	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
+	msgRunLog      = win32.WM_APP + 4  // wparam: the backups list group whose Show log was clicked
+	msgListFocus   = win32.WM_APP + 5  // the backups list may have moved the focus to a group
+	msgDestChecked = win32.WM_APP + 6  // the Restore backup window's check of the choices is done
+	msgReloaded    = win32.WM_APP + 7  // the configuration file was read again
+	msgAskUpdate   = win32.WM_APP + 10 // offer to update the configuration file, if it needs it
 )
 
 const (
@@ -84,13 +85,13 @@ type app struct {
 	// reloading is set while the configuration file is read again;
 	// reloadErr is why it did not load; deferredConfig waits for the
 	// running operation; recheck checks again after the running check,
-	// which used the previous configuration. addedCopy is the copy of the
-	// file that Add to config.yaml saved, until the next Reload.
+	// which used the previous configuration. askingUpdate is set while the
+	// dialog that offers to update the file is open.
 	reloading      bool
 	reloadErr      error
 	deferredConfig *config.Config
 	recheck        bool
-	addedCopy      string
+	askingUpdate   bool
 
 	// taskbar shows the operation on the taskbar button once it exists;
 	// taskbarCreated is the message that says so.
@@ -150,6 +151,7 @@ func Run(opts Options) error {
 		return err
 	}
 	a.startCheck()
+	a.offerConfigUpdate()
 
 	var msg win32.Msg
 	for {
@@ -403,6 +405,9 @@ func (a *app) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 		return 0
 	case msgReloaded:
 		a.reloadDone()
+		return 0
+	case msgAskUpdate:
+		a.askConfigUpdate()
 		return 0
 	case msgYubiKeyDiagnosed:
 		a.yubiKeyDiagnosed()

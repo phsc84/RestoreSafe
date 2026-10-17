@@ -450,16 +450,32 @@ const (
 	restoringDiff        = "differential %d, with its full backup of %s"
 )
 
+// The dialog about settings missing from the configuration file or no
+// longer used (GUI spec ST-10).
+const (
+	updateInstruction     = "Update %s?"
+	retiredOne            = "%s is no longer used by this version of RestoreSafe and is ignored."
+	retiredMany           = "%d settings are no longer used by this version of RestoreSafe and are ignored: %s."
+	missingOne            = "%s isn't in %s, so its default applies."
+	missingMany           = "%d settings aren't in %s, so their defaults apply: %s."
+	updateDoes            = "%s saves a copy of the file next to it, then %s. Nothing else in the file changes."
+	updateRemoves         = "removes the settings that are no longer used"
+	updateAdds            = "adds the missing settings with their default values and explanations"
+	updateLater           = "Not now keeps %s as it is; RestoreSafe asks again at the next start."
+	buttonUpdateConfig    = "&Update %s"
+	buttonNotNow          = "&Not now"
+	updatedInstruction    = "%s is up to date"
+	updatedCopy           = "The previous file is saved as %s."
+	notUpdatedInstruction = "%s wasn't changed"
+	notUpdatedLine        = "RestoreSafe uses the settings as they are."
+	buttonOK              = "OK"
+)
+
 // Settings page (GUI spec 10).
 const (
 	buttonReload        = "Re&load"
 	reasonReloadBusy    = "Reload waits until the running operation has finished."
 	settingsReloadNote  = "After saving your changes in the editor, click Reload."
-	missingOne          = "%s isn't in config.yaml, so its default applies."
-	missingMany         = "%d settings aren't in config.yaml, so their defaults apply: %s."
-	buttonAddMissing    = "&Add to config.yaml"
-	reasonAddBusy       = "Adding waits until the running operation has finished."
-	missingAdded        = "The missing settings were added with their defaults. The previous file is saved as %s."
 	settingsFolders     = "Folders to back up"
 	settingNothing      = "Nothing"
 	settingLeaveOut     = "Leave out"

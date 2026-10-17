@@ -4,7 +4,7 @@ package restoresafe
 
 import _ "embed"
 
-// ConfigSample is config-SAMPLE.yaml. config.AddMissing takes the
+// ConfigSample is config-SAMPLE.yaml. config.Update takes the
 // explanation of each setting it adds from it.
 //
 //go:embed config-SAMPLE.yaml

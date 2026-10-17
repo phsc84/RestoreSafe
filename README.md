@@ -124,7 +124,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
    For any other parameters you may keep the default values or adjust them according to your needs. Every parameter is explained in `config-SAMPLE.yaml`.
 
-   A parameter that is missing from `config.yaml` uses its default value; the Settings page lists such parameters and **Add to config.yaml** writes them into the file with their default values and explanations (a copy of the previous file is kept). A misspelled or unknown parameter is an error, so a typo can't silently fall back to a default.
+   A parameter that is missing from `config.yaml` uses its default value, and a parameter that a newer version no longer has is ignored. At start, RestoreSafe lists such parameters and **Update config.yaml** removes the old ones and writes the missing ones into the file with their default values and explanations (a copy of the previous file is kept). A misspelled or unknown parameter is an error, so a typo can't silently fall back to a default.
 4. Choose the authentication mode:
 
    | Setting | Password prompt | Second factor (2FA) | Description |
