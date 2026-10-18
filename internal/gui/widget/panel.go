@@ -93,6 +93,11 @@ func (p *Panel) PrimaryButton(text string, id uintptr) win32.HWND {
 	return p.add(child{style: TextBody, primary: true, styled: true, button: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_PUSHBUTTON, id)
 }
 
+// Checkbox creates a standard checkbox; its clicks reach OnCommand.
+func (p *Panel) Checkbox(text string, id uintptr) win32.HWND {
+	return p.add(child{style: TextBody, styled: true}, "BUTTON", text, win32.WS_TABSTOP|win32.BS_AUTOCHECKBOX, id)
+}
+
 // Link creates a link; its click reaches OnCommand with code 0.
 func (p *Panel) Link(text string, id uintptr) win32.HWND {
 	markup := "<a>" + strings.ReplaceAll(text, "<", "") + "</a>"
@@ -294,6 +299,9 @@ func (p *Panel) ScrollTo(offset int32) {
 	win32.SetVScroll(p.hwnd, p.content, view, offset)
 	if p.OnScroll != nil {
 		p.OnScroll()
+		// Moving the children copies their old pixels; small steps left
+		// parts of them painted over each other. Paint everything anew.
+		win32.RedrawAll(p.hwnd)
 	}
 }
 

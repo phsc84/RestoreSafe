@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/phsc84/restoresafe/internal/format/naming"
+	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
@@ -87,7 +88,19 @@ func (s *Script) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 	if q.Failure != nil {
 		s.printf("%v Please try again.\n", q.Failure)
 	}
-	return interact.ReadPasswordConfirmed(s.readSecret, fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength), "Re-enter new backup password: ")
+	pw, err := s.readSecret(fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength))
+	if err != nil || len(pw) == 0 {
+		if err != nil {
+			return nil, err
+		}
+		return interact.CheckNewPassword(pw, nil) // empty: no confirmation asked
+	}
+	confirm, err := s.readSecret("Re-enter new backup password: ")
+	if err != nil {
+		cryptox.ZeroBytes(pw)
+		return nil, err
+	}
+	return interact.CheckNewPassword(pw, confirm)
 }
 
 // ConfirmStart asks a yes/no question; yes is the default.
@@ -189,6 +202,33 @@ func (s *Script) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 	}
 }
 
+// YubiKeyRefused asks whether to try the YubiKey again (default), create new
+// keys, or cancel.
+func (s *Script) YubiKeyRefused(q interact.YubiKeyRefusal) (interact.YubiKeyRefusalAnswer, error) {
+	s.println("The YubiKey didn't unlock the keys of your backups. If it was reset or is another one, it can never unlock them: create new keys.")
+	if q.RecoveryCode {
+		s.println("Older backups keep opening with your recovery code.")
+	} else {
+		s.println("These keys have no recovery code: without this YubiKey registration, older backups can't be opened.")
+	}
+	for {
+		answer, err := s.readLine("[Y] try again (default) / [K] new keys + full backup / [N] cancel: ")
+		if err != nil {
+			return interact.RefusalCancel, err
+		}
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return interact.RefusalRetry, nil
+		case "k":
+			return interact.RefusalNewKeys, nil
+		case "n", "no":
+			return interact.RefusalCancel, nil
+		default:
+			s.println("Please enter y (try again), k (new keys) or n (no).")
+		}
+	}
+}
+
 // ShowRecoveryCode prints the recovery code with instructions for keeping it.
 func (s *Script) ShowRecoveryCode(code []byte) error {
 	s.println()
@@ -204,27 +244,13 @@ func (s *Script) ShowRecoveryCode(code []byte) error {
 	return nil
 }
 
-// WaitForSpareYubiKey waits for Enter, after the reason the previous try
-// failed; "q" cancels.
-func (s *Script) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
-	if q.Failure != nil {
-		s.println(q.Failure)
-	}
-	answer, err := s.readLine("Press Enter when the spare YubiKey is connected (q = cancel): ")
-	if err != nil {
-		return false, err
-	}
-	return !strings.EqualFold(strings.TrimSpace(answer), "q"), nil
-}
-
-// ShowBackupPlan prints the preflight summary of the plan.
-func (s *Script) ShowBackupPlan(p interact.BackupPlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.Output(), p.Details) }
 
 // ShowRestorePlan prints the preflight summary of the plan.
-func (s *Script) ShowRestorePlan(p interact.RestorePlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowRestorePlan(p interact.RestorePlan) { WriteReport(s.Output(), p.Details) }
 
 // ShowVerifyPlan prints the preflight summary of the plan.
-func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { interact.WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { WriteReport(s.Output(), p.Details) }
 
 // Progress is ignored: the script shows the log lines of each step instead.
 func (s *Script) Progress(interact.Progress) {}
@@ -252,3 +278,14 @@ func Answers(lines ...string) func(prompt string) (string, error) {
 
 // LogStarted records the log file; the script prints it with the result.
 func (s *Script) LogStarted(path string) { s.LogPath = path }
+
+// Answering returns a Script that writes to out and answers every line
+// prompt with line and every secret prompt with a copy of secret: a run that
+// asks to start and for one password, as often as it asks.
+func Answering(out io.Writer, line string, secret []byte) *Script {
+	return &Script{
+		Out:          out,
+		ReadLine:     func(string) (string, error) { return line, nil },
+		ReadPassword: func(string) ([]byte, error) { return append([]byte(nil), secret...), nil },
+	}
+}

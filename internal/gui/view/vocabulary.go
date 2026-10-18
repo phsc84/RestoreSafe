@@ -52,7 +52,12 @@ const (
 	ActionStartVerify
 	ActionOpenRestored
 	ActionReload
-	ActionAddMissing
+	// The YubiKey page (GUI spec 10.2).
+	ActionTestYubiKey
+	ActionOpenSignInSettings
+	ActionOpenWindowsUpdate
+	ActionOpenAuthenticator
+	ActionCopyDetails
 )
 
 // Button is a button or link of a view.

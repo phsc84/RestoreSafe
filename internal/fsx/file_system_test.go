@@ -65,3 +65,24 @@ func TestDirectorySizeBytesMissingPathReturnsError(t *testing.T) {
 		t.Fatal("expected error for missing path, got nil")
 	}
 }
+
+func TestValidateSourceDirectoryAcceptsOnlyAReadableFolder(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateSourceDirectory(dir); err != nil {
+		t.Fatalf("a readable folder: %v", err)
+	}
+	for path, want := range map[string]string{
+		filepath.Join(dir, "missing"): "Not found or inaccessible",
+		file:                          "Path is not a directory",
+	} {
+		if err := ValidateSourceDirectory(path); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%s: expected %q, got %v", path, want, err)
+		}
+	}
+}

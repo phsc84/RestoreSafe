@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"bytes"
 	"io"
 
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
@@ -22,6 +21,9 @@ type Dialogs interface {
 	// takes the password with the choice answers it as secret, which the
 	// caller zeroes; nil otherwise.
 	ChooseUnlockMethod(q interact.UnlockChoice, answer func(recovery bool, secret []byte, err error))
+	// YubiKeyRefused asks what to do when the YubiKey didn't unlock the
+	// keys of a backup.
+	YubiKeyRefused(q interact.YubiKeyRefusal, answer func(interact.YubiKeyRefusalAnswer, error))
 	// Password answers the secret; the caller zeroes it.
 	Password(q interact.SecretQuestion, answer func(secret []byte, err error))
 	// NewPassword answers the password and its confirmation, or ok=false
@@ -29,8 +31,6 @@ type Dialogs interface {
 	NewPassword(q interact.NewPasswordQuestion, answer func(password, confirm []byte, ok bool))
 	// RecoveryCode shows a new recovery code once; ok=false cancels.
 	RecoveryCode(code []byte, answer func(ok bool))
-	// SpareYubiKey asks to connect the spare YubiKey; ok=false cancels.
-	SpareYubiKey(q interact.SpareQuestion, answer func(ok bool))
 }
 
 // UI implements interact.UI for one operation: every question goes through
@@ -109,6 +109,15 @@ func (u *UI) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 	return c.recovery, nil
 }
 
+// YubiKeyRefused asks whether to try the YubiKey again, create new keys, or
+// cancel the backup.
+func (u *UI) YubiKeyRefused(q interact.YubiKeyRefusal) (interact.YubiKeyRefusalAnswer, error) {
+	v, err := u.b.Ask(func(answer func(any, error)) {
+		u.d.YubiKeyRefused(q, func(a interact.YubiKeyRefusalAnswer, err error) { answer(a, err) })
+	}, interact.RefusalCancel, interact.ErrCancelled)
+	return v.(interact.YubiKeyRefusalAnswer), err
+}
+
 // Password asks for a secret without echo.
 func (u *UI) Password(q interact.SecretQuestion) ([]byte, error) {
 	if s := u.pendingSecret; s != nil && q.Kind == interact.SecretPassword {
@@ -126,7 +135,7 @@ func (u *UI) Password(q interact.SecretQuestion) ([]byte, error) {
 }
 
 // NewPassword asks for a new password and its confirmation in one dialog,
-// with the rules and errors of interact.ReadPasswordConfirmed.
+// checked with interact.CheckNewPassword.
 func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 	v, err := u.b.Ask(func(answer func(any, error)) {
 		u.d.NewPassword(q, func(pw, confirm []byte, ok bool) {
@@ -134,7 +143,7 @@ func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 				answer(nil, interact.ErrCancelled)
 				return
 			}
-			pw, err := checkNewPassword(pw, confirm)
+			pw, err := interact.CheckNewPassword(pw, confirm)
 			answer(pw, err)
 		})
 	}, nil, interact.ErrCancelled)
@@ -142,21 +151,6 @@ func (u *UI) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
 		return nil, err
 	}
 	return v.([]byte), nil
-}
-
-// checkNewPassword checks a new password against its confirmation, zeroes
-// the confirmation, and zeroes the password when it is refused.
-func checkNewPassword(pw, confirm []byte) ([]byte, error) {
-	defer cryptox.ZeroBytes(confirm)
-	switch {
-	case len(pw) == 0:
-		cryptox.ZeroBytes(pw)
-		return nil, interact.ErrPasswordEmpty
-	case !bytes.Equal(pw, confirm):
-		cryptox.ZeroBytes(pw)
-		return nil, interact.ErrPasswordMismatch
-	}
-	return pw, nil
 }
 
 // ShowRecoveryCode shows the new recovery code once.
@@ -171,13 +165,4 @@ func (u *UI) ShowRecoveryCode(code []byte) error {
 		})
 	}, nil, interact.ErrCancelled)
 	return err
-}
-
-// WaitForSpareYubiKey waits until the user confirms the spare YubiKey is
-// connected.
-func (u *UI) WaitForSpareYubiKey(q interact.SpareQuestion) (bool, error) {
-	v, err := u.b.Ask(func(answer func(any, error)) {
-		u.d.SpareYubiKey(q, func(ok bool) { answer(ok, nil) })
-	}, false, nil)
-	return v.(bool), err
 }

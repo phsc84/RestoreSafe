@@ -2,6 +2,7 @@ package container
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -37,11 +38,11 @@ func testManifest(t testing.TB, h *Header, dataLen int) []byte {
 	b := manifest.NewBuilder(manifest.Header{SetType: h.SetType, ChainID: h.ChainID, DiffNumber: h.DiffNumber, DirectoryName: h.DirectoryName, SourcePath: "C:/src"})
 	zero := int64(0)
 	b.Add(manifest.Entry{Path: "data.bin", Type: manifest.TypeFile, Size: int64(dataLen), Hash: testHash, Origin: manifest.OriginFull, Offset: &zero})
-	data, err := b.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
+	var buf bytes.Buffer
+	if err := b.Encode(&buf); err != nil {
+		t.Fatalf("manifest Encode: %v", err)
 	}
-	return data
+	return buf.Bytes()
 }
 
 // writeTestSet writes a full set with the given payload into dir and returns
@@ -313,6 +314,31 @@ func TestReadHeaderRejectsOtherVersions(t *testing.T) {
 	}
 	if _, _, err := ReadHeader(bytes.NewReader([]byte("NOTABACKUPFILE"))); err == nil || !strings.Contains(err.Error(), "not a RestoreSafe backup") {
 		t.Fatalf("expected format error, got %v", err)
+	}
+}
+
+// TestReadHeaderRejectsABrokenPrefixOrBody breaks the reserved byte, the
+// length and the end of the header JSON once each.
+func TestReadHeaderRejectsABrokenPrefixOrBody(t *testing.T) {
+	t.Parallel()
+
+	prefix := func(reserved byte, length uint32) []byte {
+		p := append([]byte("RSBKP\x00"), FormatVersion, reserved)
+		return binary.BigEndian.AppendUint32(p, length)
+	}
+	body := []byte(`{} {}`)
+	for name, tc := range map[string]struct {
+		data []byte
+		want string
+	}{
+		"reserved byte": {append(prefix(1, 2), "{}"...), "reserved byte"},
+		"zero length":   {prefix(0, 0), "invalid header length 0"},
+		"too long":      {prefix(0, maxHeaderJSON+1), "invalid header length"},
+		"trailing data": {append(prefix(0, uint32(len(body))), body...), "trailing data"},
+	} {
+		if _, _, err := ReadHeader(bytes.NewReader(tc.data)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: got %v, want an error containing %q", name, err, tc.want)
+		}
 	}
 }
 

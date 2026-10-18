@@ -1,10 +1,6 @@
 package interact
 
 import (
-	"fmt"
-	"io"
-	"strings"
-
 	"github.com/phsc84/restoresafe/internal/problem"
 )
 
@@ -61,8 +57,6 @@ const (
 	RowItem
 	// RowField is a label/value pair of a summary.
 	RowField
-	// RowNote is an explanatory sentence.
-	RowNote
 )
 
 // Row is one line of a section with, for items, its details.
@@ -70,7 +64,7 @@ type Row struct {
 	Kind RowKind
 	// Label is the heading text or the field label.
 	Label string
-	// Text is the item text, the field value, or the note.
+	// Text is the item text or the field value.
 	Text string
 	// Status and Details apply to items.
 	Status  Status
@@ -93,7 +87,7 @@ func IssueOf(status Status, code Code, err error) Issue {
 	return Issue{Status: status, Code: code, Text: text, Remedy: remedy}
 }
 
-// Full returns the issue as the console and the log show it: the text and
+// Full returns the issue as the log pane and the log show it: the text and
 // its remedy.
 func (i Issue) Full() string {
 	return (&problem.Error{Msg: i.Text, Remedy: i.Remedy}).Error()
@@ -120,61 +114,5 @@ func Item(status Status, text string, details ...string) Row {
 // Field returns a label/value row.
 func Field(label, value string) Row { return Row{Kind: RowField, Label: label, Text: value} }
 
-// Note returns an explanatory row.
-func Note(text string) Row { return Row{Kind: RowNote, Text: text} }
-
 // HasErrors reports whether an issue blocks the operation.
 func (r Report) HasErrors() bool { return hasErrors(r.Issues) }
-
-// minFieldLabelWidth is the narrowest label column of a section's fields, so
-// short summaries line up with the "Authentication" field.
-const minFieldLabelWidth = 14
-
-// WriteReport writes r as console text: the title underlined, sections
-// separated by blank lines, field labels aligned per section, and the issues
-// at the end.
-func WriteReport(w io.Writer, r Report) {
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, r.Title)
-	fmt.Fprintln(w, strings.Repeat("-", len(r.Title)))
-	for i, section := range r.Sections {
-		if i > 0 {
-			fmt.Fprintln(w)
-		}
-		width := minFieldLabelWidth
-		for _, row := range section.Rows {
-			if row.Kind == RowField && len(row.Label) > width {
-				width = len(row.Label)
-			}
-		}
-		for _, row := range section.Rows {
-			writeRow(w, row, width)
-		}
-	}
-	if len(r.Issues) > 0 {
-		fmt.Fprintln(w)
-		for _, issue := range r.Issues {
-			fmt.Fprintf(w, "[%s] %s\n", issue.Status, issue.Full())
-		}
-	}
-}
-
-func writeRow(w io.Writer, row Row, labelWidth int) {
-	switch row.Kind {
-	case RowHeading:
-		fmt.Fprintf(w, "%s:\n", row.Label)
-	case RowField:
-		fmt.Fprintf(w, "%-*s: %s\n", labelWidth, row.Label, row.Text)
-	case RowNote:
-		fmt.Fprintln(w, row.Text)
-	case RowItem:
-		if row.Status == StatusNone {
-			fmt.Fprintf(w, "  %s\n", row.Text)
-		} else {
-			fmt.Fprintf(w, "  [%s] %s\n", row.Status, row.Text)
-		}
-		for _, detail := range row.Details {
-			fmt.Fprintf(w, "          → %s\n", detail)
-		}
-	}
-}

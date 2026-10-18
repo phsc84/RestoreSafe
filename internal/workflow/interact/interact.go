@@ -1,9 +1,11 @@
 // Package interact defines the interface between the backup, restore, and
-// verify workflows and the user. The workflows never read input or write to the
-// console directly: every question goes through a UI method, as a type that
-// carries what a frontend needs to word it (questions.go), and the log and
-// console text is written to UI.Output. The window application implements
-// it; interacttest.Script implements it for the tests of the workflows.
+// verify workflows and the user. The workflows never read input or show
+// anything themselves: every question goes through a UI method, as a type
+// that carries what a frontend needs to word it (questions.go), and the
+// lines for the user (what the log file records, too) are written to
+// UI.Output, which the window shows in its log pane. The window application
+// implements it; interacttest.Script implements it for the tests of the
+// workflows.
 //
 // The workflows call a UI from the goroutine that runs the operation, and each
 // question method blocks until the user has answered. A graphical
@@ -87,6 +89,9 @@ type UI interface {
 	// ChooseUnlockMethod asks whether to unlock with the regular credentials
 	// or the recovery code. It returns true for the recovery code.
 	ChooseUnlockMethod(q UnlockChoice) (bool, error)
+	// YubiKeyRefused asks what to do when the YubiKey didn't unlock the keys
+	// a backup reuses: try again, create new keys, or cancel.
+	YubiKeyRefused(q YubiKeyRefusal) (YubiKeyRefusalAnswer, error)
 	// Password asks for a secret (password or recovery code) without echo.
 	Password(q SecretQuestion) ([]byte, error)
 	// NewPassword asks for a new password and its confirmation. It returns
@@ -97,7 +102,4 @@ type UI interface {
 	// ShowRecoveryCode shows a new recovery code. It is shown only this once.
 	// It returns ErrCancelled when the user cancels instead of storing it.
 	ShowRecoveryCode(code []byte) error
-	// WaitForSpareYubiKey waits until the user has connected the spare
-	// YubiKey. It returns false when the user cancels.
-	WaitForSpareYubiKey(q SpareQuestion) (bool, error)
 }

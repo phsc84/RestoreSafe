@@ -30,6 +30,7 @@ func problems(p Params, in inspection, s *Snapshot) (problems, notes []Problem) 
 
 	// Errors.
 	problems = append(problems, fromItems(interact.StatusError, interact.CodeConfigInvalid)...)
+	problems = append(problems, fromItems(interact.StatusError, interact.CodeYubiKeysConnected)...)
 	for _, item := range in.items {
 		if item.Severity == healthError && (item.Code == interact.CodeBackupDirUnreachable || item.Code == interact.CodeBackupDirNotWritable) {
 			problems = append(problems, Problem{Code: item.Code, Status: interact.StatusError, Path: in.backupDir, Detail: item.Detail})

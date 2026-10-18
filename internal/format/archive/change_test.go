@@ -30,14 +30,7 @@ func buildWithHook(t *testing.T, src, target string, hook *func(string), change 
 	if err := BuildTar(context.Background(), &tarBuf, BuildOptions{SourceDir: src, SkipUnreadable: true, Stats: &stats}, mb); err != nil {
 		t.Fatalf("BuildTar: %v", err)
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := roundTrip(t, mb)
 	dest := t.TempDir()
 	if err := restore(t, m, tarBuf.Bytes(), dest, false); err != nil {
 		t.Fatalf("restore: %v", err)
@@ -119,5 +112,22 @@ func TestBuildTarFileGrowsWhileRead(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(filepath.Join(dest, "z-after.txt")); string(data) != "after" {
 		t.Fatalf("the file after the void entry restored as %q", data)
+	}
+}
+
+// A folder deleted while the backup runs: when a.txt is opened, the folder
+// b, which the walk lists next, is gone. It is counted as vanished, like a
+// file deleted in the meantime, and the backup goes on.
+func TestBuildTarCountsAFolderThatVanishes(t *testing.T) {
+	src := t.TempDir()
+	mustWrite(t, filepath.Join(src, "a.txt"), []byte("alpha"))
+	mustWrite(t, filepath.Join(src, "b", "c.txt"), []byte("gamma"))
+	m, stats, _ := buildWithHook(t, src, "a.txt", &testHookOpen, func(string) {
+		if err := os.RemoveAll(filepath.Join(src, "b")); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if stats.Vanished != 1 || stats.Skipped != 0 || entryOf(m, "b/c.txt") != nil || entryOf(m, "a.txt") == nil {
+		t.Fatalf("the vanished folder: stats %+v, entries %+v", stats, m.Entries)
 	}
 }

@@ -30,7 +30,7 @@ func samplePlan() interact.BackupPlan {
 			{Name: "Docs2", Path: `C:\Docs`, Skipped: true},
 		},
 		NeededBytes: 55 << 30, AllBytes: 63 << 30, FreeBytes: 370 << 30,
-		Keys:        interact.KeyPlan{Created: time.Date(2026, 9, 1, 20, 0, 0, 0, time.Local), Password: true, YubiKeys: 1},
+		Keys:        interact.KeyPlan{Created: time.Date(2026, 9, 1, 20, 0, 0, 0, time.Local), Password: true, YubiKey: true},
 		VerifyAfter: true,
 	}
 }
@@ -105,7 +105,7 @@ func TestBackupPlanButtons(t *testing.T) {
 func TestBackupPlanNewKeysAndRemovals(t *testing.T) {
 	t.Parallel()
 	p := samplePlan()
-	p.Keys = interact.KeyPlan{New: true, NewKeysReason: "Recovery_code enabled in config.yaml", Password: true, YubiKeys: 2, RecoveryCode: true}
+	p.Keys = interact.KeyPlan{New: true, NewKeysReason: "Recovery_code enabled in config.yaml", Password: true, YubiKey: true, RecoveryCode: true}
 	p.VerifyAfter = false
 	set := func(dir, chain string, diff int, created time.Time, size int64) catalog.SetInfo {
 		e := naming.BackupEntry{DirectoryName: dir, ChainID: naming.BackupID(chain), Date: created.Format("2006-01-02"), DiffNumber: diff}
@@ -121,7 +121,7 @@ func TestBackupPlanNewKeysAndRemovals(t *testing.T) {
 	if v.KeysNote != "New keys will be created: recovery_code enabled in config.yaml. Every folder gets a full backup." {
 		t.Fatalf("keys note %q", v.KeysNote)
 	}
-	if v.Unlock.Text != "New password, register 2 YubiKeys (4 prompts), store a recovery code" {
+	if v.Unlock.Text != "New password, register your YubiKey (2 prompts), store a recovery code" {
 		t.Fatalf("unlock %q", v.Unlock.Text)
 	}
 	if v.Afterwards.Text != "Remove 4 old backups (42 GB)." || v.RemovesLink == "" {

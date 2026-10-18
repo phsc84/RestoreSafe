@@ -42,7 +42,7 @@ func (rd reading) decrypt(ctx context.Context, set *container.Set, keys *contain
 	done := rd.out.Done
 	var outBytes atomic.Int64
 	var outWriteCalls atomic.Int64
-	stopProgress := job.StartProgressTracking(rd.out.Log, rd.name, verb, &outBytes, &outBytes, &outWriteCalls)
+	stopProgress := job.StartProgressTracking(rd.out.Log, rd.name, verb, fsx.StreamCounters{In: &outBytes, Out: &outBytes, Calls: &outWriteCalls})
 	defer stopProgress()
 
 	pr, pw := io.Pipe()

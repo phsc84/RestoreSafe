@@ -1,8 +1,11 @@
 package view
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/phsc84/restoresafe/internal/problem"
 )
 
 func TestSize(t *testing.T) {
@@ -64,5 +67,23 @@ func TestDuration(t *testing.T) {
 		if got := Duration(d); got != want {
 			t.Errorf("Duration(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+func TestSmallHelpers(t *testing.T) {
+	t.Parallel()
+	if KeyTip("") != "" || KeyTip("recovery_code") != "config.yaml: recovery_code" {
+		t.Fatal("KeyTip")
+	}
+	if Exact(time.Time{}) != "" {
+		t.Fatal("Exact of the zero time")
+	}
+	err := problem.New("Config file has a setting that is no longer used: 'yubikey_spare' (line 4).").WithRemedyOnOwnLine("Remove the line.")
+	if got := ErrorText(err); !strings.Contains(got, "no longer used") || !strings.Contains(got, "Remove the line.") || strings.Contains(got, "Remedy:") {
+		t.Fatalf("ErrorText = %q", got)
+	}
+	h := ReloadErrorHero(err)
+	if h.Tone != ToneError || h.Title != heroReloadTitle || !strings.Contains(h.Line, "Remove the line.") || h.Primary.Action != ActionEditConfig {
+		t.Fatalf("ReloadErrorHero = %+v", h)
 	}
 }

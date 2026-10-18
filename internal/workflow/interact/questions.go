@@ -64,15 +64,32 @@ type UnlockChoice struct {
 	Keys *OtherKeys
 }
 
+// YubiKeyRefusal asks what to do when the YubiKey didn't unlock the keys a
+// backup reuses. Windows reports a YubiKey that was reset or is another one
+// like a cancelled prompt, so the question covers both.
+type YubiKeyRefusal struct {
+	// RecoveryCode is set when the keys have a recovery code: it keeps
+	// opening the backups made with them.
+	RecoveryCode bool
+}
+
+// YubiKeyRefusalAnswer is the answer to a YubiKeyRefusal.
+type YubiKeyRefusalAnswer int
+
+const (
+	// RefusalCancel ends the backup.
+	RefusalCancel YubiKeyRefusalAnswer = iota
+	// RefusalRetry asks the YubiKey again.
+	RefusalRetry
+	// RefusalNewKeys shows the plan with new keys, where every directory
+	// gets a full backup, and asks again whether to start.
+	RefusalNewKeys
+)
+
 // NewPasswordQuestion asks for the password of new keys and its
 // confirmation.
 type NewPasswordQuestion struct {
 	// MinLength is the number of characters the password needs at least.
 	MinLength int
-	Attempt
-}
-
-// SpareQuestion asks to connect the spare YubiKey for its registration.
-type SpareQuestion struct {
 	Attempt
 }

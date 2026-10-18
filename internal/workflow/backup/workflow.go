@@ -75,19 +75,34 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	removeLeftoverTempParts(backupDir, log)
 
-	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos)
+	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos, "")
 	if err != nil {
 		return err
 	}
-	if !start {
-		log.InfoLogOnly("Backup cancelled by user before start")
-		fmt.Fprintln(out, "Backup cancelled.")
-		return nil
-	}
-
-	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
-	keySet, master, err := obtainKeys(u, cfg, keys, log)
-	if err != nil {
+	var keySet *container.KeySet
+	var master []byte
+	for {
+		if !start {
+			log.InfoLogOnly("Backup cancelled by user before start")
+			fmt.Fprintln(out, "Backup cancelled.")
+			return nil
+		}
+		job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
+		keySet, master, err = obtainKeys(u, cfg, keys, log)
+		if err == nil {
+			break
+		}
+		answer := askAfterYubiKeyRefusal(u, keys, err, log)
+		switch answer {
+		case interact.RefusalRetry:
+			continue
+		case interact.RefusalNewKeys:
+			keys, plans, start, err = choosePlan(u, cfg, backupDir, sources, infos, yubiKeyRefusedReason)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		return err
 	}
 	defer cryptox.ZeroBytes(master)
@@ -267,6 +282,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Sourc
 // was kept and returns the cancellation.
 func backupFailed(ctx context.Context, log *logging.Logger, start time.Time, err error) error {
 	if ctx.Err() == nil {
+		log.Error("%v", err)
 		log.Fact(logging.Fact{Kind: logging.FactBackup, Result: logging.ResultFailed, Error: err.Error(), Seconds: secondsSince(start)})
 		return err
 	}
@@ -292,7 +308,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 	for i, entry := range entries {
 		set, err := catalog.OpenSet(backupDir, entry)
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			log.Error("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue
@@ -309,7 +325,7 @@ func verifyBackupAfterWrite(ctx context.Context, rep interact.ProgressReporter, 
 			return failures, ctxErr
 		}
 		if err != nil {
-			log.Warn("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
+			log.Error("  Post-backup verification failed for [%s]: %v.%s", entry.DirectoryName, err, verifyKeptRemedy)
 			failures++
 			log.Fact(logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: entry.String(), Error: err.Error()})
 			continue
@@ -352,12 +368,12 @@ func loadBase(backupDir string, info *catalog.SetInfo, keySet *container.KeySet,
 // files it skipped as unreadable and the size of the set.
 func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressReporter, srcDir string, entry naming.BackupEntry, base *setwriter.Base) (setStats, error) {
 	var inBytes, outBytes, outWriteCalls atomic.Int64
-	counters := setwriter.Counters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
+	counters := fsx.StreamCounters{In: &inBytes, Out: &outBytes, Calls: &outWriteCalls}
 	var progressLog *logging.Logger
 	if o.log.DebugEnabled() {
 		progressLog = o.log
 	}
-	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", &inBytes, &outBytes, &outWriteCalls)
+	stopProgress := job.StartProgressTracking(progressLog, entry.DirectoryName, "encrypted", counters)
 	defer stopProgress()
 
 	excludeDirs := []string{o.backupDir}

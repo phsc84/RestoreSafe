@@ -13,8 +13,8 @@ import (
 
 func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "2026-09-30_FACT01.log")
-	var console bytes.Buffer
-	log, err := logging.NewLogger(path, "info", &console)
+	var output bytes.Buffer
+	log, err := logging.NewLogger(path, "info", &output)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,8 +29,8 @@ func TestFactsAreWrittenToTheFileOnlyAndReadBack(t *testing.T) {
 	log.Fact(logging.Fact{Kind: logging.FactRestore, Result: logging.ResultWarnings, Set: "My Docs_ABC123_2026-09-30_DIFF001", Skipped: 1, Stale: 2})
 	log.Close()
 
-	if strings.Contains(console.String(), "FACT") {
-		t.Fatalf("facts must not reach the user's output: %q", console.String())
+	if strings.Contains(output.String(), "FACT") {
+		t.Fatalf("facts must not reach the user's output: %q", output.String())
 	}
 	facts, err := logging.ReadFacts(path)
 	if err != nil {

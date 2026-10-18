@@ -15,6 +15,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
+	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 )
 
 var fastArgon2 = cryptox.Argon2Params{Time: cryptox.MinArgonTime, MemoryKB: cryptox.MinArgonMemoryKB, Threads: cryptox.MinArgonThreads}
@@ -58,7 +59,7 @@ func TestWriteFullSetRoundTrip(t *testing.T) {
 		t.Fatalf("temporary parts left behind: %v", tmp)
 	}
 
-	info := catalog.InspectSet(backupDir, entry)
+	info := inventory.Find(t, backupDir, entry)
 	if !info.Complete() {
 		t.Fatalf("set not complete: %v", info.Err)
 	}

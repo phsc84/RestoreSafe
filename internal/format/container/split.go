@@ -46,7 +46,7 @@ type WriteStats struct {
 	PartsClosed    int
 }
 
-// NewWriter creates a SplitWriter. maxBytes is the maximum number of bytes per part.
+// NewWriter creates a Writer. maxBytes is the maximum number of bytes per part.
 // By default each finalized part is flushed to disk before being closed; use
 // SetSyncOnClose to disable this when durability is enforced elsewhere.
 func NewWriter(nameFunc NameFunc, maxBytes int64) *Writer {

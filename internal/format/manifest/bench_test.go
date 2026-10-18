@@ -35,7 +35,7 @@ func BenchmarkManifestEncode(b *testing.B) {
 }
 
 func BenchmarkManifestDecode(b *testing.B) {
-	data, err := benchBuilder().Bytes()
+	data, err := encode(benchBuilder())
 	if err != nil {
 		b.Fatal(err)
 	}

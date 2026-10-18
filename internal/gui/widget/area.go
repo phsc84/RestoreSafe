@@ -13,8 +13,7 @@ type Area struct {
 // NewArea returns the area r at scale s.
 func NewArea(s Scale, r win32.Rect) Area { return Area{S: s, R: r} }
 
-// Width and Height are the size of the area in pixels.
-func (a Area) Width() int32  { return a.R.Width() }
+// Height is the height of the area in pixels.
 func (a Area) Height() int32 { return a.R.Height() }
 
 // Inset shrinks the area by the given DIPs on each side.
@@ -73,29 +72,3 @@ func (a *Area) RightPx(px int32) win32.Rect {
 
 // Rest returns what is left of the area.
 func (a Area) Rest() win32.Rect { return a.R }
-
-// Columns divides the area into columns separated by gap DIPs, sized in
-// proportion to weights; the last column takes the rounding remainder.
-func (a Area) Columns(gap int32, weights ...int32) []Area {
-	if len(weights) == 0 {
-		return nil
-	}
-	total := int32(0)
-	for _, w := range weights {
-		total += w
-	}
-	g := a.S.Px(gap)
-	free := max(a.R.Width()-g*int32(len(weights)-1), 0)
-	cols := make([]Area, len(weights))
-	x := a.R.Left
-	for i, w := range weights {
-		width := free * w / max(total, 1)
-		if i == len(weights)-1 {
-			width = a.R.Right - x
-		}
-		width = max(width, 0)
-		cols[i] = Area{S: a.S, R: win32.Rect{Left: x, Top: a.R.Top, Right: x + width, Bottom: a.R.Bottom}}
-		x += width + g
-	}
-	return cols
-}

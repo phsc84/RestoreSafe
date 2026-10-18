@@ -43,10 +43,11 @@ const (
 	msgSnapshot    = win32.WM_APP + 1
 	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
 	msgWorkerDone  = win32.WM_APP + 3
-	msgRunLog      = win32.WM_APP + 4 // wparam: the backups list group whose Show log was clicked
-	msgListFocus   = win32.WM_APP + 5 // the backups list may have moved the focus to a group
-	msgDestChecked = win32.WM_APP + 6 // the Restore window's check of the choices is done
-	msgReloaded    = win32.WM_APP + 7 // the configuration file was read again
+	msgRunLog      = win32.WM_APP + 4  // wparam: the backups list group whose Show log was clicked
+	msgListFocus   = win32.WM_APP + 5  // the backups list may have moved the focus to a group
+	msgDestChecked = win32.WM_APP + 6  // the Restore backup window's check of the choices is done
+	msgReloaded    = win32.WM_APP + 7  // the configuration file was read again
+	msgAskUpdate   = win32.WM_APP + 10 // offer to update the configuration file, if it needs it
 )
 
 const (
@@ -74,8 +75,8 @@ type app struct {
 	theme   *widget.Theme
 	page    int
 	modal   win32.HWND     // open credential dialog, if any
-	plan    *planDialog    // open backup plan dialog, if any
-	restore *restoreDialog // open Restore window, if any
+	plan    *planDialog    // open Create backup window, if any
+	restore *restoreDialog // open Restore backup window, if any
 	verify  *verifyDialog  // open Verify window, if any
 	// credential is the open credential dialog, if any.
 	credential *credentialDialog
@@ -84,13 +85,13 @@ type app struct {
 	// reloading is set while the configuration file is read again;
 	// reloadErr is why it did not load; deferredConfig waits for the
 	// running operation; recheck checks again after the running check,
-	// which used the previous configuration. addedCopy is the copy of the
-	// file that Add to config.yaml saved, until the next Reload.
+	// which used the previous configuration. askingUpdate is set while the
+	// dialog that offers to update the file is open.
 	reloading      bool
 	reloadErr      error
 	deferredConfig *config.Config
 	recheck        bool
-	addedCopy      string
+	askingUpdate   bool
 
 	// taskbar shows the operation on the taskbar button once it exists;
 	// taskbarCreated is the message that says so.
@@ -107,6 +108,8 @@ type app struct {
 
 	// The shell of the new interface.
 	shell shell
+	// yk is the state of the YubiKey page.
+	yk yubiKeyState
 
 	// The message font and a monospaced font for the viewers, and the base
 	// font of their RTF.
@@ -148,6 +151,7 @@ func Run(opts Options) error {
 		return err
 	}
 	a.startCheck()
+	a.offerConfigUpdate()
 
 	var msg win32.Msg
 	for {
@@ -310,6 +314,7 @@ func (a *app) snapshotDone() {
 	first := a.snapshot == nil
 	a.snapshot = s
 	a.checking = false
+	a.keysChecked()
 	if a.recheck {
 		a.recheck = false
 		a.startCheck()
@@ -401,6 +406,25 @@ func (a *app) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 	case msgReloaded:
 		a.reloadDone()
 		return 0
+	case msgAskUpdate:
+		a.askConfigUpdate()
+		return 0
+	case msgYubiKeyDiagnosed:
+		a.yubiKeyDiagnosed()
+		return 0
+	case msgYubiKeyTested:
+		a.yubiKeyTested()
+		return 0
+	case win32.WM_DEVICECHANGE:
+		if wparam == win32.DBT_DEVNODES_CHANGED {
+			a.deviceChanged()
+		}
+		return 1
+	case win32.WM_TIMER:
+		if wparam == yubiKeyTimerID {
+			a.devicesSettled()
+			return 0
+		}
 	case msgDestChecked:
 		a.mu.Lock()
 		c := a.pendingDest

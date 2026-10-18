@@ -31,3 +31,15 @@ func placeTitle(t *widget.Theme, title, refresh win32.HWND, row win32.Rect) {
 	r.Bottom = r.Top + s.Px(refreshHeight)
 	win32.SetWindowPos(refresh, r)
 }
+
+// contentWidth returns the width in pixels of a page's content: its client
+// width less the padding at both sides.
+func contentWidth(t *widget.Theme, page win32.HWND) int32 {
+	return win32.ClientRect(page).Width() - 2*t.Scale.Px(widget.ContentPaddingX)
+}
+
+// lineHeight returns the height of a line of text in style, in DIPs.
+func lineHeight(t *widget.Theme, style widget.TextStyle) int32 {
+	_, h := t.Fonts.Measure("Ag", style)
+	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
+}

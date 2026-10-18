@@ -62,3 +62,11 @@ func hoverSubclass(hwnd, msg, wparam, lparam, id, ref uintptr) uintptr {
 	r, _, _ := procDefSubclassProc.Call(hwnd, msg, wparam, lparam)
 	return r
 }
+
+// TrackMouseLeave asks Windows to send hwnd WM_MOUSELEAVE when the mouse
+// leaves it; a control that tracks the mouse over its parts calls it on
+// the first WM_MOUSEMOVE.
+func TrackMouseLeave(hwnd HWND) {
+	e := trackMouseEvent{Size: uint32(unsafe.Sizeof(trackMouseEvent{})), Flags: tmeLeave, Track: hwnd}
+	procTrackMouseEvent.Call(uintptr(unsafe.Pointer(&e)))
+}

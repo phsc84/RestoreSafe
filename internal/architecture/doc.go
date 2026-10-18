@@ -4,9 +4,9 @@
 // The layers, from top to bottom (a package may import its own layer and
 // every layer below it):
 //
-//	cmd             restoresafe, yubidiag
+//	cmd             restoresafe
 //	gui             gui, gui/win32
-//	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job
+//	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job, keycheck
 //	format          archive, container, manifest, catalog, naming, setwriter
 //	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo
 //	security        cryptox, recovery, yubikey (recovery and yubikey -> cryptox)
@@ -32,6 +32,8 @@
 //     about backups.
 //   - testutil, e2e, and architecture are test support: exempt from the
 //     layers, never imported by production code.
+//   - tools holds development tools (the CI runner): outside the layers,
+//     separate from the program in both directions.
 //
 // The test fails for a package that belongs to no layer.
 package architecture

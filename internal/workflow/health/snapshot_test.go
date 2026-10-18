@@ -5,16 +5,19 @@ import (
 	"errors"
 	"io"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil/scenario"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
 func snapshotOf(t *testing.T, s scenario.Scenario) Snapshot {
@@ -108,7 +111,7 @@ func TestSnapshotDescribesTheBackups(t *testing.T) {
 		t.Fatalf("unexpected storage: %+v", st)
 	}
 	k := s.Keys
-	if !k.Exists || k.Methods == "" || k.Created.IsZero() || k.SpareYubiKey || k.RecoveryCode || k.YubiKeyConnected != nil || k.NewKeysReason != "" {
+	if !k.Exists || k.Methods == "" || k.Created.IsZero() || k.RecoveryCode || k.YubiKeyConnected != nil || k.NewKeysReason != "" {
 		t.Fatalf("unexpected keys: %+v", k)
 	}
 	if len(s.Retention) != 0 || s.Check.BlocksBackup() || !s.Checked.Equal(sc.Now) {
@@ -120,6 +123,34 @@ func TestSnapshotDescribesTheBackups(t *testing.T) {
 	sc.Config.RetentionKeep = 1
 	if s := snapshotOf(t, sc); len(s.Retention) != 0 {
 		t.Fatalf("a differential next removes nothing: %+v", s.Retention)
+	}
+}
+
+func TestKeysSummaryFindsYubiKeysAlsoInOlderBackups(t *testing.T) {
+	t.Parallel()
+	set := func(mode config.AuthMode, complete bool) catalog.SetInfo {
+		info := catalog.SetInfo{Header: &container.Header{KeySet: container.KeySet{AuthMode: mode, CreatedUTC: "2026-09-01T10:00:00Z"}}}
+		if !complete {
+			info.Err = errors.New("incomplete")
+		}
+		return info
+	}
+	damaged := catalog.SetInfo{Err: errors.New("damaged")}
+	for _, tc := range []struct {
+		name                      string
+		infos                     []catalog.SetInfo // newest first
+		exists, yubiKey, inBackup bool
+	}{
+		{"YubiKey keys", []catalog.SetInfo{set(config.AuthModePasswordYubiKey, true)}, true, true, true},
+		{"password now, YubiKey before", []catalog.SetInfo{set(config.AuthModePassword, true), set(config.AuthModeYubiKey, true)}, true, false, true},
+		{"password only", []catalog.SetInfo{set(config.AuthModePassword, true), damaged}, true, false, false},
+		{"only an incomplete YubiKey set", []catalog.SetInfo{set(config.AuthModeYubiKey, false)}, false, false, true},
+		{"no backups", nil, false, false, false},
+	} {
+		k := keysSummary(&config.Config{}, tc.infos, plan.Keys{}, nil)
+		if k.Exists != tc.exists || k.YubiKey != tc.yubiKey || k.YubiKeyInBackups != tc.inBackup {
+			t.Errorf("%s: %+v", tc.name, k)
+		}
 	}
 }
 
@@ -171,14 +202,46 @@ func TestSnapshotNotesADisconnectedYubiKey(t *testing.T) {
 	}
 }
 
+// Two YubiKeys block a backup, whose new keys would register the one the
+// user touches, but not a restore or verification.
+func TestSnapshotBlocksBackupsWithTwoYubiKeys(t *testing.T) {
+	sc := scenario.Build(t, scenario.Protected)
+	defer func(f func() error, g func() (int, error)) { checkYubiKeyConnected, countYubiKeys = f, g }(checkYubiKeyConnected, countYubiKeys)
+	checkYubiKeyConnected = func() error { return nil }
+	countYubiKeys = func() (int, error) { return 2, nil }
+
+	sc.Config.AuthenticationMode = 2
+	s := snapshotOf(t, sc)
+	if len(s.Problems) == 0 || s.Problems[0].Code != interact.CodeYubiKeysConnected || s.Problems[0].Status != interact.StatusError || !strings.Contains(s.Problems[0].Detail, "2 YubiKeys are connected") {
+		t.Fatalf("expected YUBIKEYS_CONNECTED first, got %+v", s.Problems)
+	}
+	if !s.Check.BlocksBackup() || s.Check.BlocksRestoreOrVerify() {
+		t.Fatalf("blocks backup %v, restore %v", s.Check.BlocksBackup(), s.Check.BlocksRestoreOrVerify())
+	}
+
+	// One YubiKey, or none in a password mode: no problem.
+	countYubiKeys = func() (int, error) { return 1, nil }
+	if s := snapshotOf(t, sc); s.Check.BlocksBackup() {
+		t.Fatalf("one YubiKey: %+v", s.Problems)
+	}
+	sc.Config.AuthenticationMode = 1
+	countYubiKeys = func() (int, error) { return 2, nil }
+	if s := snapshotOf(t, sc); s.Check.BlocksBackup() {
+		t.Fatalf("two YubiKeys without a YubiKey mode: %+v", s.Problems)
+	}
+}
+
 func TestEveryWarningAndErrorItemHasACode(t *testing.T) {
 	for _, c := range scenario.All {
-		sc := scenario.Build(t, c)
-		for _, item := range inspect(sc.Config, "", sc.ConfigPath).items {
-			if item.Severity != healthOK && item.Code == "" {
-				t.Fatalf("%s: a finding without a code: %+v", c, item)
+		t.Run(string(c), func(t *testing.T) {
+			t.Parallel()
+			sc := scenario.Build(t, c)
+			for _, item := range inspect(sc.Config, "", sc.ConfigPath).items {
+				if item.Severity != healthOK && item.Code == "" {
+					t.Fatalf("a finding without a code: %+v", item)
+				}
 			}
-		}
+		})
 	}
 }
 

@@ -57,28 +57,28 @@ func TestVerifyOwnDataDetectsCorruptedPart(t *testing.T) {
 	}
 }
 
-func TestProcessAndVerifyOwnDataRejectWrongKey(t *testing.T) {
+func TestVerifyAndVerifyOwnDataRejectAWrongKey(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	set := openSet(t, fx.BackupDir, fx.Entry)
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
 	if _, err := Verify(context.Background(), set, nil, wrong, Output{}); err == nil {
-		t.Fatal("Process must fail with a wrong key")
+		t.Fatal("Verify must fail with a wrong key")
 	}
 	if _, err := VerifyOwnData(context.Background(), set, wrong, Output{}); err == nil {
 		t.Fatal("VerifyOwnData must fail with a wrong key")
 	}
 }
 
-func TestProcessStopsWhenCancelled(t *testing.T) {
+func TestVerifyStopsWhenCancelled(t *testing.T) {
 	t.Parallel()
 
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := Verify(ctx, openSet(t, fx.BackupDir, fx.Entry), nil, fx.Master, Output{}); err == nil {
-		t.Fatal("a cancelled Process must fail")
+		t.Fatal("a cancelled Verify must fail")
 	}
 }
 
@@ -124,7 +124,7 @@ func TestReportSkippedAndStaleFiles(t *testing.T) {
 		{Path: "busy.db", Type: manifest.TypeFile, Stale: true},
 	}}
 	var out testutil.Output
-	log := logging.NewConsoleLogger("info", &out)
+	log := logging.NewOutputLogger("info", &out)
 	if n := ReportSkippedFiles(m, "Docs", log); n != 1 {
 		t.Fatalf("ReportSkippedFiles = %d, want 1", n)
 	}
@@ -139,7 +139,7 @@ func TestReportSkippedAndStaleFiles(t *testing.T) {
 
 	clean := &manifest.Manifest{Entries: []manifest.Entry{{Path: "ok.txt", Type: manifest.TypeFile}}}
 	var quiet testutil.Output
-	log = logging.NewConsoleLogger("info", &quiet)
+	log = logging.NewOutputLogger("info", &quiet)
 	if ReportSkippedFiles(clean, "Docs", log) != 0 || ReportStaleFiles(clean, "Docs", log) != 0 || quiet.String() != "" {
 		t.Fatalf("a clean manifest reports nothing, got %q", quiet.String())
 	}

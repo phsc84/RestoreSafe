@@ -37,13 +37,13 @@ var (
 	offsetComment = regexp.MustCompile(`^//\s*(\d+)\b`)
 )
 
-// TestWebAuthnStructLayout checks every webauthn* struct in fido2.go against
+// TestWebAuthnStructLayout checks every webauthn* struct in webauthn_abi.go against
 // the layout of winwebauthn.h written in its comments: the size in the doc
 // comment and the offset at the start of each field's comment. A wrong
 // offset makes the YubiKey fail only on real hardware, which CI lacks.
 func TestWebAuthnStructLayout(t *testing.T) {
 	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "fido2.go", nil, parser.ParseComments)
+	file, err := parser.ParseFile(fset, "webauthn_abi.go", nil, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestWebAuthnStructLayout(t *testing.T) {
 	}
 	for name := range webauthnStructs {
 		if !seen[name] {
-			t.Errorf("%s is not declared in fido2.go", name)
+			t.Errorf("%s is not declared in webauthn_abi.go", name)
 		}
 	}
 }

@@ -26,14 +26,14 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 1. **The backup format of the current major version is frozen.** Every backup written by any x.0.0 release restores unchanged with every later x.y build. This includes fields that look like leftovers. The format-fixture tests (`internal/format/testdata/`) enforce it; a round never edits existing fixtures, it only adds new ones.
 2. **Behaviour is preserved.** The GUI's texts, the log file format, the order of questions, and the exit behaviour stay the same unless an item says otherwise and names the user-visible change for the CHANGELOG.
 3. **The layer rules stay and get stricter, never looser.** `internal/architecture` is the reference; a new package is added to its test in the same commit.
-4. **No unattended operation.** No item may introduce scheduling, background backups, or stored credentials (SPEC-2.0 section 1.3).
+4. **No unattended operation.** No item may introduce scheduling, background backups, or stored credentials (SPEC-core section 1.3).
 5. **The build and all tests pass after every commit.** A phase may leave an improvement unfinished, never something broken.
 6. **Delete, don't keep.** Replaced code goes in the same commit. No compatibility shims inside the program, no commented-out code, no "old" copies of files.
 7. **Measure before claiming.** A performance item records the numbers before and after; a "simplification" that adds lines or indirection needs a reason in the item.
 
 ## 3. A round, step by step
 
-1. **Branch.** `refactor-<release>` from the release branch, after the release.
+1. **Branch.** The round works on `dev`, after the release (CONTRIBUTING.md section 1). Each phase ends in a state that builds and passes CI.
 2. **Baseline.** Run the measurements of section 4 and copy the previous round's baseline table into the new plan with a column for each round, so trends are visible.
 3. **Review.** Go through the checklist of section 5, area by area. Write down only findings with evidence: a file and line, or a tool's output. "Could be nicer" without a cost is not a finding.
 4. **Carry over.** Add the items the previous round moved on (section 8), re-checked: some will have gone away by themselves.
@@ -44,7 +44,7 @@ Every round keeps these. A change that would break one is out of scope, not a tr
 
 ## 4. Baseline
 
-Run on a clean checkout of the round's starting commit and record the results in the plan. Once CI runs these (refactoring 2.0 RF-1), its output for that commit is the baseline. The tools are pinned in `go.mod` (refactoring 2.0 RF-2); until then, use `go run <module>@<version>`.
+Run on a clean checkout of the round's starting commit and record the results in the plan. Where CI runs a measure, its output for that commit is the baseline. The tools are pinned in `go.mod`. `go run ./tools/ci all` runs formatting, vet, the build, staticcheck, govulncheck, both deadcode passes, the tests with coverage, the race detector (with a gcc) and fuzzing in one go ([SPEC-ci.md](SPEC-ci.md)); the table names the single commands. The throughput benchmarks run alone on the machine, nothing else at the same time, with the SSD data outside `%TEMP%`: a test run beside them, or a folder the virus scanner watches more closely, changed the numbers by a third (RF-75).
 
 | Measure | Command | Record |
 |---|---|---|
@@ -54,11 +54,11 @@ Run on a clean checkout of the round's starting commit and record the results in
 | Tests and coverage | `go test -count=1 -coverprofile=cover.out ./...`; `go tool cover -func=cover.out` | pass or fail, total and per-package coverage |
 | Races | `go test -race ./...` with `CGO_ENABLED=1` and a gcc | pass or fail |
 | Static analysis | `go tool staticcheck ./...` (project configuration) | findings by check |
-| Dead code | `go tool deadcode -test ./...` | unreachable functions |
+| Dead code | `go tool deadcode -test ./...`; `go tool deadcode ./...` | unreachable functions; without `-test`, also the production functions only tests call (outside the test-support packages `testutil` and `interacttest`) |
 | Vulnerabilities | `go tool govulncheck -show verbose ./...` | called, imported, and required-only findings |
 | Formatting | `gofmt -l .` | files listed |
 | Fuzzing | each fuzz target for 30 s | crashes |
-| Throughput | the opt-in benchmarks of DEVELOPMENT.md section 11, SSD and network share | median MiB/s, backup and restore |
+| Throughput | the opt-in benchmarks of GUIDE-development.md section 11, SSD and network share | median MiB/s, backup and restore |
 | Markers | `git grep -n -E "TODO\|FIXME\|XXX\|HACK"` | count and where |
 | Docs | the index in `docs/README.md` against the files in `docs/` | missing or stale documents |
 
@@ -78,7 +78,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 ### 5.2 Dead and legacy code
 
-- `deadcode -test` and staticcheck U1000 findings. Struct fields that only keep a Windows ABI layout are not dead; they carry a `//lint:ignore U1000` with the reason and a layout test.
+- `deadcode` with and without `-test`, and staticcheck U1000 findings. `-test` counts tests as callers, so it misses production code only tests call (RF-70): delete it, or move it into the tests that need it. Struct fields that only keep a Windows ABI layout are not dead; they carry a `//lint:ignore U1000` with the reason and a layout test.
 - Wrapper functions in `gui/win32` with no caller.
 - Conversions that undo each other (a value turned into flags and back).
 - Wording and comments of an older version: file kinds, formats or screens that no longer exist (e.g. 1.x `.challenge` files, the first GUI).
@@ -89,16 +89,16 @@ For each area: what to look at, and how to find it. Not every point yields an it
 
 - Profile the throughput benchmarks (`-cpuprofile`, `-memprofile`) and list the top functions in the plan before proposing any change.
 - Allocations per chunk, per file, or per manifest entry in the backup and restore paths (`testing.B` with `b.ReportAllocs`).
-- Memory that grows with the number of files (manifest, maps) against the limits in SPEC-2.0 section 5.3.
+- Memory that grows with the number of files (manifest, maps) against the limits in SPEC-core section 5.3.
 - Blocking calls on the UI thread; snapshot and file-system work that can hang on a network drive.
-- Compare with the previous round's throughput; a drop of more than 10 % is a P1 finding.
+- Compare with the previous round's throughput; a drop of more than 10 % is a P1 finding. Before it is put down to the code, run the previous release and the current commit alternately on the same data: the machine changes too (a Windows or virus scanner update), and then both are slower (RF-75).
 
 ### 5.4 Security hardening
 
 - Untrusted input: every parser of bytes from the backup directory or the configuration (header, key set, trailer, chunk framing, manifest, file names, challenge JSON, recovery code, config.yaml) has a fuzz target and bounds on what it allocates.
 - Restore safety: paths from a backup can't leave the destination (lexical check, reparse points, `O_EXCL`).
 - Secrets: passwords, recovery codes and derived keys live in `[]byte` and are zeroed; no secret passes through a `string`, a log line, an error text, or the clipboard history.
-- Concurrency between RestoreSafe processes: what the backup-directory lock covers, and what happens without it.
+- Concurrency between RestoreSafe processes: what the backup-directory lock covers, and what happens without it. Readers share the lock, so a restore and a verification of one backup run at once and write the same log file (RF-95).
 - Windows specifics: DLL search order, file and directory permissions of what RestoreSafe writes, the application manifest.
 - Cryptography: algorithms, KDF bounds and defaults against current guidance (OWASP, RFC 9106); a change to defaults is a feature with its own spec, not a refactoring item.
 - Dependencies and supply chain: `govulncheck`, tool versions pinned, release checksums (and signing, if decided).
@@ -107,26 +107,28 @@ For each area: what to look at, and how to find it. Not every point yields an it
 ### 5.5 Quality assurance and testing
 
 - Per-package coverage against the floors in CI; packages that decide whether damage is detected (format, restorepoint) first.
+- Coverage counts only a package's own tests: code that only the tests of another package reach is not covered, and a split or a new method can lower a package that was not touched. Before a push, `go run ./tools/ci fast` checks every floor, not only those of the changed packages (RF-96).
+- Inputs that decide which branch runs are fixed in a test, not random: a random recovery code covered different branches from run to run, so the coverage of its package moved by 3 points and broke its floor (RF-40).
 - Tests that are flaky, slow (over 10 s per package), sleep, depend on today's date, or touch process-global state (`os.Stdout`, environment, working directory) while running in parallel.
 - The fault-injection matrix (damaged, missing, truncated parts; full disk; cancel in every phase) has a test per row.
 - The format fixtures restore bit-exact.
 - The GUI scripts in `scripts/gui-test` still find every control (`ids_test.go`) and run.
-- The manual checklist (`docs/GUI-TEST-CHECKLIST.md`) has no row that a script could cover instead.
-- Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference.
+- The manual checklist (`docs/GUIDE-gui-test.md`) has no row that a script could cover instead.
+- Elevated and not elevated: code whose behaviour depends on the process's privileges (backup semantics, file locks, ACLs) is tested both ways. The CI runner is elevated, users usually are not; refactoring 2.0 RF-59 was found only by that difference. A test that needs a permission to be denied (an ACL deny entry) did not take effect on every runner; such a test skips with the reason, and a second test reaches the same code in a way that works everywhere, so the floor does not depend on the runner (RF-68).
 - A check that only a person can do (Process Monitor, real hardware) names who does it and before which release, in the item itself; otherwise it stays open unnoticed (refactoring 2.0 RF-52).
 
 ### 5.6 Tooling, build and CI
 
 - CI runs every measurement of section 4 that is cheap enough, and fails on regressions.
 - Go version and dependencies: update to the current Go release and dependency versions (`go get -u ./...`, then `go mod tidy`), unless an item says why not.
-- `build.bat` (or its successor) changes no tracked file and gives the same exe for the same commit.
+- `build-release.bat` (or its successor) changes no tracked file and gives the same exe for the same commit.
 - Line endings: `.gitattributes` covers every file type in the repository.
 
 ### 5.7 Documentation
 
 - README, CHANGELOG, `config-SAMPLE.yaml`, and the specs against the code: defaults, option names, screenshots, statuses.
 - `docs/README.md` lists every document with its status; finished plans are deleted after their release.
-- Code comments cite specs as "2.0 spec n" or "GUI spec n"; a cited section still says what the comment claims.
+- Code comments cite specs as "core spec n" or "GUI spec n"; a cited section still says what the comment claims.
 
 ## 6. Items
 
@@ -142,7 +144,7 @@ Acceptance: how to see it is done (a command, a test, a measurement).
 - **P2** removes real cost: duplication, legacy protocol, measurable slowness, missing tests on code that decides correctness.
 - **P3** is cleanup worth doing while the code is open anyway.
 
-IDs restart at RF-1 in every round and are grouped by area (e.g. RF-1x tests, RF-5x security), leaving gaps for items found later. Outside its plan, cite an item with its round: "refactoring 2.0 RF-26". An item is never renumbered; a dropped item keeps its ID with "Dropped: <reason>".
+IDs count on from the last round (section 1) and are grouped by area in blocks of five from the round's first free number (e.g. RF-65 structure, RF-70 dead code, RF-80 tests), leaving gaps for items found later; a carried-over item keeps its ID. Outside its plan, cite an item with its round: "refactoring 2.0 RF-26". An item is never renumbered; a dropped item keeps its ID with "Dropped: <reason>".
 
 ## 7. Phases
 
@@ -171,7 +173,7 @@ A round is done when every P1 and P2 item is done or dropped with a reason, and 
 | Status | Proposed <date> |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
 | Baseline | `<branch>` at `<commit>` |
-| Branch | `refactor-<release>` |
+| Branch | `dev` |
 | Scope | <areas; what is explicitly not touched> |
 
 ## 1. Purpose
@@ -185,6 +187,9 @@ The standing constraints of SPEC-refactoring section 2 apply. <added constraints
 
 ## 4.-n. Items by area
 <RF items in the format of section 6>
+
+## n. Found during the work
+<items found after the plan was agreed, with IDs from the next free number; a defect found by a test of the round is a P1 or P2 item like any other>
 
 ## Phases
 | Phase | Items | When | Why then |

@@ -17,6 +17,7 @@ import (
 // could delete the parts it reads (refactoring 2.0 RF-50); a backup fails
 // while a restore runs.
 func TestRestoreAndVerifyWaitForARunningBackup(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Docs")
 	writeFile(t, filepath.Join(docs, "a.txt"), "content")

@@ -1,421 +1,251 @@
-# Plan: Refactoring round after 2.0
+# Plan: Refactoring round after 2.0.0
 
 | | |
 |---|---|
-| Status | **Done 2026-10-09** (section 17). Proposed 2026-10-06; Phases A and B done 2026-10-07, Phase C done 2026-10-08, phases D and E done 2026-10-08; all open questions answered. What is left is in section 18: RF-62 right after the 2.0.0 release, the coverage targets of RF-40 for the next round |
-| Follows | [SPEC-refactoring.md](SPEC-refactoring.md): how a round works, the standing constraints, the review checklist |
-| Baseline | `gui-redesign` at `dbc9402` (all numbers in section 2 are measured on it) |
-| Branch | `refactor-2.0`, merged into `v2` with one pull request per phase (Phase A: #1, B: #2, C: #3, D and E: #4); CI runs on each push to the pull request |
-| Scope | Structure, dead and legacy code, performance, security hardening, tests, tooling, and docs. **No change to the backup format, the keys, or what a backup, restore, or verify does for the user.** |
+| Status | Done 2026-10-15 (agreed 2026-10-13) |
+| Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
+| Previous round | The round of 2.0 (RF-1 to RF-64), done 2026-10-09; its plan is in git history (`git show v2.0.0:docs/PLAN-refactoring.md`) |
+| Baseline | `dev` at `d4d192a`; result at `7dc1742` |
+| Branch | `dev` |
+| Scope | Coverage (RF-40), code that only tests reach, duplicated checks and formats, console-era names, dependency updates, two large files. **No change to the backup format of 2.x** (standing constraint 1), and no user-visible change. |
 
 ## 1. Purpose
 
-RestoreSafe 2.0 is functionally complete and well layered: `internal/architecture` enforces the import rules, the view logic is plain Go, and most packages below the GUI have 75-95 % test coverage. This first refactoring round lists what an expert review of the code found worth changing before the codebase grows further, and in which order to change it.
+RestoreSafe 2.0.0 is released: a layered codebase with CI, coverage floors per package, format fixtures, fuzzing and a fault-injection matrix, all from the round of 2.0. The code has not changed since the release (only docs, names of windows and lint settings), so this round is small: it finishes the coverage targets the round of 2.0 left open, removes what the round of 2.0 could not see because its dead-code check counted tests as callers, and tidies a few places where one fact is known twice.
 
-Items follow the format and priorities (P1-P3) of SPEC-refactoring section 6. Their IDs (`RF-n`) are unique across rounds (SPEC-refactoring section 1); code and commits cite them as "refactoring 2.0 RF-n".
+New items start at RF-65 (IDs count on across rounds, SPEC-refactoring section 1). They are grouped by area with gaps: RF-65 structure, RF-70 dead and legacy code, RF-75 performance, RF-80 tests, RF-85 tooling, RF-90 documentation.
 
-## 2. Baseline (measured 2026-10-06)
+## 2. Baseline (measured 2026-10-13)
 
-| Measure | Value |
-|---|---|
-| Tracked files / Go lines | 262 / 40,636 (production and tests) |
-| Go toolchain, module deps | go 1.27.1; `go.yaml.in/yaml/v3`, `golang.org/x/crypto`, `golang.org/x/sys` only |
-| `go vet ./...` | clean |
-| `go test ./...` | passes |
-| `go test -cover ./...` | **fails** in `internal/gui/view`: `error generating coverage report: write \|1: file already closed` (RF-10) |
-| `go test -race` | not run: needs cgo, which the build disables (RF-11) |
-| staticcheck 2026.x (`-checks all` minus naming/doc style) | 10 findings besides ST1005: 6 unused (U1000), 1 dead store (SA4006), 2 test signatures (ST1008); ST1005 (error string style) on ~100 lines (RF-25) |
-| `deadcode -test ./...` | 16 unreachable functions (RF-20) |
-| `govulncheck ./...` | 0 called; 1 in a required module (`GO-2026-5932`, `x/crypto/openpgp`, not imported, no fix) |
-| `gofmt -l` | 18 files, all because of CRLF in the working tree (RF-4) |
-| CI | none; no `.github/` |
-| Coverage, total | 46.1 % of statements |
+| Measure | 2.0 round, start (2026-10-06) | 2.0 round, result (2026-10-09, `a5986bb`) | This round, start (2026-10-13, `d4d192a`) | This round, result (2026-10-15, `7dc1742`) |
+|---|---|---|---|---|
+| Tracked files / Go lines | 262 / 40,636 | 337 / 44,303 | 340 / 44,341 | 376 / 47,720 |
+| Go toolchain | go 1.27.1 | go 1.27.2 | go 1.27.2 (the current release) | go 1.27.2 (the current release) |
+| Dependency updates | not recorded | not recorded | `x/crypto` 0.57.0 → 0.58.0, `x/sys` 0.48.0 → 0.49.0; tools: staticcheck 0.8.1 → 0.8.2, govulncheck 1.8.0 → 1.9.0, `x/tools` 0.51.0 → 0.52.0 | none for a direct dependency or tool |
+| `go vet`, `gofmt -l` | vet clean; 18 files (CRLF) | nothing reported | nothing reported | nothing reported |
+| staticcheck | 10 findings besides ST1005 | nothing reported | nothing reported, with the naming and doc-comment checks on since `2974fe1` | nothing reported |
+| `deadcode -test` | 16 unreachable functions | nothing reported | nothing reported | nothing reported; fails CI since RF-86 |
+| `deadcode` (without `-test`) | not measured | not measured | 22 functions outside the test-support packages (RF-70) | nothing outside the test-support packages; fails CI since RF-86 |
+| `govulncheck` | 0 called; 1 required-only | 0 called, 0 imported; 1 required-only (`x/crypto/openpgp`) | unchanged: 1 required-only, GO-2026-5932 (`x/crypto/openpgp`, no fix) | unchanged: 1 required-only, GO-2026-5932 |
+| `go test ./...` | passes; `-cover` failed in `gui/view` | passes, including the 2.0.0 format fixtures; race and fuzzing pass in CI | passes; slowest packages `e2e` 83 s, `container` 63 s, `backup` 56 s, `health` 31 s | passes, 610 tests; slowest packages `container` 56 s, `e2e` 26 s, `health` 17 s; the whole run 73 s on a slow day of the machine (50 s the day before) |
+| Race, fuzzing | not run | pass in CI | pass in CI (run 38073462386 on `d4d192a`) | pass in CI (run 38767528308 on `7dc1742`) |
+| Markers (`TODO`, `FIXME`, `XXX`, `HACK`) | not counted | none | none | none |
+| CI | none | check, tests with coverage floors, race, fuzzing, GUI smoke test | the same five jobs; about 7 min, of which fuzzing 7 min, tests 2 min 15 s, race 2 min 10 s | the same five jobs, each one run of `tools/ci` (RF-87), with annotations per failure; about 7 min 20 s, fuzzing the longest; a pre-push hook runs `fast` |
+| Coverage, total | 46.1 % | 54.5 % | 54.5 % | 56.6 %, every package at its target (the CI runner `tools/ci` and the window code `gui`, `gui/win32` keep the total low) |
+| Largest production files | `gui/backups.go` 948, `gui/wizard.go` 931, `yubikey/fido2.go` 917 | `yubikey/fido2.go` 908, `gui/view/strings.go` 516, `archive/build.go` 504 | `yubikey/fido2.go` 910, `gui/view/strings.go` 516, `archive/build.go` 504 | `archive/build.go` 554, `gui/view/strings.go` 516, `gui/win32/listview.go` 487 |
+| Throughput, SSD (backup / restore) | not measured | 329–338 / 255 MiB/s | 316 / 178 MiB/s (RF-75) | 217–254 / 144–150 MiB/s, alternating with `v2.0.0` at 252–254 / 142–150 on the same day (a single run before: 290 / 114) |
+| Throughput, network share (backup / restore) | not measured | 29.3 / 56.9 MiB/s | 24.2 / 43.9 MiB/s (RF-75) | 22.5 / 33.4 MiB/s (one backup run of three took 266 s instead of 75 s) |
+| Docs index | not checked | complete | complete: every file in `docs/` is listed in `docs/README.md` | complete, with SPEC-ci |
 
-Coverage by package (statements):
+Coverage by package is unchanged since the result of the 2.0 round: cryptox 89.1, recovery 94.0, yubikey 36.4; config 92.6, logging 88.5, problem 100; manifest 92.6, naming 92.5, container 85.5, setwriter 85.2, catalog 81.2, archive 78.1; fsx 82.7; health 95.1, plan 93.3, restorepoint 90.9, unlock 84.7, job 84.3, backup 83.3, restore 79.1, interact 78.3, verify 73.2; gui/view 91.0, gui/flow 77.0, gui/widget 73.6, gui/win32 10.4, gui 2.0; cmd/restoresafe 33.3.
 
-| Layer | Packages and coverage |
-|---|---|
-| security | cryptox 89.0, recovery 92.2, **yubikey 20.8** |
-| config, logging | config 92.7, logging 86.6 |
-| format | manifest 92.3, naming 92.9, setwriter 86.6, catalog 79.7, archive 75.6, **container 72.2** |
-| fsx | 80.4 |
-| workflow | health 96.0, plan 93.9, backup 85.1, verify 84.1, unlock 84.0, restore 83.9, interact 82.1, job 72.9, **restorepoint 69.3** |
-| gui | flow 80.1, widget 73.8, view (fails, RF-10), **win32 9.1, gui 1.8** |
-| cmd | **restoresafe 0, yubidiag 0** |
+Coverage by package at the result of this round (CI run of `7dc1742`): cryptox 94.1, recovery 98.5, yubikey 62.3; config 92.6, logging 91.8, problem 100; manifest 92.4, naming 92.5, container 85.5, setwriter 85.2, catalog 94.0, archive 86.8; fsx 92.9; health 95.1, plan 93.3, restorepoint 90.9, unlock 87.4, job 90.8, backup 85.7, restore 90.3, interact 100, verify 93.9; gui/view 91.0, gui/flow 95.8, gui/widget 85.2; tools/ci/check 98.4.
 
-Largest production files: `gui/backups.go` 948 lines, `gui/wizard.go` 931, `security/yubikey/fido2.go` 917, `gui/overview.go` 693, `gui/view/backups.go` 651.
+Looked at without a finding: the layer rules (`internal/architecture` unchanged since the release); package documentation; secrets passed as `string` (none); the DLL search order (both programs call `SetDefaultDllDirectories`); `.gitattributes` against the file types; `config-SAMPLE.yaml` against the configuration keys; every "core spec n", "GUI spec n" and "GUI spec XX-n" citation in the code against the specs; `ids_test.go` against the GUI scripts.
 
-After Phase A (2026-10-07, `refactor-2.0` at `9b6b196`): `gofmt -l .`, `go tool staticcheck ./...` (with `staticcheck.conf`) and `go tool deadcode -test ./...` print nothing; `go test -cover -count=3 ./...` passes; coverage 52.1 % in total, most of the rise because `gui/view` (91.4 %) is measured now; 267 files, 41,087 Go lines. `-race` passes in CI (RF-11).
-
-After Phase B (2026-10-07, `refactor-2.0` at `22257c0`): `gofmt -l .`, staticcheck and deadcode print nothing; all tests pass, including the 2.0.0 format fixtures; coverage 52.3 % in total, every package above its floor; 291 files, 41,924 Go lines (the fixtures add 2.4 MB of test data).
-
-After Phase C (2026-10-08, `refactor-2.0` at `82ae779`): gofmt, staticcheck and deadcode print nothing; all tests pass, including the format fixtures; coverage 52.4 % in total, every package above its floor; no production error text contains "Remedy:"; `gui/flow` matches no workflow text; no production file in `internal/gui` is over 500 lines except `view/strings.go` (515); 312 files, 42,510 Go lines.
+Not looked at in this round: the cryptography point of SPEC-refactoring section 5.4 (algorithms, KDF bounds and defaults against current OWASP and RFC 9106 guidance). No deficiency is known; the defaults are 512 MB, 3 passes and 4 threads ([crypto.go:104](../internal/security/cryptox/crypto.go#L104)). The next round starts its review with it.
 
 ## 3. Constraints
 
-The standing constraints of SPEC-refactoring section 2 apply. This round adds none; RF-41 creates the format fixtures that constraint 1 relies on.
+The standing constraints of SPEC-refactoring section 2 apply. The format fixtures in `internal/format/testdata/v2.0.0/` now describe the released format: they never change.
 
-## 4. Tooling and CI (Phase A)
+## 4. Structure
 
-**RF-1 (P1) Add CI.** There is no automated check; everything relies on running `go test` by hand before a commit.
-Add `.github/workflows/ci.yml` on `windows-latest`, triggered on push and pull request:
+**RF-65 (P3) Progress logging takes three counters in a row.** Evidence: `LogStreamProgress` and `LogProgressUntilDone` ([job/progress.go:34](../internal/workflow/job/progress.go#L34), [:52](../internal/workflow/job/progress.go#L52)) take 7 parameters, among them `inBytes, outBytes, outWriteCalls *atomic.Int64`; both are only called from the same file.
+Change: one `streamCounters` struct for the three counters; unexport what has no caller outside the package.
+Acceptance: no function in `job` takes more than 4 parameters; the log lines are unchanged (`job` tests).
+Done 2026-10-13: `fsx.StreamCounters` replaces the three counters and setwriter's own `Counters` type, which held the same three; the two logging functions are methods of an unexported `streamProgress`. `OpenLogger` (5 parameters) takes the log path its callers had already computed. The log lines are unchanged.
 
-1. `gofmt` check (after RF-4), `go vet ./...`
-2. `go build ./...` with `CGO_ENABLED=0` (the release configuration)
-3. `go test -count=1 -coverprofile ./...` (needs RF-10)
-4. `go test -race ./...` with cgo enabled (RF-11)
-5. `staticcheck ./...` with the project configuration (RF-25)
-6. `govulncheck ./...`
-7. Upload the coverage profile as an artifact; fail when a package drops below its floor in RF-40.
+**RF-66 (P3) The backup preflight and the backup plan take the same eight inputs.** Evidence: [backup/choose.go:49-53](../internal/workflow/backup/choose.go#L49-L53) calls `backupPreflightReport` (7 parameters, [preflight.go:23](../internal/workflow/backup/preflight.go#L23)) and `backupPlan` (9 parameters, [preflight.go:398](../internal/workflow/backup/preflight.go#L398)) one after the other with `cfg, backupDir, sources, keys, folders, est`; the comment of `backupPlan` says it must use "the values the details report was built from".
+Change: one struct holding those inputs, built once in `choose.go`, with the report and the plan as its methods; the fact that both use the same values then holds by construction.
+Acceptance: neither function takes more than 3 parameters; `backup` tests pass unchanged.
+Done 2026-10-13: `proposal` with the methods `report` (1 parameter) and `plan` (3); `choosePlan` builds it once per plan shown.
 
-Acceptance: a pull request against `v2` shows all seven steps green.
-Done in `fe55e57`, as three jobs (check, test, race). Step 7 in `d21ad47`: the floors of RF-40 (`scripts/ci/coverage-floors.txt`), checked per package. `staticcheck.conf` already leaves out ST1005 (the last step of RF-25), so the check is green before the error texts change. Failing tests and data races are reported as an annotation (`71839dd`). Accepted with [pull request #1](https://github.com/phsc84/RestoreSafe/pull/1): all steps green. CI runs on pull requests and on pushes to `main` and `v2`.
+**RF-67 (P3) The log line layout is known in three places.** Evidence: [logging.go:202](../internal/logging/logging.go#L202) writes `[<time>] <severity> - <message>`; [facts.go:132](../internal/logging/facts.go#L132) parses it for facts; [view/logviewer.go:34](../internal/gui/view/logviewer.go#L34) and [:57](../internal/gui/view/logviewer.go#L57) match `"] FACT  - "`, `line[20] == ']'` and `" WARN"` / `" ERROR"` by hand. `view` already imports `logging`.
+Change: `logging` exports one function that splits a line into time, severity and message (used by `parseFact` too), and one that formats a line (used by the logger); the log viewer uses the first. The test of a failed run in `view/restorepage_test.go` writes its fact line with the second, with a time after the scenario's runs, instead of sleeping (RF-80).
+Acceptance: no log-line literal or column index in `gui/view`; no `time.Sleep` in tests; the log file format is unchanged (`logging` tests).
+Done 2026-10-13: `logging/line.go` holds the severities, `FormatLine` (the logger) and `ParseLine` (`parseFact` and the log window). The log format is unchanged. Found on the way: no logger method writes `ERROR`, so the log window's ERROR tone and the "Warnings and errors" filter (GUI spec BK-5) only ever see warnings; kept as they are, since the spec names them.
 
-**RF-2 (P1) Pin the developer tools in `go.mod`.** `staticcheck` on this machine was built with go 1.25 and cannot analyse a go 1.27 module; `goversioninfo` is installed with `@latest` (DEVELOPMENT.md section 8), so two developers can build with different versions.
-Use the `tool` directive (`go get -tool ...`) for `staticcheck`, `govulncheck`, `deadcode`, and `goversioninfo`, and call them as `go tool <name>` in `build.bat`, CI, and DEVELOPMENT.md. Versions are then in `go.mod`/`go.sum` and update like any dependency.
-Acceptance: a fresh clone runs `go tool staticcheck ./...` without a separate install.
-Done in `789f734`.
+**RF-68 (P3) `BuildTar` is 160 lines.** Evidence: [archive/build.go:101](../internal/format/archive/build.go#L101) `BuildTar` 160 lines, and `writeFile` ([:320](../internal/format/archive/build.go#L320)) 7 parameters; `archive` is at 78.1 % coverage (RF-40). The other functions over 80 lines are a window procedure and dialog builders in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), where a long switch or a list of controls reads better in one piece, and `setwriter.Write` (107), `backup.run` (109), each one sequence of steps.
+Change: after RF-40 has brought `archive` to its target, split `BuildTar` into the walk and the writing of one entry, with the per-run state in a struct instead of `writeFile`'s parameters.
+Acceptance: no function in `archive` over 80 lines or 5 parameters; a known-answer test, written before the change, shows that the tar output of a fixed tree is byte for byte the same after it.
+Done 2026-10-14: `BuildTar` keeps its per-run state in `tarBuilder`; the walk is its method `visit`, with `unlisted`, `unstatable`, `addDir`, `addFile` and `writeFile` (2 parameters instead of 7) for the cases. `TestBuildTarKnownAnswer`, committed before the split, passes unchanged after it. The split moved archive's coverage from 85.3 to 84.8 %; `TestBuildTarHandlesAFolderItCannotList` (a folder denied listing with `icacls`, by default and with `on_unreadable_file: skip`) tests the branch that was never reached. In the CI run of `6c4f9cb` that test did not count (CI measured 84.8 % again), while the run of `7dc1742` measured 86.8 %, so it ran there: whether the deny entry takes effect depends on the runner (a guess: one whose account may use the backup privilege, with which Go opens folders, ignores it). `TestBuildTarCountsAFolderThatVanishes`, which works the same on every machine, found RF-97 and brings archive to 85.1 % without the `icacls` test (86.8 % with it).
 
-**RF-3 (P2) Make `build.bat` side-effect free and reproducible.**
+**RF-69 (P3) `yubikey/fido2.go` holds four things in 910 lines.** Evidence: the file has the WebAuthn ABI structs (lines 105–298), the challenge data and its JSON (300–375), the public operations (379–525), the WebAuthn calls (526–810) and the HID enumeration through SetupAPI (811–910). It has been the largest production file for two rounds.
+Change: split by those parts into `webauthn.go`, `challenge.go`, `hid.go` and `fido2.go`; a move only, no change to a function.
+Acceptance: no file in `yubikey` over 400 lines; `git diff --stat -M` shows moves; `layout_test.go` passes.
+Done 2026-10-14: `fido2.go` (200 lines: debug output, errors, test seams, public operations), `challenge.go` (75), `webauthn_abi.go` (252: bindings and the ABI structs, which `layout_test.go` now reads), `webauthn.go` (309: the calls) and `hid.go` (117). Five files instead of four, because the WebAuthn part alone had 539 lines. A move only: the sorted lines of the new files, without package clauses and imports, equal those of the old file.
 
-- It runs `go mod tidy` first, so a release build can change `go.mod`/`go.sum`. Replace it with `go mod verify` and fail if `git diff --exit-code go.mod go.sum` reports a change.
-- It stamps `main.Version`, and `main` copies it into `buildinfo.Version` at runtime ([cmd/restoresafe/main.go:37](../cmd/restoresafe/main.go#L37)). Stamp `RestoreSafe/internal/buildinfo.Version` directly with `-X`, and delete `main.Version` and `Options.Version` (the GUI reads `buildinfo.Version`).
-- Write a `SHA256SUMS.txt` next to the ZIP (RF-58).
+## 5. Dead and legacy code
 
-Acceptance: two builds of the same commit produce identical `RestoreSafe.exe` hashes; the build leaves `git status` clean.
-Done in `d7b800c`. `go mod tidy -diff` checks `go.mod` and `go.sum` without changing them; `SHA256SUMS.txt` is in sha256sum format. Two builds gave the same exe hash.
+**RF-70 (P2) Production code that only tests call.** Evidence: `go tool deadcode -test ./...` reports nothing because tests count as callers; `go tool deadcode ./...` reports 22 functions outside `testutil` and `interacttest`:
+`catalog.ScanBackups`, `catalog.InspectSet`; `manifest.Parse`, `manifest.Builder.Bytes`; `widget.Area.Width`, `widget.Area.Columns`, the whole `widget.Badge` (6 functions); `win32.ListSetGroupCollapsed`, `win32.Pixel`; `backup.estimateBackupSpace`; `health.Check`, `health.collectStartupHealthItemsWithConfigPath`, `health.checkBackupInventoryHealth`; `interact.ReadPasswordConfirmed` (RF-71), `interact.Note`, `interact.WriteReport`, `interact.writeRow` (only `interacttest` uses them to print a report).
+Change: for each, delete it and change its tests to use what the program uses, or move it into the test files or test-support package that need it. `manifest.Parse` and `Builder.Bytes` may stay if the fuzz target and the format fixtures need the in-memory form; the item then says so. Add `deadcode` without `-test` to SPEC-refactoring section 4.
+Acceptance: `go tool deadcode ./...` lists functions in `testutil`, `interacttest` and the functions kept with a reason only.
+Done 2026-10-13; none kept. Deleted: `ScanBackups`, `InspectSet`, `Parse`, `Builder.Bytes`, the `Badge` window (`DrawBadge`, which the lists use, stays), `Area.Width`, `Area.Columns`, `ListSetGroupCollapsed`, `Pixel` (the widget tests call `GetPixel` themselves), and with `interact.Note` the whole `RowNote` kind, which nothing produces (also the window's RTF branch for it). Moved into the tests: `health.Check` and two health shorthands, `backup.estimateBackupSpace`; `WriteReport` into `interacttest`. The tests now use what the program uses (`Inventory`, `Encode`/`Decode`). `ReadPasswordConfirmed` went with RF-71. SPEC-refactoring section 4 and 5.2 run `deadcode` with and without `-test`; SPEC-gui no longer names `health.Check`. Coverage: interact fell to 34 % once `WriteReport`'s test moved and got its own tests (100 %); widget fell from 73.6 to 72.2 % with the tested `Badge`, floor 72 until RF-40.
 
-**RF-4 (P1) Fix line endings.** The index holds LF, but 18 Go files have CRLF in the working tree (`git ls-files --eol` shows `i/lf w/crlf`), so `gofmt -l` lists them and any formatting check fails on Windows. `.gitattributes` only covers `*.bat`.
-Add `* text=auto` and `*.go text eol=lf` (plus `*.ps1 text eol=crlf`, `*.md text`), then renormalise once (`git add --renormalize .`) in a commit of its own.
-Acceptance: `gofmt -l .` prints nothing on a fresh Windows checkout with `core.autocrlf=true`.
-Done in `8981fd5`; `25bb563` formats the four files that were not gofmt-clean apart from their line endings.
+**RF-71 (P2) A new password is checked against its confirmation twice.** Evidence: [interact/password.go:18](../internal/workflow/interact/password.go#L18) `ReadPasswordConfirmed` (from the console, unreachable in the program, RF-70) and [gui/flow/ui.go:148](../internal/gui/flow/ui.go#L148) `checkNewPassword` both refuse an empty password and a mismatch, and zero the buffers; only the second runs.
+Change: one function in `interact` that checks a password and its confirmation (the body of `checkNewPassword`), used by `gui/flow`; `ReadPasswordConfirmed` goes.
+Acceptance: `ErrPasswordEmpty` and `ErrPasswordMismatch` are returned in one place; the tests of both cases move with it.
+Done 2026-10-13: `interact.CheckNewPassword`, used by `gui/flow` and by `interacttest` (which asks for the confirmation only after a non-empty password, as before).
 
-## 5. Test-tooling defects (Phase A)
+**RF-72 (P3) Console-era names for the log pane.** Evidence: RestoreSafe.exe has no console since 2.0 ([fido2.go:32](../internal/security/yubikey/fido2.go#L32) says so), and the workflows' output goes to the window's log pane ([gui/flow/ui.go:54](../internal/gui/flow/ui.go#L54), [gui/operation.go:141](../internal/gui/operation.go#L141)). Still named after the console: `logging.Logger.console`, `NewConsoleLogger`, `IsConsoleOnly` ([logging.go:32](../internal/logging/logging.go#L32), [:102](../internal/logging/logging.go#L102), [:107](../internal/logging/logging.go#L107)), `job.OpenLogger(..., console)` ([job/runtime.go:19](../internal/workflow/job/runtime.go#L19)), the package documentation of `interact` ([interact.go:3-5](../internal/workflow/interact/interact.go#L3-L5)) and `Issue.Full` ([report.go:96](../internal/workflow/interact/report.go#L96)). `yubidiag` is a console program; its use is not affected.
+Change: rename to "output" (the writer) and "without a log file" (`IsConsoleOnly`); fix the comments. Texts written to the output stay the same (standing constraint 2).
+Acceptance: `git grep -i console -- '*.go'` finds only `yubidiag`, the `GetConsoleWindow` fallback of `yubikey`, and test names.
+Done 2026-10-13: `NewOutputLogger` and `HasFile` (the inverse of `IsConsoleOnly`; a nil logger has no file), `output` for the writer in `logging` and `job`, and the comments of `interact`, `problem`, `Issue.Full` and `testutil.Output`. The tests' `console` variables went too. The texts written are unchanged. Only yubikey's console window, which yubidiag uses, keeps the word.
 
-**RF-10 (P1) `testutil.CaptureStdout` is not safe for parallel tests.** It swaps the process-global `os.Stdout` ([internal/testutil/stdout.go](../internal/testutil/stdout.go)). `TestBackupPlanOfARealPlan` calls it from parallel subtests ([internal/gui/view/plan_test.go:163-168](../internal/gui/view/plan_test.go#L163-L168)); one subtest restores another's closed pipe as `os.Stdout`, and the coverage writer then fails with `file already closed`. 14 test files use the helper, many of them with `t.Parallel()`. The helper can also deadlock: it reads the pipe only after `fn` returns, so output larger than the pipe buffer blocks `fn`.
-Change: tests stop capturing `os.Stdout`. `interacttest.Script` already has an `Out io.Writer` field; tests pass a `bytes.Buffer` there. Delete `CaptureStdout` and the `stdout` fallback writer in [interacttest/script.go:29-33](../internal/workflow/interact/interacttest/script.go#L29-L33), so nothing in tests writes to the real `os.Stdout`.
-Acceptance: `go test -cover -count=3 ./...` passes; `grep -r "os.Stdout" internal` finds no test code.
-Done in `56a454d`. A nil `Script.Out` and a nil logger console now discard the output (the program always passes the UI's writer); tests that check the output pass a `testutil.Output`, which takes concurrent writes. `internal` no longer mentions `os.Stdout` at all.
+## 6. Performance
 
-**RF-11 (P1) Run the race detector.** The workflows, the health checker, the GUI bridge, and the decrypt pipeline all use goroutines, atomics, and mutexes, yet `-race` has never run because it needs cgo. Run it in CI with a MinGW gcc (preinstalled on GitHub's Windows images) and `CGO_ENABLED=1`; release builds stay `CGO_ENABLED=0`.
-Acceptance: `go test -race ./...` passes in CI. Races found are fixed under this item.
-Done in `fe55e57` (the `race` job of CI). The first runs found no data race. They found that four tests of locked files failed on the runner: an elevated process with the backup privilege opens a file held without sharing, because `os.Open` asks for backup semantics. `testutil/filelock.Hold` (`2c0948d`) removes the privilege from the test process. CI run 37669132251 is green.
+**RF-75 (P1) Restore is slower than in the round of 2.0.** Evidence: the throughput benchmarks on 2026-10-13 (median of 3 runs, 1.7 GB; the SSD run alone on the machine, in `sandbox\bench`):
 
-**RF-12 (P3) Test helper signatures.** staticcheck ST1008 in [backup/keys_test.go:87](../internal/workflow/backup/keys_test.go#L87) and [unlock/unlock_test.go:89](../internal/workflow/unlock/unlock_test.go#L89): the error is not the last result. Reorder.
-Done in `0a2f913`.
+| | 2.0 round (2026-10-08) | 2026-10-13 | Change |
+|---|---|---|---|---|
+| SSD, backup | 318–338 MiB/s | 316 MiB/s (312–337) | within the variance |
+| SSD, restore | 255–257 MiB/s | 178 MiB/s (172–181) | −30 % |
+| Network share, backup | 29.3 MiB/s | 24.2 MiB/s (23.6–24.9) | −17 % |
+| Network share, restore | 56.9 MiB/s | 43.9 MiB/s (41.3–48.1) | −23 % |
 
-## 6. Dead code (Phase B)
+No code on the backup or restore path changed between `a5986bb` and `d4d192a` (`git diff a5986bb..HEAD` touches only comments there), and the Go toolchain and `x/sys` are the same, so the cause is likely the machine (a Windows or virus scanner update) rather than the code. A first SSD run under `%TEMP%`, while other tests ran, gave 221 and 138 MiB/s and is not counted.
+Change: run the benchmarks of `v2.0.0` and of `dev` alternately on the same data, as for RF-59 in the round of 2.0. If `v2.0.0` is as slow, the drop is the machine's: record the new reference numbers here and drop the item with that reason. If not, profile restore (`-cpuprofile`, `-memprofile`, SPEC-refactoring section 5.3) and fix what the profile shows.
+Acceptance: alternating runs of `v2.0.0` and the fix differ by less than 10 %, or the item is dropped with the measurement that shows the machine changed.
+Dropped 2026-10-13: the machine changed, not the code. `v2.0.0` (a worktree of the tag) and `dev` at `a8d5818`, alternately on the same data in `sandbox\bench` on the SSD, two rounds (median of 3 runs each):
 
-**RF-20 (P2) Delete unreachable code.** `deadcode -test` and staticcheck agree on these:
-
-| Symbol | Where | Action |
+| | `v2.0.0` | `dev` |
 |---|---|---|
-| `Builder.Entries` | [format/manifest/manifest.go:165](../internal/format/manifest/manifest.go#L165) | delete |
-| `card.badge` | [gui/overview.go:418](../internal/gui/overview.go#L418) | delete |
-| `AppendText`, `NMListViewParam`, `NMLVKeyDownParam`, `NMLVCustomDrawParam`, `ListHitGroup`, `ListKeyOf`, `Checked`, `DrawItemParam`, `StockObject`, `Ellipse`, `DrawFocusRect`, `AddTooltip` | `gui/win32/*` | delete; the wrapper grows when a caller needs a function, not ahead of it |
-| `AssertFileContentEqual` | [testutil/assert.go:10](../internal/testutil/assert.go#L10) | delete |
-| `health.StateOf` | [workflow/health/snapshot.go:160](../internal/workflow/health/snapshot.go#L160) | delete |
-| `yubicoVID` | [cmd/yubidiag/main.go:36](../cmd/yubidiag/main.go#L36) | use it to filter the HID list, or delete |
-| `client` dead store | [gui/settings.go:259](../internal/gui/settings.go#L259) | remove the assignment |
+| Backup, round 1 / 2 | 266.9 / 251.0 MiB/s | 243.1 / 256.7 MiB/s |
+| Restore, round 1 / 2 | 166.0 / 162.6 MiB/s | 159.4 / 153.6 MiB/s |
 
-Not dead: the unused fields `cbSecond`, `pbSecond`, `cCredWithHmacSecretSaltList`, `pCredWithHmacSecretSaltList` in [yubikey/fido2.go:220-230](../internal/security/yubikey/fido2.go#L220-L230) keep the struct layout of `winwebauthn.h`. Keep them and add `//lint:ignore U1000 ABI layout of WEBAUTHN_*`, and add a test that checks `unsafe.Sizeof` and `unsafe.Offsetof` against the sizes in the comments, for every WebAuthn struct.
+The release itself restores at 163–166 MiB/s here today, against 255 MiB/s on 2026-10-08; `dev` is within 6 % of it. Neither `Get-HotFix` nor the virus scanner's versions name a cause. The reference for the next comparison is this round's own numbers; the network share was not run alternately, since the SSD already separates the code from the machine.
 
-Acceptance: `go tool deadcode -test ./...` prints nothing; staticcheck reports no U1000 or SA4006. CI runs `deadcode` as a report (not failing), because a wrapper function added in one commit may get its caller in the next.
-Done in `9b6b196`; the procs, types and constants that only the deleted wrappers used went with them.
+## 7. Tests
 
-**RF-21 (P2) Remove the auth-mode round trip.** `restore.authFactors` turns the key set's `AuthMode` into two booleans, and `config.AuthModeFromFactors` turns them back into the same `AuthMode` ([restore/workflow.go:101](../internal/workflow/restore/workflow.go#L101), [:237](../internal/workflow/restore/workflow.go#L237); [verify/workflow.go:179](../internal/workflow/verify/workflow.go#L179)). This is left over from 1.x, which read the factors from a `.challenge` file. Pass `config.AuthMode` through, and delete `AuthModeFromFactors` and its test.
-Done in `b0751d3`; `config.AuthMode.UsesYubiKey` answers what the two booleans did.
+**RF-40 (P1) Coverage targets per package** (carried over from the round of 2.0, re-checked 2026-10-13: the numbers are unchanged). CI enforces a floor per package (`scripts/ci/test-coverage-floors.txt`, checked by `test-coverage-floors.sh`); the targets set in the round of 2.0 are not reached everywhere. Below the target: cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.6 (85 each), yubikey 36.4 (60; everything except the WebAuthn calls, behind the `fido2MakeCredFn`/`fido2GetHmacFn` seams). The floors also lag the current values by up to 8 points (archive, backup, restore, unlock, job at 70), so coverage can drop without CI noticing.
+Change: first raise every floor to its package's current value, rounded down. Then tests for the error paths, starting with verify and restore, which decide whether damage is reported; raise each floor to its target once it is reached. RF-70 removes functions that only tests reach, which lowers some packages a little; measure after it.
+Acceptance: every package at or above its target, and the floors in CI raised to match.
+Step 1 done 2026-10-13: every floor raised to its package's coverage in CI (run 38073462386, the same as locally), rounded down, e.g. archive 70 → 78, verify 70 → 73, restorepoint 85 → 90, yubikey 35 → 36. Where RF-70 deletes tested functions and a package drops below its new floor, RF-70 lowers that floor with the number, in the same commit.
+The first CI run with the new floors failed: `recovery` measured 92.5 % against its floor of 94. Its coverage depended on the random code: the test of the Crockford readings (O as 0, I and L as 1) ran only when the code contained a 0 or a 1, so the package measured 92.5, 94.0 or 95.5 % from run to run. That test now uses a fixed code, and a new test covers `ValidCheck`'s refusals; `recovery` measures 98.5 % in every run and its floor is 98. Two more full runs showed one other package that varies: `gui/widget` 73.4 or 73.6 % (floor 73).
+Step 2, 2026-10-13: tests to the targets, each floor raised to the new coverage in CI, rounded down. verify 73.2 → 93.8 %, restore 79.1 → 90.1 %, archive 78.1 → 85.3 %, cryptox 89.1 → 94.1 %, job 84.3 → 89.7 %, fsx 82.7 → 92.9 %, unlock 84.7 → 87.4 %, gui/flow 77.0 → 95.9 %, yubikey 36.4 → 62.3 % (CI and here alike; the WebAuthn calls stay untested). logging rose to 91.3 % with RF-95. The verify tests found RF-95. Still below the target: catalog 81.2, interact 78.3, gui/widget 73.6 and backup 83.3, all four with functions RF-70 deletes or moves (`ScanBackups`, `InspectSet`; `WriteReport`, `ReadPasswordConfirmed`; `Badge`, `Area.Width`; `estimateBackupSpace`); their tests follow RF-70, so that no test is written for code about to go.
+Done 2026-10-13 (`b6b2bd2`, CI run of that commit): every package at or above its target, every floor at its coverage in CI, rounded down. After RF-70: catalog 82.7 → 94.0 %, backup 83.3 → 85.7 %, interact 34.3 → 100 % (its report test moved to `interacttest` with `WriteReport`), gui/widget 72.2 → 85.2 %. Total coverage 54.5 → 57.4 % (the window code in `gui` and `gui/win32`, which only the GUI scripts drive, keeps it low).
 
-**RF-22 (P2) One set of auth-mode constants.** `container.AuthModePassword/PasswordYubiKey/YubiKey` (`int`, [keyset.go:25-29](../internal/format/container/keyset.go#L25-L29)) duplicate `config.AuthMode*` (typed). `container` already imports `config`. Make `KeySet.AuthMode` a `config.AuthMode` (JSON stays a number, so the format is unchanged) and delete the `container` constants.
-Done in `adf34f2`; the format fixtures confirm the JSON is unchanged.
+**RF-80 (P3) Slow tests and a test that sleeps.** Evidence: four packages take over 30 s (`e2e` 83 s, `container` 63 s, `backup` 56 s, `health` 31 s, SPEC-refactoring section 5.5 asks for 10 s); in `container`, `TestManifestStreamsAtOneMillionEntries` alone took 22 s. [view/restorepage_test.go:136](../internal/gui/view/restorepage_test.go#L136) sleeps 1.1 s because the logger takes its time from the clock. CI is not slowed by them (fuzzing takes longer); a developer running `go test ./...` waits about 1.5 min.
+Change: profile the four packages' slowest tests (`go test -v` sorted by time) and fix what is setup cost (Argon2 parameters, file sizes) rather than what the test checks; let a test give the logger its time instead of sleeping.
+Acceptance: no `time.Sleep` in tests; each of the four packages faster by the amount the item records, with the reason for what stays slow.
+Done 2026-10-13, except the sleep. Measured alone, most of the baseline's time was the packages competing for the CPU in `go test ./...`: alone they took e2e 29 s, container 20 s, backup 24 s, health 10 s. Changed: the e2e tests run in parallel (none changes global state), as do the subtests of `TestCancelAtEachPhase` (12 s → 3 s) and of `TestEveryWarningAndErrorItemHasACode` (4.8 s → 1.3 s). Alone now: e2e 8 s, health 9 s; in the full run e2e 44 → 23 s, and `go test ./...` takes 50 s instead of 54 s. Stays slow, with the reason:
+- container: `TestManifestStreamsAtOneMillionEntries` (19 s) measures the heap at the one million entries of core spec 5.3 and collects garbage after every 5 % of growth so that the peak shows live memory; that is what it checks. The rest of the package takes 1.5 s.
+- backup: its slow tests replace the package's YubiKey and key seams (`checkYubiKeyConnectedFn` and others in `keys.go`) and so cannot run in parallel.
+- The sleep in `view/restorepage_test.go` stays until RF-67: the test needs a failed run with a later time than the scenario's runs (the Create page describes the latest run), and RF-67's single function for the log line lets the test write that line with its own time. A clock in `Logger` only for this test would be code only tests call (RF-70).
+  Removed with RF-67 on 2026-10-13: the test writes the failed run's fact line with `logging.FormatLine`, a minute after the scenario's runs. No `time.Sleep` is left in the tests.
 
-**RF-23 (P3) The FIDO2 debug output goes nowhere in the app.** `RESTORESAFE_FIDO2_DEBUG=1` prints with `fmt.Printf` ([fido2.go:27-33](../internal/security/yubikey/fido2.go#L27-L33)), but `RestoreSafe.exe` is linked with `-H=windowsgui` and has no console; only `yubidiag` can show it. Replace the environment switch with a package-level `io.Writer` that `yubidiag` sets and the app leaves nil. (The `GetConsoleWindow` fallback in `dialogParent` stays: `yubidiag` is a console program and needs it.)
-Done in `6189d5d`. yubidiag sets `yubikey.DebugOutput` when `RESTORESAFE_FIDO2_DEBUG=1`, so the README stays correct.
+**RF-81 (P3) Test names and test files of the workflows still describe older code.** Evidence (2026-10-14): tests are named after functions that were renamed or merged away: in restore `TestRunRestoreOperation…`, `TestRestoreSelectedEntries…` and three `TestPrintRestorePreflight…` (the code now has `operation.run`, `restoreAll`, `restorePreflightReport`); in verify `TestRunVerifyOperation…`, `TestVerifySelectedEntries…`, `TestPrintVerifyPreflight…`, `TestBuildVerifyPreflight…`; in backup three `TestRunBackupOperation…`. The test files show two rounds that were never merged: restore has one [workflow.go](../internal/workflow/restore/workflow.go) (425 lines: `Run` and the operation, the preflight from line 164, the plan from line 385) and four test files for it (`workflow_test.go`, `workflow_preflight_test.go`, `run_test.go`, `plan_test.go`); verify (219 lines) has `workflow_test.go`, `run_test.go` and `plan_test.go`; backup has `workflow_test.go` and `workflow_operation_test.go`. GUIDE-ci.md section 4 now says a test file is named after the file it tests or after the behaviour or tool it covers; these are neither. Five helpers are copied between packages: `fixtureInfos`, `fixtureConfig`, `script` and `errorsIn` (restore and verify), `setInfo` (setwriter and backup), about 40 lines.
+Change: rename each test after what it tests now, in every package (a sweep, not only the names above). Split restore's `workflow.go` into `run.go`, `preflight.go` and `plan.go`, a move only, and give each its test file. In verify (one file, small enough) and backup, move the tests of the older round into the files named after what they test, so that no `workflow_*_test.go` file is left beside a `workflow_test.go`. Move the five copied helpers into `testutil` (`script`, which builds an `interacttest.Script`, may fit `interacttest` better; the layer rules of `internal/architecture` decide), and delete the copies. `assertTreesEqual` (e2e, restore) and `errorLines` (backup, verify) share a name but not a body; they stay.
+Acceptance: no test name refers to a function that does not exist; none of the five helpers is defined in more than one package; in restore, verify and backup every test file is named after a source file or a behaviour (GUIDE-ci.md section 4); the restore split shows as moves in `git diff --stat -M`; each package lists as many tests before as after (`go test -list .`), and coverage of the three packages is unchanged.
+Done 2026-10-15, in three commits:
+1. Helpers (`e454fa1`): `interacttest.Answering`, `testutil.BackupFixture.Config`, `testutil.ErrorLines` and `testutil.LogErrors`, and the new `testutil/inventory` (`Read`, `Find`; apart from `testutil`, because catalog's own tests import `testutil`). `errorLines` of backup and verify became one too: once `ErrorLines` was shared, both were the same two lines.
+2. Names (`3ef98c8`): a scan of every test against the identifiers its package declares, then a review by hand of 160 candidates; 56 tests renamed after what they call now (also outside the workflows: container's `Writer`, manifest's `Decode` and `FuzzDecode`, cryptox's `chunkParams`, `ResolveSources`, unlock's `KeySet`), two failure messages, and the fault matrix of `e2e/doc.go`. Every test it names exists.
+3. Files: restore's `workflow.go` is `run.go`, `preflight.go` and `plan.go`, each with its test file; verify has `run_test.go` and `plan_test.go` beside its one `workflow.go`; backup's `workflow_operation_test.go` joined `workflow_test.go`, and the tests of `keyPlanFor` and `deleteSetFiles` went to `preflight_test.go` and `retention_test.go`. `git diff --stat -M` shows `workflow.go => run.go` as a rename and the two other files as new, since it does not follow blocks; the sorted lines of the three files, without package clauses and imports, equal those of `workflow.go`.
+Every package lists as many tests as before (610); coverage is unchanged (restore 90.3 %, verify 93.9 %, backup 85.7 %).
 
-## 7. Legacy code and protocol (Phase C)
+## 8. Tooling and build
 
-**RF-24 (P1) v1 wording in user-facing errors.** The YubiKey code still talks about a `.challenge` file, which 2.0 no longer has: "challenge file is corrupted" and "Ensure the .challenge file is unchanged and belongs to the same backup run as the .enc files" ([fido2.go:338](../internal/security/yubikey/fido2.go#L338), [:466](../internal/security/yubikey/fido2.go#L466)), plus the section comment "Challenge file format" ([:277](../internal/security/yubikey/fido2.go#L277)) and [config/config.go:30](../internal/config/config.go#L30). The YubiKey challenge is now part of the key set in the backup header. Reword to "the YubiKey data in the backup header is damaged", with the remedy to use another backup. This is a user-visible text change; add it to CHANGELOG.
-Done in `6179ed7`. A damaged challenge reaches the user inside the header error ("Invalid backup header: ... YubiKey challenge is damaged ... Remedy: Use an unmodified backup created by RestoreSafe."), which already gives the remedy. `DeriveFIDO2SecretForRestore`, the 1.x path with the `.challenge` remedy, had no caller left and is deleted; its tests now test `DeriveFIDO2SecretAny`. No CHANGELOG entry: the old wording was never released in a 2.x version.
+**RF-85 (P2) Dependencies and tools behind their current versions.** Evidence: `go list -m -u all` (baseline): `x/crypto` 0.58.0, `x/sys` 0.49.0, staticcheck 0.8.2, govulncheck 1.9.0, `x/tools` 0.52.0 are available.
+Change: `go get -u ./...` and the tools, `go mod tidy`, one commit with the CHANGELOG line for the dependencies (CONTRIBUTING.md).
+Acceptance: `go list -m -u all` shows no update for a direct dependency or tool; CI passes, including the format fixtures.
+Done 2026-10-13. `x/crypto` 0.58.0, `x/sys` 0.49.0; staticcheck 0.8.2, govulncheck 1.9.0, `x/tools` 0.52.0 and their modules (`go get -u tool`). gofmt, vet, staticcheck, `deadcode -test` and `go test ./...` report nothing new, coverage 54.5 %; govulncheck still lists only GO-2026-5932 (`x/crypto/openpgp`, required, not imported). The updates `go list -m -u all` still shows (testify, go-spew, goldmark, `x/exp`, `renameio`) are in the module graph only, not in `go.mod`.
 
-**RF-25 (P2) Typed user errors instead of "Remedy:" strings.** 145 production error strings embed the user message and its remedy as text ("... Remedy: ..."), capitalised and with punctuation, which is why ST1005 fires on ~100 lines. The frontend can only show them whole; tests can only compare text; the same remedy is repeated with slightly different wording.
-Introduce in the bottom layer (`fsx` or a new `internal/problem`, added to the architecture test):
+**RF-86 (P3) The dead-code check in CI only reports.** Evidence: [ci.yml:44-46](../.github/workflows/ci.yml#L44-L46) runs `go tool deadcode -test ./...` as "a report only", so a finding never fails CI and is seen only when someone reads the job's log; the round of 2.0 brought it to zero.
+Change: fail the job when `deadcode -test` reports anything, and, after RF-70, when `deadcode` without `-test` reports anything outside the test-support packages and the functions RF-70 keeps (open question 1).
+Acceptance: a function without a caller, added on a test branch, fails the static job.
+Done 2026-10-13: `scripts/ci/static-deadcode.sh` runs `deadcode` with and without `-test` (open question 1) and fails on either finding, outside `testutil` and `interacttest`. Checked locally with a planted function without a caller and one only a test calls: each reported once, exit 1; the clean tree passes. GUIDE-ci.md describes the step.
 
-```go
-type Error struct {
-    Code   interact.Code // or a code type moved down with it
-    Msg    string        // what happened
-    Remedy string        // what the user does about it
-    Err    error         // cause, for errors.Is/As
-}
-```
+**RF-87 (P2) The checks of CI are defined in three places.** Evidence: shell inside [ci.yml](../.github/workflows/ci.yml) (gofmt, `go test | tee`, the benchmarks), four bash scripts with awk and grep in `scripts/ci/`, and the "Locally" columns of [GUIDE-ci.md](GUIDE-ci.md), which repeat them as single commands. Running CI locally means typing those commands one by one, and the coverage floors need Git Bash, because Windows PowerShell 5.1 writes redirected output in UTF-16.
+Change: one Go program, `tools/ci`, runs each job the same way on the development machine and on the runner, as specified in [SPEC-ci.md](SPEC-ci.md) (agreed 2026-10-14, decisions in its section 11), in that spec's four phases: the runner, the switch of `ci.yml`, the proof on a throwaway pull request, the pre-push hook.
+Acceptance: the acceptance criteria of SPEC-ci section 13.
+Done 2026-10-14, in the four phases of SPEC-ci (its phases and acceptance criteria were removed when it became a living spec; `git show f1546d9:docs/SPEC-ci.md` has them):
+1. Runner (`8a7ccde`): `tools/ci` and `tools/ci/check`, next to the unchanged scripts; `internal/architecture` puts `tools` outside the layers and keeps it apart from the program both ways (`TestDevToolsStandAlone`). `tools/ci/check` is tested from `go test -json` streams recorded with Go 1.27.2 from a small fixture module (98.4 %, floor 90); the data race stream is written by hand in the same format, since the development machine has no gcc. Locally `fast`, `race` (skipped: no gcc) and `fuzz` gave the same results as the scripts; `gui` was not run locally, as it takes over mouse and keyboard, and runs in CI instead.
+2. Switch (`7f911a2`): `ci.yml` as in SPEC-ci 7.1, the four `.sh` scripts and the inline shell deleted, GUIDE-ci.md, CONTRIBUTING.md and GUIDE-development.md on the runner. The `gui` job failed at first: the step runs in PowerShell 7, whose `PSModulePath` the Windows PowerShell of `gui-smoke.ps1` inherited (`Get-FileHash` not found); the runner starts it without (`aa20f8a`). Job names unchanged, so the ruleset needed no change; a CI run takes about 7 minutes, as before.
+3. Proof (pull request #9 into `dev`, closed unmerged, branch deleted): an unformatted file, a vet finding, a failing test, a floor one above the coverage, an unused function and a data race each turned the expected job red with a readable annotation (a vet finding in a test file also breaks the build of `go test`, so test, race and fuzz turned red too). The fuzz job failed without an annotation when `go test -list` could not build a package; commands that fail before their output now carry their error into the annotation (`338d82a`).
+4. Pre-push hook (`910c18a`): turned on in the owner's clone; a push with an unformatted file was stopped. `fast` takes about 2 minutes on the development machine (static 18 s, test 1 min 44 s; the first run of the day 2 min 30 s).
 
-`Error()` returns `Msg + " Remedy: " + Remedy`, so logs and the existing tests keep their text. The GUI uses `errors.As` to show the remedy on its own line and to pick the action button by `Code`. Convert package by package, starting with `container`, `archive`, and `config` (the most strings). Then add `staticcheck.conf` with `-ST1005` and a comment that error texts are user-facing sentences on purpose.
-Acceptance: no production error string contains "Remedy:" literally; the GUI shows remedies from the field.
-Decided 2026-10-07: all sites, package by package, starting with the errors that carry a `Code` (the ones the GUI acts on). The round may stop after those without leaving anything broken.
-Done up to the last step (`c1bee60` to `2410eae`): `internal/problem` (bottom layer) holds `Error{Msg, Remedy, OwnLine, Err}`; every production error that carried "Remedy:" is one now, converted by a syntax-tree tool where the text was a literal and by hand elsewhere, with unchanged text (the tests compare it). Error types that callers find with `errors.As` (unreadable file, incomplete set, missing parts, renamed files) are the cause of a `problem.Error`. Issues and plans carry the remedy in a field (`Issue.Remedy`, `FolderPlan.Remedy`, `SetPlan.Remedy`, `RestoreSetPlan.OutputRemedy`), and the GUI shows it from there. Differences from the item: no `Code` field yet, because no caller acts on an error's code (the GUI picks actions by the codes of issues and problems); and log and console lines, the printed plan's advisory row and the health problems' Detail keep "Remedy:" as text, because they are the log format (standing constraint 2) or, for Detail, the full text GUI spec 11.8 asks for. Last step, after RF-26: the credential message is the only text the GUI still splits; then `problem.Split`'s text fallback and `textWithRemedy` go. Last step done in `e42d666`: `problem.Split` takes the remedy from a `problem.Error` only; the GUI splits no text.
+## 9. Documentation
 
-**RF-26 (P2) Replace the text protocol between workflows and GUI.** `interact.UI` is still shaped like the old console: questions are prompts as strings, and messages are lines written to `Output()`. The GUI recovers meaning by matching text:
+**RF-90 (P3) SPEC-refactoring contradicts itself on item IDs.** Evidence: section 1 says IDs "count on across rounds"; section 6 says "IDs restart at RF-1 in every round" and gives "RF-1x tests" as the grouping example.
+Change: section 6 says IDs count on and are grouped by area with gaps from the round's first free number, as in this plan.
+Acceptance: section 1, section 6 and this plan agree.
+Done 2026-10-13.
 
-- `flow.UI.Password` decides whether a pending password applies by checking whether the prompt contains "recovery code" ([gui/flow/ui.go:147](../internal/gui/flow/ui.go#L147)).
-- `flow.UI.recentMessage` takes the last output line as the dialog message ("Wrong password. 2 attempt(s) remaining.") unless it starts with `[`, which marks a log line ([gui/flow/ui.go:135-145](../internal/gui/flow/ui.go#L135-L145)).
+## 10. Found during the work
 
-Rewording a prompt or a log line silently changes the dialogs. Change:
+**RF-95 (P1) Two runs logging to the same file lose each other's lines.** Evidence: found by the verify tests of RF-40, whose parallel tests both logged to `verify.log`. `NewLogger` wrote to `%TEMP%\<name of the log>` ([logging.go:62](../internal/logging/logging.go#L62) at `c425eb0`), so every logger of one log file shared one temp file: a second `NewLogger` overwrote it with a fresh copy of the log, and `Close` overwrote the log with the temp file. A restore and a verification of the same backup run, started in two windows (the read lock lets both run), therefore lost the lines and facts the first one had written before the second one started. `TestLoggersOfTheSameFileAtOnceKeepEachOthersLines` fails on the old code with exactly that.
+Change: each logger writes to a temp file of its own (`os.CreateTemp`); `Close` appends it to the log instead of overwriting the log. The log format is unchanged; the warnings about copying an existing log to the temp directory are gone with the copy. CHANGELOG: under "Fixed" for 2.1.0.
+Acceptance: the test above passes; a temp file that cannot be appended is kept and reported (`TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten`).
+Done 2026-10-13.
 
-- `Password(kind SecretKind, attempt Attempt)` with `SecretKind` = password, recovery code, and `Attempt{N, Max int; Reason}`; the GUI words the prompt in `gui/view/strings.go`. The question also carries the creation date of the key set it unlocks, so the unlock dialog names it as GUI spec CR-1 asks (accepted as a known difference for 2.0.0, PLAN-gui-redesign D4).
-- A typed `Notice(n Notice)` for messages a dialog may show; `Output()` stays for the log text only.
-- `interacttest.Script` prints the same wording as today, so the e2e scripts' expected output does not change.
+**RF-96 (P2) Failures are not logged as errors, and their reason is not in the readable log.** Evidence: no workflow writes an `ERROR` line; every problem, from a skipped file to a failed run, is a `WARN` line (`git grep -n "log.Warn" -- internal/workflow`). When a run fails, its reason reaches the log file only as a `FACT` line (JSON), e.g. `backupFailed` ([backup/workflow.go:270](../internal/workflow/backup/workflow.go#L270)) and `verifyAll` ([verify/workflow.go:175](../internal/workflow/verify/workflow.go#L175)), and the log window hides fact lines; a failed restore writes no fact at all. A user who opens the log of a failed run sees the steps up to the failure, not why it failed. The log window's ERROR tone and the "Warnings and errors" filter (GUI spec BK-5) therefore only ever show warnings (found with RF-67).
+Change: `logging` gets an `Error` method for `SeverityError`. `ERROR` is for what the user asked for and did not happen: a backup run that failed, a set that failed its post-backup verification, a verification that found damage, a restore that failed (with its "INCOMPLETE" line). Each workflow fails in one place (`backupFailed`, the error paths of `run` in verify and restore); the error line goes there, as text with its remedy, next to the fact. `WARN` stays for a run that completed with something to look at: unreadable files skipped as configured, retention skipped, a base not usable (full backup instead), stalled I/O, the directory lock unavailable, wrong password attempts, and a cancel (the user's own choice, not a failure). CHANGELOG: under "Changed" for 2.1.0 (standing constraint 2: the log's content changes, not its format).
+Acceptance: tests show an `ERROR` line with the reason in the log of a failed backup, of a verification that found damage and of a failed restore, and none in the log of a cancelled run; the comment "never written" on `SeverityError` is gone.
+Done 2026-10-14: `Logger.Error`; `backupFailed`, the post-backup verification of a set, and the error paths of `run` in verify and restore write the error with its remedy as an `ERROR` line. The "INCOMPLETE" line of a restore is `ERROR` when the restore failed and stays `WARN` when it was cancelled. Tests: the failure tests of backup, verify and restore check the `ERROR` line, their cancel tests and `TestCancelAtEachPhase` check that a cancel writes none. CHANGELOG under "Changed" for 2.1.0.
 
-Acceptance: `gui/flow` contains no `strings.Contains` or prefix check on workflow text; architecture test unchanged.
-Done in `4f40d12`. The questions are types in `interact`: `SecretQuestion` (password or recovery code, the operation, `OtherKeys` with their creation date for CR-1, an `Attempt` with the reason the previous try failed), `UnlockChoice` (the `AuthMode` instead of its label), `NewPasswordQuestion` (the minimum length) and `SpareQuestion`. Instead of a general `Notice`, every message a dialog showed is part of the question it belongs to, which was enough: the workflows write no message for a dialog any more, and `Output()` carries log and console text only. `interacttest.Script` prints the old wording, so console output and the e2e tests are unchanged. `gui/flow` matches no text, and `gui/view` reads no prompt or message (its regular expressions are gone). One GUI text changed: the password dialog after a YubiKey touch no longer repeats "YubiKey connected. Follow the on-screen prompts", which came too late to help.
+**RF-97 (P2) A folder deleted during a backup fails the backup.** Evidence: found by a test of RF-68. `addDir` ([archive/build.go](../internal/format/archive/build.go)) treated a folder that vanished between the walk listing it and reading its times as unreadable: by default the backup failed ("Cannot read ... set 'on_unreadable_file: skip'"), with `skip` it was reported as a file that could not be read. Core spec 6.5 says a file or directory deleted while the backup runs "never aborts a backup"; a file deleted in the same way is counted as vanished, and so is a folder the walk cannot list because it is gone. The code was the same before the split of RF-68.
+Change: `addDir` counts a folder that no longer exists as vanished, like the other two places.
+Acceptance: `TestBuildTarCountsAFolderThatVanishes` (the folder is deleted when the file before it is opened) fails before the change and passes after it. CHANGELOG under "Fixed" for 2.1.0.
+Done 2026-10-14.
 
-**RF-27 (P3) Stale package docs.** `restore`'s doc still lists "Let the user choose which backup(s) to restore" ([restore/workflow.go:1-5](../internal/workflow/restore/workflow.go#L1-L5)); the choice is made before `Run` since decision 2 of PLAN-gui-redesign. Review every `doc.go` and package comment against the current behaviour.
-Done in `46112ff`: restore and backup list their steps in today's order, interact says what Output is for since RF-26, catalog got a package comment, and job, logging and fsx name what they hold now. The other packages' comments were checked and are current.
-
-## 8. Modularity and duplication (Phase C)
-
-**RF-30 (P2) Restore and verify share one preflight.** `restore/workflow.go` and `verify/workflow.go` duplicate: the preflight item build with base lookup (`buildRestorePreflight` / `buildVerifyPreflight`), the "Backup selection" rows, the size estimate, the "with full backup ... (parts: n)" detail, the auth rows, the per-entry loop, and the cancel handling. Move the shared part into `workflow/job` (it may not go into `restore` or `verify`, architecture rule): `job.SelectionPreflight(selected, inventory) []SelectionItem` and `job.SelectionRows(...)`. Restore adds its destination checks on top.
-Acceptance: the duplicated functions exist once; the restore and verify tests pass unchanged.
-Done in `c025396`: `job.SelectionPreflight`, `SelectionRows`, `SelectionBytes`, `SelectionItem.SetPlan`, `EachRestorePoint`, `OpenRestorePoint` and `LogStart`, with tests of their own (`job` 83.5 %). Verify uses the shared item as it is; restore embeds it and adds its destination folder. The tests pass with only the renames of verify's item. The cancel branches stay in each workflow: their messages differ.
-
-**RF-31 (P2) Parameter structs for long signatures.** Several functions take 8-10 positional parameters, several of them strings or `*atomic.Int64` of the same type, which invites swapped arguments: `runRestoreOperation` (10), `RunSectionPipeline` (9, two of them prose strings), `restorePreflightReport` (7), `backupDirectory`, `logPartSummary`. Use a struct per operation (`restore.operation{...}`) with methods instead of passing the same eight values down three levels.
-Done in `c9a6cdf`, `88d2792`, `20ec84b` and `afd6b68`: restore, verify and backup each have an `operation` struct whose methods share the run's values; `logPartSummary` takes `setwriter.Counters`; `restorepoint.Process(..., verifyOnly, ...)` became `Restore` and `Verify` with an `Output` (logger and byte counter), and the section reader derives its prose itself instead of taking it as two parameters. `restorePreflightReport` is down to 6 parameters since RF-21 and stays.
-
-**RF-32 (P3) Context as a parameter, not a field.** `archive.BuildOptions.Context` and `setwriter.Params.Context` keep the context in a struct, and `nil` means background. Make it the first parameter (`BuildTar(ctx, w, opts, mb)`, `setwriter.Write(ctx, p)`), as the workflows already do.
-Done in `974cc48`. `fsx.ContextWriter` keeps its context as a field on purpose: an `io.Writer` has nowhere else to take it from.
-
-**RF-33 (P2) Split the large GUI files.** `gui/backups.go` (948), `gui/wizard.go` (931) and `gui/overview.go` (693) each mix building controls, layout, list custom-draw, and commands. `overview.go` also holds helpers that 8 files use (`card`, `layoutRow`, `toneColor`, `heroColors`, `badgeColors`, `segmentColor`, `glyphOf`, `measure`).
-
-- Move `card` and `layoutRow` to `gui/card.go`, and the mapping from `view` tones, badges and glyphs to `widget` colours and glyphs to `gui/palette.go`.
-- Split each page into `<page>.go` (struct, build, update), `<page>_layout.go`, and `<page>_list.go` (ListView fill and custom draw), where the page has a list.
-- Target: no file in `gui` over 500 lines.
-- Update the target structure in PLAN-gui-redesign section 3, which still lists files that were never created (`verifydialog.go`, `credentials.go`, `widget/list.go`, `widget/stack.go`, `view/progress.go`), or move the plan to the archive (RF-62).
-
-Done in `515ff1d`, `28ae632`, `b49acf5` and `0250574`, moving code unchanged with a syntax-tree tool: `card.go`, `palette.go` and `page.go` hold what the pages share; the Create backup page, the Restore backup page and the Restore window are split into the page and its `_layout`, `_list` and (for the window) `_check` files; `gui/view` got `vocabulary.go`, `verifyplan.go`, `logviewer.go` and `restorepage_actions.go`, and `gui/win32` got `display.go`. The files the item names are `restorepage.go`, `restoredialog.go` and `createpage.go` since the pages were renamed. Every production file in `internal/gui` is under 500 lines except `view/strings.go` (515), which stays whole: it is the one place of every user-visible string (GUI spec 3.6). PLAN-gui-redesign's target structure is not updated: that plan is deleted after the 2.0.0 release (RF-62).
-
-**RF-34 (P3) Package-level GUI state.** `theApp`, `activeDetails`, `activeCredential`, `dialogWindows`, and the `*ClassExists` flags are globals ([app.go:124](../internal/gui/app.go#L124), [details.go:30](../internal/gui/details.go#L30), [dialogs.go:47](../internal/gui/dialogs.go#L47), [dialogwin.go:33](../internal/gui/dialogwin.go#L33)). A Win32 window procedure needs one way to find its Go object, but one is enough: keep a single registry `map[HWND]handler` (or `GWLP_USERDATA` per window) in the `gui` package and make the dialog state fields of `app`. This lets more of `gui` be tested with a hidden window (RF-40).
-Done in `82ae779`: `registry.go` maps every top-level window to its handler (`app`, `dialogWindow`, the details viewer, each with a `message` method), served by one window procedure; `registerClass` registers every class once; the open credential dialog is a field of `app`. `theApp`, `activeDetails`, `activeCredential`, `dialogWindows` and the class flags are gone. Checked on the real window with `Smoke-BackupRestore.ps1`, `Check-States.ps1` (all 13 conditions; `Argon2Capped` needs a configuration without its own `argon2` block, as the script appends one), `Accessibility.ps1`, and an ad-hoc check of the details viewer. Testing `gui` with a hidden window (the item's motive) is now possible; writing such tests belongs to the coverage targets of RF-40.
-
-## 9. Performance (Phase D)
-
-The two opt-in throughput benchmarks (DEVELOPMENT.md section 11) are the yardstick for this section. Before any change, record their medians on an SSD and on the network share in this document; every change in this section reports the before and after.
-
-**RF-35 (P2) Profile first.** Add `-cpuprofile` and `-memprofile` runs of `TestThroughputBenchmarkBackup` and `...Restore` and note the top 10 functions here. RF-36 and RF-38 are only done if the profile shows their cost. AES-GCM with AES-NI and SHA-256 with SHA-NI are each well above 1 GB/s per core, so the bottleneck may be I/O, not crypto.
-Done 2026-10-08. Baseline (1.7 GB of benchmark data, median of 3 runs; SSD: the local NVMe disk, network: the owner's share `M:\RestoreSafe-test`):
-
-| Where | Backup | Restore |
-|---|---|---|
-| SSD | 5.1–5.2 s, 329–338 MiB/s | 6.8 s, 255 MiB/s |
-| Network share | 58.8 s, 29.3 MiB/s | 30.3 s, 56.9 MiB/s |
-
-Top functions by CPU (flat), backup: `runtime.cgocall` (the Windows file syscalls) 71 %, `sha256.blockSHANI` 8.5 %, `gcm.gcmAesEnc` 4.3 %, `runtime.memmove` 3.0 %, `runtime.memclrNoHeapPointers` 2.9 % (clearing the new Seal buffers), ChaCha8 (the benchmark's data generation, not RestoreSafe) 2.8 %, `runtime.semawakeup` 1.4 %, `runtime.sysUnusedOS` 1.1 %. Restore: `runtime.cgocall` 65 %, `sha256.blockSHANI` 14.7 %, `gcm.gcmAesDec` 5.9 %, `runtime.memmove` 5.5 %, `runtime.semawakeup` 1.4 %. So both are I/O-bound; crypto is under 25 % of the CPU time, as expected.
-Allocations: `gcm.sliceForAppend` (the `Seal(nil, ...)` of RF-36) is 6.7 GB of 8.7 GB allocated in a backup, about 4 GB per GB backed up. Restore allocates little (`DecryptStream` reuses its buffer). RF-36 is done for the allocations and the GC work; it will not change the throughput much.
-RF-59 (`CreateFile` without backup semantics) was checked against the commit before it, alternating runs on the same data: 337.6 and 328.8 MiB/s against 329.0 and 319.7 MiB/s, so no cost. A first run of 283 MiB/s was variance.
-
-**RF-36 (P2) No allocation per chunk.** `cryptox.writeEncryptedChunk` calls `gcm.Seal(nil, ...)`, which allocates a new 8 MiB + 16 B slice for every chunk, and `chunkNonce` and `chunkAAD` allocate per chunk ([crypto.go:318](../internal/security/cryptox/crypto.go#L318)). A 100 GB backup makes ~12,800 large allocations, and the GC work that goes with them. Reuse one ciphertext buffer, one nonce array, and one AAD buffer per stream (`DecryptStream` already reuses its buffer). Combine the 5-byte prefix and the ciphertext into one `Write`.
-Acceptance: a `testing.B` benchmark of `EncryptStream` over 256 MiB shows a constant number of allocations, independent of the size.
-Done 2026-10-08. `chunkParams` holds the nonce and AAD buffers of a stream; `Seal` appends to one prefix-plus-ciphertext buffer, written with one `Write`; `DecryptStream` no longer allocates its prefix per chunk either. Tests: `TestStreamAllocationsIndependentOfSize` (encrypt and decrypt allocate the same for 2 and 16 chunks; a test instead of a `testing.B` benchmark, so that CI checks it on every run) and `TestEncryptStreamKnownAnswer` (the SHA-256 of the output for a fixed key and input, taken from the code before the change: the format fixtures check reading, this checks writing). SSD before and after: allocations in a backup 8.7 GB to 0.36 GB; backup 318 MiB/s, restore 257 MiB/s, both within the runs' variance.
-
-**RF-37 (P2) Go benchmarks that CI can run.** The throughput tests need `RESTORESAFE_BENCH_ROOT` and 1.7 GB of data, so they never run by themselves. Add small `testing.B` benchmarks for `EncryptStream`, `DecryptStream`, `archive.BuildTar` over a temp tree, manifest encode and parse at 100k entries, and `catalog.Inventory` with 500 sets. CI runs them with `-benchtime=1x` only to keep them compiling; a developer compares with `benchstat`.
-Done 2026-10-08. `bench_test.go` in cryptox, archive, manifest and catalog; CI runs them once in the test job; CONTRIBUTING.md section 4 shows `benchstat`. On the owner's PC: encrypt 1.7 GB/s, decrypt 2.1 GB/s (one core, so crypto is not the bottleneck); manifest encode 100k entries 0.28 s, decode 0.53 s. Two findings: `BuildTar` opens a just-written file in about 14 ms the first time and 70 µs afterwards, the same with `os.Open` and with RF-59's `CreateFile` (the virus scanner, not the code). `Inventory` read the backup directory twice per set (`InspectSet` and `OpenSet` each called `CollectParts`), quadratic in the number of sets and a round trip per set on a network share; it now reads it once: 500 sets 4.9 s to 2.0 s, 242 MB to 4 MB allocated.
-
-**RF-38 (P3, only if RF-35 shows CPU-bound crypto) Parallel chunk encryption.** The pipeline is one producer (walk, read, SHA-256, TAR) and one consumer (encrypt, write) joined by an unbuffered `io.Pipe`. Chunks are independent (counter nonce, per-chunk AAD), so N workers can seal chunks while one writer keeps the order. Bounds: N = min(GOMAXPROCS, 4), memory ≤ 2 × N × 8 MiB. The on-disk output must be byte-identical to the sequential writer for the same key, which a test checks. Same for decrypt, with read-ahead of the next part.
-Dropped 2026-10-07: the owner wants simple and robust code, so the crypto pipeline stays sequential whatever the profile shows. RF-35 still profiles, for RF-36 and RF-39.
-
-**RF-39 (P3) Manifest memory against SPEC 5.3.** SPEC-2.0 section 5.3 says "the manifest is written as a stream", but `container.Write` takes the whole manifest as `[]byte` from `manifestFn` ([set.go:55](../internal/format/container/set.go#L55)) and `ReadManifest` reads it into a `bytes.Buffer`. At 1,000,000 files that is ~300 MB once more, on top of the builder's entries. Either stream it (`manifestFn func(io.Writer) error`) or correct the spec. Add a test with 1,000,000 synthetic entries that checks the peak heap stays under a stated limit.
-Done 2026-10-08. `manifestFn` is `func(io.Writer) error`; `Builder.Encode` writes line by line, `manifest.Decode` parses from a reader; `container.Write` and `ReadManifest` join them to the crypto stream with an `io.Pipe` and hash the plaintext on the way. `Validate` drops its second path map (`seenFolded` finds exact duplicates too). `TestManifestStreamsAtOneMillionEntries` (211 MB manifest): writing adds 107 MiB to the heap at peak, reading 149 MiB on top of the parsed entries; the limit is the size of the serialized manifest, which the old code exceeded (424 MiB when writing from one buffer). Skipped under `-race`. SPEC 5.3 now says "written and read as a stream".
-
-## 10. Security hardening (Phase B for P1, Phase D for the rest)
-
-**RF-50 (P1) Restore and verify take the backup-directory lock.** Only `backup.Run` calls `fsx.AcquireBackupLock` ([backup/workflow.go:43](../internal/workflow/backup/workflow.go#L43)). A second RestoreSafe window (e.g. a second configuration with the same backup directory) can apply retention and delete the parts of a set that the first window is restoring. Make the lock a reader/writer lock: backup takes it exclusively (as now), restore and verify take it shared (`LockFileEx` without `LOCKFILE_EXCLUSIVE_LOCK`). Restore and verify then fail fast with "a backup is running" instead of failing halfway with a missing part.
-Done in `0282e6d`. `fsx.AcquireReadLock` takes the lock shared; restore and verify call it through `job.LockForReading` before their first question. `TestRestoreAndVerifyWaitForARunningBackup` (e2e) covers all four combinations. CHANGELOG has an entry.
-
-**RF-51 (P1) No silent no-op lock.** When the lock file cannot be created, `AcquireBackupLock` returns an empty lock and no error ([fsx/lock.go:27-33](../internal/fsx/lock.go#L27-L33)), so two backups can then run at the same time. Return a warning the workflow logs and shows in the plan ("RestoreSafe can't lock the backup folder; don't start a second backup"). A read-only backup directory can't be backed up into anyway, so for backup this is an error.
-Done in `0282e6d`. A backup fails when the lock file can't be created. A restore or verification goes on and shows the warning `BACKUP_DIR_NOT_LOCKED` (new code, GUI spec 11.8) in its plan and log. Only the exclusive holder removes the lock file, so a reader never deletes it under another reader.
-
-**RF-52 (P1) Restrict DLL search.** RestoreSafe is a portable exe that users run from a download or USB folder. The WebAuthn and Win32 procs use `NewLazySystemDLL` (good), but the process's default DLL search order still includes the exe's folder for DLLs that Windows or the runtime loads implicitly. Call `windows.SetDefaultDllDirectories(windows.LOAD_LIBRARY_SEARCH_SYSTEM32)` as the first statement of `main` in both commands, before any window or WebAuthn call. Check by hand with Process Monitor that no DLL is looked up in the exe's folder.
-Done in `d11617c`. No package `init` touches the Windows API before `main`, and the window starts as before. Open: the check with Process Monitor by hand.
-Checked by hand 2026-10-09 (owner, `a5986bb`): `RestoreSafe.exe` alone in `C:\dlltest\` with empty `dwmapi.dll`, `uxtheme.dll` and `version.dll` as bait, under Process Monitor (process `RestoreSafe.exe`, path in that folder), through start, Browse…, Edit config.yaml and a scaling change. No bait was looked up, and every DLL loaded came from System32 (or WinSxS for `comctl32.dll`). Two lookups in the folder remain, both outside what `SetDefaultDllDirectories` covers and neither running code: `tzres.dll` (Go's `time` package reads the time zone names with `RegLoadMUIStringW`, which tries the folder before Go falls back to System32) and `explorerframe.dll` (the folder dialog's icon lookup calls `SearchPathW`, which uses the old search order). Both load the file as a resource-only data file, so a planted file could at worst change a time zone name or a folder icon.
-
-**RF-53 (P2) Recovery code as bytes.** `recovery.Code` stores the code in `string` fields and `Secret()` converts to a new `[]byte` ([recovery.go:25-32](../internal/security/recovery/recovery.go#L25-L32)). Strings cannot be zeroed, so every recovery code generated or typed stays in memory until the GC reuses the space. The same applies to `ShowRecoveryCode(code string)` in `interact.UI` and `win32.CopySecretText(owner, text string)`. Keep the code as `[]byte` end to end, give `Code` a `Zero()` method, and zero the UTF-16 copy after `SetClipboardData` copied it. Passwords already follow this rule; this brings the recovery code in line.
-Done 2026-10-08. `recovery.Code` keeps its data characters as `[]byte` with `Zero()`; `Display()` replaces `String()`, `Parse` takes `[]byte` and fills a buffer that never grows. `ShowRecoveryCode`, the GUI flow and `view.CredentialDialog.Code` carry bytes (the separate `Copy` field is gone: the Copy button copies `Code`). New `win32.SetSecretText` and `win32.CopySecret` convert to UTF-16 without a string and zero their copy; what remains is the copy inside the STATIC control and on the clipboard, which Windows owns. The backup workflow zeroes the code once its slot is made, the unlock zeroes the parsed code. Checked with `Smoke-BackupRestore.ps1` on new keys with a recovery code (the script reads the code from the dialog).
-
-**RF-54 (P2) Fuzz the parsers that read untrusted bytes.** A backup directory can hold files from anywhere. Add Go fuzz tests (`func FuzzX(f *testing.F)`) with the existing valid inputs as seeds for: `container.ReadHeader`, `KeySet.Validate`, `container.Open` (trailer), `cryptox.DecryptStream` (framing), `manifest` parsing, `manifest.ValidatePath`, `naming.ParsePartFileName` and `ParseLogFileName`, `yubikey.ParseChallengeJSON`, `recovery.Parse`, and `config.Load`. Properties: no panic; no allocation above the stated bounds (64 KiB header, 1 MiB manifest line, 4 GiB Argon2 memory); `ValidatePath` never accepts a path that `filepath.Join(dest, p)` puts outside `dest`. CI runs each fuzz target for 30 s; a crash is committed to `testdata/fuzz` as a regression test.
-Done 2026-10-08. Fuzz targets: `FuzzReadHeader` (now also: no Argon2 memory above 4 GiB; `KeySet.Validate` runs inside it), `FuzzDecodeTrailer`, `FuzzOpen` (header and trailer from memory through `readStructure`; one file per input made the virus scanner the bottleneck), `FuzzDecryptStream` (what it accepts is exactly what `EncryptStream` writes), manifest `FuzzParse` and `FuzzValidatePath` (never outside the destination, never another volume), `FuzzParsePartFileName` and `FuzzParseLogFileName` (round trip), `FuzzParseChallengeJSON`, recovery `FuzzParse`, config `FuzzParse` (Argon2 within bounds). The 1 MiB manifest line bound is `maxLineBytes` in the scanner. CI job **Fuzzing** runs `scripts/ci/fuzz.sh 30`. Found: `ParsePartFileName` accepted `/` in the folder name, so the name written again was a path; it refuses path separators now, and the input is kept in `testdata/fuzz`. CONTRIBUTING.md section 4 describes the benchmarks and the fuzzing.
-
-**RF-55 (P2) Restore into a destination without reparse points.** `Restorer.targetPath` checks the path lexically, and directories are created with `os.Mkdir` and files with `O_EXCL`, which is sound for a new folder. It does not check that the destination folder itself, or a folder created during the restore, is not swapped for a junction by another process between `Mkdir` and `OpenFile`. Open the destination root once with `FILE_FLAG_OPEN_REPARSE_POINT` and reject it if it is a reparse point, and check each created directory's attributes before writing into it. Low likelihood (needs a local process racing the restore); low cost.
-Done 2026-10-08. `checkNotReparsePoint` (`GetFileAttributes`, which does not follow the last path element) refuses the destination, each directory right after `Mkdir`, and the parent directory before each file is created; one system call per file. A process that swaps a folder between that check and `CreateFile` is still possible; closing that gap would need handle-relative opens, which the low likelihood does not justify. Tests with real junctions (`mklink /J`, no administrator rights needed). CHANGELOG under Changed.
-
-**RF-56 (P3) Cap Argon2 memory per unlock from a header.** A crafted header can ask for 4 GiB of Argon2 memory for each slot RestoreSafe tries ([crypto.go:83-88](../internal/security/cryptox/crypto.go#L83-L88)). That is only a denial of service of the local process, but the health check opens headers automatically at start. Check that the health check never derives keys (it should only read structure), and add a test that it does not.
-Done 2026-10-08. The health check (`TakeSnapshot` and `Check`) only reads the structure: `TestHealthCheckDerivesNoKeys` adds a set whose key slots ask for 20 passes over 4 GiB and checks that both allocate less than 1 GiB together.
-
-**RF-57 (P3) Document what is plaintext.** The set header is plaintext JSON: folder name, dates, chain and run ID, app version, and the key set (salts, wrapped keys, YubiKey credential IDs). The README says "AES-256-GCM encryption (content and metadata/file names)". Make the README precise: file and folder names *inside* a backup are encrypted; the backed-up folder's name, the dates, and the key slots are not.
-Done 2026-10-08. README: the feature line names what is encrypted, and "What is not encrypted" under "How your backups are locked" lists the header fields readable without unlocking.
-
-**RF-58 (P2) Release integrity.** Releases are a ZIP with no checksum or signature. Publish `SHA256SUMS.txt` with every release (RF-3) and the command to check it (`Get-FileHash`) in the README. Authenticode signing is an open question (section 14).
-Decided 2026-10-07: checksums only, no Authenticode signing (no running costs for a tool that earns nothing). The README says that SmartScreen may warn about the downloaded exe ("unknown publisher", More info, Run anyway) and how to check `SHA256SUMS.txt`. Done in `d32c6d9` (README) and `d7b800c` (SHA256SUMS.txt).
-
-**RF-59 (P1) Elevated, RestoreSafe reads files that other programs hold locked.** `archive.writeFile` opens a source file with `os.Open` ([build.go:314](../internal/format/archive/build.go#L314)), which asks for backup semantics (`FILE_FLAG_BACKUP_SEMANTICS`). In a process that holds the backup privilege, as an elevated administrator does, Windows then skips the share-mode check: a file another program holds without sharing, such as a PST open in Outlook, is read anyway, possibly while it is being written, and the backup holds an inconsistent copy instead of skipping the file. Found by the first CI runs (RF-11): the runner is elevated, and four tests of locked files failed until `testutil/filelock` removed the privilege from the test process (`2c0948d`). Unelevated, which is how RestoreSafe normally runs, the lock holds.
-Change: open source files for reading without backup semantics (`windows.CreateFile` with `GENERIC_READ`, `FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE`, `FILE_FLAG_SEQUENTIAL_SCAN`), so a locked file is unreadable, and `on_unreadable_file` applies, whether RestoreSafe runs elevated or not. Opening for attributes keeps backup semantics; it reads no file content and needs them for directories. Then `filelock.Hold` stops removing the privilege, so the locked-file tests run elevated on CI. User-visible only when elevated: a locked file is skipped (or fails the backup) instead of being copied; add it to CHANGELOG.
-Acceptance: the locked-file tests of `format/archive` and `e2e` pass on the elevated CI runner with the backup privilege in place.
-Done in `22257c0`, with two changes from the item: the share mode is that of `os.Open` (no `FILE_SHARE_DELETE`), and no `FILE_FLAG_SEQUENTIAL_SCAN`, so nothing changes but the backup semantics (a performance flag would need a measurement first). `extendedPath` keeps the long-path handling of `os.Open` and now serves `openForAttributes` too. CI run 37684035665 passed on the elevated runner with the privilege in place.
-
-## 11. Quality assurance (Phase B and ongoing)
-
-**RF-40 (P1) Coverage floors per package, not a global number.** A global percentage hides that the format layer is covered and the GUI is not. CI fails when a package falls below its floor:
-
-| Packages | Floor now | Target after this spec |
-|---|---|---|
-| security/cryptox, security/recovery, config, format/manifest, format/naming, workflow/plan, workflow/health | 85 % | 90 % |
-| format/archive, format/catalog, format/container, format/setwriter, workflow/backup, restore, verify, unlock, restorepoint, job, interact, fsx, logging | 70 % | 85 % |
-| gui/view, gui/flow, gui/widget | 70 % | 85 % |
-| security/yubikey | 20 % | 60 % (everything except the WebAuthn calls, behind the existing `fido2MakeCredFn`/`fido2GetHmacFn` seams) |
-| gui, gui/win32, cmd | none | measured only; covered by RF-43 |
-
-`format/container` (72 %) and `restorepoint` (69 %) are the packages that decide whether a damaged backup is detected; their error paths come first.
-
-Floors "now" enforced by CI since `d21ad47`; `cd5d90f` raised `restorepoint` from 65.3 % (it had fallen below its floor since the baseline) to 91.7 %. Open: the targets, starting with the error paths of `format/container` (72.2 %).
-Phase B part done: the floors are enforced. The targets belong to the end of the round.
-Phase D, 2026-10-08: `format/container` reached its target (71.6 % to 85.5 %: table tests for every rule of `KeySet.Validate`, `validateSlot`, `Header.Validate` and the trailer check, in `validation_test.go`). Floors raised to the target where it is reached: 90 % for recovery, config, manifest, naming, plan, health; 85 % for container, setwriter, restorepoint, logging, gui/view; yubikey 20 % to 35 %. Still below the target (measured today): cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.3 (85 each), yubikey 36.4 (60). Open, as optional for the 2.0.0 release (13.1).
-
-**RF-41 (P1) Format compatibility fixtures.** Nothing stops a refactoring from changing the bytes RestoreSafe writes or what it accepts. Commit a small set of backups made by the 2.0.0 release build to `internal/format/testdata/v2.0.0/`: a full and a differential of a tree with special cases (empty file, empty folder, Unicode and long names, read-only/hidden/system attributes, a skipped file), with password, password + recovery slot (the test uses the recovery code), and Argon2 at the minimum to keep the test fast. A test restores each and compares tree, content, times, and attributes with a recorded listing. A second test checks that a set written by the current code with the fixed inputs (seeded randomness through a test hook) produces the same header structure and trailer.
-Acceptance: the fixtures exist before Phase C starts; they never change after 2.0.0 is released.
-Done in `17942af`, with two changes from the item. The fixtures were written by the code of `refactor-2.0` before the 2.0.0 release, as no release build exists yet: nothing before the release may change the format, or they are written again (`TestWriteFormatFixtures`, after deleting the folder). And instead of seeded randomness, `TestFormatFixturesStructure` compares the structure of freshly written sets with the fixtures (header prefix, keys and types of the header JSON, trailer), which needs no randomness hook in the program. Both tests were checked by breaking the program on purpose: a new header field and attributes that are not restored each fail them. The folder of the restored source is new on restore; the format keeps the times of what is inside it, so the listing records none for it.
-
-**RF-42 (P2) Fault-injection matrix.** Make sure the e2e tests cover each of these for backup, restore, and verify, and add the missing ones with `testutil/scenario`: disk full during a part; a part deleted, truncated, or with one bit flipped (header, data, manifest, trailer); the base of a differential missing; cancel at each phase; a source file locked or vanishing mid-read; the destination folder appearing between plan and start. Each row names the test that covers it, in a table in `internal/e2e/doc.go`.
-Done 2026-10-08. The matrix is in `internal/e2e/doc.go` (now also the package comment). New: `TestDamagedSetIsRefused` (part deleted, truncated, one bit in the header syntax, a header value, data, manifest, trailer; verify and restore through the workflows, with the expected cause), `TestCancelAtEachPhase` (every phase of backup, restore, verify), `setwriter.TestWriteFailingInASecondPartRemovesAllParts`, `health.TestBaseMissingNextBackupIsFull`, and archive tests for a source file that vanishes, shrinks or grows while it is read (two test hooks in `writeFile`, nil in production). Changed: a restore cancelled before its first byte no longer leaves an empty folder marked INCOMPLETE. A cancel during the cleanup lets the run complete, by design (retention deletes whole chains). Disk full during a restore is not simulated: a write error takes the path of a damaged data section.
-
-**RF-43 (P2) GUI smoke test in CI.** `scripts/gui-test` drives the real window through UI Automation, but only by hand. Run `Smoke-BackupRestore.ps1` and `Check-States.ps1` in CI on a Windows runner with an interactive session, with password-only keys. If no interactive session is available, they stay in the release checklist (GUI-TEST-CHECKLIST.md) and that is stated there.
-Done 2026-10-08. GitHub's Windows runners have an interactive session (session 2, 1024 x 768), so CI job **GUI smoke test** runs both scripts through `scripts/ci/gui-smoke.ps1` on a fresh password-only setup with a recovery code; about 1.5 minutes. Two fixes on the way: the script generates `resource.syso` first (without the manifest, `InitCommonControlsEx` fails and RestoreSafe shows an error instead of its window), and `New-TestCondition.ps1` raises `memory_mb` in an existing `argon2` block instead of adding a second one. The run at 150 % stays manual (GUI-TEST-CHECKLIST.md says so).
-
-**RF-44 (P3) WebAuthn struct layout test.** See RF-20: a test compares `unsafe.Sizeof`/`Offsetof` of every `webauthn*` struct with the sizes and offsets in its comment. A wrong offset there makes the YubiKey fail only on real hardware, which CI does not have.
-Done in `9b6b196`: `TestWebAuthnStructLayout` reads the sizes and offsets from the comments in `fido2.go`, so a struct and its comment cannot drift apart.
-
-## 12. Project structure and documentation (Phase E)
-
-**RF-60 (P3) Module path.** The module is named `RestoreSafe`. Go tooling expects a lower-case path that can be fetched, e.g. `github.com/phsc84/restoresafe`; tools like `goimports` then group local imports correctly, and `-X` flags and `go install` work as usual. Renaming changes every import line (mechanical, one commit). Open question (section 14).
-Decided 2026-10-08: rename to `github.com/phsc84/restoresafe` (lowercase; GitHub resolves the repository name case-insensitively) as the last step of Phase D, before the owner's full test. The import blocks show why: `"RestoreSafe/internal/..."` sorts into the standard library's group, as Go treats a first path element without a dot like the standard library.
-Done 2026-10-08: `go mod edit -module`, every import, the architecture test's `module`, the `-X` path in build.bat and the buildinfo comment, and the package prefix in `check-coverage-floors.sh`; then `goimports -local github.com/phsc84/restoresafe -w .` put the module's packages into their own import group. The string `"RestoreSafe"` (window titles, the WebAuthn RP name) is unchanged. The `-X` flag was checked on a built exe. CONTRIBUTING.md section 6 names the module and the import order.
-
-**RF-61 (P3) Root package.** [sample.go](../sample.go) exists only to `//go:embed config-SAMPLE.yaml` (a package cannot embed files from a parent directory). Keep the technique; rename the file to `embed.go` and keep the package comment, so its purpose is clear from the file list.
-Done 2026-10-08: `git mv sample.go embed.go`, content unchanged.
-
-**RF-62 (P2) Sort the docs.** Partly done on 2026-10-06: the specs are named `SPEC-2.0.md` and `SPEC-gui.md`, their status lines are current, the finished implementation phases are out of the 2.0 spec, code comments say "2.0 spec n" or "GUI spec n", [docs/README.md](README.md) lists the documents, the mockups are deleted, and SPEC-refactoring.md describes refactoring rounds in general. Left: once 2.0.0 is released, delete the GUI plan (its section 9), remove GUI spec 17.2 (which only points to it), and update the index. Finished plans are deleted, not archived (SPEC-refactoring section 8), so there is no `docs/archive/`.
-
-```text
-docs/
-├── README.md                index: which document covers what
-├── SPEC-2.0.md              living: format and behaviour
-├── SPEC-gui.md              living: the window
-├── SPEC-refactoring.md      how a refactoring round works
-├── PLAN-refactoring.md      the current round
-├── GUI-TEST-CHECKLIST.md
-└── images/
-```
-
-**RF-63 (P2) Fix documentation drift.**
-
-- README "Main configuration options" gives `retention_keep` a default of `3`; the program's default is `0` (keep all) and only `config-SAMPLE.yaml` sets 3 ([config/keys.go:30](../internal/config/keys.go#L30)). Name the column "In config-SAMPLE.yaml", or list both.
-- DEVELOPMENT.md section 10 refers to `docs\REFACTORING-PLAN.md`, which does not exist. Point it at the architecture test and SPEC-refactoring.md. Done 2026-10-07 (DEVELOPMENT.md is not tracked).
-- RF-57 (encryption wording). Done with RF-57.
-Done 2026-10-08: the README row of `retention_keep` names both values; every other row of the table matches the program's defaults and `config-SAMPLE.yaml` (checked).
-
-**RF-64 (P3) Add a CLAUDE.md / contributor note.** One page: the layer rules, the commands (`go build`, `go vet`, `go test`, `go tool staticcheck`), the standing constraints of SPEC-refactoring section 2, the error convention of RF-25, and the commit style. It replaces the parts of the private DEVELOPMENT.md that a contributor needs.
-Done for the contributor note: [CONTRIBUTING.md](../CONTRIBUTING.md) describes branches, commits, pull requests, CI and its coverage floors, CHANGELOG entries, the rules of the code, and releases; the README and DEVELOPMENT.md link to it. Open: whether a CLAUDE.md is still worth having next to it, and the error convention once RF-25 is decided.
-Closed 2026-10-09: CONTRIBUTING.md section 6 has the error convention (`problem.Error` with its remedy). No CLAUDE.md: it would repeat CONTRIBUTING.md, and two copies drift apart.
-
-## 13. Phases
-
-Each phase is a series of small commits, each building and passing. Items inside a phase can be done in any order unless noted.
+## Phases
 
 | Phase | Items | When | Why then |
-|---|---|---|---|
-| A. Tooling | RF-1, 2, 3, 4, 10, 11, 12 | now, on its own branch; merge into `v2` | Touches no product code (RF-3 only the build); makes every later phase checkable. RF-4 first, RF-10 before RF-1's coverage step. |
-| B. Safety net and quick fixes | RF-20, 21, 22, 23, 24, 40, 41, 50, 51, 52, 59 | before the 2.0.0 release | RF-41 must capture 2.0.0's format before anything else changes; RF-24, 50, 51, 52, 59 are user-facing fixes worth shipping in 2.0.0. |
-| C. Structure | RF-25, 26, 27, 30, 31, 32, 33, 34 | after 2.0.0; done before it (2026-10-08) | Large diffs; would conflict with the release fixes. RF-26 before RF-33 (the dialogs change shape). |
-| D. Performance and hardening | RF-35 → 36, 37, 39 (RF-38 dropped); RF-53, 54, 55, 56, 57, 58; RF-42, 43, 44 | after C, before the 2.0.0 release (13.1) | Profiling needs the cleaned pipeline signatures (RF-31, 32). |
-| E. Project and docs | RF-60, 61, 62, 63, 64 | last; all but RF-62 before the 2.0.0 release (13.1) | RF-60 touches every file; doing it last avoids conflicts with all other work. |
+|---|---|---|---|---|
+| 1. Tooling and safety net | RF-75, RF-85, RF-40 (floors raised to the current values), RF-90 | first | RF-75 compares with `v2.0.0` before the dependency update changes the code; the update and the raised floors guard everything after them |
+| 2. Tests | RF-40 (tests to the targets), RF-80 | after phase 1 | the safety net before code is changed or removed in phase 3 |
+| 3. Cleanup | RF-70, RF-71, RF-67, RF-65, RF-66, RF-72, then RF-86 | after phase 2 | small diffs inside single packages; RF-86 last, once RF-70 has brought `deadcode` to zero |
+| 4. Log errors, then moves | RF-96, then RF-68, RF-69 | last | RF-96 changes what the log says, in three workflows; the moves are the largest diffs, and RF-68 needs `archive` at its coverage target first (reached) |
+| 5. CI runner | RF-87 | after phase 4 | it replaces the CI scripts the earlier phases still use; its own four phases are in SPEC-ci section 10 |
+| 6. Test layout | RF-81 | after phase 5 | found 2026-10-14, after the phases were agreed; tests only, plus one move in restore, so it waits for the CI runner to check it |
 
-### 13.1 Before and after the 2.0.0 release (2026-10-08)
+There is no 2.0.1 (owner's decision, 2026-10-13): everything ships with 2.1.0, including the user-visible fixes RF-95 and RF-96.
 
-The owner tests the whole application once the refactoring is done, and then releases 2.0.0. So everything that does not need the release comes before it, and the test covers the code as it ships. Only these wait for the release:
+Phase 1 done 2026-10-13 (`fc02339`): RF-75 dropped, RF-85 and RF-90 done, RF-40 step 1 done. Checks at the end of the phase: gofmt, vet, staticcheck and `deadcode -test` report nothing; govulncheck unchanged (1 required-only); `go test ./...` passes with every package at its new floor; coverage 54.5 %.
 
-- RF-62: deleting PLAN-gui-redesign.md and GUI spec 17.2; a plan is deleted because its work was released.
-- Closing the round (SPEC-refactoring section 8): the final baseline and "Done" in docs/README.md, after the last item.
+Phase 2 done 2026-10-13 (`b378846`), with RF-95 found and fixed in it: RF-40 brought nine packages to their targets, RF-80 is done except the sleep, which moved to RF-67. The four packages RF-70 touches reached their targets in phase 3 (`b6b2bd2`), which closed RF-40. Checks after RF-40: gofmt, vet, staticcheck, `deadcode -test` and `deadcode` (outside the test-support packages) report nothing; `go test ./...` passes in 50 s; coverage 57.4 %; CI passes.
 
-Phase D, item by item:
+Phase 3 done 2026-10-13 (`960ad01`): RF-70, RF-71, RF-67, RF-65, RF-66, RF-72 and RF-86 done, and RF-40 closed with the four packages RF-70 touched. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; `go test ./...` passes; coverage 57.4 %; CI passes on all five jobs.
 
-| Item | Before 2.0.0 | Note |
-|---|---|---|
-| RF-35 profiling, RF-37 benchmarks | yes | RF-35 measures on an SSD and on the owner's network share: the share needs its path (a folder for about 4 GB of test data, deleted afterwards) or the owner runs the command; otherwise profile on the SSD only. |
-| RF-36 allocations per chunk | yes, if RF-35 shows the cost | The bytes written must not change; the format fixtures check it. |
-| RF-39 manifest memory | yes | Stream the manifest or correct the spec; the format stays byte for byte. |
-| RF-53 recovery code as bytes | yes | In memory only; touches the Copy button of the recovery code dialog. |
-| RF-54 fuzzing, RF-56 no key derivation in the health check | yes | Tests only. |
-| RF-55 restore into a reparse point | yes | Refuses a junction as destination (rare): a CHANGELOG entry. |
-| RF-57 what is plaintext | yes | README only. |
-| RF-42 fault-injection matrix | yes | Tests only. |
-| RF-43 GUI smoke test in CI | try | GitHub's Windows runners may have no interactive desktop; then it stays a step of the release checklist, as the item says. |
-| RF-44, RF-58 | done | |
+Phase 4 done 2026-10-14 (`f81ed7b`): RF-96, RF-68 and RF-69 done; RF-97 found by a test of RF-68 and fixed. The first CI run of the phase (`6c4f9cb`) failed on three coverage floors (archive, logging, restore), because only the packages changed directly had been measured before the push; the floors are now checked locally before every push. Checks at the end of the phase: gofmt, vet, staticcheck and `static-deadcode.sh` report nothing; every package at its floor; CI passes on all five jobs.
 
-Phase E, item by item:
+Phase 5 done 2026-10-14 (`910c18a`): RF-87 done; CI runs every job through `tools/ci`, and every push is checked by the pre-push hook. CI passes on all five jobs.
 
-| Item | Before 2.0.0 | Note |
-|---|---|---|
-| RF-61 `sample.go` to `embed.go`, RF-63 documentation drift | yes | Small. |
-| RF-64 contributor note | mostly done | CONTRIBUTING.md. |
-| RF-60 module path | yes, at the end of Phase D | Decided 2026-10-08: `github.com/phsc84/restoresafe`. Mechanical and checked completely by the compiler and CI. |
-| RF-62 sort the docs | after the release | See above. |
+Phase 6 done 2026-10-15 (`71dc61b`): RF-81 done; CI passes on all five jobs (`7dc1742`).
 
-## 14. Open questions
+## Open questions
 
-These are the owner's decisions; the spec works with either answer. Answered 2026-10-07 (bold).
+Answered 2026-10-13:
 
-1. **Module path (RF-60).** Rename to `github.com/phsc84/restoresafe`, or keep `RestoreSafe`? **Rename to `github.com/phsc84/restoresafe`, at the end of Phase D.**
-2. **Parallel encryption (RF-38).** Accept the extra complexity in the crypto pipeline if the profile shows a gain of, say, 30 % or more, or keep the pipeline sequential regardless? **Dropped: the pipeline stays sequential.**
-3. **Code signing (RF-58).** Buy an Authenticode certificate (or use a signing service) so SmartScreen stops warning, or publish checksums only? **Checksums only.**
-4. **Typed errors (RF-25).** Convert all 145 sites, or only the ones the GUI wants to act on (codes), leaving the rest as text? **All sites, GUI-relevant first.**
+1. **RF-86: should `deadcode` without `-test` fail CI**, with the test-support packages filtered out, or only `deadcode -test`? Failing on both keeps RF-70 from coming back but means a helper used only by tests must live in a test file or `testutil`. Answer: both.
+2. **RF-40: is 60 % the right target for `yubikey`?** RF-69 separates the WebAuthn calls, which no test can reach without a YubiKey, from the rest; a target for the rest alone may be more honest than one for the package. Answer: keep 60 % for the package.
 
-## 15. Not part of this refactoring
+## Not part of this round
 
-- Any change to container format 2, the key hierarchy, or the KDF defaults.
-- New features (single-file restore, compression, VSS, scheduling).
-- Replacing the Win32 GUI with a toolkit, or `logging` with `log/slog`: the log format is user-facing and read back by the Restore backup page, and the custom logger is small and tested.
-- Supporting platforms other than Windows 64-bit.
+- Replacing the Win32 GUI with a toolkit, or `logging` with `log/slog`.
+- Splitting the long functions in `gui` (`message`, `runCredentialDialog`, `SettingsOf`), `setwriter.Write` and `backup.run` (RF-68 says why).
+- `gui/view/strings.go` (516 lines): a table of texts, longer by nature.
+- **yubidiag needs an overhaul** (owner, 2026-10-13): it may not do what it is for. Its new purpose and behaviour get a specification of their own first; then the work is a feature, not a refactoring item. Noted here so it is not forgotten. Specified on 2026-10-14 as the YubiKey page in [SPEC-gui.md](SPEC-gui.md) 10.2 (decision 10), which removes `cmd/yubidiag`.
 
-## 16. Done when
+## Done when
 
-- Every P1 and P2 item is done or explicitly dropped with a reason recorded in its section.
-- CI runs on every push: format, vet, build, tests with coverage floors, race, staticcheck, govulncheck, fuzz smoke, benchmarks compile.
-- The 2.0.0 fixtures restore bit-exact with the final build.
-- `deadcode` reports nothing; no production file in `internal/gui` exceeds 500 lines; no string matching on workflow text remains in `gui/flow`.
-- README, CHANGELOG, and the docs layout match the code.
+- RF-40 done: every package at its target, the floors in CI at the targets.
+- Every P1 and P2 item done or dropped with a reason.
+- `go tool deadcode ./...` reports nothing outside the test-support packages.
+- The baseline of section 2 run again and recorded as this round's result, with throughput on the SSD and the network share.
 
-Then close the round as SPEC-refactoring section 8 describes.
+## Closed 2026-10-15
 
-## 17. Result (measured 2026-10-09, `refactor-2.0` at `a5986bb`)
+Every P1 and P2 item is done or dropped with a reason, RF-40 is done, `deadcode` reports nothing outside the test-support packages, and the baseline was run again (section 2, last column). Throughput: on the day of the close the machine was slower again, as during RF-75; alternating runs of `v2.0.0` and `7dc1742` on the same SSD data gave the same numbers (backup 252–254 against 217–254, restore 142–150 against 144–150 MiB/s), so the round changed neither. What the round taught is in SPEC-refactoring: the runner of SPEC-ci as the way to measure (section 4), throughput only alone on the machine and against the previous release (4 and 5.3), the shared read lock and the log file (5.4), coverage that counts only a package's own tests, fixed inputs for branches, and tests that depend on the runner (5.5), and a section for items found during the work in the template (9).
 
-| Measure | Value |
-|---|---|
-| Tracked files / Go lines | 337 / 44,303 |
-| Largest production files | `security/yubikey/fido2.go` 908, `gui/view/strings.go` 516, `format/archive/build.go` 504, `gui/win32/listview.go` 496, `gui/view/result.go` 485 |
-| Go toolchain | go 1.27.2 |
-| `go vet`, `gofmt -l`, staticcheck, `deadcode -test` | nothing reported |
-| `govulncheck` | 0 called, 0 imported; 1 in a required module (`x/crypto/openpgp`, not imported) |
-| `go test ./...` | passes, including the 2.0.0 format fixtures; race and fuzzing pass in CI |
-| Markers (`TODO`, `FIXME`, `XXX`, `HACK`) | none |
-| Coverage, total | 54.5 % (baseline 46.1 %) |
+## Carried over (filled in when the round closes)
 
-Coverage by package: cryptox 89.1, recovery 94.0, yubikey 36.4; config 92.6, logging 88.5, problem 100; manifest 92.6, naming 92.5, container 85.5, setwriter 85.2, catalog 81.2, archive 78.1; fsx 82.7; health 95.1, plan 93.3, restorepoint 90.9, unlock 84.7, job 84.3, backup 83.3, restore 79.1, interact 78.3, verify 73.2; gui/view 91.0, gui/flow 77.0, gui/widget 73.6, gui/win32 10.4, gui 2.0; cmd/restoresafe 33.3.
+For the round after 2.1.0. None of these is an item yet; the next round's review decides.
 
-Done when (section 16): every P1 and P2 item is done, decided or dropped with its reason, except RF-62, which follows the release (section 18). CI runs every listed check. The fixtures restore bit-exact. `deadcode` reports nothing and `gui/flow` matches no workflow text. One file in `internal/gui` is over 500 lines: `view/strings.go` (516), the table of the window's texts; splitting a list of constants would make texts harder to find, so it stays whole. The manual GUI checklist passed on 2026-10-09 at `a5986bb`.
+- **The cryptography point of SPEC-refactoring 5.4** was not looked at (section 2). The next round starts its review with it. A change to the KDF defaults is a feature with its own spec, not a refactoring item.
+- **`archive/build.go` has 554 lines**, over the 500 of SPEC-refactoring 5.1 (found at the close): the split of RF-68 made it longer by its doc comments. The walk (`tarBuilder` and its methods) could go to a file of its own.
+- **The throughput of the development machine varies by a third from day to day** (RF-75, the close). The next round compares only with alternating runs of the previous release, as SPEC-refactoring 5.3 now says, and records both.
 
-## 18. Carried over
-
-Right after the 2.0.0 release, in one commit (SPEC-refactoring section 8, step 5):
-
-- Replace the content of this file with the next round's plan from the template, with section 17 as its first baseline column and the item below; its new items start at RF-65.
-- **RF-62 (P2)**: delete PLAN-gui-redesign.md, remove GUI spec 17.2 and the plan link in GUI spec 11, and update the index in docs/README.md.
-
-To the next round:
-
-- **RF-40 (P1)**, the coverage targets (the floors are enforced). Below the target on 2026-10-09: cryptox 89.1 (90), archive 78.1, catalog 81.2, backup 83.3, restore 79.1, verify 73.2, unlock 84.7, job 84.3, interact 78.3, fsx 82.7, gui/flow 77.0, gui/widget 73.6 (85 each), yubikey 36.4 (60). Start with verify and restore, which decide whether damage is reported.
+Not carried over: the yubidiag overhaul (section "Not part of this round") is specified as the YubiKey page in SPEC-gui 10.2, which removes `cmd/yubidiag`; it is feature work, done with that spec.

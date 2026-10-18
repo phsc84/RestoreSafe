@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -53,19 +52,13 @@ const (
 	ResultCancelled = "cancelled"
 )
 
-// factSeverity marks fact lines; it has the width of the other severities.
-const factSeverity = "FACT "
-
-// timestampLayout is the time format of every log line.
-const timestampLayout = "2006-01-02 15:04:05"
-
 // Fact writes f to the log file only.
 func (l *Logger) Fact(f Fact) {
 	data, err := json.Marshal(f)
 	if err != nil {
 		return
 	}
-	l.writeLogOnly(factSeverity, "%s", data)
+	l.writeLogOnly(SeverityFact, "%s", data)
 }
 
 // RunFacts are the facts of one log file.
@@ -132,13 +125,10 @@ func ReadFacts(path string) (RunFacts, error) {
 // parseFact parses a line "[2006-01-02 15:04:05] FACT  - {...}".
 func parseFact(line string) (Fact, bool) {
 	var fact Fact
-	if len(line) < len(timestampLayout)+2 || line[0] != '[' || line[len(timestampLayout)+1] != ']' {
-		return fact, false
+	l, ok := ParseLine(line)
+	if !ok || l.Severity != SeverityFact || json.Unmarshal([]byte(l.Message), &fact) != nil || fact.Kind == "" {
+		return Fact{}, false
 	}
-	rest, ok := strings.CutPrefix(line[len(timestampLayout)+2:], " "+factSeverity+" - ")
-	if !ok || json.Unmarshal([]byte(rest), &fact) != nil || fact.Kind == "" {
-		return fact, false
-	}
-	fact.Time, _ = time.ParseInLocation(timestampLayout, line[1:len(timestampLayout)+1], time.Local)
+	fact.Time = l.Time
 	return fact, true
 }

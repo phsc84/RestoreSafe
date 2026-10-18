@@ -1,0 +1,36 @@
+# Coverage floors per package, in % of statements (refactoring 2.0 RF-40).
+# CI fails when a package falls below its floor. Raise a floor when a
+# package's coverage has risen for good; never lower one to let a change
+# through without a reason in the refactoring plan.
+internal/security/cryptox        94
+internal/security/recovery       98
+internal/config                  94
+internal/format/manifest         92
+internal/format/naming           92
+internal/workflow/plan           93
+internal/workflow/health         95
+internal/problem                 100
+internal/format/archive          85
+internal/format/catalog          94
+internal/format/container        85
+internal/format/setwriter        85
+internal/workflow/backup         86
+internal/workflow/restore        90
+internal/workflow/verify         93
+internal/workflow/unlock         89
+internal/workflow/restorepoint   90
+internal/workflow/job            89
+internal/workflow/interact       100
+internal/workflow/keycheck       100
+internal/fsx                     92
+internal/logging                 91
+internal/gui/view                92
+internal/gui/flow                95
+internal/gui/widget              85
+# yubikey: the CI runner has no YubiKey and no Yubico entries in the
+# registry, so the device loops don't run there (61 %; 72 % with a YubiKey
+# plugged in). Its floor follows the CI number (PLAN-yubikey-page, phase 5).
+internal/security/yubikey        61
+
+# The CI runner (SPEC-ci section 8).
+tools/ci/check                   90

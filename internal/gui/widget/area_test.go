@@ -19,7 +19,7 @@ func TestScale(t *testing.T) {
 	}
 }
 
-func TestAreaCutsRowsAndColumns(t *testing.T) {
+func TestAreaCutsRowsAndSides(t *testing.T) {
 	t.Parallel()
 	a := NewArea(144, win32.Rect{Right: 600, Bottom: 300})
 	a.Inset(10, 10, 10, 10) // 15 px at 144 dpi
@@ -36,27 +36,17 @@ func TestAreaCutsRowsAndColumns(t *testing.T) {
 	if rest := a.Rest(); rest != (win32.Rect{Left: 165, Top: 45, Right: 435, Bottom: 255}) {
 		t.Fatalf("rest: %+v", rest)
 	}
-
-	cols := NewArea(96, win32.Rect{Right: 310, Bottom: 50}).Columns(10, 1, 2)
-	if cols[0].R.Right != 100 || cols[1].R.Left != 110 || cols[1].R.Right != 310 {
-		t.Fatalf("columns: %+v %+v", cols[0].R, cols[1].R)
-	}
 }
 
 func TestAreaNeverGoesNegative(t *testing.T) {
 	t.Parallel()
 	a := NewArea(192, win32.Rect{Right: 50, Bottom: 40})
 	a.Top(100)
-	if a.Height() != 0 || a.Width() != 50 {
+	if a.Height() != 0 || a.R.Width() != 50 {
 		t.Fatalf("a row larger than the area takes what is left: %+v", a.R)
 	}
 	a.Inset(100, 100, 100, 100)
-	if a.Width() < 0 || a.Height() < 0 {
+	if a.R.Width() < 0 || a.Height() < 0 {
 		t.Fatalf("inset larger than the area: %+v", a.R)
-	}
-	for _, c := range NewArea(96, win32.Rect{Right: 10, Bottom: 10}).Columns(20, 1, 1, 1) {
-		if c.Width() < 0 {
-			t.Fatalf("columns wider than the area: %+v", c.R)
-		}
 	}
 }

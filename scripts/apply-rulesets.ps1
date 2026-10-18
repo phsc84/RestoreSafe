@@ -3,7 +3,7 @@
 # The JSON files are the definition; change a rule there, then run this
 # script (gh must be logged in with admin rights on the repository).
 #
-#   powershell -File scripts\apply-rulesets.ps1
+#   powershell -ExecutionPolicy Bypass -File scripts\apply-rulesets.ps1
 
 $ErrorActionPreference = 'Stop'
 $repo = 'phsc84/RestoreSafe'

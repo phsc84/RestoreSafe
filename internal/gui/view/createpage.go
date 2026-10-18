@@ -85,6 +85,8 @@ type KeysCard struct {
 	// YubiKey is whether the YubiKey is connected, "" when none is used.
 	YubiKey     string
 	YubiKeyTone Tone
+	// Warning warns not to reset the YubiKey, while one is used (YK-8).
+	Warning string
 }
 
 // CreatePage is everything the Create backup page shows.
@@ -109,7 +111,7 @@ func CreatePageOf(s *health.Snapshot, cfg *config.Config, now time.Time) CreateP
 		Hero:    heroOf(s, cfg, now),
 		Folders: foldersOf(s, now),
 		Storage: storageOf(s),
-		Keys:    keysOf(s),
+		Keys:    keysOf(s, cfg),
 		Refresh: Button{Text: buttonRefresh, Action: ActionCheckAgain, Enabled: true},
 	}
 	return o
@@ -224,6 +226,8 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 		return Hero{Title: heroSpaceLow, Line: fmt.Sprintf(heroSpaceLowLine, Size(p.Bytes), Size(s.Storage.FreeBytes)), Primary: showBackups}
 	case interact.CodeArgon2Capped:
 		return Hero{Title: heroArgon2, Line: heroArgon2Line, Primary: *editConfig}
+	case interact.CodeYubiKeysConnected:
+		return Hero{Title: heroYubiKeys, Line: heroYubiKeysLine, Primary: checkAgain}
 	}
 	return Hero{Title: string(p.Code), Line: p.Detail, Primary: checkAgain}
 }
@@ -390,9 +394,12 @@ func lastRunNote(s *health.Snapshot, now time.Time) (string, Tone) {
 	return laterRunNote(s, run.Created, now)
 }
 
-func keysOf(s *health.Snapshot) KeysCard {
+func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 	k := s.Keys
 	card := KeysCard{Title: cardKeys}
+	if cfg.UseYubiKey() {
+		card.Warning = keysNeverReset
+	}
 	switch {
 	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:
 		card.YubiKey, card.YubiKeyTone = yubiKeyConnected, ToneSecondary
@@ -400,14 +407,16 @@ func keysOf(s *health.Snapshot) KeysCard {
 		card.YubiKey, card.YubiKeyTone = yubiKeyMissing, ToneInfo
 	}
 	if !k.Exists {
+		// With a YubiKey, the note also tells how it gets set up: first,
+		// as the keys it protects need it.
 		card.Note, card.Tone = keysNone, ToneInfo
+		if cfg.UseYubiKey() {
+			card.Note = keysYubiKeySetup
+		}
 		return card
 	}
 	card.Methods = capitalize(k.Methods)
 	details := []string{fmt.Sprintf(keysCreated, ShortDay(k.Created, s.Checked))}
-	if k.SpareYubiKey {
-		details = append(details, keysSpare)
-	}
 	if k.RecoveryCode {
 		details = append(details, keysRecovery)
 	}

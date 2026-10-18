@@ -303,14 +303,14 @@ func (z *tableSizer) moved(top int32) {
 	cardBottom := top - (s.Px(widget.CardGap)-s.Px(widget.SplitterHeight))/2
 	z.height = max(s.Dip(cardBottom-(cr.Bottom-tr.Bottom)-tableTop), z.table.heightOf(tableMinRows))
 	// The table is the card's second row, below the heading.
-	if len(z.card.rows) > 1 {
-		z.card.rows[1].height = z.rowHeight()
+	if len(z.card.items) > 1 {
+		z.card.items[1].height = s.Px(z.rowHeight())
 	}
 }
 
 // dialogTable is the table of a dialog that sizes itself to its content,
 // with a splitter in the gap below it that sets its height, as in the
-// Restore window: the dialog grows and shrinks with the table. The table
+// Restore backup window: the dialog grows and shrinks with the table. The table
 // and the splitter outlive the dialog's rebuilds, so a drag goes on over
 // one.
 type dialogTable struct {

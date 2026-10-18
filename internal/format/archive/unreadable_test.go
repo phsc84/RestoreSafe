@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,15 +24,7 @@ func buildWith(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte, err
 	if err := BuildTar(context.Background(), &buf, opts, mb); err != nil {
 		return nil, nil, err
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatalf("manifest Parse: %v", err)
-	}
-	return m, buf.Bytes(), nil
+	return roundTrip(t, mb), buf.Bytes(), nil
 }
 
 func TestBuildTarAppliesExcludePatterns(t *testing.T) {
@@ -146,14 +139,7 @@ func TestRestoreSkipsVoidEntries(t *testing.T) {
 	mb := manifest.NewBuilder(manifest.Header{SetType: manifest.SetTypeFull, ChainID: "ABC123", DirectoryName: "src"})
 	mb.Add(manifest.Entry{Path: "broken.db", Type: manifest.TypeSkipped, Reason: "read error", Void: true})
 	mb.Add(manifest.Entry{Path: "good.txt", Type: manifest.TypeFile, Size: 4, Hash: sha256Hex("good"), Origin: manifest.OriginFull, Offset: &offset})
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatal(err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
+	m := roundTrip(t, mb)
 	if err := restore(t, m, buf.Bytes(), t.TempDir(), true); err != nil {
 		t.Fatalf("restore with void entry: %v", err)
 	}
@@ -162,4 +148,51 @@ func TestRestoreSkipsVoidEntries(t *testing.T) {
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// denyListing makes dir unlistable for everyone, administrators included,
+// until the test ends.
+func denyListing(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("icacls", dir, "/deny", "*S-1-1-0:(RD)").CombinedOutput(); err != nil {
+		t.Fatalf("icacls deny: %v: %s", err, out)
+	}
+	t.Cleanup(func() {
+		if out, err := exec.Command("icacls", dir, "/remove:d", "*S-1-1-0").CombinedOutput(); err != nil {
+			t.Errorf("icacls remove: %v: %s", err, out)
+		}
+	})
+}
+
+func TestBuildTarHandlesAFolderItCannotList(t *testing.T) {
+	t.Parallel()
+
+	src := t.TempDir()
+	mustWrite(t, filepath.Join(src, "a.txt"), []byte("alpha"))
+	mustWrite(t, filepath.Join(src, "locked", "b.txt"), []byte("beta"))
+	denyListing(t, filepath.Join(src, "locked"))
+	if _, err := os.ReadDir(filepath.Join(src, "locked")); err == nil {
+		t.Skip("the folder can still be listed; the deny entry has no effect here")
+	}
+
+	if _, _, err := buildWith(t, BuildOptions{SourceDir: src}); err == nil || !strings.Contains(err.Error(), "locked") || !strings.Contains(err.Error(), "on_unreadable_file: skip") {
+		t.Fatalf("by default the backup stops with the folder and the remedy, got %v", err)
+	}
+
+	var skipped []string
+	var stats BuildStats
+	m, _, err := buildWith(t, BuildOptions{
+		SourceDir: src, SkipUnreadable: true, Stats: &stats,
+		OnSkip: func(rel, reason string, stale bool) { skipped = append(skipped, rel) },
+	})
+	if err != nil {
+		t.Fatalf("with skip: %v", err)
+	}
+	types := map[string]string{}
+	for _, e := range m.Entries {
+		types[e.Path] = e.Type
+	}
+	if types["locked"] != manifest.TypeSkipped || types["a.txt"] != manifest.TypeFile || len(skipped) != 1 || skipped[0] != "locked" || stats.Skipped != 1 {
+		t.Fatalf("the folder is recorded as skipped: entries %v, skipped %v, stats %+v", types, skipped, stats)
+	}
 }

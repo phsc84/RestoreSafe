@@ -19,15 +19,7 @@ func buildDiff(t *testing.T, opts BuildOptions) (*manifest.Manifest, []byte) {
 	if err := BuildTar(context.Background(), &buf, opts, mb); err != nil {
 		t.Fatalf("BuildTar (differential): %v", err)
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatalf("differential manifest invalid: %v", err)
-	}
-	m, err := manifest.Parse(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return m, buf.Bytes()
+	return roundTrip(t, mb), buf.Bytes()
 }
 
 func entryByPath(m *manifest.Manifest) map[string]manifest.Entry {

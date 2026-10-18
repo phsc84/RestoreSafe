@@ -6,17 +6,24 @@ import "github.com/phsc84/restoresafe/internal/gui/win32"
 type SidebarItem struct {
 	Glyph Glyph
 	Text  string
+	// Bottom puts the item in the group at the sidebar's bottom edge,
+	// below a line (GUI spec YK-1).
+	Bottom bool
 }
 
 // Sidebar is the navigation: one tab stop, arrow keys, Home and End move
 // the selection; a click selects. The selected item has a filled row and an
-// accent bar on its left edge (GUI spec 3.2).
+// accent bar on its left edge (GUI spec 3.2). Items can be hidden; the keys
+// and the mouse skip them.
 type Sidebar struct {
 	hwnd     win32.HWND
 	theme    *Theme
 	items    []SidebarItem
+	hidden   []bool
 	selected int
-	focused  bool
+	// hover is the row under the mouse, -1 for none.
+	hover   int
+	focused bool
 	// keyboard is whether the user reached or moved the sidebar with the
 	// keyboard: only then does the selected row show the focus outline,
 	// as in standard Windows controls.
@@ -30,7 +37,7 @@ const sidebarPadding = 8
 
 // NewSidebar creates the navigation on parent.
 func NewSidebar(t *Theme, parent win32.HWND, id uintptr, items []SidebarItem) (*Sidebar, error) {
-	s := &Sidebar{theme: t, items: items}
+	s := &Sidebar{theme: t, items: items, hidden: make([]bool, len(items)), hover: -1}
 	hwnd, err := create(s, classSidebar, parent, win32.WS_TABSTOP, 0, id)
 	if err != nil {
 		return nil, err
@@ -48,13 +55,26 @@ func (s *Sidebar) Selected() int { return s.selected }
 
 // Select selects item index without calling OnSelect.
 func (s *Sidebar) Select(index int) {
-	if index < 0 || index >= len(s.items) || index == s.selected {
+	if index < 0 || index >= len(s.items) || index == s.selected || s.hidden[index] {
 		return
 	}
 	s.selected = index
 	s.announce()
 	win32.Invalidate(s.hwnd)
 }
+
+// SetHidden hides or shows item index. The caller selects another item
+// before it hides the selected one.
+func (s *Sidebar) SetHidden(index int, hidden bool) {
+	if index < 0 || index >= len(s.items) || s.hidden[index] == hidden {
+		return
+	}
+	s.hidden[index] = hidden
+	win32.Invalidate(s.hwnd)
+}
+
+// Hidden tells whether item index is hidden.
+func (s *Sidebar) Hidden(index int) bool { return s.hidden[index] }
 
 // announce names the sidebar for screen readers after the selected item.
 func (s *Sidebar) announce() {
@@ -65,8 +85,7 @@ func (s *Sidebar) announce() {
 
 // choose selects index and tells the owner.
 func (s *Sidebar) choose(index int) {
-	index = max(0, min(index, len(s.items)-1))
-	if index == s.selected {
+	if index < 0 || index >= len(s.items) || index == s.selected || s.hidden[index] {
 		return
 	}
 	s.Select(index)
@@ -75,21 +94,96 @@ func (s *Sidebar) choose(index int) {
 	}
 }
 
-// rowRect returns the rectangle of row i.
+// step returns the next shown item from the selected one in direction dir
+// (+1 or -1), or the selected one at the end.
+func (s *Sidebar) step(dir int) int {
+	for i := s.selected + dir; i >= 0 && i < len(s.items); i += dir {
+		if !s.hidden[i] {
+			return i
+		}
+	}
+	return s.selected
+}
+
+// end returns the first (dir -1) or last (dir +1) shown item.
+func (s *Sidebar) end(dir int) int {
+	i := 0
+	if dir > 0 {
+		i = len(s.items) - 1
+	}
+	for ; i >= 0 && i < len(s.items); i -= dir {
+		if !s.hidden[i] {
+			return i
+		}
+	}
+	return s.selected
+}
+
+// rowRect returns the rectangle of row i: the top group from the top edge,
+// the bottom group from the bottom edge, both without hidden rows.
 func (s *Sidebar) rowRect(i int, client win32.Rect) win32.Rect {
 	sc := s.theme.Scale
 	pad := sc.Px(sidebarPadding)
-	top := client.Top + pad + int32(i)*sc.Px(SidebarRowHeight)
-	return win32.Rect{Left: client.Left + pad, Top: top, Right: client.Right - pad, Bottom: top + sc.Px(SidebarRowHeight)}
+	row := sc.Px(SidebarRowHeight)
+	if s.items[i].Bottom {
+		below := 0
+		for j := i + 1; j < len(s.items); j++ {
+			if s.items[j].Bottom && !s.hidden[j] {
+				below++
+			}
+		}
+		bottom := client.Bottom - pad - int32(below)*row
+		return win32.Rect{Left: client.Left + pad, Top: bottom - row, Right: client.Right - pad, Bottom: bottom}
+	}
+	above := 0
+	for j := range i {
+		if !s.items[j].Bottom && !s.hidden[j] {
+			above++
+		}
+	}
+	top := client.Top + pad + int32(above)*row
+	return win32.Rect{Left: client.Left + pad, Top: top, Right: client.Right - pad, Bottom: top + row}
+}
+
+// lineRect returns the line above the bottom group; ok is false when the
+// group shows no item.
+func (s *Sidebar) lineRect(client win32.Rect) (win32.Rect, bool) {
+	top := client.Bottom
+	for i, item := range s.items {
+		if item.Bottom && !s.hidden[i] {
+			top = min(top, s.rowRect(i, client).Top)
+		}
+	}
+	if top == client.Bottom {
+		return win32.Rect{}, false
+	}
+	sc := s.theme.Scale
+	y := top - sc.Px(sidebarPadding/2)
+	return win32.Rect{Left: client.Left + sc.Px(sidebarPadding), Top: y, Right: client.Right - sc.Px(sidebarPadding), Bottom: y + max(sc.Px(1), 1)}, true
 }
 
 func (s *Sidebar) paint(hdc uintptr, r win32.Rect) {
 	pal := s.theme.Palette
 	sc := s.theme.Scale
 	fill(hdc, r, pal.SurfaceAlt)
+	if line, ok := s.lineRect(r); ok {
+		fill(hdc, line, pal.Lines)
+	}
 	for i, item := range s.items {
+		if s.hidden[i] {
+			continue
+		}
 		row := s.rowRect(i, r)
 		color := pal.TextSecondary
+		if i == s.hover && i != s.selected {
+			// The row under the mouse gets the selected row's fill, without
+			// its bar.
+			back := row
+			back.Right--
+			back.Bottom--
+			roundRect(hdc, back, sc.Px(ControlRadius*2), pal.Control, pal.Control)
+			color = pal.Text
+		}
 		if i == s.selected {
 			color = pal.Text
 			back := row
@@ -138,27 +232,29 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 		}
 		switch wparam {
 		case win32.VK_UP:
-			s.choose(s.selected - 1)
+			s.choose(s.step(-1))
 		case win32.VK_DOWN:
-			s.choose(s.selected + 1)
+			s.choose(s.step(+1))
 		case win32.VK_HOME:
-			s.choose(0)
+			s.choose(s.end(-1))
 		case win32.VK_END:
-			s.choose(len(s.items) - 1)
+			s.choose(s.end(+1))
 		default:
 			return 0, false
 		}
+		return 0, true
+	case win32.WM_MOUSEMOVE:
+		s.setHover(s.rowAt(int32(int16(win32.HiWord(lparam)))))
+		return 0, true
+	case win32.WM_MOUSELEAVE:
+		s.setHover(-1)
 		return 0, true
 	case win32.WM_LBUTTONDOWN:
 		s.keyboard = false
 		win32.SetFocus(hwnd)
 		win32.Invalidate(hwnd)
-		y := int32(int16(win32.HiWord(lparam)))
-		client := win32.ClientRect(hwnd)
-		for i := range s.items {
-			if r := s.rowRect(i, client); y >= r.Top && y < r.Bottom {
-				s.choose(i)
-			}
+		if i := s.rowAt(int32(int16(win32.HiWord(lparam)))); i >= 0 {
+			s.choose(i)
 		}
 		return 0, true
 	case win32.WM_SETFOCUS, win32.WM_KILLFOCUS:
@@ -172,4 +268,27 @@ func (s *Sidebar) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) (
 		return 0, true
 	}
 	return 0, false
+}
+
+// rowAt returns the shown row at y, or -1.
+func (s *Sidebar) rowAt(y int32) int {
+	client := win32.ClientRect(s.hwnd)
+	for i := range s.items {
+		if r := s.rowRect(i, client); !s.hidden[i] && y >= r.Top && y < r.Bottom {
+			return i
+		}
+	}
+	return -1
+}
+
+// setHover marks row i as the one under the mouse (-1: none).
+func (s *Sidebar) setHover(i int) {
+	if i == s.hover {
+		return
+	}
+	if s.hover == -1 {
+		win32.TrackMouseLeave(s.hwnd)
+	}
+	s.hover = i
+	win32.Invalidate(s.hwnd)
 }

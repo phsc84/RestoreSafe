@@ -6,13 +6,13 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// questions shows the questions of an operation: the backup plan dialog,
-// the Verify window, the Restore window and the credential dialogs.
+// questions shows the questions of an operation: the Create backup window,
+// the Verify window, the Restore backup window and the credential dialogs.
 type questions struct{ a *app }
 
 var _ flow.Dialogs = questions{}
 
-// BackupPlan shows the plan in the plan dialog.
+// BackupPlan shows the plan in the Create backup window.
 func (q questions) BackupPlan(p interact.BackupPlan, answer func()) {
 	q.a.machine.PlanShown(p)
 	if q.a.plan != nil {
@@ -23,7 +23,7 @@ func (q questions) BackupPlan(p interact.BackupPlan, answer func()) {
 }
 
 // ConfirmBackupStart offers Start (unless the plan is blocked), the other
-// plans in opts, and Cancel in the plan dialog. Choosing another plan
+// plans in opts, and Cancel in the Create backup window. Choosing another plan
 // shows it, and this question is asked again.
 func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer func(interact.BackupStart, error)) {
 	if q.a.plan == nil {
@@ -33,7 +33,7 @@ func (q questions) ConfirmBackupStart(opts interact.BackupStartOptions, answer f
 	q.a.plan.ask(opts, answer)
 }
 
-// RestorePlan shows the workflow's plan in the Restore window.
+// RestorePlan shows the workflow's plan in the Restore backup window.
 func (q questions) RestorePlan(p interact.RestorePlan, answer func()) {
 	q.a.machine.RestorePlanShown(p)
 	if q.a.restore != nil {
@@ -52,7 +52,7 @@ func (q questions) VerifyPlan(p interact.VerifyPlan, answer func()) {
 }
 
 // ConfirmStart waits for Start in the Verify window (figure 7.3); for a
-// restore, the Restore window answers it itself, as its Start was the
+// restore, the Restore backup window answers it itself, as its Start was the
 // confirmation.
 func (q questions) ConfirmStart(action string, answer func(bool, error)) {
 	if r := q.a.machine.Current(); r != nil && r.Op == flow.OpVerify {
@@ -84,6 +84,24 @@ func (q questions) ChooseUnlockMethod(qu interact.UnlockChoice, answer func(bool
 		answer(false, res.values[0], nil)
 	default:
 		answer(false, nil, nil)
+	}
+}
+
+// YubiKeyRefused asks what to do after the YubiKey didn't unlock the keys
+// (figure 9.4). New keys reopen the Create backup window, which shows the
+// plan with new keys and asks again.
+func (q questions) YubiKeyRefused(qu interact.YubiKeyRefusal, answer func(interact.YubiKeyRefusalAnswer, error)) {
+	res := q.a.runCredentialDialog(view.YubiKeyRefusalDialogOf(qu))
+	switch {
+	case res.link:
+		q.a.machine.Replan()
+		q.a.refreshRun()
+		q.a.openPlanDialog()
+		answer(interact.RefusalNewKeys, nil)
+	case res.ok:
+		answer(interact.RefusalRetry, nil)
+	default:
+		answer(interact.RefusalCancel, nil)
 	}
 }
 
@@ -128,9 +146,4 @@ func (q questions) newKeys() interact.KeyPlan {
 // dialog cancels the backup.
 func (q questions) RecoveryCode(code []byte, answer func(bool)) {
 	answer(q.a.runCredentialDialog(view.RecoveryCodeDialogOf(code, q.newKeys())).ok)
-}
-
-// SpareYubiKey asks to connect the spare YubiKey.
-func (q questions) SpareYubiKey(qu interact.SpareQuestion, answer func(bool)) {
-	answer(q.a.runCredentialDialog(view.SpareYubiKeyDialogOf(qu, q.newKeys())).ok)
 }

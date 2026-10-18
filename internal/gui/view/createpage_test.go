@@ -160,7 +160,7 @@ func TestEveryProblemHasWords(t *testing.T) {
 		interact.CodeConfigInvalid, interact.CodeBackupDirUnreachable, interact.CodeBackupDirNotWritable,
 		interact.CodeSourceMissing, interact.CodeSourceInvalid, interact.CodeBaseMissing, interact.CodeSetIncomplete,
 		interact.CodeVerifyFailed, interact.CodeOverdue, interact.CodeFolderNotBackedUp, interact.CodeSkippedFiles,
-		interact.CodeIncompleteNewest, interact.CodeSpaceLow, interact.CodeArgon2Capped,
+		interact.CodeIncompleteNewest, interact.CodeSpaceLow, interact.CodeArgon2Capped, interact.CodeYubiKeysConnected,
 	} {
 		h := problemHero(health.Problem{Code: code, Folder: "Docs", Path: "C:/Docs", Count: 2}, &s, sc.Config, sc.Now, Button{Action: ActionBackUp})
 		if h.Title == string(code) || h.Title == "" || h.Line == "" || h.Primary.Action == ActionNone {

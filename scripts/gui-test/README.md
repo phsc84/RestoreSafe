@@ -1,17 +1,17 @@
 # GUI test scripts
 
-PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, read control texts, and take screenshots (spec section 16.4 of [docs/SPEC-gui.md](../../docs/SPEC-gui.md)). They support the manual checklist in [docs/GUI-TEST-CHECKLIST.md](../../docs/GUI-TEST-CHECKLIST.md); they are not part of `go test`.
+PowerShell tools that drive the RestoreSafe window like a user: they click buttons, fill dialogs, read control texts, and take screenshots (spec section 16.4 of [docs/SPEC-gui.md](../../docs/SPEC-gui.md)). They support the manual checklist in [docs/GUIDE-gui-test.md](../../docs/GUIDE-gui-test.md); they are not part of `go test`.
 
 Controls are found by their control ID, which is also their UI Automation `AutomationId` (table `$Ids` in `GuiDriver.ps1`; a Go test in `internal/gui` keeps it equal to the code). Windows are found by class: `RestoreSafeMainWindow`, `RestoreSafePlan`, `RestoreSafeVerify`, `RestoreSafeRestore`, `RestoreSafeInputDialog`, `RestoreSafeDetails`, and `#32770` for task dialogs.
 
 | Script | Use |
 |---|---|
 | `GuiDriver.ps1` | Helpers, dot-sourced by the other scripts: find windows and controls, click, switch pages, select list items (MSAA), fill and answer credential dialogs, click task-dialog buttons, save a screenshot. |
-| `Smoke-BackupRestore.ps1` | Two backups through the plan dialog (a full, then differentials), a restore of one folder of the newest run through the wizard, a verification of the newest run; compares the restored folder with its source. Checks that no label lies over a control of a result card. Exit code 0 on success. Password-only configurations (it cannot answer YubiKey prompts); it handles new-key setup and a recovery code. |
+| `Smoke-BackupRestore.ps1` | Two backups through the Create backup window (a full, then differentials), a restore of one folder of the newest run through the wizard, a verification of the newest run; compares the restored folder with its source. Checks that no label lies over a control of a result card. Exit code 0 on success. Password-only configurations (it cannot answer YubiKey prompts); it handles new-key setup and a recovery code. |
 | `New-TestCondition.ps1` | Copies a smoke-test setup and turns the copy into a condition of spec 3.5 and 11.8 (`-Condition BaseMissing`, ...; the names of the Go fixtures). |
 | `Check-States.ps1` | For every condition: makes it, starts RestoreSafe, compares the hero's title and primary action with the expected ones, saves a screenshot. Exit code 0 when all match. |
-| `Accessibility.ps1` | Library: `Show-Accessibility` (role, name, AutomationId, access key of every control, as screen readers see them), `Test-AccessKeys`. As a check: walks the pages, the plan dialog and the wizard and reports buttons without access keys and duplicate access keys, and labels that lie over a control (a label with a tooltip takes the clicks of a button under it). |
-| `Screenshot.ps1` | Starts RestoreSafe and saves a screenshot cropped to the visible frame, optionally scaled (the README screenshots use `-Scale 0.667` at 150 %). |
+| `Accessibility.ps1` | Library: `Show-Accessibility` (role, name, AutomationId, access key of every control, as screen readers see them), `Test-AccessKeys`. As a check: walks the pages, the Create backup window and the wizard and reports buttons without access keys and duplicate access keys, and labels that lie over a control (a label with a tooltip takes the clicks of a button under it). |
+| `README-Screenshots.ps1` | The five screenshots of the README in `docs\images`, cropped to the visible frame and scaled by 0.667 (taken at 150 %): a full backup (screenshot while it runs), then the differentials (screenshot of their Create backup window; each source folder gets a copy of its newest file, removed at the end), then the Create backup page, the Restore backup page and the Restore backup window. Needs a password-only configuration whose backup directory doesn't exist yet; restores nothing. |
 
 ## Examples
 
@@ -32,8 +32,10 @@ $cfg = "C:\dev\RestoreSafe\sandbox\gui-test\config.yaml"
 # Access keys of all pages and dialogs.
 .\Accessibility.ps1 -Exe $exe -Config $cfg
 
-# Screenshot of the Create backup page for the README.
-.\Screenshot.ps1 -Exe $exe -ExeArgs "-config=`"$cfg`"" -Out ..\..\docs\images\Screenshot_v2.0.0_overview.png -Scale 0.667
+# The README screenshots, from a configuration whose backup directory
+# doesn't exist yet and with a source folder of about 1 GB.
+.\README-Screenshots.ps1 -Exe $exe -Config C:\dev\RestoreSafe\sandbox\readme-demo\config.yaml `
+    -Password "correct horse battery"
 ```
 
 The release gate (spec 16.7) runs `Smoke-BackupRestore.ps1` and `Check-States.ps1` at 100 % and 150 % display scaling.

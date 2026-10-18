@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
+	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/workflow/backup"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/restore"
@@ -35,6 +36,7 @@ func cancelAt(s *script, phase interact.Phase, cancel context.CancelFunc) (*obse
 // chains and is not stopped halfway, so a cancel that arrives during it is
 // too late and the run completes.
 func TestCancelAtEachPhase(t *testing.T) {
+	t.Parallel()
 	phases := map[string][]interact.Phase{
 		"backup":  {interact.PhaseUnlocking, interact.PhaseBackingUp, interact.PhaseVerifying, interact.PhaseCleaningUp},
 		"restore": {interact.PhaseUnlocking, interact.PhaseRestoring},
@@ -43,6 +45,7 @@ func TestCancelAtEachPhase(t *testing.T) {
 	for op, list := range phases {
 		for _, phase := range list {
 			t.Run(op+"/"+phaseName(phase), func(t *testing.T) {
+				t.Parallel()
 				root := t.TempDir()
 				docs := filepath.Join(root, "Docs")
 				writeFile(t, filepath.Join(docs, "a.txt"), strings.Repeat("restoresafe", 100_000))
@@ -91,6 +94,9 @@ func TestCancelAtEachPhase(t *testing.T) {
 					t.Error("a restore cancelled before writing must leave no folder")
 				case phase == interact.PhaseRestoring && !strings.Contains(s.out.String(), "INCOMPLETE"):
 					t.Errorf("a restore cancelled while writing must be marked INCOMPLETE: %s", s.out.String())
+				}
+				if strings.Contains(s.out.String(), "] "+logging.SeverityError+" - ") {
+					t.Errorf("a cancellation is no error: %s", s.out.String())
 				}
 			})
 		}

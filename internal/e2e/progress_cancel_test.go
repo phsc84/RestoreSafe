@@ -65,6 +65,7 @@ func progressConfig(sources []string, backupDir string) *config.Config {
 }
 
 func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Docs")
 	writeFile(t, filepath.Join(docs, "a.txt"), "hello")
@@ -104,6 +105,7 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 }
 
 func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	first := filepath.Join(root, "First")
 	second := filepath.Join(root, "Second")
@@ -145,6 +147,7 @@ func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
 }
 
 func TestCancelledRestoreAndVerify(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Docs")
 	writeFile(t, filepath.Join(docs, "a.txt"), "hello")
@@ -201,6 +204,7 @@ func (o *observedUI) phases(t *testing.T) []string {
 }
 
 func TestProgressPhasesFollowTheRun(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	first := filepath.Join(root, "First")
 	second := filepath.Join(root, "Second")

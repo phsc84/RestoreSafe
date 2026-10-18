@@ -13,8 +13,8 @@ func (b *restorePage) headHeight(width int32) int32 {
 	if b.run.mode != runHidden {
 		h += b.run.height(width-2*s.Px(widget.ContentPaddingX)) + s.Px(widget.CardGap)
 	}
-	if win32.IsWindowVisible(b.lines.HWND()) && b.linesStack != nil {
-		h += b.linesHeight + s.Px(widget.CardGap)
+	if win32.IsWindowVisible(b.lines.panel.HWND()) {
+		h += b.lines.height() + s.Px(widget.CardGap)
 	}
 	return h
 }
@@ -58,11 +58,8 @@ func (b *restorePage) layout() {
 		area.Top(widget.CardGap)
 	}
 
-	if win32.IsWindowVisible(b.lines.HWND()) && b.linesStack != nil {
-		r := area.TopPx(b.linesHeight)
-		win32.SetWindowPos(b.lines.HWND(), r)
-		pad := s.Px(widget.CardPadding)
-		b.linesStack.place(pad, pad)
+	if win32.IsWindowVisible(b.lines.panel.HWND()) {
+		b.lines.place(area.TopPx(b.lines.height()))
 		area.Top(widget.CardGap)
 	}
 

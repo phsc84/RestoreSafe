@@ -49,7 +49,7 @@ func TestChoosePlanShowsEveryPlanBeforeItStarts(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ui := &planRecorder{Script: &interacttest.Script{Out: &bytes.Buffer{}, ReadLine: interacttest.Answers(tc.answers...)}}
-			keys, folders, start, err := choosePlan(ui, &cfg, env.dir, sources, infos)
+			keys, folders, start, err := choosePlan(ui, &cfg, env.dir, sources, infos, "")
 			if err != nil || start != tc.start {
 				t.Fatalf("start=%v err=%v, want start=%v", start, err, tc.start)
 			}
@@ -82,7 +82,7 @@ func TestBackupPlanDescribesTheRun(t *testing.T) {
 	}
 	sources := plan.ResolveSources(cfg.SourceDirectories, "")
 	ui := &planRecorder{Script: &interacttest.Script{Out: &bytes.Buffer{}, ReadLine: interacttest.Answers("f", "n")}}
-	if _, _, _, err := choosePlan(ui, &cfg, env.dir, sources, infos); err != nil {
+	if _, _, _, err := choosePlan(ui, &cfg, env.dir, sources, infos, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -94,7 +94,7 @@ func TestBackupPlanDescribesTheRun(t *testing.T) {
 	if folder.AllBytes != auto.AllBytes || auto.NeededBytes > auto.AllBytes || auto.FreeBytes <= 0 {
 		t.Fatalf("unexpected sizes: %+v", auto)
 	}
-	if auto.Keys.New || auto.Keys.Summary == "" || !auto.Keys.Password || auto.Keys.YubiKeys != 0 {
+	if auto.Keys.New || auto.Keys.Summary == "" || !auto.Keys.Password || auto.Keys.YubiKey {
 		t.Fatalf("unexpected key plan: %+v", auto.Keys)
 	}
 	if !auto.VerifyAfter || len(auto.Removes) != 0 || auto.HasErrors() || auto.Details.Title != "Backup preflight" {

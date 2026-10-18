@@ -33,7 +33,7 @@ func (p *Folder) Label() string {
 }
 
 // Folders decides per source directory between a full and a differential
-// backup (2.0 spec 6.1), keyed by backup name. All checks use headers and
+// backup (core spec 6.1), keyed by backup name. All checks use headers and
 // trailers only, so the complete plan is known before the password is asked.
 // forceFull (the user chose a full backup) makes every directory a full backup.
 func Folders(cfg *config.Config, infos []catalog.SetInfo, sources []Source, keys Keys, forceFull bool, now time.Time) map[string]*Folder {

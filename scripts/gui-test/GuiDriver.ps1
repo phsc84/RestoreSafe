@@ -3,7 +3,7 @@
 # Dot-source it:  . .\GuiDriver.ps1
 # Controls are found by their control ID, which is also their UI Automation
 # AutomationId (spec 15), not by their texts: see $Ids. Windows are found by
-# class: RestoreSafeMainWindow, RestoreSafePlan (backup plan),
+# class: RestoreSafeMainWindow, RestoreSafePlan (Create backup window),
 # RestoreSafeVerify (verify), RestoreSafeRestore (restore),
 # RestoreSafeInputDialog (credentials), RestoreSafeDetails (reports and
 # logs), "#32770" (task dialogs).
@@ -28,10 +28,12 @@ public static class U {
   [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr h);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, string l);
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint f);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out RECT r, int s);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   // Window caption or static text; for edit controls of another process use EditText.
   public static string Text(IntPtr h) { var s = new StringBuilder(1024); GetWindowText(h, s, 1024); return s.ToString(); }
@@ -96,7 +98,6 @@ $Ids = [ordered]@{
   SettingsReload   = 802
   SettingsOpen     = 803
   SettingsMore     = 804
-  SettingsAdd      = 805
 }
 
 # Wait-Until runs $cond until it returns something truthy, and returns it.
@@ -182,7 +183,7 @@ function Click-TaskButton([int]$procId, [string]$text, [int]$seconds = 30) {
 
 # Answer-Credentials answers the credential dialogs until $done returns
 # true: a new password (two fields), the password (one masked field), the
-# recovery code shown at key setup (read, then confirmed), and nothing
+# recovery code shown at key setup (read, ticked, then continued), and nothing
 # else. It returns the recovery code it saw, if any.
 function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done, [int]$seconds = 180) {
   $code = $script:RecoveryCode
@@ -195,6 +196,9 @@ function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done,
     $lines = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Static" } | ForEach-Object { [U]::Text($_) } | Where-Object { $_ -match '^[0-9A-Z]{4,}(-[0-9A-Z]{4,})+$' })
     if ($edits.Count -eq 0 -and $lines.Count -gt 0) {
       $script:RecoveryCode = $lines -join "-"
+      # Continue is enabled only once the checkbox is ticked.
+      Click ([U]::Children($dlg) | Where-Object { [U]::Id($_) -eq 473 } | Select-Object -First 1)
+      Start-Sleep -Milliseconds 300
       [U]::PostMessage($dlg, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null
     } elseif ($edits.Count -eq 2) {
       Fill-Dialog $dlg @($password, $password)
@@ -222,6 +226,26 @@ function Shot($hwnd, [string]$path) {
   $hdc = $g.GetHdc(); [U]::PrintWindow($hwnd, $hdc, 2) | Out-Null; $g.ReleaseHdc($hdc)
   $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
+}
+
+# Save-Shot saves a PNG of the window cropped to its visible frame, without
+# the invisible resize border (DWMWA_EXTENDED_FRAME_BOUNDS = 9), and scaled
+# (0.667 for the README screenshots, taken at 150 %).
+function Save-Shot($hwnd, [string]$path, [double]$scale = 1.0) {
+  $raw = [System.IO.Path]::GetTempFileName() + ".png"
+  Shot $hwnd $raw
+  $wr = New-Object U+RECT; [U]::GetWindowRect($hwnd, [ref]$wr) | Out-Null
+  $fr = New-Object U+RECT; [U]::DwmGetWindowAttribute($hwnd, 9, [ref]$fr, 16) | Out-Null
+  $src = [System.Drawing.Image]::FromFile($raw)
+  $crop = New-Object System.Drawing.Rectangle ($fr.L - $wr.L), ($fr.T - $wr.T), ($fr.R - $fr.L), ($fr.B - $fr.T)
+  $w = [int]($crop.Width * $scale); $h = [int]($crop.Height * $scale)
+  $dst = New-Object System.Drawing.Bitmap $w, $h
+  $g = [System.Drawing.Graphics]::FromImage($dst)
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $g.DrawImage($src, (New-Object System.Drawing.Rectangle 0, 0, $w, $h), $crop, [System.Drawing.GraphicsUnit]::Pixel)
+  $dst.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose(); $dst.Dispose(); $src.Dispose(); Remove-Item $raw
+  "Saved $path (${w}x${h})"
 }
 
 # Test-Overlaps returns the visible labels of $parent that lie over a

@@ -27,7 +27,7 @@ func TestScriptsKnowTheControlIDs(t *testing.T) {
 		"RestoreDest": idRestoreDest, "RestoreBrowse": idRestoreBrowse,
 		"RestoreBackupDir": idRestoreIntoBackupDir, "RestoreDetails": idRestoreDetails,
 		"SettingsEdit": idSettingsEdit, "SettingsReload": idSettingsReload,
-		"SettingsOpen": idSettingsOpen, "SettingsMore": idSettingsMore, "SettingsAdd": idSettingsAdd,
+		"SettingsOpen": idSettingsOpen, "SettingsMore": idSettingsMore,
 	}
 	data, err := os.ReadFile("../../scripts/gui-test/GuiDriver.ps1")
 	if err != nil {

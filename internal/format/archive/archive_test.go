@@ -32,15 +32,22 @@ func build(t *testing.T, src string, excludes ...string) (*manifest.Manifest, []
 	if err := BuildTar(context.Background(), &tarBuf, BuildOptions{SourceDir: src, ExcludeDirs: excludes}, mb); err != nil {
 		t.Fatalf("BuildTar: %v", err)
 	}
-	data, err := mb.Bytes()
-	if err != nil {
-		t.Fatalf("manifest Bytes: %v", err)
+	return roundTrip(t, mb), tarBuf.Bytes()
+}
+
+// roundTrip encodes the manifest of mb and decodes it again, as a backup
+// writes it and a restore reads it.
+func roundTrip(t *testing.T, mb *manifest.Builder) *manifest.Manifest {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := mb.Encode(&buf); err != nil {
+		t.Fatalf("manifest Encode: %v", err)
 	}
-	m, err := manifest.Parse(data)
+	m, err := manifest.Decode(&buf)
 	if err != nil {
-		t.Fatalf("manifest Parse: %v", err)
+		t.Fatalf("manifest Decode: %v", err)
 	}
-	return m, tarBuf.Bytes()
+	return m
 }
 
 func restore(t *testing.T, m *manifest.Manifest, tarData []byte, dest string, verifyOnly bool) error {
@@ -213,9 +220,15 @@ func TestFinishReportsMissingFiles(t *testing.T) {
 
 	var empty bytes.Buffer
 	tar.NewWriter(&empty).Close()
-	err := restore(t, m, empty.Bytes(), t.TempDir(), true)
-	if err == nil || !strings.Contains(err.Error(), "2 file(s)") {
+	r := NewRestorer(m, t.TempDir(), true)
+	if err := r.ExtractSection(&empty, DecideOwn(m)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Finish(); err == nil || !strings.Contains(err.Error(), "2 file(s)") {
 		t.Fatalf("expected missing-files error, got %v", err)
+	}
+	if got := r.MissingFiles(); len(got) != 2 || got[0] != "a.txt" || got[1] != "b.txt" {
+		t.Fatalf("MissingFiles = %v", got)
 	}
 }
 

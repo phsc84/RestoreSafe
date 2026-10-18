@@ -1,6 +1,6 @@
-﻿# Smoke-BackupRestore.ps1 - backs up twice through the plan dialog (a full,
+﻿# Smoke-BackupRestore.ps1 - backs up twice through the Create backup window (a full,
 # then differentials), restores the folders of the newest run through the
-# Restore window, verifies the newest run from the Restore backup page, and
+# Restore backup window, verifies the newest run from the Restore backup page, and
 # compares the restored folders with their sources (spec 16.4).
 #
 # Use a test configuration with authentication_mode 1 (password only); the
@@ -44,10 +44,10 @@ try {
   Wait-Until { (Text-Of $main HeroTitle) -and (Text-Of $main HeroTitle) -notlike "Checking*" } 60 "health check" | Out-Null
   Snap $main "overview"
 
-  # Backups through the plan dialog.
+  # Backups through the Create backup window.
   for ($i = 1; $i -le $Backups; $i++) {
     Click-Control $main HeroPrimary 60
-    $plan = Wait-Until { Find-Window $p.Id "RestoreSafePlan" } 20 "plan dialog"
+    $plan = Wait-Until { Find-Window $p.Id "RestoreSafePlan" } 20 "Create backup window"
     Wait-Until { Find-Control $plan PlanStart -Enabled } 120 "backup plan" | Out-Null
     Snap $plan "plan-$i"
     Click-Control $plan PlanStart
@@ -58,7 +58,7 @@ try {
     Click-Control $main RunDone
   }
 
-  # Restore of the newest run's folders through the Restore window.
+  # Restore of the newest run's folders through the Restore backup window.
   Go-Page $main 1
   # The check after an operation rebuilds the list and can drop a selection
   # made just before it: select again until the action is enabled.
@@ -66,7 +66,7 @@ try {
   Wait-Until { try { Select-ListItem $list 0 } catch {}; Find-Control $main BackupsRestore -Enabled } 20 "a backup selected" | Out-Null
   Snap $main "backups"
   Click-Control $main BackupsRestore
-  $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore window"
+  $wiz = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore backup window"
   $edit = Wait-Until { Find-Control $wiz RestoreDest } 10 "destination"
   Set-Text $edit $RestoreTo
   Wait-Until { Find-Control $wiz RestoreStart -Enabled } 20 "choices checked" | Out-Null

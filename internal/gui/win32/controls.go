@@ -1,5 +1,7 @@
 package win32
 
+//lint:file-ignore ST1003 names follow the Windows SDK headers, so they match the Win32 documentation
+
 import (
 	"encoding/binary"
 	"fmt"
@@ -22,19 +24,26 @@ const (
 	EM_EMPTYUNDOBUFFER = 0x00CD
 	ES_AUTOHSCROLL     = 0x80
 
-	PBS_MARQUEE        = 0x08
-	PBM_SETPOS         = 0x0402
-	PBM_GETPOS         = 0x0408
-	PBM_SETRANGE32     = 0x0406
-	PBM_SETMARQUEE     = 0x040A
-	PROGRESS_CLASS     = "msctls_progress32"
-	WM_SETTEXT         = 0x000C
-	EM_SETSEL          = 0x00B1
-	EM_REPLACESEL      = 0x00C2
-	EM_EXLIMITTEXT     = 0x0435
-	EM_SETTEXTMODE     = 0x0459
-	TM_PLAINTEXT       = 1
-	WM_TIMER           = 0x0113
+	PBS_MARQUEE    = 0x08
+	PBM_SETPOS     = 0x0402
+	PBM_GETPOS     = 0x0408
+	PBM_SETRANGE32 = 0x0406
+	PBM_SETMARQUEE = 0x040A
+	PROGRESS_CLASS = "msctls_progress32"
+	WM_SETTEXT     = 0x000C
+	EM_SETSEL      = 0x00B1
+	EM_REPLACESEL  = 0x00C2
+	EM_EXLIMITTEXT = 0x0435
+	EM_SETTEXTMODE = 0x0459
+	TM_PLAINTEXT   = 1
+	WM_TIMER       = 0x0113
+	// WM_DEVICECHANGE with DBT_DEVNODES_CHANGED reaches every top-level
+	// window when a device is added or removed; no registration needed.
+	WM_DEVICECHANGE      = 0x0219
+	DBT_DEVNODES_CHANGED = 0x0007
+	// WM_MOUSELEAVE is sent once after TrackMouseLeave, when the mouse
+	// leaves the window.
+	WM_MOUSELEAVE      = wmMouseLeave
 	WM_QUERYENDSESSION = 0x0011
 	WM_ENDSESSION      = 0x0016
 

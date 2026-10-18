@@ -50,11 +50,32 @@ func TestParseRecoveryCodeNormalizesInput(t *testing.T) {
 			t.Fatalf("variant %q not accepted: %v", v, err)
 		}
 	}
+}
+
+func TestParseRecoveryCodeReadsConfusablesAsDigits(t *testing.T) {
+	t.Parallel()
+
+	// A fixed code with both 0 and 1: a random one lacks them in some runs.
+	data := []byte("0123456789ABCDEFGHJK01MNP")
+	code := Code{data: data, check: recoveryChecksum(data)}
+	s := string(code.Display())
 	// Crockford decoding: O reads as 0, I and L as 1.
-	if strings.ContainsAny(s, "01") {
-		confusable := strings.NewReplacer("0", "O", "1", "l").Replace(s)
+	for _, confusable := range []string{
+		strings.NewReplacer("0", "O", "1", "I").Replace(s),
+		strings.NewReplacer("0", "o", "1", "l").Replace(s),
+	} {
 		if got, err := Parse([]byte(confusable)); err != nil || !sameCode(got, code) {
 			t.Fatalf("confusable variant %q not accepted: %v", confusable, err)
+		}
+	}
+}
+
+func TestValidCheckRefusesMalformedGroups(t *testing.T) {
+	t.Parallel()
+
+	for _, s := range []string{"", "ABCD", "ABCDEF", "ABCDU", "abcde"} {
+		if ValidCheck(s) {
+			t.Fatalf("ValidCheck(%q) = true", s)
 		}
 	}
 }

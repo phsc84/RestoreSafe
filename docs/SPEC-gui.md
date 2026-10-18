@@ -2,20 +2,20 @@
 
 | | |
 |---|---|
-| Status | Specified 2026-09-30 (status-first redesign); implemented on `v2`; the manual tests of [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) passed on 2026-10-09. |
-| Target release | RestoreSafe 2.0.0. Editing the configuration and dark mode follow in 2.1.0 (section 18). |
-| Builds on | [SPEC-2.0.md](SPEC-2.0.md); formats, keys and workflow behavior are unchanged |
-| Manual tests | [GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) |
+| Status | Living. Released with 2.1.0 (2026-10-18); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-18. 2.1.0 added the YubiKey page (10.2, decision 10), dropped the spare YubiKey (decision 11), allows one YubiKey for a backup (decision 12) and asks about an out-of-date config.yaml at start (decision 13). |
+| Planned | Later: editing the configuration and dark mode (decisions 1 and 4; moved out of 2.1.0 on 2026-10-18). |
+| Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
+| Manual tests | [GUIDE-gui-test.md](GUIDE-gui-test.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
 
 ## 0. How to use this document (read first)
 
-This document specifies RestoreSafe's window application: a status-first interface that replaces the first GUI's home screen (configuration paths, health check report, three buttons) and its linear operation screens. The architecture of the first GUI (bridge, threads, secret handling, section 12 to 14) stays. It is written for developers and coding agents.
+This document specifies RestoreSafe's window application, a status-first interface over the workflows of [SPEC-core.md](SPEC-core.md). It is written for developers and coding agents.
 
 - **Requirement IDs** (`OV-1`, `BP-3`, `BK-5`, `RW-2`, `ST-4`) identify testable requirements. Reference them in commits, tests and questions; section 16 maps them to tests.
 - **Text wins over wireframes.** Wireframes show layout, content and states, not pixels. Colors, sizes and spacing are defined in section 3.3. If a wireframe and the text disagree, follow the text and flag the difference.
-- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.Check`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-2.0.md](SPEC-2.0.md). Where the UI needs data the workflows don't expose yet, section 11 names the addition. Add it there; don't guess and don't parse text meant for people.
-- **Keep what already works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are reused unchanged.
+- **Behavior does not change.** The UI is a frontend over the existing workflows (`backup.Run`, `restore.Run`, `verify.Run`, `health.TakeSnapshot`, `catalog.Inventory`). What a backup, restore or verify does, what it checks and when it fails stays as specified in [SPEC-core.md](SPEC-core.md). Section 11 lists what the workflows expose for the UI. When the UI needs more, add it there; don't guess and don't parse text meant for people.
+- **Keep what works.** The bridge (12.2), the secret handling in controls (13), the recovery-code dialog (13.3), the YubiKey parent window (13.4), cancellation and session end (12.4) are settled; change them only for a stated reason.
 - **Ask when something is unclear.** Section 18 lists the decisions taken. Do not silently pick a different answer.
 - **Pure Win32.** No WebView2, no web technology, no third-party UI toolkit, no cgo, no new modules. Standard controls first, custom drawing only where section 3.4 says so.
 
@@ -36,23 +36,24 @@ This document specifies RestoreSafe's window application: a status-first interfa
 
 **Goal:** a user sees at a glance whether their folders are protected, starts a backup with one click, understands what RestoreSafe will do before it does it, and gets folders back without reading a report.
 
-**In scope:** Create backup page, backup plan and run, Restore backup page (runs, sets, logs, verify), Restore window, credential dialogs, Settings (configuration view), window behavior when an operation finishes or the window is closed, and the additions to the workflows the UI needs.
+**In scope:** Create backup page, Create backup window and run, Restore backup page (runs, sets, logs, verify), Restore backup window, credential dialogs, Settings (configuration view), the YubiKey page (check, test and setup guide), window behavior when an operation finishes or the window is closed, and the data the workflows provide for the UI (section 11).
 
-**Out of scope, permanently** (2.0 spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
+**Out of scope, permanently** (core spec 1.3): scheduled or unattended backups, a tray icon, background processes, start with Windows, stored credentials. Every backup, restore and verify needs the user to authenticate. Toast notifications are not used, because nothing runs while the user is away.
 
-**Out of scope for this redesign:** restoring single files or subfolders (2.0 spec 13.5), deleting backups from the UI (decision 5), cloud destinations, more than one backup directory per configuration, a first-run wizard, localization.
+**Not offered:** restoring single files or subfolders (core spec 13.5), deleting backups from the UI (decision 5), cloud destinations, more than one backup directory per configuration, a first-run wizard, localization.
 
 **What RestoreSafe does today, and the UI must represent:**
 
 | Capability | Where it shows |
 |---|---|
-| Full and differential backups, chosen automatically **per source folder** with a stated reason; override to full backups or to new keys + full backups | Backup plan (6) |
+| Full and differential backups, chosen automatically **per source folder** with a stated reason; override to full backups or to new keys + full backups | Create backup window (6) |
 | Chains per folder (a full backup and its differentials, same chain ID); backup runs that write one set per folder | Restore backup (7) |
-| Restore of one run or single sets into a new folder per set; checksum check of every file; stops and reports "incomplete" on a mismatch | Restore window (8) |
+| Restore of one run or single sets into a new folder per set; checksum check of every file; stops and reports "incomplete" on a mismatch | Restore backup window (8) |
 | Verify of a run or set (full decrypt and checksum check, nothing written); optional verify after backup | Restore backup (7), Settings (10) |
-| Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Backup plan (6), Restore backup (7) |
-| Password, password + YubiKey or YubiKey-only; spare YubiKey; recovery code; new keys | Credential dialogs (9), Create backup (5) |
-| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero (5), problem lines on Restore backup (7), folder and backup directory status on Settings (10) |
+| Retention after each successful backup: `retention_keep` chains per folder, `retention_keep_differentials` per chain; held back after a failed verification or skipped files | Create backup window (6), Restore backup (7) |
+| Password, password + YubiKey or YubiKey-only; recovery code; new keys | Credential dialogs (9), Create backup (5) |
+| Startup health check (config, folders, backup directory, YubiKey, keys, inventory, 1.x files, leftovers) | Create backup hero (5), problem lines on Restore backup (7), folder and backup directory status on Settings (10.1) |
+| YubiKey diagnostics: Windows WebAuthn readiness, connected YubiKeys, a live test against the current keys, setup help | YubiKey page (10.2) |
 | Exclude patterns (global), `on_unreadable_file`, split size, Argon2 parameters, log level | Settings (10) |
 | One log file per run in the backup directory; restore and verify append to the log of the run they read | Log window of a run (BK-5) |
 | Several configurations via `-config` | Title bar, Settings (10) |
@@ -76,11 +77,11 @@ This document specifies RestoreSafe's window application: a status-first interfa
 | Item | Requirement |
 |---|---|
 | OS | Windows 11. YubiKey needs 22H2 or later (unchanged). |
-| Common Controls | Version 6 via the existing manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
-| DPI | `PerMonitorV2` (existing). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
+| Common Controls | Version 6 via the application manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
+| DPI | `PerMonitorV2` (application manifest). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
 | Text | UTF-16 (`W` APIs) throughout. |
-| Theme | Light only in 2.0.0. Dark mode follows in 2.1.0 (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
-| Fonts | Segoe UI Variable Text (fallback: the system message font, as today) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
+| Theme | Light only in 2.0.0. Dark mode follows later (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
+| Fonts | Segoe UI Variable Text (fallback: the system message font) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
 | State | RestoreSafe is portable and keeps no state outside the backup directory. The UI stores nothing: no registry, no settings file, no remembered window position or column widths. |
 
 ### 3.2 Window and navigation
@@ -88,14 +89,14 @@ This document specifies RestoreSafe's window application: a status-first interfa
 - Default size 1000 × 700 DIP, minimum 820 × 600 DIP. Centered on the monitor of the cursor at start.
 - Title: `RestoreSafe <version>`. When the configuration isn't the default `config.yaml` next to the exe, the title adds the file name: `RestoreSafe 2.0.0 · home-backup.yaml`.
 - Layout: title bar, sidebar (160 DIP), content area, status bar (24 DIP).
-- Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings**. The sidebar names the pages by their action. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`. The sidebar is one tab stop with arrow-key navigation.
-- Other shortcuts: `Ctrl+B` opens the backup plan, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons, as today.
+- Sidebar items: **Create backup** (section 5), **Restore backup** (section 7), **Settings** (10.1), and at the bottom, below a line, **YubiKey** (10.2) while YubiKeys are in use (YK-1). The sidebar names the pages by their action; YubiKey is a tool page and is named by its subject. The selected item has a filled row and a 3 DIP accent bar on its left edge. Keyboard: `Ctrl+1`, `Ctrl+2`, `Ctrl+3`, `Ctrl+4` (YubiKey, while visible). The sidebar is one tab stop with arrow-key navigation. The row under the mouse gets the selected row's fill, without its accent bar.
+- Other shortcuts: `Ctrl+B` opens the Create backup window, `F5` runs the health check again, `Esc` closes the active dialog. Access keys (`&Back up now…`) on all buttons.
 - Status bar: a strip on the secondary surface without text. What is going on shows on the page itself (hero, progress card, Refresh disabled while a check runs); the free space is on the backup directory cards, the runs on Restore backup.
-- While an operation runs, all three pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
+- While an operation runs, all pages stay available. Actions that would start a second operation are disabled (one worker at a time, 12.2).
 
 ### 3.3 Visual language
 
-| Role | Light | Dark (2.1.0) | Use |
+| Role | Light | Dark (later) | Use |
 |---|---|---|---|
 | Surface | `#FFFFFF` | `#1D2126` | Window content, cards |
 | Surface, secondary | `#F0F2F5` | `#252A30` | Sidebar, title bar, group headers, action bars |
@@ -125,19 +126,19 @@ The implementation may use the user's Windows accent color instead of the accent
 
 | UI element | Win32 implementation |
 |---|---|
-| Sidebar | Custom child window, one tab stop, exposes UI Automation names and selection state |
+| Sidebar | Custom child window, one tab stop, exposes UI Automation names and selection state. An item can be hidden (YubiKey, YK-1); the bottom group is anchored to the sidebar's bottom edge. |
 | Status hero, cards, progress card | Container windows that paint only their background, border and icon circle (double buffered, DPI aware). All text in them is in standard `STATIC` and `SysLink` controls, so screen readers and UI Automation get names, roles and `AutomationId` without a custom provider. Redrawn only on state change. |
 | Step trail, badges, bars | Small painted controls; each sets its accessible name to its text ("Step 2 of 4, Back up 2 of 3", "Differential 3"). |
 | Backup list | `SysListView32`, report mode, groups enabled (one group per run). Badges and status are custom-drawn cells (`NM_CUSTOMDRAW`). Column headers as for the folder lists. |
-| Folder lists (Create backup, backup plan, Settings, Restore window) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) in the Restore window. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
+| Folder lists (Create backup page, Create backup window, Settings, Restore backup window) | `SysListView32`, report mode, full-row select, column headers the user can drag wider; checkboxes (`LVS_EX_CHECKBOXES`) in the Restore backup window. A filling column takes the width the others leave until the table's width changes; widths the user set stay meanwhile. A row's tooltip shows what its cells may cut off (path, exact time, reason). Tones color the cells, type badges are custom-drawn (`NM_CUSTOMDRAW`). More than five rows scroll within the table. Every list's column header is drawn on the secondary surface with a line under it and between the columns, so it stands apart from the rows (`widget.StyleListHeader`); high contrast keeps the system header. |
 | One-line text | `STATIC` with an ellipsis (`SS_ENDELLIPSIS`, `SS_PATHELLIPSIS` for paths). When the text is cut off, its tooltip shows it in full; when it fits, there is no such tooltip. |
 | Progress bars | `msctls_progress32` (`PBS_SMOOTH`, marquee while the total is unknown and while keys are unlocked), plus taskbar progress via `ITaskbarList3` |
 | Confirmations | `TaskDialog` with headline, explanation, custom button labels and expandable details. **Never for the recovery code** (task dialogs copy their text on `Ctrl+C`, which bypasses the clipboard protection of 13.3). |
 | Password fields | Edit with `ES_PASSWORD`, read and wiped as in 13.1 |
-| Log window | Read-only rich edit (`MSFTEDIT_CLASS`, as today) with a severity filter |
-| Show details (plans, results) | The existing report view (rich edit) in a dialog |
-| Backup plan, Restore window | Modal dialogs that close on Start, no property sheets |
-| Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` (existing) |
+| Log window | Read-only rich edit (`MSFTEDIT_CLASS`) with a severity filter |
+| Show details (plans, results) | The report view (rich edit) in a dialog |
+| Create backup window, Restore backup window | Modal dialogs that close on Start, no property sheets |
+| Folder pickers | `IFileOpenDialog` with `FOS_PICKFOLDERS` |
 
 ### 3.5 Application state
 
@@ -151,7 +152,7 @@ The hero renders one state. Priority: Running, then Error, then Warning, then Pr
 | **Protected** (green) | None of the above, and every configured folder has a complete backup. |
 | **Empty** (neutral) | No complete backup set exists in the backup directory. |
 
-**Not a warning:** a YubiKey that isn't connected (people keep it on their key ring; it's shown on the Keys card and asked for when needed), 1.x backups and leftover `.tmp` files (shown as information lines on Restore backup), and "the next backup creates new keys" (shown on the Keys card and in the backup plan). Amber that can't be cleared by the user trains them to ignore amber.
+**Not a warning:** a YubiKey that isn't connected (people keep it on their key ring; it's shown on the Keys card and asked for when needed), 1.x backups and leftover `.tmp` files (shown as information lines on Restore backup), and "the next backup creates new keys" (shown on the Keys card and in the Create backup window). Amber that can't be cleared by the user trains them to ignore amber.
 
 If several Error or Warning triggers apply, the hero shows the most urgent one (order as listed) with its fix action. The sub line ends with "and N more problems"; the next one takes the hero once the first is fixed. Problems of existing backups are listed on Restore backup (BK-6), the state of each folder and of the backup directory on Settings (ST-3, ST-4).
 
@@ -170,12 +171,12 @@ The hero on Create backup leaves out the problems of existing backups: a missing
 
 ## 4. Operation lifecycle
 
-This section connects the screens. Every operation follows the same five steps; the workflow drives them through `interact.UI` exactly as today.
+This section connects the screens. Every operation follows the same five steps; the workflow drives them through `interact.UI`.
 
 | Step | Backup | Restore | Verify |
 |---|---|---|---|
 | 1. Choose | "Back up now…" | Selected run on Restore backup (7) | Selected run or set on Restore backup |
-| 2. Plan | Backup plan dialog (6.1) | Restore window (8) | Verify window (figure 7.3) |
+| 2. Plan | Create backup window (6.1) | Restore backup window (8) | Verify window (figure 7.3) |
 | 3. Unlock | Unlock or new-keys dialogs (9) | Unlock dialog (9) | Unlock dialog (9) |
 | 4. Run | Progress card on Create backup (6.2) | Progress card on Restore backup | Progress card on Restore backup |
 | 5. Result | Result card on Create backup (6.3) | Result card on Restore backup | Result card and status on Restore backup |
@@ -214,7 +215,11 @@ Purpose: answer "are my folders safe?" and start a backup.
 │                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
 │                  │ ┌─ Keys ────────────────────────────────────────────────────────────────────────┐ │
 │                  │ │ Password + YubiKey                                  (i) YubiKey not connected │ │
-│                  │ │ Created 1 Sep · 2 YubiKeys · recovery code                                    │ │
+│                  │ │ Created 1 Sep · recovery code                                                 │ │
+│                  │ │ ┌───────────────────────────────────────────────────────────────────────────┐ │ │
+│                  │ │ │ ⚠ Never reset your YubiKey. A reset erases the credential that unlocks    │ │ │
+│                  │ │ │   your keys; after that only your recovery code opens your backups.       │ │ │
+│                  │ │ └───────────────────────────────────────────────────────────────────────────┘ │ │
 │                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
 ├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                      │
@@ -293,25 +298,25 @@ Purpose: answer "are my folders safe?" and start a backup.
 | ID | Requirement |
 |---|---|
 | OV-1 | The hero shows the state from 3.5. The title is a short statement; the sub line carries facts (Empty has none). The hero has no link to the full health check report: it names the most urgent problem and its fix, and the pages show the rest (3.5). Each Warning and Error variant offers exactly one primary fix action; Error may add one secondary action. |
-| OV-2 | "Back up now…" opens the backup plan (6.1). When the health check blocks a backup (`health.Result.BlocksBackup`), the hero names the reason and offers its fix actions (OV-1) instead of **Back up now…**, and `Ctrl+B` does nothing: a disabled button next to them would be a third action that does nothing. There is no split button: the full-backup and new-keys overrides are offered in the plan, next to the reason for the planned type. |
-| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (2.0 spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. The paths and their state are on Settings (ST-3). |
+| OV-2 | "Back up now…" opens the Create backup window (6.1). When the health check blocks a backup (`health.Result.BlocksBackup`), the hero names the reason and offers its fix actions (OV-1) instead of **Back up now…**, and `Ctrl+B` does nothing: a disabled button next to them would be a third action that does nothing. There is no split button: the full-backup and new-keys overrides are offered in the plan, next to the reason for the planned type. |
+| OV-3 | The Folders card is a table of every configured source folder: **Folder** (backup name), **Last backup** (the date of its newest complete set) and **Next backup** (`DIFF` or `FULL`, the type the next backup would get). The row's tooltip has the path, the exact time and the plan's reason (e.g. "Next backup FULL: Full backup is 31 days old (limit 30)"). The card needs no password (core spec 6.1). A folder that is missing or unreadable shows the problem in red in place of the date. More than five folders scroll within the table. A splitter below the card sets the table's height (at least three rows; until it is dragged, three to five rows as the folders need); the cards below keep their height and move down, and the page scrolls when they no longer fit. The paths and their state are on Settings (ST-3). |
 | OV-4 | The backup directory card shows the path, a segmented bar (backups, other data, free) and a legend. Backups is the size of all 2.0 set parts in the directory; Other is used space minus Backups; Free comes from the file system. Each segment's tooltip shows exact bytes. The last line estimates a new full backup of all folders as the sum of each folder's newest full backup (trailer data length). |
 | OV-5 | The page shows only what a backup needs: the type, size and base of existing sets, and the size of runs, are on Restore backup. Below the folders, the Folders card says when the newest backup failed or was cancelled ("The backup of today, 09:12 failed; the Restore backup page has its log."), which the folders' dates alone don't show. |
-| OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode`, spare YubiKey, recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys." |
+| OV-6 | The Keys card shows the current key set: unlock methods (from `authentication_mode` and the recovery code) and the creation date; for YubiKey modes whether a YubiKey is connected (information, not a warning). When the configuration no longer matches the keys, it shows (i) "Your next backup creates new keys and full backups" with the reason (`catalog.KeySetMismatch`). Without keys: "Your first backup creates your keys."; in YubiKey modes instead, in the order the first backup does it (the keys are wrapped with the YubiKey's secret): "Your first backup sets up your YubiKey, then creates your keys: follow the Windows Security prompts." (a YubiKey without a PIN gets one there, which the YubiKey help says, YK-8). Without keys, the YubiKey status sits at the right of the heading, as there is no methods line. In YubiKey modes, always, a warning in a box of the Warning background color with a warning icon: "Never reset your YubiKey. A reset erases the credential that unlocks your keys; after that only your recovery code opens your backups." Note and warning wrap. "YubiKey connected" follows the key: a device change takes a new snapshot (YK-3). |
 | OV-7 | The page starts with its title "Create backup", like Restore backup; the hero or the progress and result cards sit below it. While a backup runs, the progress card (6.2) replaces the hero. After it ends, the result card (6.3) replaces the progress card until the user dismisses it or starts another operation; then the hero returns with the new state. A restore or verification shows these cards on the Restore backup page instead (BK-8, RW-9); meanwhile the hero stays, with "Back up now…" disabled. |
 | OV-8 | The health check runs at start, after each operation, on **Check again**, on **Refresh** (next to the page title on Create backup and Restore backup, centered on it; disabled while a check or an operation runs), on `F5`, and when the window is activated and the last check is older than 5 minutes. It runs on a worker goroutine; the hero keeps the last state meanwhile, and Refresh is disabled. Until the first check has finished, the hero reads "Checking your backups…". A check never blocks the UI thread, even when the backup directory is an unreachable network share. |
 
-## 6. Backup plan and run
+## 6. Create backup window and run
 
-### 6.1 Backup plan
+### 6.1 Create backup window
 
-The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately with a marquee while the workflow scans the folders and estimates sizes, then shows the plan.
+The Create backup window is the backup preflight (core spec 6.2). It opens immediately with a marquee while the workflow scans the folders and estimates sizes, then shows the plan.
 
-**Figure 6.1: Backup plan.**
+**Figure 6.1: Create backup.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Back up                                                                  [x] │
+│ Create backup                                                            [x] │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Back up 3 folders to \\NAS\Backup\RestoreSafe                                │
 │                                                                              │
@@ -355,12 +360,12 @@ The plan dialog is the backup preflight (2.0 spec 6.2). It opens immediately wit
 
 | ID | Requirement |
 |---|---|
-| BP-1 | The plan lists every source folder in a table: **Folder**, **Type** (badge: differential with its number, or full), **Why** (the reason in plain words) and **About** (the size (for a differential the estimate from 2.0 spec 6.2; for a full the folder size)). A folder with a blocking problem has no type and shows the problem in red under Why. The row's tooltip has the path and the full reason. The table shows up to five rows; a splitter below it makes it taller or shorter (not below its rows, at most three), and the dialog grows or shrinks with it, as in the Restore window (RW-5). |
-| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register 2 YubiKeys (4 prompts), store a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
+| BP-1 | The plan lists every source folder in a table: **Folder**, **Type** (badge: differential with its number, or full), **Why** (the reason in plain words) and **About** (the size (for a differential the estimate from core spec 6.2; for a full the folder size)). A folder with a blocking problem has no type and shows the problem in red under Why. The row's tooltip has the path and the full reason. The table shows up to five rows; a splitter below it makes it taller or shorter (not below its rows, at most three), and the dialog grows or shrinks with it, as in the Restore backup window (RW-5). |
+| BP-2 | Below the table: **Space** (needed, free, status icon; a warning when only the estimate fits, an error when it doesn't fit), **Unlock** (the prompts that will follow: "Password", "One YubiKey touch, then your password", "One YubiKey touch", or for new keys "New password, register your YubiKey (2 prompts), store a recovery code"), **Afterwards** (verify after backup on or off; what retention will remove if the run succeeds, section 11.3). "Show what's removed" expands a list of the sets and their sizes. When nothing would be removed: "Nothing is removed (keeps 3 chains per folder)". |
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
 | BP-5 | Blocking issues (`Report.HasErrors`) remove **Start**; the issues are listed in red above the buttons with their remedy. Warnings are listed in amber and don't block. "Show details" shows the full preflight report (split size, exclude patterns, unreadable-file rule, Argon2, log level) in the report view. |
-| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Create backup page shows no result card for it. |
+| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Create backup page shows no result card for it. When the YubiKey doesn't unlock the keys, figure 9.4 asks first (CR-5); new keys reopen this window. |
 
 ### 6.2 Progress
 
@@ -482,7 +487,7 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 └───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Figure 7.3: Verify.** Laid out and worded like the backup plan (figure 6.1).
+**Figure 7.3: Verify.** Laid out and worded like the Create backup window (figure 6.1).
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -516,27 +521,27 @@ Purpose: see every backup run, understand chains, act on a run or a set, read it
 | BK-1 | The list has one group per backup run (`catalog.BackupRunSummaries`), newest first. The group header shows date, number of folders, total size, the number of warnings (section 11.4) and "new keys" when the run created a key set. Each row is one backup set. The newest run is expanded, the others collapsed. |
 | BK-2 | Columns: Folder (backup name, tooltip path), Type (`FULL` / `DIFF n` badge), Based on (for a differential: "FULL of <date>", tooltip the full's set name; for a full: "-"), Size (the set's parts on disk), Chain (chain ID in Consolas; it's what the user sees in Explorer), Status. Status values: Complete (green), Verified <time> (green, section 11.4), n skipped files (amber), Incomplete (red), Full backup missing (red), Damaged (red, verify failed), Running with progress. |
 | BK-3 | The folder filter offers "All folders" and each source folder, plus folders that only exist in the backup directory ("Old: Music" for folders no longer in the configuration). Filtering keeps the run grouping and hides empty runs. |
-| BK-4 | The selection is a run: clicking its header or any of its sets selects the run, shows only its header selected, not its sets. An incomplete set has no run and is selected by itself. The action bar shows the selection in words and its actions: **Restore…** (opens the Restore window on that run, section 8) and **Verify…** (opens the Verify window, figure 7.3; verifies all the run's sets, or only the filtered folder's when the folder filter shows one folder, and then names that folder in the result rather than the whole backup). A set whose full backup is missing or that is incomplete can't be restored or verified; the action bar says why. With no selection the action bar shows a hint. Double-click or `Enter` starts Restore. A context menu offers Restore…, Verify…, Show log, Copy set name, Open backup folder. |
+| BK-4 | The selection is a run: clicking its header or any of its sets selects the run, shows only its header selected, not its sets. An incomplete set has no run and is selected by itself. The action bar shows the selection in words and its actions: **Restore…** (opens the Restore backup window on that run, section 8) and **Verify…** (opens the Verify window, figure 7.3; verifies all the run's sets, or only the filtered folder's when the folder filter shows one folder, and then names that folder in the result rather than the whole backup). A set whose full backup is missing or that is incomplete can't be restored or verified; the action bar says why. With no selection the action bar shows a hint. Double-click or `Enter` starts Restore. A context menu offers Restore…, Verify…, Show log, Copy set name, Open backup folder. |
 | BK-5 | Each run's header ends with the link "Show log" (a list-view group task link); the context menu has "Show log" too, for the keyboard. It opens the run's log in a log window over the main window: title "Log of <date> (<log file>)", filter (All, Warnings and errors), **Open in Editor** (opens the file in the default application for log files, Notepad if there is none) and **Close**. The log is read from the backup directory when the window opens and doesn't follow a running operation. When "Warnings and errors" finds none, the window says "No warnings or errors in this log." in the secondary text color. Log lines are shown as the log file stores them, with WARN and ERROR lines colored and marked. Restore and verify append to the log of the run they read, so their entries appear in the same log. A group without a log (incomplete sets) has no link. The page has no log pane: the list fills the page above its action bar and the page scrolls when the list would be lower than 160 pixels at 100%. |
 | BK-6 | Problem lines (figure 7.2) sit above the list: health check errors and warnings about the inventory (missing full backup, incomplete sets, sets that can't be used) with their remedy, and information lines for 1.x backups and leftover `.tmp` files. Affected rows are marked in the list. Each line is complete in itself: it names the set and says why it can't be used (missing parts, renamed files, unreadable, damaged; `catalog.FaultOf`) with the remedy for that reason, as listed in 11.8; the page has no details for these lines. A full backup that is there but can't be used is reported once, in the line of its differentials (`BASE_MISSING`), not again on its own. |
-| BK-7 | The retention line (figure 7.1) names the backups the next backup would remove, from the same prediction as BP-2. It is shown only then: the rule itself is on Settings (`retention_keep`, `retention_keep_differentials`) and in the backup plan's Afterwards line, so the page doesn't repeat it. Retention never runs from this page; it runs only after a successful backup. |
-| BK-7a | The Verify window (figure 7.3) is the verification's plan, laid out and worded like the backup plan dialog (6.1): same width, sized to its content. It opens when Verify… starts the workflow, with a marquee until the plan (`ShowVerifyPlan`) arrives. Heading: "Verify 3 folders from the backup of today, 09:12". Table: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup); a set that can't be verified is red, with the reason as its tooltip; a splitter below the table sets its height, as in the backup plan (BP-1). **Read** ("About 97 GB to read · nothing is written") and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code"). The note says that every file is decrypted and checked against its checksum, and which full backups the differentials are read with. When the folder filter of Restore backup (BK-3) left folders of the backup out, a second note says so: "The folder filter on Restore backup hides 2 other folders of this backup. Choose All folders to verify them too." Issues as in BP-5, then **Show details**. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in BP-4; Cancel answers no, and nothing is read. When the workflow finds a blocking issue, it ends before asking; the window stays open with the issues and only Cancel, as a blocked backup plan does. |
+| BK-7 | The retention line (figure 7.1) names the backups the next backup would remove, from the same prediction as BP-2. It is shown only then: the rule itself is on Settings (`retention_keep`, `retention_keep_differentials`) and in the Create backup window's Afterwards line, so the page doesn't repeat it. Retention never runs from this page; it runs only after a successful backup. |
+| BK-7a | The Verify window (figure 7.3) is the verification's plan, laid out and worded like the Create backup window (6.1): same width, sized to its content. It opens when Verify… starts the workflow, with a marquee until the plan (`ShowVerifyPlan`) arrives. Heading: "Verify 3 folders from the backup of today, 09:12". Table: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup); a set that can't be verified is red, with the reason as its tooltip; a splitter below the table sets its height, as in the Create backup window (BP-1). **Read** ("About 97 GB to read · nothing is written") and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code"). The note says that every file is decrypted and checked against its checksum, and which full backups the differentials are read with. When the folder filter of Restore backup (BK-3) left folders of the backup out, a second note says so: "The folder filter on Restore backup hides 2 other folders of this backup. Choose All folders to verify them too." Issues as in BP-5, then **Show details**. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in BP-4; Cancel answers no, and nothing is read. When the workflow finds a blocking issue, it ends before asking; the window stays open with the issues and only Cancel, as a blocked Create backup window does. |
 | BK-8 | Verify: **Start** closes the Verify window, the credential dialogs follow and the progress card appears at the top of the Restore backup page, above the problem lines; the page stays shown and shows the running set with progress in its Status cell. When verification ends, the result card (6.3) replaces the progress card until it is dismissed, and the Status cells of the verified sets show "Verified <time>" or "Damaged"; damage turns the hero red (3.5) and the log lists the affected files. |
 | BK-9 | No empty state: without backups the page shows the empty list with its columns and the action bar, as it does when a backup was cancelled or failed before it backed up a folder. |
 
-## 8. Restore window
+## 8. Restore backup window
 
-Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (2.0 spec 13.5); the window says so where users look for it.
+Purpose: get folders back with confidence. RestoreSafe restores whole folders (backup sets), each into a new folder, and checks every file against its checksum. It never overwrites existing files: the destination folders must not exist yet. Restoring single files is not available (core spec 13.5); the window says so where users look for it.
 
-The Restore window is the restore's plan, as the backup plan dialog (6.1) is the backup's: one page that shows what will happen, with **Start** and **Cancel**. Start closes it; the progress and the result show on the Restore backup page, as for a verification (BK-8). The restore point is chosen on the Restore backup page: the window opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3). To restore from another run, the user cancels and selects it; nothing has been written before Start.
+The Restore backup window is the restore's plan, as the Create backup window (6.1) is the backup's: one page that shows what will happen, with **Start** and **Cancel**. Start closes it; the progress and the result show on the Restore backup page, as for a verification (BK-8). The restore point is chosen on the Restore backup page: the window opens from there (button, double-click, `Enter`) on the selected run, like Verify (figure 7.3). To restore from another run, the user cancels and selects it; nothing has been written before Start.
 
-Its layout and wording follow the backup plan dialog: a heading that says what happens, the folder table, labeled **Space** and **Unlock** lines, a note, the issues, **Show details**, and **Start** and **Cancel** at the bottom right. The folders appear once, in the table, with everything the restore needs to say about each.
+Its layout and wording follow the Create backup window: a heading that says what happens, the folder table, labeled **Space** and **Unlock** lines, a note, the issues, **Show details**, and **Start** and **Cancel** at the bottom right. The folders appear once, in the table, with everything the restore needs to say about each.
 
-**Figure 8.1: Restore.**
+**Figure 8.1: Restore backup.**
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Restore                                                                  [x] │
+│ Restore backup                                                           [x] │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Restore 2 folders from the backup of today, 09:12                            │
 │                                                                              │
@@ -610,16 +615,16 @@ Its layout and wording follow the backup plan dialog: a heading that says what h
 
 | ID | Requirement |
 |---|---|
-| RW-1 | Modal dialog, about 680 × 560 DIP (the width of the backup plan dialog), centered on the main window, resizable. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in the backup plan dialog (BP-4). `Enter` triggers Start, `Esc` cancels. Cancel before Start closes without asking; nothing has been written. |
-| RW-2 | The heading says what Start does: "Restore 2 folders from the backup of today, 09:12" (the checked folders; "Restore from the backup of …" while none is checked), as the backup plan's "Back up 3 folders to …". |
+| RW-1 | Modal dialog, about 680 × 560 DIP (the width of the Create backup window), centered on the main window, resizable. Buttons at the bottom right: **Start** (default, primary) and **Cancel**, as in the Create backup window (BP-4). `Enter` triggers Start, `Esc` cancels. Cancel before Start closes without asking; nothing has been written. |
+| RW-2 | The heading says what Start does: "Restore 2 folders from the backup of today, 09:12" (the checked folders; "Restore from the backup of …" while none is checked), as the Create backup window's "Back up 3 folders to …". |
 | RW-3 | The window restores from the run selected on Restore backup (BK-4) and has no way to choose a run: Restore backup is where runs are compared, with their types, status and log. Restore… is only offered for a run with a restorable set (BK-4), so the window never opens on a run it can't restore. |
 | RW-4 | **To**, labeled like Space and Unlock: the destination path with **Browse…**, and below it the link **Restore into the backup directory**, which fills in the path with backslashes, as Browse… does, even when the configuration writes it with slashes. The last destination of the session is filled in, else `%USERPROFILE%\Restore`. |
 | RW-5 | The table lists the run's sets with checkboxes: **Folder**, **Type** (badge), **About** (the size read, for a differential with its full backup) and **Check**: "New folder" in green, "Already exists" or "Can't be created" in red for a checked folder, "-" for an unchecked one; the row's tooltip names the new folder (`destination\<backup name>`). All restorable folders are checked when the window opens; when the folder filter of Restore backup (BK-3) shows one folder, only that folder is checked, and the others can be checked. A set whose full backup is missing is shown disabled and unchecked. Which full backup a differential reads is "Based on" on Restore backup and in Show details; the table doesn't repeat it. A splitter below the table sets its height (as on Create backup, OV-3): at least as many rows as it has, up to three, at most the room the lines below leave; the height stays while the window is open. |
-| RW-6 | Below the table, as in the backup plan (BP-2): **Space** ("About 92 GB needed · 212 GB free" with (ok); a warning when it may not fit; an error when it can't fit or the free space is unknown; the size is an estimate, exact only after unlocking) and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code" when the key set has one). Then the note (whole folders, checksums, single files), the issues, and **Show details** (the full preflight report, once there is one). Issues: a warning line naming the folders whose full backup is missing; one error line saying what to do about the folders that already exist, without naming them again (their Check cell says "Already exists"); a line per folder that can't be created, with the reason; other issues of the plan in amber or red, as BP-5. While there is nothing to check, a hint replaces Space and Unlock: "Choose at least one folder.", "Enter or browse to the folder to restore into.", "Enter a full path, such as D:\Restore.", "Checking…". |
+| RW-6 | Below the table, as in the Create backup window (BP-2): **Space** ("About 92 GB needed · 212 GB free" with (ok); a warning when it may not fit; an error when it can't fit or the free space is unknown; the size is an estimate, exact only after unlocking) and **Unlock** (the prompts that follow Start, worded as in BP-2, plus ", or recovery code" when the key set has one). Then the note (whole folders, checksums, single files), the issues, and **Show details** (the full preflight report, once there is one). Issues: a warning line naming the folders whose full backup is missing; one error line saying what to do about the folders that already exist, without naming them again (their Check cell says "Already exists"); a line per folder that can't be created, with the reason; other issues of the plan in amber or red, as BP-5. While there is nothing to check, a hint replaces Space and Unlock: "Choose at least one folder.", "Enter or browse to the folder to restore into.", "Enter a full path, such as D:\Restore.", "Checking…". |
 | RW-6a | The checks run when the window opens, when a folder is checked or unchecked, and 300 ms after the path stops changing, on a worker goroutine. They use `restore.PlanDestination`, the plan `restore.Run` shows (including whether a YubiKey is connected), so the window and the restore cannot disagree. A checked folder that already exists or can't be created, and an error of the plan, disable Start; warnings don't. |
 | RW-6b | **Start** starts the restore with the checked folders and the destination. The workflow checks again (`ShowRestorePlan`); the window shows that plan and answers its start question (`ConfirmStart`) itself, because Start was the confirmation, and the credential dialogs (section 9) follow. If the workflow finds a blocking issue (something changed since the check), it ends before asking for anything, nothing is written, and the window shows the issue in place of the check. Once the workflow asks to start, the window closes and the credential dialogs follow, as after Start in the Verify window (BK-8). Cancelling a credential dialog ends the restore before anything is written; the page shows no result card for it. |
 | RW-7 | Progress card on Restore backup (RW-9): step trail (**Unlock keys** › **Restore n of N**; every file is checked against its checksum while it is written, so there is no separate check step), current folder and its type ("differential 3, with its full backup of 1 Sep"), bar, bytes, speed (as BR-3), taskbar progress. Cancel asks with figure 8.2. |
-| RW-8 | Result card on Restore backup (RW-9): success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (2.0 spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in the log window of BK-5. |
+| RW-8 | Result card on Restore backup (RW-9): success with folder count, size, time and "Every file matched its checksum"; skipped and stale files from the backup (core spec 7.7: "not in this backup", "restored in an older version from <date>") as amber lines per folder, counted from the restore's `restore` fact (11.4); the restore's log names the files, so there is no separate file list; failure as **Restore incomplete** in red (never amber), naming the folder that stopped, stating that it's incomplete, and which folders weren't restored. "Open folder" opens the destination in Explorer. "Show log" shows the log in the log window of BK-5. |
 | RW-9 | While a restore runs, the progress card is at the top of the Restore backup page, then the result card until it is dismissed, as for a verification (BK-8); the main window stays usable for reading; starting another operation is disabled. |
 
 ## 9. Credential dialogs
@@ -647,7 +652,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ Create your keys · Step 1 of 2                       [x] │
+│ Create your keys                                     [x] │
 ├──────────────────────────────────────────────────────────┤
 │ Choose a password for your backups.                      │
 │ At least 12 characters. You need it for every backup     │
@@ -656,8 +661,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 │ Password          [•••••••••••••••        ]              │
 │ Confirm password  [•••••••••••••••        ]              │
 │                                                          │
-│ Steps: password › register your YubiKey › register your  │
-│ spare YubiKey › recovery code                            │
+│ Steps: password › register your YubiKey › recovery code  │
 │                                                          │
 │                                     [ Next ]  [ Cancel ] │
 └──────────────────────────────────────────────────────────┘
@@ -675,23 +679,51 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 │                                                    │
 │           K7QF-9M2D-XW4P-HT6N-3JBV-R8LC            │
 │                                                    │
+│ [ ] I have stored my recovery code                 │
+│                                                    │
 │ Keep it in a safe place, never next to your        │
 │ backups or unencrypted on this computer.           │
 ├────────────────────────────────────────────────────┤
-│ [ Copy ]                      [ I have stored it ] │
+│ [ Copy ]                              [ Continue ] │
+└────────────────────────────────────────────────────┘
+```
+
+**Figure 9.4: The YubiKey didn't unlock** (backup only).
+
+```text
+┌────────────────────────────────────────────────────┐
+│ Unlock your backups                            [x] │
+├────────────────────────────────────────────────────┤
+│ Your YubiKey didn't unlock your backups.           │
+│ If you cancelled the Windows Security prompt, try  │
+│ again. If Windows said the security key doesn't    │
+│ look familiar, this YubiKey was reset or is a      │
+│ different one: it can never unlock these keys      │
+│ again. Create new keys, and every folder gets a    │
+│ full backup.                                       │
+│                                                    │
+│ Create new keys + full backup                      │
+│                                                    │
+│ Your older backups keep opening with your recovery │
+│ code.                                              │
+│                                                    │
+│                          [ Try again ]  [ Cancel ] │
 └────────────────────────────────────────────────────┘
 ```
 
 | ID | Requirement |
 |---|---|
 | CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): when the selection uses more than one key set, the notice above the field names the backup that needs other keys and their creation date, which the question carries (`interact.OtherKeys`). After a failed try, the reason and the attempts left, which the question also carries (`interact.Attempt`), are shown under the field. The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
-| CR-2 | New keys (`NewPassword`, YubiKey registration, `WaitForSpareYubiKey`, `ShowRecoveryCode`): one dialog frame with "Step n of N", where N counts the dialogs that ask something (password; spare YubiKey), and a single one isn't numbered. YubiKey registration has no dialog of its own (the Windows Security prompt) and the recovery code dialog asks nothing, so neither is numbered; the "Steps:" line still names every step. Mismatch and length errors from the workflow appear under the fields. The spare step reads "Remove your YubiKey and connect your spare YubiKey" with **Continue**; a refused same-key registration shows the workflow's message. |
-| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
+| CR-2 | New keys (`NewPassword`, YubiKey registration, `ShowRecoveryCode`): the password dialog is titled "Create your keys". YubiKey registration has no dialog of its own (the Windows Security prompt) and the recovery code dialog asks nothing; when there is more than one step, the "Steps:" line names them all. Mismatch and length errors from the workflow appear under the fields. In modes 2 and 3 the recovery code always follows (core spec 4.4.2). |
+| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step, **Continue** disabled until **I have stored my recovery code** is ticked). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
+| CR-5 | YubiKey refused (`YubiKeyRefused`, figure 9.4): when the YubiKey doesn't unlock the keys a backup reuses, the backup asks instead of ending. Windows reports a reset or different YubiKey, wrong PINs and a cancel with the same `0x800704C7` (YK-7), so the text covers a cancel and a reset. **Try again** asks Windows again; **Create new keys + full backup** reopens the Create backup window with the plan with new keys (BP-3, reason "Your YubiKey didn't unlock the current keys"), which the user starts or cancels, so no second confirmation (figure 6.2) is asked; **Cancel** ends the backup with the YubiKey error, nothing written. The note says what the older backups need: "Your older backups keep opening with your recovery code." when the keys have a recovery slot, otherwise "These keys have no recovery code: if this YubiKey was reset, your older backups can't be opened any more." Restore and verify don't ask: they offer the recovery code (CR-1). |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
-## 10. Settings page
+## 10. Settings and YubiKey pages
 
-Purpose: show what RestoreSafe is configured to do and where to change it. The configuration is `config.yaml` (or the file given with `-config`). In 2.0.0 the page is **read-only**; editing in the app follows in 2.1.0 (decision 1). Each card shows the effective values in plain words, with the `config.yaml` key in the tooltip, so a user knows what to change in the file.
+### 10.1 Settings page
+
+Purpose: show what RestoreSafe is configured to do and where to change it. The configuration is `config.yaml` (or the file given with `-config`). The page is **read-only**; editing in the app follows later (decision 1). Each card shows the effective values in plain words, with the `config.yaml` key in the tooltip, so a user knows what to change in the file.
 
 **Figure 10.1: Settings.**
 
@@ -730,10 +762,12 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 │                  │ └──────────────────────────────────────┘ └──────────────────────────────────────┘ │
 │                  │ ┌─ Checks ─────────────────────────────┐ ┌─ Keys and unlocking ─────────────────┐ │
 │                  │ │ Verify each backup    Off            │ │ Unlock with    Password + YubiKey    │ │
-│                  │ │ after it's written                   │ │ Spare YubiKey  On                    │ │
-│                  │ │ Reminder              After 7 days   │ │ Recovery code  On                    │ │
-│                  │ │                       without a      │ │ New passwords  At least 12           │ │
-│                  │ │                       backup         │ │                characters            │ │
+│                  │ │ after it's written                   │ │ Recovery code  Always on with a      │ │
+│                  │ │ Reminder              After 7 days   │ │                YubiKey, so a lost    │ │
+│                  │ │                       without a      │ │                YubiKey doesn't lose  │ │
+│                  │ │                       backup         │ │                your backups          │ │
+│                  │ │                                      │ │ New passwords  At least 12           │ │
+│                  │ │                                      │ │                characters            │ │
 │                  │ │                                      │ │ Key derivation (Argon2id)            │ │
 │                  │ └──────────────────────────────────────┘ └──────────────────────────────────────┘ │
 │                  │ ┌─ Logging ─────────────────────────────────────────────────────────────────────┐ │
@@ -746,24 +780,223 @@ Purpose: show what RestoreSafe is configured to do and where to change it. The c
 
 | ID | Requirement |
 |---|---|
-| ST-1 | Configuration file: the loaded path, **Edit config.yaml** (opens it in its default application, `ShellExecuteW` as today) and **Reload**. |
+| ST-1 | Configuration file: the loaded path, **Edit config.yaml** (opens it in its default application, `ShellExecuteW`) and **Reload**. |
 | ST-2 | **Reload** reads the file again, validates it and runs the health check; on success every page shows the new values. A file that doesn't load keeps the previous configuration and shows the error with its line and remedy on this card (the app keeps running). Reload is disabled while an operation runs. This replaces "restart RestoreSafe" (section 11.6). |
-| ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, 2.0 spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. A splitter below the card sets the table's height, as on Create backup (OV-3). |
+| ST-3 | Folders to back up: a table of backup name (including the generated alias for duplicate names), resolved path, and status from the health check (Found, Not found, Can't be read). Exclude patterns (they apply to all folders, core spec 6.4) and the unreadable-file rule ("Stop the backup of that folder" / "Skip the file and warn") are part of this card. A splitter below the card sets the table's height, as on Create backup (OV-3). |
 | ST-4 | Backup directory: path, reachability and free space (from the health check), split size, **Open in Explorer**. |
 | ST-5 | Full and differential: `differential.enabled`, `full_backup_interval_days`, `max_size_percent`, in words. |
 | ST-6 | Retention: `retention_keep` and `differential.retention_keep_differentials` in words ("Keep all backups" for 0; when `retention_keep` is missing from the file, the value adds "(the default; 3 chains recommended)"), and "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files". |
 | ST-7 | Checks: `verify_after_backup`; the reminder limit (decision 2). |
-| ST-8 | Keys and unlocking: authentication mode in words, spare YubiKey, recovery code, minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." |
+| ST-8 | Keys and unlocking: authentication mode in words, recovery code ("Always on with a YubiKey, so a lost YubiKey doesn't lose your backups" in modes 2 and 3), minimum password length. "Key derivation (Argon2id)" expands time, memory and threads with the note that changes apply to new keys only. A (i) line appears when the configuration differs from the current keys: "Your next backup creates new keys: <reason>." |
 | ST-9 | Logging: `log_level` (debug includes the I/O diagnostics of a backup). |
-| ST-10 | Missing settings (decision 9): when the file lacks settings that have a default (11.6), a (i) line on the configuration card names their keys, "3 settings aren't in config.yaml, so their defaults apply: reminder_days, recovery_code, differential.", with **Add to config.yaml**. It saves a copy of the file next to it (`<name>.<yyyy-mm-dd_hhmmss>.bak`), adds each missing setting with its default value and its explanation from `config-SAMPLE.yaml`, and reloads (ST-2). Settings of a block that exists already (`differential`, `argon2`) are added at the end of that block, all others at the end of the file under one comment line that says when they were added. Lines already in the file are not changed. Nothing is written unless the user clicks; the button is disabled while an operation runs. Afterwards a line names the copy until the next Reload; a file that can't be written keeps the configuration in use and shows the error as ST-2 does. |
+| ST-10 | Out-of-date settings (decisions 9, 13): a dialog, not part of the page. When the file lacks settings that have a default or has retired ones (11.6), a task dialog (i) "Update config.yaml?" opens right after the window at start, and again whenever a configuration read by Reload is used, until the file is up to date. It lists, one bullet per setting, the retired settings with their lines under "No longer used (ignored):" and the missing ones under "Missing (defaults apply):", then "Update fixes the file and keeps a copy of the old one. Not now asks again at the next start." Buttons: **Update config.yaml** (default) and **Not now**; the dialog names the file actually loaded (`-config`). Update saves a copy of the file next to it (`<name>.<yyyy-mm-dd_hhmmss>.bak`), removes each retired setting, adds each missing setting with its default value and its explanation from `config-SAMPLE.yaml`, and reloads (ST-2). Settings of a block that exists already (`differential`, `argon2`) are added at the end of that block, all others at the end of the file under one comment line that says when they were added. Other lines in the file are not changed. Nothing is written unless the user clicks. Afterwards a dialog (i) "config.yaml is up to date" names the copy; a file that can't be written keeps the configuration in use, and a dialog (x) "config.yaml wasn't changed" says why. |
+
+### 10.2 YubiKey page
+
+Purpose: answer "will my YubiKey open my backups?" and help a user set one up. The page replaces the console tool `yubidiag` (decision 10): its checks, its live test and its technical details are here, for users and for bug reports. The page needs no password, writes nothing to disk and never changes the backups or the keys.
+
+**Figure 10.2: YubiKey, after a test.** The sidebar shows the page at its bottom, below a line (YK-1).
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ RestoreSafe 2.0.0                                                                      _    [ ]    x │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ YubiKey  [ Check again ]                                                          │
+│   Create backup  │                                                                                   │
+│   Restore backup │ (ok)  Your YubiKey opens your backups                         [ Test YubiKey... ] │
+│   Settings       │       Tested today, 08:52                                                         │
+│                  │                                                                                   │
+│                  │ ┌─ Checks ──────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ (ok) Windows        Ready for YubiKeys                                        │ │
+│                  │ │                     RestoreSafe uses the security key support built into      │ │
+│                  │ │                     Windows (WebAuthn), from Windows 11 version 22H2 on.      │ │
+│                  │ │ (ok) YubiKey        Connected                                                 │ │
+│                  │ │                     Works: YubiKey 5 Series and Security Key Series, firmware │ │
+│                  │ │                     5.2 or later. Doesn't work: YubiKey 4 and YubiKey NEO.    │ │
+│                  │ │ (ok) FIDO2          On                                                        │ │
+│                  │ │ (ok) Firmware       5.7.4 (RestoreSafe needs 5.2 or later)                    │ │
+│                  │ │ (ok) Your keys      Password + YubiKey, created Tue 1 Sep 2026: your YubiKey  │ │
+│                  │ │                     answered                                                  │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ YubiKey help ────────────────────────────────────────────────────────────────┐ │
+│                  │ │ PIN and reset                                                                 │ │
+│                  │ │   - Windows asks for the PIN at every backup and restore. A new YubiKey gets  │ │
+│                  │ │     one at its first test or backup.                                          │ │
+│                  │ │   - Change the PIN or reset the YubiKey in Windows Settings.                  │ │
+│                  │ │   - After too many wrong PINs, only a reset unlocks the YubiKey. It then      │ │
+│                  │ │     forgets your keys: open your backups with your recovery code and create   │ │
+│                  │ │     new keys.                                                                 │ │
+│                  │ │   [ Open Windows settings... ]                                                │ │
+│                  │ │                                                                               │ │
+│                  │ │ Turn on FIDO2                                                                 │ │
+│                  │ │   - Needed when Checks shows FIDO2 as off.                                    │ │
+│                  │ │   - Yubico Authenticator turns it on; Windows asks for administrator          │ │
+│                  │ │     permission.                                                               │ │
+│                  │ │   - Not installed? The button opens its download page.                        │ │
+│                  │ │   [ Open Yubico Authenticator... ]                                            │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│──────────────────│ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│ > YubiKey        │ │ Technical details v                                                           │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 10.3: YubiKey with FIDO2 turned off and no keys yet.**
+
+```text
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ RestoreSafe 2.0.0                                                                      _    [ ]    x │
+├──────────────────┬───────────────────────────────────────────────────────────────────────────────────┤
+│                  │ YubiKey  [ Check again ]                                                          │
+│   Create backup  │                                                                                   │
+│   Restore backup │ (x)   This YubiKey can't protect your backups                                     │
+│   Settings       │       Its FIDO2 function is turned off. YubiKey help below shows how to           │
+│                  │       turn it on.                                                                 │
+│                  │                                                                                   │
+│                  │ ┌─ Checks ──────────────────────────────────────────────────────────────────────┐ │
+│                  │ │ (ok) Windows        Ready for YubiKeys                                        │ │
+│                  │ │                     RestoreSafe uses the security key support built into      │ │
+│                  │ │                     Windows (WebAuthn), from Windows 11 version 22H2 on.      │ │
+│                  │ │ (ok) YubiKey        Connected                                                 │ │
+│                  │ │                     Works: YubiKey 5 Series and Security Key Series, firmware │ │
+│                  │ │                     5.2 or later. Doesn't work: YubiKey 4 and YubiKey NEO.    │ │
+│                  │ │ (x)  FIDO2          Off or missing: YubiKey help below shows how to turn it on│ │
+│                  │ │ (ok) Firmware       5.7.4 (RestoreSafe needs 5.2 or later)                    │ │
+│                  │ │ ( )  Your keys      None yet. Your first backup registers your YubiKey.       │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│                  │ ┌─ YubiKey help ────────────────────────────────────────────────────────────────┐ │
+│                  │ │ PIN and reset                                                                 │ │
+│                  │ │   - Windows asks for the PIN at every backup and restore. A new YubiKey gets  │ │
+│                  │ │     one at its first test or backup.                                          │ │
+│                  │ │   - Change the PIN or reset the YubiKey in Windows Settings.                  │ │
+│                  │ │   - After too many wrong PINs, only a reset unlocks the YubiKey. It then      │ │
+│                  │ │     forgets your keys: open your backups with your recovery code and create   │ │
+│                  │ │     new keys.                                                                 │ │
+│                  │ │   [ Open Windows settings... ]                                                │ │
+│                  │ │                                                                               │ │
+│                  │ │ Turn on FIDO2                                                                 │ │
+│                  │ │   - Needed when Checks shows FIDO2 as off.                                    │ │
+│                  │ │   - Yubico Authenticator turns it on; Windows asks for administrator          │ │
+│                  │ │     permission.                                                               │ │
+│                  │ │   - Not installed? The button opens its download page.                        │ │
+│                  │ │   [ Open Yubico Authenticator... ]                                            │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+│──────────────────│ ┌───────────────────────────────────────────────────────────────────────────────┐ │
+│ > YubiKey        │ │ Technical details v                                                           │ │
+│                  │ └───────────────────────────────────────────────────────────────────────────────┘ │
+├──────────────────┴───────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 10.4: Hero variants of the YubiKey page.** The hero has no border; the boxes only separate the variants.
+
+```text
+┌─ Checking ──────────────────────────────────────────────────────────────────────────┐
+│ ( )  Checking your YubiKey...                                                       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: not connected ────────────────────────────────────────────────────────────┐
+│ ( )  Connect your YubiKey                                                           │
+│      Plug it into a USB port. This page updates when it's connected.                │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: connected, not tested ────────────────────────────────────────────────────┐
+│ ( )  Your YubiKey is connected                                  [ Test YubiKey... ] │
+│      Test whether it opens your backups. Windows asks for its PIN and a touch.      │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Neutral: test cancelled ───────────────────────────────────────────────────────────┐
+│ ( )  The test was cancelled                                     [ Test YubiKey... ] │
+│      If Windows said it doesn't recognize the security key, this YubiKey isn't      │
+│      registered for your keys: connect the YubiKey you back up with. If it said     │
+│      the PIN was entered wrong too often, the YubiKey is locked: only a reset       │
+│      unlocks it, and then only your recovery code opens your backups.               │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Success: matches the current keys ─────────────────────────────────────────────────┐
+│ (ok) Your YubiKey opens your backups                            [ Test YubiKey... ] │
+│      Tested today, 08:52                                                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Success: no keys yet ──────────────────────────────────────────────────────────────┐
+│ (ok) Your YubiKey is ready                                      [ Test YubiKey... ] │
+│      It can protect your backups. Your first backup registers it.                   │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: Windows ────────────────────────────────────────────────────────────────────┐
+│ (x)  Windows can't use your YubiKey                      [ Open Windows Update... ] │
+│      RestoreSafe needs Windows 11 version 22H2 or later.                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: firmware too old ───────────────────────────────────────────────────────────┐
+│ (x)  This YubiKey can't protect your backups                                        │
+│      Its firmware 4.3.7 is older than 5.2, the first with what RestoreSafe needs.   │
+│      YubiKey 5 Series and Security Key Series keys with newer firmware work.        │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: no FIDO2 ───────────────────────────────────────────────────────────────────┐
+│ (x)  This YubiKey can't protect your backups                                        │
+│      Its FIDO2 function is turned off. YubiKey help below shows how to turn it      │
+│      on.                                                                            │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─ Error: test failed ────────────────────────────────────────────────────────────────┐
+│ (x)  The test didn't work                                       [ Test YubiKey... ] │
+│      Windows ended it with an error. Technical details has the error code; the      │
+│      YubiKey help below covers the PIN.                                             │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Figure 10.5: Technical details, open, after a cancelled test** (YK-9; plain text in Consolas, as Copy details copies it).
+
+```text
+RestoreSafe 2.1.0
+
+SUMMARY
+  Windows         Ready for YubiKeys
+  YubiKey         Connected
+  FIDO2           On
+  Firmware        5.7.4 (RestoreSafe needs 5.2 or later)
+  Your keys       Password + YubiKey, created Tue 1 Sep 2026: the test was cancelled
+
+YUBIKEY 1
+  Product ID      0x0407
+  Firmware        5.7.4 (USB device version 0x0574)
+  USB device      USB\VID_1050&PID_0407\6&1A6D5D6D&0&1
+  Interface       OTP   usage page 0x0001, usage 0x0006, write access granted
+                  \\?\HID#VID_1050&PID_0407&MI_00#8&145b2277&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}\KBD
+  Interface       FIDO  usage page 0xF1D0, usage 0x0001, write access denied (normal: Windows keeps the FIDO interface for itself)
+                  \\?\HID#VID_1050&PID_0407&MI_01#8&38326039&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
+
+LAST TEST
+  Kind            Match: asks the YubiKey for the secret of your current keys (PIN and one touch)
+  Time            Fri 16 Oct 2026, 08:52:00
+  Result          Cancelled
+  Error code      0x800704C7: ended as cancelled. Windows returns this for a cancel, a YubiKey that isn't registered and a locked PIN alike; its own dialog said which (ERROR_CANCELLED)
+  Message         YubiKey authentication failed: FIDO2 hmac-secret failed: WebAuthNAuthenticatorGetAssertion: HRESULT 0x800704C7.
+  WebAuthn trace  [fido2-debug] webauthn.dll API version: 9 (minimum required: 4)
+
+WINDOWS
+  Version         Windows 11 (10.0.26200)
+  WebAuthn API    9 (RestoreSafe needs 4)
+  HID drivers     VID_1050&PID_0407&MI_00\8&145b2277&0&0000: kbdhid
+```
+
+| ID | Requirement |
+|---|---|
+| YK-1 | The sidebar shows **YubiKey** at its bottom, below a line, when the configuration uses a YubiKey (`authentication_mode` 2 or 3) or any key set in the backup directory has a YubiKey slot (`Keys.YubiKeyInBackups`, 11.1), so a user who changed to password-only still finds it when restoring older backups. Otherwise the item is hidden. Visibility is recomputed with every snapshot and after Reload; when the page is hidden while it is shown, Settings is selected. `Ctrl+4` opens it while it is visible. The sidebar stays one tab stop; the arrow keys reach the item like the others. |
+| YK-2 | The page starts with its title "YubiKey" and **Check again** (as Refresh on the other pages, OV-8), then the hero (figure 10.4), the **Checks** card, the setup guide (YK-8) and the technical details (YK-9). The hero is the page's own verdict: it never changes the state of 3.5 or the hero on Create backup, where a YubiKey that isn't connected stays information. |
+| YK-3 | **Automatic checks** run without any Windows Security prompt: when the page is shown, on **Check again**, on `F5` while the page is shown (besides the health check of OV-8), after Reload, and 500 ms after the last `WM_DEVICECHANGE` (a YubiKey plugged in or pulled out). They call `yubikey.Diagnose` on a worker goroutine and post the result (12.2); a result that arrives after a newer request is dropped. Until the first result, the hero reads "Checking your YubiKey…". |
+| YK-4 | Checks card, one line per check, icon, label and text (3.3), in the same words as the summary of the technical details (YK-9); a small note under a line explains it. **Windows**: "Ready for YubiKeys", or "Not ready: needs Windows 11 version 22H2 or later" (the WebAuthn error of `yubikey.Diagnose`); its note: "RestoreSafe uses the security key support built into Windows (WebAuthn), from Windows 11 version 22H2 on." **YubiKey**: "Connected", "Not connected", or with two or more an error, "2 connected: connect only the one you back up with; backups wait until then", as they block backups (decision 12); its note says which YubiKeys work: "Works: YubiKey 5 Series and Security Key Series, firmware 5.2 or later. Doesn't work: YubiKey 4 and YubiKey NEO." **FIDO2**: "On", "Off or missing: YubiKey help below shows how to turn it on" (error) when no connected Yubico device has a FIDO interface, or "Unknown: no YubiKey connected". The FIDO interface is found by its HID usage page `0xF1D0`, not by the `MI_xx` part of the device path, which single-function keys don't have. **Firmware**, from the USB device version (`bcdDevice`, which equals the firmware, YK-11), of the YubiKey with FIDO2: "5.7.4 (RestoreSafe needs 5.2 or later)", or an error "4.3.7: too old, RestoreSafe needs 5.2 or later", with the hero "Error: firmware too old" of figure 10.4 and no **Test YubiKey…**; no line when no YubiKey is connected. The page never names a model (YubiKey 4 and 5 share their product IDs) and doesn't show the YubiKey's other USB functions (OTP, smart card), which don't matter to RestoreSafe. **Your keys**: with a YubiKey slot in the current keys, the registration the YubiKey must hold and the test (YK-6): "Password + YubiKey, created Tue 1 Sep 2026: not tested", "…: your YubiKey answered", "…: the test was cancelled" or "…: the test didn't work" (error); without, "None yet. Your first backup registers your YubiKey." or "Your current keys use no YubiKey; older backups do." |
+| YK-5 | **Test YubiKey…** is the hero's action whenever a YubiKey with a FIDO interface is connected and Windows is ready. It shows Windows Security prompts, so it runs only when the user clicks. There are two kinds, chosen from the current key set (`catalog.CurrentKeySet`, the keys the next backup and the newest backups use): **Match** when it has a YubiKey slot: one request for that slot (`yubikey.DeriveFIDO2Secret` with its challenge from the plaintext header, as unlock does), PIN and one touch. **Capability** when there is no such key set: a registration and one hmac-secret request with a random salt (`yubikey.ProbeCapability`): the PIN twice and two touches. A YubiKey without a PIN gets one here, because Windows asks for a new PIN in the registration (YK-11). The credential is non-resident, so nothing stays on the YubiKey. In both kinds the derived secret is zeroed as soon as its length is checked; it is never combined with a password, used to unwrap a key, shown or logged. Older key sets with other YubiKeys are not tested; the Restore backup window asks for their YubiKey when one of their sets is restored. |
+| YK-6 | While the test runs, the hero reads "Follow the Windows Security prompt" (CR-4) and **Test YubiKey…**, **Check again** and every action that would start an operation are disabled: the test takes the one worker slot of 12.2, without a progress card or a log. It is not offered while an operation runs. The Windows Security dialog has the main window as parent (13.4). The result is kept in memory for the session only (3.1) and is cleared when a YubiKey is plugged in or pulled out, after Reload, and after a backup that created new keys; "Your keys" then reads "Not tested" again. |
+| YK-7 | Test results map to the hero variants of figure 10.4: Match answered: "Your YubiKey opens your backups" with the time. Capability passed: "Your YubiKey is ready". Cancelled (`HRESULTError.Cancelled`: `ERROR_CANCELLED` as an HRESULT, 0x800704C7, which Windows returns, and `NTE_USER_CANCELLED`, 0x80090036, which it might): "The test was cancelled", with two hints, an unknown key and a PIN entered wrong too often. Windows shows both in its own dialog and then returns only the cancel (YK-11). Any other failure: "The test didn't work", with the HRESULT in the technical details. |
+| YK-8 | **YubiKey help**, a card that is always shown, with two parts (figures 10.2, 10.3), each a bold title, three short points as a list (a bullet, the text wrapping under itself) and a button; the points are short so that users read them. **PIN and reset**: Windows asks for the PIN at every backup and restore, and a new YubiKey gets one at its first test or backup (YK-11); the PIN is changed and the YubiKey reset in Windows Settings; after too many wrong PINs only a reset unlocks the YubiKey, which then forgets the keys, so the recovery code opens the backups and new keys are needed. **Open Windows settings…** (`ShellExecuteW` on `ms-settings:signinoptions`), Accounts > Sign-in options > Security key > Manage. **Turn on FIDO2**, the one case Windows can't fix: needed when Checks shows FIDO2 as off; Yubico Authenticator turns it on, and Windows asks for administrator permission; without it, the button opens its download page. **Open Yubico Authenticator…** starts Yubico Authenticator as administrator (`runas`; it needs that to turn FIDO2 on), from where its installers put it (`%ProgramFiles%\Yubico\Yubico Authenticator\authenticator.exe`, or `yubioath-desktop.exe` of older versions); when it isn't there, its download page `https://www.yubico.com/products/yubico-authenticator/` opens instead, and when the user refuses the permission, nothing opens. Setting up a new YubiKey needs no help here: Windows asks for its PIN, and the first backup registers it (OV-6, which also carries the warning not to reset the YubiKey). **Open Windows Update…** in the hero "Error: Windows" opens `ms-settings:windowsupdate`. Links open in the default browser; RestoreSafe itself makes no network request. All texts are in `view/strings.go` (3.6). |
+| YK-9 | **Technical details**, a card whose heading opens and closes it: the title in the style of a card heading, with a chevron after it (down: closed, up: open), one tab stop, opened by a click, Enter or Space, and announced as collapsed or expanded (`widget.Expander`); **Copy details** shows only while it is open. Open, a read-only rich edit in Consolas like the report view (3.4), without word wrap (it scrolls sideways): the RestoreSafe version, then sections from the overview to the raw data, each a heading in capitals and lines of a label and a value, the values in one column (figure 10.5). **SUMMARY**, for an overview at a glance: the lines of the Checks card (YK-4) in the same words, without their notes; Your keys only when the current keys use a YubiKey, as it names the registration the YubiKey must hold; before the first check, Windows and YubiKey read "Not checked yet". Lines that diagnose nothing are left out: keys without a YubiKey, whether older backups need one (that only explains the sidebar item), and a summary of the last test (LAST TEST has it). **YUBIKEY n**, one per connected YubiKey: product ID; firmware with the USB device version; the USB device's instance ID; per HID interface its function (FIDO, OTP, other), usage page and usage, write access (a refused FIDO interface is noted as normal: Windows keeps it for itself) and its path. **LAST TEST**, after a test of this session: what its kind asks for, the exact time, the result, the error code with its meaning where RestoreSafe knows it (the codes of YK-11 among them), Windows' message, and the WebAuthn trace (`yubikey.SetDebugOutput` with an in-memory buffer for the duration of the test; the writes are serialized, as the health check may log at the same time). **WINDOWS**: the version with its name (build 22000 and later is Windows 11), the WebAuthn API version and the minimum, a WebAuthn or listing error, and the HID driver entries of `VID_1050` from `HKLM\SYSTEM\CurrentControlSet\Enum\HID`. Sections without data (no YubiKey, no test, before the first check) are left out. It never contains a PIN, a secret, a salt or a credential ID. **Copy details** copies it as plain text for a bug report; the text holds no secret, so the clipboard protection of 13.3 is not used. Nothing is written to a file. |
+| YK-10 | (retired 2026-10-16) Links to the page from the Keys cards of Create backup and Settings; the sidebar is the way to the page. The number isn't reused. |
+| YK-11 | **Confirmed with a real key** on 2026-10-16: a YubiKey 5 (product ID 0x0407, firmware 5.7.4), WebAuthn API version 9, with the manual tests of `internal/security/yubikey/hardware_test.go`. (1) An unknown credential, wrong PINs, the soft block after 3 wrong PINs (unplug and plug in again), the blocked PIN and a cancel in either dialog all return `ERROR_CANCELLED` (0x800704C7). Windows explains each in its own dialog ("this security key doesn't look familiar", "too many wrong PINs", a typed challenge phrase, a warning before the last attempt), so RestoreSafe can't tell them apart and they read as YK-7 says; there is no variant "This YubiKey doesn't open your backups". (2) Windows asks for a new PIN during the registration when a reset YubiKey has none, so the guide's step 2 says so (YK-8). (3) The USB device version (`bcdDevice`, REV_0574) equals the firmware Yubico Authenticator shows, so the Connected line shows the firmware (YK-4); not checked on a Security Key. (4) The HID hardware IDs carry the usage page (`HID_DEVICE_UP:F1D0_U:0001`), and Windows denies opening the FIDO interface for writing without administrator rights. (5) A WebAuthn call with no parent window fails with `NTE_INVALID_PARAMETER` (0x80090027), before any dialog (13.4). (6) Capability asks for the PIN twice with two touches; the request of Match for the PIN once with one touch. Not covered with one key: two YubiKeys connected, a FIDO-only Security Key, FIDO2 turned off. |
 
 ## 11. Workflow interface
 
-The UI keeps the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. What the redesign changes in today's contract is listed here. Two changes remove parts: the plans of 11.2 replace `ShowReport`, and restore and verify receive the user's choice as a request instead of asking for it (12.3). [PLAN-gui-redesign.md](PLAN-gui-redesign.md) has the package layout and the order of the work.
+The UI talks to the workflows through the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. This section lists the structured data the workflows provide for it. The plans of 11.2 carry what the user confirms, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
-`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Create backup, Restore backup and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory (shared with `health.Check`), `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
+`health.TakeSnapshot(Params{Config, ExeDir, ConfigPath, Now})` returns everything the Create backup, Restore backup and Settings pages show. It is computed from one inspection of the configuration, the folders and the backup directory, `workflow/plan` (next type per folder, retention preview) and the run facts of 11.4. It's named `Snapshot`, not `Status`, because `interact.Status` (OK, Warn, Error) already exists. The code in `internal/workflow/health/snapshot.go` is the reference; in short:
 
 ```go
 type State int // StateEmpty, StateProtected, StateWarning, StateError (Running is set by the UI)
@@ -780,7 +1013,8 @@ type Snapshot struct {
     SetFacts  map[string]logging.Fact // per set name: what its backup recorded (skipped files)
     Verified  map[string]logging.Fact // per set name: its newest verification
     Storage   Storage            // Known, TotalBytes, FreeBytes, BackupBytes, FullEstimate
-    Keys      KeysSummary        // Exists, Created, Methods, SpareYubiKey, RecoveryCode, YubiKeyConnected *bool, NewKeysReason
+    Keys      KeysSummary        // Exists, Created, Methods, RecoveryCode, YubiKeyConnected *bool, NewKeysReason,
+                                 // YubiKey (the current key set has a YubiKey slot), YubiKeyInBackups (any key set has one; YK-1)
     Retention []catalog.SetInfo  // what the next backup removes if it succeeds (11.3)
     Check     Result             // the health check: what it blocks
     Checked   time.Time
@@ -813,7 +1047,7 @@ A problem carries its code and the facts that describe it, not sentences: the wo
 
 ### 11.2 Structured plans
 
-`ShowReport(Report)` is replaced by one typed call per workflow, made before `ConfirmBackupStart` / `ConfirmStart`. The types are plain data in `interact` (`plan.go`); each carries the text report as `Details`, which "Show details" renders and `interacttest.Script` prints:
+Each workflow shows its plan with one typed call, made before `ConfirmBackupStart` / `ConfirmStart`. The types are plain data in `interact` (`plan.go`); each carries the text report as `Details`, which "Show details" renders and `interacttest.Script` prints:
 
 ```go
 ShowBackupPlan(p BackupPlan)
@@ -834,13 +1068,13 @@ type BackupPlan struct {
 
 The workflows fill the plan from the values they already compute (`plan.Folders`, the space estimate, `plan.KeysFor`, the restore and verify preflights), and build `Details` from the same values.
 
-### 11.3 Retention preview (new)
+### 11.3 Retention preview
 
-`plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the backup plan (BP-2) and the retention line on Restore backup (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
+`plan.Retention` selects what retention removes, including its guard (nothing is removed while a set's metadata can't be read); `applyRetentionPolicy` deletes what it selects. `plan.RetentionPreview` applies `plan.Retention` to a copy of the inventory **as if** the planned run had succeeded (a new full adds a chain; a differential adds a set to its chain), for the Create backup window (BP-2) and the retention line on Restore backup (BK-7). Preview and deletion therefore can't diverge. The preview describes a successful run: retention is held when a new backup misses unreadable files or its verification fails, which only the run can tell. The plan says "if the backup succeeds" when verification after backup is on, and the result card says when retention was held (BR-7).
 
-### 11.4 Run facts from the log (new)
+### 11.4 Run facts from the log
 
-The Restore backup page needs, per run, the warning count and the verification results; the result card also shows the duration. They are in the run's log file today only as text. Add structured, machine-readable lines to the log (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
+The Restore backup page needs, per run, the warning count and the verification results; the result card also shows the duration. The run's log carries them as structured, machine-readable lines (one per fact, for example `FACT  - {"kind":"backup","result":"ok","warnings":2,"seconds":252}`, `FACT  - {"kind":"verify","result":"ok","set":"Documents_ABC123_2026-09-30_DIFF003"}`) written by backup and verify through `Logger.Fact`, and `logging.ReadFacts`, which extracts them; missing or unknown lines give zero values, never an error. The log file is the right place: it lives in the backup directory next to the sets and retention deletes it with them (decision 3). The backup also writes a `set` fact per folder with the number of files it could not read, skipped and stale (a differential keeps a stale file in its older version) counted apart (`{"kind":"set","set":"Documents_ABC123_2026-09-30_DIFF003","skipped":2,"stale":1}`): the plaintext header and trailer do not record them, and SKIPPED_FILES needs them without a password. A restore writes a `restore` fact with the same two counts per set that has any, from the decrypted manifest, for its result page (RW-8). The set fact also carries the size of the set's part files (`"bytes"`), and retention writes one `cleanup` fact with the number of sets and bytes it removed (`{"kind":"cleanup","result":"ok","removed":6,"bytes":44040192000}`; `failed` or `warnings` with the reason when it could not remove or held back); the result card (BR-7) reads them.
 
 ### 11.5 Session result
 
@@ -852,9 +1086,10 @@ A function that loads and validates the configuration again, returning the same 
 
 `config.Load` is strict about names and lenient about omissions (decision 9):
 
-- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. 2.0 isn't compatible with 1.x configuration files: a key 2.0 no longer has (`io_diagnostics`, 2.0 spec 12) is an unknown key too, and the error tells the user to remove it.
+- **Unknown keys are an error** (`CONFIG_INVALID`), at any level: a misspelled key would otherwise be ignored and its default used without a word (`retention_kep: 2` would keep every backup). The error names the key as written in the file, with its block (`argon2.memroy_mb`), and its line. The error names only the unknown keys.
+- **Retired keys are ignored.** A key RestoreSafe no longer has (`io_diagnostics`, `yubikey_spare`; core spec 12) isn't an error: the user didn't misspell it, and the file worked with the version it was written for. It is listed in `Config.RetiredKeys` with its line, in the order of the file, and the dialog of ST-10 names it. The list of these keys is `config.retiredKeys`; a key goes on it only when ignoring its value is harmless (decision 13).
 - **Missing keys use their defaults** and are listed in `Config.MissingKeys` in the order of `config-SAMPLE.yaml`. A block that is missing entirely is listed by its name (`differential`), single missing keys of a block by their path (`differential.max_size_percent`). `source_directories` and `backup_directory` have no default and stay required.
-- `config.AddMissing(path, now)` writes them (ST-10). It reads the file again, builds the new text, and writes it only when the new text loads, lists no missing keys and gives the same effective configuration as before, so adding defaults can never change what RestoreSafe does. The comments come from `config-SAMPLE.yaml`, embedded in the executable; the values are the defaults of `config`, not the sample's (the sample keeps 3 chains, the default is to keep all). A file in YAML flow style (`{ … }`) is refused with a remedy to add the settings by hand. The new file replaces the old one by rename, keeping its line endings.
+- `config.Update(path, now)` removes the retired keys and writes the missing ones (ST-10). A retired key goes with the lines of its value, the comment lines directly above it at its indentation, and one blank line when it stood between two. It reads the file again, builds the new text, and writes it only when the new text loads, lists no missing and no retired keys and gives the same effective configuration as before, so updating can never change what RestoreSafe does. The comments come from `config-SAMPLE.yaml`, embedded in the executable; the values are the defaults of `config`, not the sample's (the sample keeps 3 chains, the default is to keep all). A file in YAML flow style (`{ … }`) is refused with a remedy to add the settings by hand. The new file replaces the old one by rename, keeping its line endings.
 
 ### 11.7 Progress
 
@@ -878,7 +1113,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 
 | Code | Severity | Message (UI) | Hint and action |
 |---|---|---|---|
-| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start (as today); after Reload on the Settings card. Includes unknown keys (11.6). |
+| `CONFIG_INVALID` | Blocking at start | RestoreSafe can't read its configuration | Shown in a message box at start; after Reload on the Settings card. Includes unknown keys, not retired ones (11.6). |
 | `BACKUP_DIR_UNREACHABLE` | Error | The backup directory isn't reachable | Check the drive or network connection. Actions: Check again, Edit config. |
 | `BACKUP_DIR_NOT_WRITABLE` | Error | RestoreSafe can't write to the backup directory | Check the permissions. Action: Open in Explorer. |
 | `SOURCE_MISSING` | Error | A folder to back up can't be found | Connect the drive, or remove the folder from config.yaml. Actions: Check again, Edit config. |
@@ -893,6 +1128,7 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `SPACE_LOW` | Warning | The backup directory is running out of space | A full backup of all folders needs about N GB. |
 | `ARGON2_CAPPED` | Warning | A key setting was too high and was capped | Lower the value in config.yaml. |
 | `YUBIKEY_NOT_CONNECTED` | Info | YubiKey not connected | Connect it before you back up, restore or verify. |
+| `YUBIKEYS_CONNECTED` | Error (blocks backups, not restore or verify) | More than one YubiKey is connected | A backup would register or ask the one you touch. Connect only the YubiKey you back up with. |
 | `NEW_KEYS_NEEDED` | Info | Your next backup creates new keys | The reason from `KeySetMismatch`. |
 | `LEGACY_1X` | Info | RestoreSafe 1.x backups found | Keep RestoreSafe 1.0.2 to restore them. |
 | `LEFTOVER_TMP` | Info | Leftovers of an interrupted backup | Removed by the next backup. |
@@ -919,13 +1155,11 @@ else                                                        -> Protected
 
 ## 12. Architecture
 
-Carried over from the first GUI; unchanged unless noted.
-
 ### 12.1 Packages
 
 | Package | Content |
 |---|---|
-| `cmd/restoresafe` | Starts the GUI (section 14). |
+| `cmd/restoresafe` | Starts the GUI (section 14). It is the only command; `cmd/yubidiag` is removed (decision 10). |
 | `internal/gui` | Composition root and Win32 screens: `Run`, the app, the message loop, the shell (sidebar, status bar strip), one file per page and dialog. Page files only render views and forward input. |
 | `internal/gui/flow` | Operation lifecycle without Win32: the bridge (12.2), the `interact.UI` implementation (questions go to a `Dialogs` interface the `gui` package implements), the state machine of section 4, the speed. |
 | `internal/gui/view` | View models without Win32: plain functions from snapshot, plans and state to what each page and dialog shows; every user-visible string (`strings.go`) and all formatting (`format.go`). |
@@ -933,13 +1167,14 @@ Carried over from the first GUI; unchanged unless noted.
 | `internal/gui/win32` | Thin wrapper over the Win32 functions, structs and constants the GUI uses (user32, gdi32, comctl32, shell32, ole32, msftedit). No logic. Structs mirror the Windows SDK layout; every call that can fail returns an error built from `GetLastError`. |
 | `internal/workflow/interact` | The contract between the workflows and the frontend: `interact.UI`, the plan types (11.2), problem codes (11.8), `Report`, `Progress`, `Result`, `ErrCancelled`. |
 | `internal/workflow/plan` | Planning without a password: source resolution and backup names, full or differential per folder, key plan, retention candidates and preview. |
-| `internal/workflow/health` | `health.Check` and `health.Result` (items with problem codes), `health.Snapshot` (11.1). |
+| `internal/workflow/health` | `health.Snapshot` (11.1), with `health.Result` (items with problem codes) as its `Check`. |
 | `internal/logging` | Run log files; facts (11.4). |
-| `internal/security/yubikey` | `SetParentWindow(hwnd)` (13.4). |
+| `internal/security/yubikey` | `SetParentWindow(hwnd)` (13.4). `Diagnose()` returns a `Diagnosis` without prompts (WebAuthn API version and error, Yubico HID interfaces with usage page, path, product ID, USB device version and access, registry driver entries; YK-3, YK-9); the enumeration moves here from `cmd/yubidiag`. `ProbeCapability()` registers a non-resident credential and derives one hmac-secret, zeroing it (YK-5). `SetDebugOutput(w)` replaces the variable `DebugOutput`; only the YubiKey test sets it. |
+| `internal/workflow/keycheck` | The YubiKey test of YK-5: picks Match or Capability from the current key set, runs it and returns a `Result` (kind, time, cancelled, HRESULT, error, trace). No secret leaves it. |
 
 Imports point downward only; `internal/architecture` checks it (its package documentation lists the layers and rules). Two rules shape this layout:
 
-- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection live in `workflow/plan`, which `backup` and `health` both import. The "next" type on Create backup, the backup plan, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
+- No workflow package may import `backup`, `restore`, `verify` or `health`. Therefore the backup type planning and the retention selection live in `workflow/plan`, which `backup` and `health` both import. The "next" type on Create backup, the Create backup window, the retention preview and the retention the run performs share one implementation (11.2, 11.3).
 - `gui/flow` and `gui/view` import neither `gui/widget` nor `gui/win32` nor `golang.org/x/sys/windows`; `gui/widget` imports only `gui/win32`. Everything that decides what the user sees is testable without a window (16.1).
 
 ### 12.2 Threads and the bridge
@@ -966,27 +1201,28 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 - **Questions:** the bridge puts a request (kind, parameters, reply channel) into a queue and posts `WM_APP_QUESTION`. The UI thread shows the dialog and sends exactly one reply. If the window is closing or the operation is cancelled, pending and later questions are answered with `interact.ErrCancelled`.
 - **Output:** writes are appended to a mutex-protected buffer; `WM_APP_OUTPUT` is posted only when the buffer changes from empty to non-empty. The UI thread takes the whole buffer and appends it to the live log.
 - **Progress:** the latest `interact.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending. The workflows report four times per second, which bounds the repaints.
-- **Plans:** the `Show*Plan` calls of 11.2 are questions without an answer: the worker waits until the plan dialog shows them, so the plan and the following `ConfirmBackupStart` / `ConfirmStart` appear together.
+- **Plans:** the `Show*Plan` calls of 11.2 are questions without an answer: the worker waits until the Create backup window shows them, so the plan and the following `ConfirmBackupStart` / `ConfirmStart` appear together.
 
 ### 12.3 Mapping of `interact.UI`
 
 | Method | GUI |
 |---|---|
 | `Output` | The operation's output; the log window reads the log file. |
-| `ShowBackupPlan` | Backup plan dialog (6.1); its `Details` for "Show details". |
-| `ShowRestorePlan` | Restore window (8): the check of Start (RW-6b); its `Details` for "Show details". |
+| `ShowBackupPlan` | Create backup window (6.1); its `Details` for "Show details". |
+| `ShowRestorePlan` | Restore backup window (8): the check of Start (RW-6b); its `Details` for "Show details". |
 | `ShowVerifyPlan` | Verify window (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3). |
-| `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (new in 2.0; the workflows call it after opening the log). |
-| `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore window itself after its **Start** (RW-6b). |
+| `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (the workflows call it after opening the log). |
+| `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore backup window itself after its **Start** (RW-6b). |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
-| `NewPassword`, `ShowRecoveryCode`, `WaitForSpareYubiKey` | New-keys dialogs (9.2, 9.3). |
+| `YubiKeyRefused` | The YubiKey didn't unlock (9.4, CR-5); new keys reopen the Create backup window. |
+| `NewPassword`, `ShowRecoveryCode` | New-keys dialogs (9.2, 9.3). |
 | `Progress` | Progress card (6.2). |
 
-The user's choice is not a question: the GUI passes it when it starts the workflow, `restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets, Destination})` and `verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets})`. The first GUI's questions `SelectBackups` and `RestoreDestination` are removed from `interact.UI`.
+The user's choice is not a question: the GUI passes it when it starts the workflow, `restore.Run(ctx, u, cfg, exeDir, restore.Request{Sets, Destination})` and `verify.Run(ctx, u, cfg, exeDir, verify.Request{Sets})`. `interact.UI` has no question for choosing sets or a destination.
 
-Cancel in any question returns `interact.ErrCancelled` or the method's "no" answer (`ConfirmStart` false, `BackupCancel`, `WaitForSpareYubiKey` false). Cancel in a password dialog returns an error "Cancelled."; the workflow ends before anything is written.
+Cancel in any question returns `interact.ErrCancelled` or the method's "no" answer (`ConfirmStart` false, `BackupCancel`). Cancel in a password dialog returns an error "Cancelled."; the workflow ends before anything is written.
 
 Messages the workflows print between questions (e.g. "Wrong password. 2 attempt(s) remaining.", YubiKey instructions) go to the live log. The bridge also remembers the last output line, and a password dialog opened right after it shows that line under the field. This is a presentation aid only; the workflow logic does not depend on it.
 
@@ -994,7 +1230,7 @@ Messages the workflows print between questions (e.g. "Wrong password. 2 attempt(
 
 - **Cancel** cancels the workflow's context and waits for the worker to finish. The workflows clean up on cancellation: incomplete parts are removed, the lock is released, the log is written.
 - **Closing the window:** no operation running: the window closes. During a question: the question is answered with `interact.ErrCancelled`, the worker finishes, the window closes. During a running operation: the confirmation of 6.4; on confirmation the context is cancelled and the window closes after the worker has finished (it stays open, disabled, showing "Cancelling…").
-- **Windows shutdown or logoff** (`WM_QUERYENDSESSION`): the operation is cancelled, and `ShutdownBlockReasonCreate` ("RestoreSafe is stopping a backup") asks Windows to wait until the worker has finished. Windows may still end the process after its timeout; the incomplete parts are then removed by the next backup (2.0 spec 4.7).
+- **Windows shutdown or logoff** (`WM_QUERYENDSESSION`): the operation is cancelled, and `ShutdownBlockReasonCreate` ("RestoreSafe is stopping a backup") asks Windows to wait until the worker has finished. Windows may still end the process after its timeout; the incomplete parts are then removed by the next backup (core spec 4.7).
 
 ## 13. Secrets and YubiKey
 
@@ -1015,11 +1251,11 @@ As 13.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` ch
 
 - Shown once in its own dialog (figure 9.3), in large bold Consolas on one line (one code, so one line; the font is one and a half times the message font, so all six groups fit). The code is a static control, so it cannot be selected; there is no Print or Save button. A task dialog is never used, because task dialogs copy their text to the clipboard on `Ctrl+C` without the protection below.
 - **Copy** puts the whole code on the clipboard as one line with dashes, e.g. for a password manager, and then reads **Copied**. The clipboard data carries the formats `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` = 0 and `CanUploadToCloudClipboard` = 0, so Windows keeps it out of the clipboard history and the cloud clipboard.
-- **I have stored it** (or closing the dialog) overwrites the displayed code and closes the dialog; the backup continues. There is no retype step: like the recovery codes of other services, the user is trusted to store it. The code reaches the GUI as a Go string, so it is not zeroed.
+- Under the code, the checkbox **I have stored my recovery code** is unticked, and has the focus, when the dialog opens. **Continue** is disabled, and Enter does nothing, until it is ticked, so a habitual click on the blue button doesn't lose the code. **Continue** (or closing the dialog) overwrites the displayed code and closes the dialog; the backup continues. There is no retype step: like the recovery codes of other services, the user is trusted to store it. The code reaches the GUI as a Go string, so it is not zeroed.
 
 ### 13.4 YubiKey and Windows Security dialogs
 
-The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start and to the Restore window while it is open. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
+The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set to the main window at start (which also covers the YubiKey test, YK-6) and to the Restore backup window while it is open. Without a console program there is no `GetConsoleWindow` fallback any more. A parent window is required: WebAuthn refuses a call without one with `NTE_INVALID_PARAMETER` (YK-11), so the main window is set before any YubiKey call can start. The Windows Security dialog (PIN, touch) is then modal to RestoreSafe and appears in front of it. While it is open, the progress card or dialog shows "Follow the Windows Security prompt".
 
 ## 14. Build and start
 
@@ -1027,7 +1263,7 @@ The WebAuthn calls take a parent window: `yubikey.SetParentWindow(hwnd)` is set 
 - A configuration that cannot be loaded at start (or an invalid `-config` argument) shows an error message box with the message; closing it ends RestoreSafe. After start, Reload (ST-2) keeps the app running instead.
 - The executable uses the Windows GUI subsystem (`-ldflags "-H=windowsgui"`); no console window opens. There is no console frontend and no hidden console mode; the scripted text UI the tests use is `interacttest.Script`, which the release binary does not import.
 - `build/versioninfo.json` references the application manifest `build/RestoreSafe.manifest`: common controls 6, `PerMonitorV2` DPI awareness, `asInvoker`, supported OS Windows 11.
-- `yubidiag` stays a console tool.
+- There is no separate diagnostic tool. `cmd/yubidiag` and the `RESTORESAFE_FIDO2_DEBUG` environment switch are removed; the YubiKey page (10.2) shows what they showed, and its technical details carry the WebAuthn trace (YK-9).
 
 ## 15. Non-functional requirements
 
@@ -1056,11 +1292,11 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 ### 16.1 Testable structure
 
 - **View models.** For each page and dialog, a plain Go function computes what is shown from its inputs: `(Status, session, now) → CreatePage`, `(BackupPlan) → PlanView`, `(Status, filter, selection) → RestorePage`, `(restore choices, check) → RestoreView`, and so on. A view holds the texts, icons, badge kinds, enabled states and actions, but no Win32 handles. The window code only renders views and forwards input. Tests call the functions directly.
-- **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side, as the first GUI's screen state machine was.
-- **Clock and file system.** The status model, the view models and the speed and time-left calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
-- **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the existing `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
+- **Operation state machine.** The lifecycle of section 4 (choose, plan, unlock, run, result, and cancel or close at each step) is a state machine without windows, driven through an interface for the window side.
+- **Clock and file system.** The status model, the view models and the speed calculation take `now` and a clock as parameters. Tests never sleep and never depend on today's date.
+- **Fixtures.** `internal/testutil/scenario` builds backup directories with real sets (written through `setwriter`, like the `testutil` fixtures, with password-only keys and injectable creation times) and then damages them on purpose: delete the FULL parts of a chain, truncate the last part, add an `.enc.tmp` leftover, add 1.x file names, back up a file held open without sharing (skipped with `on_unreadable_file: skip`), and set the configuration so that the next backup needs new keys. Each condition of 3.5 and 11.8 has one fixture.
 
-### 16.2 Workflow additions (Go tests, `go test ./...`)
+### 16.2 Workflow data for the UI (Go tests, `go test ./...`)
 
 | Area | Tests | Covers |
 |---|---|---|
@@ -1071,8 +1307,9 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 | Run facts | Backup (also when it fails or is cancelled) and verify (also after a backup) write the facts of 11.4 into the right run log; the reader returns duration, warnings and verify results. A log without such lines (older 2.0 runs, a hand-edited or truncated log) yields "unknown" and never an error. | 11.4, BK-1, BK-2, BK-8 |
 | Progress | A recording UI checks per workflow: phases in the order of BR-2, `Index` from 1 to `Count`, `Done` never decreasing within a step, a final report per step. | 11.7, BR-2, RW-7 |
 | Reload | A valid file replaces the configuration; an invalid file keeps the previous one and returns the error; Reload during an operation is refused. `reminder_days` bounds and default. | 11.6, ST-2, decision 2 |
-| Config keys | An unknown key, top level and in a block, fails with its name and line; every key of `Config` and every key of `config-SAMPLE.yaml` is known, and every key with a default can be reported missing. `MissingKeys` for an empty block, a partial block and a minimal file. `AddMissing` on the minimal file, a partial block, a CRLF file and a file without a final newline: the result loads, lists nothing missing, has the same effective configuration, keeps every original line, and the copy equals the old file; a flow-style file is refused and left unchanged. | 11.6, ST-10, decision 9 |
-| Unchanged workflows | The existing workflow and e2e tests pass; they change only for the request parameters, the plan calls, the progress fields and the facts. | 17.1 (criterion 6) |
+| Config keys | An unknown key, top level and in a block, fails with its name and line; every key of `Config` and every key of `config-SAMPLE.yaml` is known, and every key with a default can be reported missing. `MissingKeys` for an empty block, a partial block and a minimal file. A retired key loads, is listed in `RetiredKeys` with its line, and the keys after it are read; next to an unknown key, the error names only the unknown one. `Update` on the minimal file, a partial block, a CRLF file and a file without a final newline: the result loads, lists nothing missing, has the same effective configuration, keeps every original line, and the copy equals the old file; on a retired key with its comment block, a list value, CRLF, at the end without a final newline, and two at the end: the result is the file without them; a flow-style file is refused and left unchanged. The dialog's text for missing, retired and both, and the messages after an update. | 11.6, ST-10, decisions 9, 13 |
+| YubiKey diagnosis and test | `yubikey.Diagnose` with injected HID enumeration, attributes and registry: FIDO found by usage page also without `MI_xx`, no Yubico device, two YubiKeys, an interface that can't be opened, WebAuthn missing and too old. `keycheck` with fakes for the WebAuthn calls: Match when the current key set has a YubiKey slot, Capability without, cancel and other HRESULTs, the secret zeroed in every path, the trace captured and the debug output reset afterwards. | YK-3 to YK-7, YK-9 |
+| Unchanged workflows | The workflow and e2e tests pass without the window. | 17.1 (criterion 6) |
 
 ### 16.3 GUI logic without windows (Go tests)
 
@@ -1080,93 +1317,95 @@ Every test names the requirement it covers (`// OV-3` in Go tests, the ID column
 |---|---|---|
 | Create backup view | Every hero variant of figure 5.3 plus Protected and Running, from fixtures: title, sub line, icon, primary and secondary action, "Back up now…" or, when the check blocks a backup, the fix actions in its place (OV-2). The page title; the Folders card (dates, next type, the note on a failed or cancelled backup), the backup directory and Keys cards per fixture. | OV-1 to OV-7 |
 | Operation state machine | Every transition of section 4: cancel in the plan, in each credential dialog, during the run and during cleanup; close during a question and during a run; session end; a workflow error in each phase. After each path: exactly one worker ran, no question is left unanswered, the right result card is shown, "Back up now…" is enabled again. | 4, 6.4, 12.4, BR-6, BR-7 |
-| Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with spare and recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
+| Backup plan view | The button matrix of BP-4 (differential planned or not, keys reused or new, blocking issues present or not), the Unlock line for every authentication mode with and without a recovery code, the Afterwards line with and without removals. | BP-1 to BP-6 |
 | Restore backup view | Grouping per run, newest first; status per set for every fixture; folder filter including folders that are no longer configured; which actions are available for a run, a set, a set with a missing full and an incomplete set. | BK-1 to BK-9 |
-| Restore window | Preselection from a run and from a set, Start enablement (no folder checked; an existing target folder; a space warning, which doesn't block), the heading, Check column and issue lines, checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6b |
+| Restore backup window | Preselection from a run and from a set, Start enablement (no folder checked; an existing target folder; a space warning, which doesn't block), the heading, Check column and issue lines, checks debounced with a fake timer, stale check results dropped. | RW-1 to RW-6b |
+| YubiKey view | Sidebar visibility for each `authentication_mode` with and without YubiKey key sets in the backup directory, and the switch to Settings when it disappears. Every hero variant of figure 10.4 from a diagnosis and a test result; the Checks lines; when the guide is expanded; actions disabled while a test or an operation runs; results cleared on a device change, Reload and new keys; the technical details contain no secret, salt or credential ID. | YK-1 to YK-10 |
 | Speed | Synthetic progress sequences: the rate over the last 5 seconds, a new folder starts a new rate, bytes going back start over. | BR-3 |
 | Formatting | Relative dates across midnight, weekdays and years with an injected clock; binary sizes with one decimal below 10; set names in text ("Documents, differential 3 of 27 Sep"). | 3.6 |
 | Strings | All user-visible strings from the string table: no "!", no "successfully", no "please"; buttons start with a verb; "…" on buttons that open a dialog; format verbs match their arguments. | 3.6 |
-| Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (The first GUI found a real defect this way: a hidden page's access key started a backup.) | 15 |
+| Access keys and names | Per page and dialog: access keys are unique, and every interactive control has an accessible name. (This test once found a real defect: a hidden page's access key started a backup.) | 15 |
 | Layout | Every page and dialog at its minimum and default size at 96, 120, 144 and 192 dpi: no control overlaps another or leaves the client area, and every text fits its measured width. | 3.2, 15 |
-| Bridge and secrets | The existing bridge tests (questions answered exactly once, cancellation, output order, progress coalescing) and secret tests (buffers zeroed) stay and are extended to the plan messages. | 12.2, 13 |
+| Bridge and secrets | The bridge tests (questions answered exactly once, cancellation, output order, progress coalescing, plan messages) and secret tests (buffers zeroed). | 12.2, 13 |
 
 ### 16.4 Window automation (`scripts/gui-test`)
 
-The PowerShell scripts drive the real window. They are updated for the new UI and find controls by `AutomationId` (15), not by text.
+The PowerShell scripts drive the real window. They find controls by `AutomationId` (15), not by text.
 
 | Script | Purpose |
 |---|---|
-| `New-TestCondition.ps1` (new) | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
-| `Check-States.ps1` (new) | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
-| `Smoke-BackupRestore.ps1` | Back up through the plan dialog, restore one folder of the newest run through the Restore window, verify the run; compare the restored files with the sources. |
-| `Screenshot.ps1` | One screenshot per page and dialog, for the visual review against 3.3 and the wireframes (16.5), and for the README. |
+| `New-TestCondition.ps1` | Turns a backup directory made by the smoke test into one of the conditions of 3.5 and 11.8 by moving, truncating and adding files, e.g. `-Condition BaseMissing`. The condition names are those of the Go fixtures (`internal/testutil/scenario`). `Overdue` has no script variant (a header date can't be faked); the checklist uses a backup from the day before. |
+| `Check-States.ps1` | For each condition: start RestoreSafe, wait for the status, read the hero's accessible name and primary action, compare them with the expected values, save a screenshot. |
+| `Smoke-BackupRestore.ps1` | Back up through the Create backup window, restore one folder of the newest run through the Restore backup window, verify the run; compare the restored files with the sources. Optionally a screenshot of every step, for the visual review against 3.3 and the wireframes (16.5). |
+| `README-Screenshots.ps1` | The five screenshots of the README: the backup while it runs, the Create backup window, the Create backup page, the Restore backup page and the Restore backup window. |
 | `Accessibility.ps1` | Role, name, `AutomationId` and access key of every control on every page and dialog. |
 
 They run on every release candidate at 100% and 150% scaling.
 
 ### 16.5 Manual tests
 
-[GUI-TEST-CHECKLIST.md](GUI-TEST-CHECKLIST.md) holds what automation can't judge: YubiKey prompts with real keys, listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
+[GUIDE-gui-test.md](GUIDE-gui-test.md) holds what automation can't judge: YubiKey prompts with real keys (including the YubiKey page with the registered key, an unregistered key, a key without a PIN, a FIDO-only Security Key, and the findings of YK-11 again with new firmware or a new Windows build), listening with Narrator, high contrast, moving between monitors, pulling a USB drive or network cable during an operation, logging off during a backup, the visual review of the screenshots against 3.3 and the wireframes, and a short usability session (16.6). It is a guide of what to test, not a record of results.
 
 ### 16.6 Usability session
 
-Before the release, give one person who hasn't seen the new UI a test configuration and these tasks, without further help, and write down where they hesitate or go wrong:
+Before a major release or a redesign of the window, give one person who hasn't seen the window a test configuration and these tasks, without further help, and write down where they hesitate or go wrong:
 
 1. "Are your folders protected? How do you know?"
 2. "Back up now. What kind of backup will Documents get, and why?"
 3. "Get your Documents folder back as it was last Sunday, into D:\Restore."
-4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note in the Restore window should get them there.)
+4. "One file you need is in Pictures. Get it back." (Expected: restore the folder to a new place, then copy the file. The note in the Restore backup window should get them there.)
 5. "Something is wrong with your backups (condition BaseMissing). What is it and what should you do?"
 
 A task that fails or needs help is a defect in the UI or its texts, not in the user.
 
 ### 16.7 Release gate
 
-The redesign ships with 2.0.0 only when:
+A release that changes the window ships only when:
 
 - `go test ./...` passes, including `internal/architecture` and `internal/e2e`;
 - `Check-States.ps1` and `Smoke-BackupRestore.ps1` pass at 100% and 150%;
 - every row of the checklist is tested by hand, or accepted with a reason;
-- the usability session found no task that failed.
+- the usability session, when one is due (16.6), found no task that failed.
 
-## 17. Acceptance criteria and build order
+## 17. Acceptance criteria
 
 ### 17.1 Acceptance criteria
 
 1. All wireframes in this document are implemented with the described states, texts and behaviors.
 2. The hero shows the correct state for every trigger in 3.5, and each Warning and Error variant offers its fix action.
 3. A user can back up, see the planned type and reason per folder and what retention removes, force a full backup, create new keys, watch progress, cancel, and read the result and log without opening a file.
-4. A user can restore one folder of a differential run to a new folder using only the Restore window; nothing is written before **Start**, and a checksum mismatch is reported as "Restore incomplete".
+4. A user can restore one folder of a differential run to a new folder using only the Restore backup window; nothing is written before **Start**, and a checksum mismatch is reported as "Restore incomplete".
 5. A user can verify a run or a set and see the result in the backups list.
-6. Every behavior of the 2.0 workflows is unchanged; the e2e tests pass and change only for the request parameters, the plan calls, the progress fields and the facts.
+6. The window doesn't change what the workflows do ([SPEC-core.md](SPEC-core.md)); the e2e tests drive the workflows without it and pass.
 7. All interactions work with keyboard only. Narrator announces the sidebar, hero, lists, buttons, progress and credential fields.
 8. The UI stays responsive during every operation and while the backup directory is unreachable.
 9. No user-visible string shows raw OS or workflow text outside "Show details" and the log.
 10. The release gate of 16.7 is met.
-
-### 17.2 Build order
-
-The phases, the package layout and the order of the work are in [PLAN-gui-redesign.md](PLAN-gui-redesign.md). Tests are written in the phase of their code, not afterwards.
+11. A user with a YubiKey mode can see on the YubiKey page whether Windows and the connected YubiKey are ready, find out with one test whether it opens the current backups, and set up a new YubiKey with the guide, without another tool.
 
 ## 18. Decisions
 
 "Decision N" elsewhere in this document refers to row N of 18.1.
 
-### 18.1 Status-first redesign (decided 2026-09-30)
+### 18.1 Pages and behavior (decided 2026-09-30 unless noted)
 
 | # | Topic | Decision |
 |---|---|---|
-| 1 | Editing the configuration in the app | 2.0.0: read-only with **Edit config.yaml** and **Reload** instead of a restart. 2.1.0: editing in the app; it needs a YAML writer that keeps the comments of `config.yaml`, validation per field, and a Save / Discard flow. The Settings cards are laid out so their values can become controls. |
+| 1 | Editing the configuration in the app | 2.0.0: read-only with **Edit config.yaml** and **Reload** instead of a restart. Later (moved out of 2.1.0 on 2026-10-18): editing in the app; it needs a YAML writer that keeps the comments of `config.yaml`, validation per field, and a Save / Discard flow. The Settings cards are laid out so their values can become controls. |
 | 2 | Backup reminder | New configuration key `reminder_days` (default 7, 0 = off), added to `config-SAMPLE.yaml`, the config validation and the README's option table. The hero turns amber when the newest complete backup is older. It's only evaluated while RestoreSafe is open; there is no background check (1). |
 | 3 | Verification history | Verify results are written as structured lines into the run's log (11.4), so "Verified <time>" and "Damaged" survive a restart and disappear with the run. |
-| 4 | Dark mode | 2.0.0: light only (Win32 common controls have no supported dark mode). 2.1.0: dark mode (the tokens in 3.3 are ready); common controls need `DarkMode_Explorer` themes and custom drawing for buttons and group boxes. |
+| 4 | Dark mode | 2.0.0: light only (Win32 common controls have no supported dark mode). Later (moved out of 2.1.0 on 2026-10-18): dark mode (the tokens in 3.3 are ready); common controls need `DarkMode_Explorer` themes and custom drawing for buttons and group boxes. |
 | 5 | Deleting backups in the app | Not offered. Retention removes chains safely after each backup; manual deletion stays in Explorer, and the health check reports what it breaks. |
-| 6 | Single-file restore | Not offered (2.0 spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
-| 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (2.0 spec 7.7). Recovery mode (2.0 spec 13.6) isn't part of this redesign. |
-| 8 | Target release | 2.0.0. The redesign replaces the first GUI before the release; there is no release with the first GUI's home screen. |
-| 9 | Settings missing from config.yaml (decided 2026-10-04) | Missing settings keep using their defaults, so a file from an older version still works; blocking until the file is complete would break every configuration with each new setting. Unknown keys are an error, because a misspelled key silently falls back to its default. The Settings page names the missing settings and adds them on request (ST-10), with a copy of the old file; RestoreSafe never writes config.yaml on its own. Defaults aren't written without asking because a written value can't be told from a chosen one: a default raised in a later version (for example `argon2.memory_mb`) would no longer reach that file. |
+| 6 | Single-file restore | Not offered (core spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
+| 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (core spec 7.7). Recovery mode (core spec 13.6) isn't offered. |
+| 8 | (retired) | The target release of the redesign; it shipped with 2.0.0. The number isn't reused. |
+| 9 | Settings missing from config.yaml (decided 2026-10-04) | Missing settings keep using their defaults, so a file from an older version still works; blocking until the file is complete would break every configuration with each new setting. Unknown keys are an error, because a misspelled key silently falls back to its default. A dialog at start names the missing settings and adds them on request (ST-10, decision 13), with a copy of the old file; RestoreSafe never writes config.yaml on its own. Defaults aren't written without asking because a written value can't be told from a chosen one: a default raised in a later version (for example `argon2.memory_mb`) would no longer reach that file. |
+| 10 | YubiKey diagnostics in the app (decided 2026-10-14) | `cmd/yubidiag` is removed; its checks become the YubiKey page (10.2). A separate console tool that isn't part of the release doesn't reach the users who have the problems, and it duplicated code the app already has. The page sits at the bottom of the sidebar and only while YubiKeys are in use, so password-only users never see it. A page, not a dialog, because it updates live when a key is plugged in and holds the setup guide. Its live test checks the current keys instead of registering a throwaway credential, because that answers the user's real question without a password. Windows asks for a PIN when a fresh YubiKey has none, and changes it in Windows Settings, which is built in and needs no administrator rights, so a fresh YubiKey needs no other software; Yubico Authenticator appears only in a footnote, for a YubiKey whose FIDO2 function was turned off. |
+| 11 | No spare YubiKey (decided 2026-10-16) | A key set has one YubiKey; `yubikey_spare` is gone. Few users have two YubiKeys, and the recovery code covers a lost or broken one, so RestoreSafe creates a recovery code with every YubiKey key set, whatever `recovery_code` says. The spare cost a second registration with a swap step, a shared salt, an unlock request over several credentials and a line on the YubiKey page, and couldn't be tested on hardware with one key. Format 2 is unchanged; the reader accepts exactly one YubiKey slot (core spec 4.4). A configuration file that still has `yubikey_spare` loads; the setting is ignored and the dialog of ST-10 offers to remove it (11.6, decision 13). |
+| 12 | One YubiKey for a backup (decided 2026-10-16) | With two or more YubiKeys connected, no backup starts: the health check reports `YUBIKEYS_CONNECTED` as an error (a scope of its own that blocks backups only, so Back up now is disabled and the hero says why), and the backup preflight blocks with the same issue before any prompt (`yubikey.CountConnected`, `yubikey.SeveralError`). New keys would register the YubiKey the user touches, and nothing would say which one; existing keys would work with either, but the rule stays simple. Restore and verify are not blocked: only the registered YubiKey can answer there, so nothing can be confused. The YubiKey page shows it in red on Connected (YK-4). |
+| 13 | An out-of-date config.yaml is asked about at start (decided 2026-10-17) | A setting RestoreSafe no longer has (`config.retiredKeys`) no longer blocks the start: it is ignored, because a key goes on that list only when ignoring it is harmless (a renamed setting would need its value carried over instead). Retired and missing settings are named in one dialog at start and after each Reload, with **Update config.yaml** and **Not now** (ST-10); it comes back until the file is up to date, so a file left as it is stays visible without stopping anyone. The card on the Settings page that did this before is gone: it was found only by those who opened that page. The file is still written only on request (decision 9). Unknown keys and invalid values still block the start, with the key and its line. |
 
-### 18.2 Still valid from the first GUI (decided 2026-09-26)
+### 18.2 Foundations (decided 2026-09-26)
 
 | # | Decision | Rationale |
 |---|---|---|
@@ -1176,7 +1415,7 @@ The phases, the package layout and the order of the work are in [PLAN-gui-redesi
 | G5 | Progress is coalesced: at most one pending progress message. | The window stays responsive regardless of how often progress arrives. |
 | G6 | Cancelling cancels the workflow's context and waits for the worker. | The workflows already clean up on cancellation. |
 | G7 | Per-monitor DPI awareness (v2) and common controls 6 through the application manifest. | Sharp text on every monitor and modern control visuals. |
-| — | The GUI ships with 2.0.0; the console frontend is removed completely, with no separate console build. | A GUI-subsystem executable cannot use the console of the terminal it was started from reliably. |
-| — | Unattended or scheduled backups, tray icons and background services are permanently out of scope. | Every operation needs the user to authenticate (2.0 spec 1.3). |
+| — | The window is the only frontend; there is no console frontend or console build. | A GUI-subsystem executable cannot use the console of the terminal it was started from reliably. |
+| — | Unattended or scheduled backups, tray icons and background services are permanently out of scope. | Every operation needs the user to authenticate (core spec 1.3). |
 
-The first GUI's decisions G3 (one window with linear screens), G8 (log and reports as the main content) and "configuration read-only, restart to apply" are replaced by this document.
+G3 and G8 were retired; the numbers aren't reused.

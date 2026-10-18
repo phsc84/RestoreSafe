@@ -158,6 +158,7 @@ func assertTreesEqual(t *testing.T, want, got string) {
 }
 
 func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	backupDir := filepath.Join(root, "Backups")
@@ -295,6 +296,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 // locked file (on_unreadable_file: skip): the run completes with warnings,
 // older backups are kept, and restore reports the missing file.
 func TestExcludeAndUnreadableFiles(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	backupDir := filepath.Join(root, "Backups")
@@ -397,6 +399,7 @@ func runBackup(t *testing.T, cfg *config.Config, lines []string, passwords ...st
 // it, then starts a new chain with [F]; retention then removes the old chain
 // as a whole.
 func TestDifferentialChain(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	backupDir := filepath.Join(root, "Backups")
@@ -478,6 +481,7 @@ func TestDifferentialChain(t *testing.T) {
 // checks that the old backup still opens with the old password only, while
 // the new backup opens with the new password.
 func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	backupDir := filepath.Join(root, "Backups")
@@ -547,6 +551,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 }
 
 func TestExistingKeysRejectAnotherPassword(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	docs := filepath.Join(root, "Documents")
 	writeFile(t, filepath.Join(docs, "a.txt"), "a")

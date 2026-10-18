@@ -3,6 +3,8 @@
 // calls one Windows API and converts its failure into an error.
 package win32
 
+//lint:file-ignore ST1003 names follow the Windows SDK headers, so they match the Win32 documentation
+
 import (
 	"fmt"
 	"syscall"
@@ -82,6 +84,7 @@ const (
 	WS_VISIBLE          = 0x10000000
 	WS_TABSTOP          = 0x00010000
 	WS_VSCROLL          = 0x00200000
+	WS_HSCROLL          = 0x00100000
 	WS_BORDER           = 0x00800000
 	WS_CLIPCHILDREN     = 0x02000000
 	WS_EX_CONTROLPARENT = 0x00010000
@@ -445,4 +448,16 @@ func RectParam(lparam uintptr) *Rect {
 // ShellOpenWith starts exe with args (e.g. notepad.exe with a file).
 func ShellOpenWith(hwnd HWND, exe, args string) error {
 	return windows.ShellExecute(windows.Handle(hwnd), UTF16("open"), UTF16(exe), UTF16(args), nil, SW_SHOWNORMAL)
+}
+
+// ShellRunAs starts exe as administrator: Windows asks the user for
+// permission first. A refusal returns windows.ERROR_CANCELLED.
+func ShellRunAs(hwnd HWND, exe string) error {
+	return windows.ShellExecute(windows.Handle(hwnd), UTF16("runas"), UTF16(exe), nil, nil, SW_SHOWNORMAL)
+}
+
+// MsgParam returns the MSG of a WM_GETDLGCODE lparam; nil when there is
+// none.
+func MsgParam(lparam uintptr) *Msg {
+	return *(**Msg)(unsafe.Pointer(&lparam))
 }

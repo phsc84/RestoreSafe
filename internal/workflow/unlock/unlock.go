@@ -5,7 +5,6 @@ package unlock
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
@@ -22,7 +21,7 @@ const maxPasswordAttempts = 3
 // Injectable for tests.
 var (
 	checkYubiKeyConnectedFn = yubikey.CheckConnected
-	deriveYubiKeySecretFn   = yubikey.DeriveFIDO2SecretAny
+	deriveYubiKeySecretFn   = yubikey.DeriveFIDO2Secret
 )
 
 // Options configures KeySet.
@@ -61,11 +60,10 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 	var yubiSecret []byte
 	slotIndex := indexes[0]
 	if slotType != container.SlotPassword {
-		idx, secret, err := deriveYubiKeySecret(u, ks, indexes)
+		secret, err := deriveYubiKeySecret(u, ks.Slots[slotIndex])
 		if err != nil {
 			return nil, err
 		}
-		slotIndex = idx
 		yubiSecret = secret
 		defer cryptox.ZeroBytes(yubiSecret)
 	}
@@ -74,7 +72,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		master, err := ks.Unlock(slotIndex, yubiSecret)
 		if err != nil {
 			if errors.Is(err, cryptox.ErrWrongPassword) {
-				return nil, problem.New("YubiKey authentication failed: this YubiKey does not unlock the backup.").WithRemedy("Use a YubiKey that was registered for this backup.")
+				return nil, &YubiKeyError{Err: problem.New("YubiKey authentication failed: this YubiKey does not unlock the backup.").WithRemedy("Use a YubiKey that was registered for this backup.")}
 			}
 			return nil, err
 		}
@@ -156,6 +154,16 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, l
 	return nil, fmt.Errorf("Too many failed recovery code attempts.")
 }
 
+// YubiKeyError is a YubiKey that didn't unlock a key set: Windows refused
+// it, or the secret it derived isn't the key set's. Windows reports a
+// YubiKey that doesn't know the credential (reset, or another one), a wrong
+// or blocked PIN and a cancelled prompt with the same HRESULT, so they can't
+// be told apart.
+type YubiKeyError struct{ Err error }
+
+func (e *YubiKeyError) Error() string { return e.Err.Error() }
+func (e *YubiKeyError) Unwrap() error { return e.Err }
+
 // MasterKeys maps key set IDs to unlocked master keys.
 type MasterKeys map[string][]byte
 
@@ -191,29 +199,17 @@ func KeySets(u interact.UI, sets []catalog.SetInfo, action string, log *logging.
 }
 
 // deriveYubiKeySecret asks the connected YubiKey for the hmac-secret of the
-// key set's YubiKey slots in one request: whichever registered YubiKey is
-// connected answers. It returns the slot index of that YubiKey with the
-// secret.
-func deriveYubiKeySecret(u interact.UI, ks *container.KeySet, indexes []int) (int, []byte, error) {
+// key set's YubiKey slot.
+func deriveYubiKeySecret(u interact.UI, slot container.Slot) ([]byte, error) {
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return 0, nil, yubikey.ErrRequired
+		return nil, yubikey.ErrRequired
 	}
-	challenges := make([]yubikey.ChallengeData, len(indexes))
-	labels := make([]string, len(indexes))
-	for i, idx := range indexes {
-		challenges[i] = *ks.Slots[idx].Challenge
-		labels[i] = ks.Slots[idx].Label
-	}
-	if len(indexes) > 1 {
-		fmt.Fprintf(u.Output(), "Use any registered YubiKey (%s). Follow the on-screen prompts to authenticate.\n", strings.Join(labels, " or "))
-	} else {
-		fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
-	}
-	i, secret, err := deriveYubiKeySecretFn(challenges)
+	fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
+	secret, err := deriveYubiKeySecretFn(*slot.Challenge)
 	if err != nil {
-		return 0, nil, fmt.Errorf("YubiKey authentication failed: %w", err)
+		return nil, &YubiKeyError{Err: fmt.Errorf("YubiKey authentication failed: %w", err)}
 	}
-	return indexes[i], secret, nil
+	return secret, nil
 }
 
 func PasswordFailurePrefix(requiresYubiKey, yubiKeyOnly bool) string {

@@ -24,6 +24,8 @@ const (
 	heroConfigInvalid      = "RestoreSafe can't read its configuration"
 	heroConfigLine         = "Check config.yaml, then start RestoreSafe again."
 	heroReloadTitle        = "config.yaml can't be loaded"
+	heroYubiKeys           = "More than one YubiKey is connected"
+	heroYubiKeysLine       = "A backup would register or ask the one you touch. Connect only the YubiKey you back up with."
 	heroReloadLine         = "RestoreSafe keeps using the previous settings. Fix config.yaml, then click Refresh. %s"
 	heroDirUnreachable     = "The backup directory isn't reachable"
 	heroDirUnreachLine     = "%s doesn't respond. Check the drive or the network connection."
@@ -101,12 +103,13 @@ const (
 	lastCancelled    = "The backup of %s was cancelled; not every folder was backed up."
 	cardKeys         = "Keys"
 	keysCreated      = "Created %s"
-	keysSpare        = "2 YubiKeys"
 	keysRecovery     = "recovery code"
 	keysNone         = "Your first backup creates your keys."
 	keysNewNeeded    = "Your next backup creates new keys: %s"
 	yubiKeyConnected = "YubiKey connected"
 	yubiKeyMissing   = "YubiKey not connected"
+	keysYubiKeySetup = "Your first backup sets up your YubiKey, then creates your keys: follow the Windows Security prompts."
+	keysNeverReset   = "Never reset your YubiKey. A reset erases the credential that unlocks your keys; after that only your recovery code opens your backups."
 	folderOne        = "1 folder"
 	folderMany       = "%d folders"
 	badgeFull        = "FULL"
@@ -131,9 +134,9 @@ const (
 // ButtonClose is the label of a dialog's close button.
 const ButtonClose = buttonClose
 
-// Backup plan (GUI spec 6.1).
+// Create backup window (GUI spec 6.1).
 const (
-	planTitle              = "Back up"
+	planTitle              = "Create backup"
 	planHeading            = "Back up %s to %s"
 	planNewKeys            = "New keys will be created: %s. Every folder gets a full backup."
 	planWhyDiff            = "Based on the full backup of %s"
@@ -150,7 +153,6 @@ const (
 	unlockTouchAndPassword = "One YubiKey touch, then your password"
 	unlockNewPassword      = "new password"
 	unlockRegisterOne      = "register your YubiKey (2 prompts)"
-	unlockRegisterTwo      = "register 2 YubiKeys (4 prompts)"
 	unlockRecoveryCode     = "store a recovery code"
 	afterVerify            = "Verify each new backup."
 	afterRemove            = "Remove %s (%s)."
@@ -290,28 +292,30 @@ const (
 	unlockWithBoth       = "Unlock with your YubiKey and your password. Windows asks for the YubiKey first."
 	unlockOtherKeys      = "Backup %s uses different keys (created %s). Authenticate with the credentials of those keys."
 	linkUseRecovery      = "Use your recovery code instead"
+	refusedIntro         = "Your YubiKey didn't unlock your backups."
+	refusedHint          = "If you cancelled the Windows Security prompt, try again. If Windows said the security key doesn't look familiar, this YubiKey was reset or is a different one: it can never unlock these keys again. Create new keys, and every folder gets a full backup."
+	refusedRecovery      = "Your older backups keep opening with your recovery code."
+	refusedNoRecovery    = "These keys have no recovery code: if this YubiKey was reset, your older backups can't be opened any more."
+	linkNewKeys          = "Create new keys + full backup"
+	buttonTryAgain       = "Try again"
 	fieldPassword        = "Password"
 	fieldConfirmPassword = "Confirm password"
 	fieldRecoveryCode    = "Recovery code"
 	buttonUnlock         = "Unlock"
 	buttonNext           = "Next"
 	buttonContinue       = "Continue"
-	buttonStored         = "I have stored it"
 	createKeysTitle      = "Create your keys"
 	recoveryTitle        = "Your recovery code"
-	stepOf               = "%s · Step %d of %d"
 	newPasswordIntro     = "Choose a password for your backups."
 	newPasswordHint      = "You need it for every backup and every restore."
 	newPasswordHintN     = "At least %d characters. You need it for every backup and every restore."
 	stepsPrefix          = "Steps: "
 	stepNamePassword     = "password"
 	stepNameYubiKey      = "register your YubiKey"
-	stepNameSpare        = "register your spare YubiKey"
 	stepNameRecovery     = "recovery code"
-	spareIntro           = "Remove your YubiKey and connect your spare YubiKey."
-	spareHint            = "Windows then asks twice for the PIN of the spare YubiKey."
 	recoveryIntro        = "Store this code in your password manager or write it down now. It's shown only once and opens your backups on its own."
 	recoveryNote         = "Keep it in a safe place, never next to your backups or unencrypted on this computer."
+	recoveryStored       = "I have stored my recovery code"
 	attemptsLeft         = "%d attempts left."
 	attemptLeftOne       = "1 attempt left."
 )
@@ -410,9 +414,9 @@ const (
 	menuOpenFolder  = "&Open backup folder"
 )
 
-// Restore window (GUI spec 8), worded like the backup plan (6.1).
+// Restore backup window (GUI spec 8), worded like the Create backup window (6.1).
 const (
-	RestoreTitle         = "Restore"
+	RestoreTitle         = "Restore backup"
 	RestoreTo            = "To"
 	RestoreBrowse        = "B&rowse…"
 	RestoreIntoBackupDir = "Restore into the backup directory"
@@ -452,16 +456,28 @@ const (
 	restoringDiff        = "differential %d, with its full backup of %s"
 )
 
+// The dialog about settings missing from the configuration file or no
+// longer used (GUI spec ST-10).
+const (
+	updateInstruction     = "Update %s?"
+	retiredHeading        = "No longer used (ignored):"
+	missingHeading        = "Missing (defaults apply):"
+	bullet                = "• "
+	updateDoes            = "Update fixes the file and keeps a copy of the old one. Not now asks again at the next start."
+	buttonUpdateConfig    = "&Update %s"
+	buttonNotNow          = "&Not now"
+	updatedInstruction    = "%s is up to date"
+	updatedCopy           = "The previous file is saved as %s."
+	notUpdatedInstruction = "%s wasn't changed"
+	notUpdatedLine        = "RestoreSafe uses the settings as they are."
+	buttonOK              = "OK"
+)
+
 // Settings page (GUI spec 10).
 const (
 	buttonReload        = "Re&load"
 	reasonReloadBusy    = "Reload waits until the running operation has finished."
 	settingsReloadNote  = "After saving your changes in the editor, click Reload."
-	missingOne          = "%s isn't in config.yaml, so its default applies."
-	missingMany         = "%d settings aren't in config.yaml, so their defaults apply: %s."
-	buttonAddMissing    = "&Add to config.yaml"
-	reasonAddBusy       = "Adding waits until the running operation has finished."
-	missingAdded        = "The missing settings were added with their defaults. The previous file is saved as %s."
 	settingsFolders     = "Folders to back up"
 	settingNothing      = "Nothing"
 	settingLeaveOut     = "Leave out"
@@ -493,7 +509,7 @@ const (
 	reminderAfter       = "After %d days without a backup"
 	cardKeysUnlock      = "Keys and unlocking"
 	settingUnlock       = "Unlock with"
-	settingSpare        = "Spare YubiKey"
+	recoveryAlways      = "Always on with a YubiKey, so a lost YubiKey doesn't lose your backups"
 	settingRecovery     = "Recovery code"
 	settingPwLength     = "New passwords"
 	atLeastChars        = "At least %d characters"
@@ -514,3 +530,130 @@ const (
 	dirReachable        = "Reachable"
 	dirReachableFree    = "Reachable, %s free"
 )
+
+// The YubiKey page (GUI spec 10.2).
+const (
+	navYubiKey          = "YubiKey"
+	buttonTestYubiKey   = "&Test YubiKey…"
+	buttonWindowsUpdate = "Open Windows &Update…"
+	buttonSignIn        = "Open Windows &settings…"
+	buttonCopyDetails   = "&Copy details"
+	buttonAuthenticator = "Open Yubico &Authenticator…"
+	reasonTestBusy      = "The test waits until the running operation has finished."
+	reasonTestRunning   = "The test is running."
+
+	ykChecking        = "Checking your YubiKey…"
+	ykPrompt          = "Follow the Windows Security prompt"
+	ykConnect         = "Connect your YubiKey"
+	ykConnectLine     = "Plug it into a USB port. This page updates when it's connected."
+	ykConnected       = "Your YubiKey is connected"
+	ykConnectedMatch  = "Test whether it opens your backups. Windows asks for its PIN and a touch."
+	ykConnectedProbe  = "Test whether it can be used. Windows asks for its PIN twice and two touches."
+	ykCancelled       = "The test was cancelled"
+	ykCancelledLine   = "If Windows said it doesn't recognize the security key, this YubiKey isn't registered for your keys: connect the YubiKey you back up with. If it said the PIN was entered wrong too often, the YubiKey is locked: only a reset unlocks it, and then only your recovery code opens your backups."
+	ykOpens           = "Your YubiKey opens your backups"
+	ykTested          = "Tested %s"
+	ykReady           = "Your YubiKey is ready"
+	ykReadyLine       = "It can protect your backups. Your first backup registers it."
+	ykWindows         = "Windows can't use your YubiKey"
+	ykWindowsLine     = "RestoreSafe needs Windows 11 version 22H2 or later."
+	ykCantProtect     = "This YubiKey can't protect your backups"
+	ykNoFIDOLine      = "Its FIDO2 function is turned off. YubiKey help below shows how to turn it on."
+	ykOldFirmwareLine = "Its firmware %s is older than 5.2, the first with what RestoreSafe needs. YubiKey 5 Series and Security Key Series keys with newer firmware work."
+	ykFailed          = "The test didn't work"
+	ykFailedLine      = "Windows ended it with an error. Technical details has the error code; YubiKey help below covers the PIN."
+	ykChecksTitle     = "Checks"
+	ykCheckWindows    = "Windows"
+	ykCheckYubiKey    = "YubiKey"
+	ykCheckFirmware   = "Firmware"
+	ykCheckKeys       = "Your keys"
+	ykWindowsReady    = "Ready for YubiKeys"
+	ykWindowsOld      = "Not ready: needs Windows 11 version 22H2 or later"
+	ykWindowsNote     = "RestoreSafe uses the security key support built into Windows (WebAuthn), from Windows 11 version 22H2 on."
+	ykNotConnected    = "Not connected"
+	ykOneConnected    = "Connected"
+	ykManyConnected   = "%d connected: connect only the one you back up with; backups wait until then"
+	ykCheckFIDO       = "FIDO2"
+	ykFIDOOn          = "On"
+	ykFIDOOff         = "Off or missing: YubiKey help below shows how to turn it on"
+	ykFIDOUnknown     = "Unknown: no YubiKey connected"
+	ykSupported       = "Works: YubiKey 5 Series and Security Key Series, firmware 5.2 or later. Doesn't work: YubiKey 4 and YubiKey NEO."
+	ykFirmware        = "%s (RestoreSafe needs 5.2 or later)"
+	ykFirmwareOld     = "%s: too old, RestoreSafe needs 5.2 or later"
+	ykKeysNone        = "None yet. Your first backup registers your YubiKey."
+	ykKeysOlder       = "Your current keys use no YubiKey; older backups do."
+	ykKeys            = "%s, created %s: %s"
+	ykKeysNotTested   = "not tested"
+	ykKeysAnswered    = "your YubiKey answered"
+	ykKeysCancelled   = "the test was cancelled"
+	ykKeysFailed      = "the test didn't work"
+	ykGuideTitle      = "YubiKey help"
+	ykStep1           = "PIN and reset"
+	ykPIN1            = "Windows asks for the PIN at every backup and restore. A new YubiKey gets one at its first test or backup."
+	ykPIN2            = "Change the PIN or reset the YubiKey in Windows Settings."
+	ykPIN3            = "After too many wrong PINs, only a reset unlocks the YubiKey. It then forgets your keys: open your backups with your recovery code and create new keys."
+	ykStep2           = "Turn on FIDO2"
+	ykFIDO1           = "Needed when Checks shows FIDO2 as off."
+	ykFIDO2           = "Yubico Authenticator turns it on; Windows asks for administrator permission."
+	ykFIDO3           = "Not installed? The button opens its download page."
+	ykDetailsTitle    = "Technical details"
+)
+
+// Targets of the YubiKey page's links; the window opens them with the
+// shell (GUI spec YK-8). RestoreSafe itself makes no network request.
+const (
+	SignInSettingsURI      = "ms-settings:signinoptions"
+	WindowsUpdateURI       = "ms-settings:windowsupdate"
+	YubicoAuthenticatorURL = "https://www.yubico.com/products/yubico-authenticator/"
+)
+
+// The technical details of the YubiKey page (GUI spec YK-9): sections,
+// labels and values, for an overview at a glance and for a bug report.
+const (
+	ydSummary         = "SUMMARY"
+	ydYubiKey         = "YUBIKEY %d"
+	ydLastTest        = "LAST TEST"
+	ydWindows         = "WINDOWS"
+	ydLabelFirmware   = "Firmware"
+	ydLabelProduct    = "Product ID"
+	ydLabelDevice     = "USB device"
+	ydLabelInterface  = "Interface"
+	ydLabelKind       = "Kind"
+	ydLabelTime       = "Time"
+	ydLabelResult     = "Result"
+	ydLabelCode       = "Error code"
+	ydLabelMessage    = "Message"
+	ydLabelTrace      = "WebAuthn trace"
+	ydLabelVersion    = "Version"
+	ydLabelAPI        = "WebAuthn API"
+	ydLabelAPIError   = "WebAuthn error"
+	ydLabelDrivers    = "HID drivers"
+	ydLabelListing    = "Listing error"
+	ydNotChecked      = "Not checked yet"
+	ydFirmwareRev     = "%s (USB device version 0x%04X)"
+	ydMatchMeans      = "Match: asks the YubiKey for the secret of your current keys (PIN and one touch)"
+	ydCapabilityMeans = "Capability: registers a credential that stays on no YubiKey and derives one secret (PIN twice, two touches)"
+	ydPassed          = "passed"
+	ydCancelled       = "cancelled"
+	ydFailed          = "failed"
+	ydUsage           = "%-5s usage page 0x%04X, usage 0x%04X"
+	ydWriteGranted    = "write access granted"
+	ydWriteDeniedFIDO = "write access denied (normal: Windows keeps the FIDO interface for itself)"
+	ydWriteDenied     = "write access denied: %v"
+	ydNone            = "None"
+	ydAPI             = "%d (RestoreSafe needs %d)"
+	ydWindowsName     = "Windows %d (%s)"
+	ydCodeUnknown     = "0x%08X"
+	ydCodeKnown       = "0x%08X: %s"
+)
+
+// hresultMeanings are the WebAuthn errors RestoreSafe knows, in words
+// (GUI spec YK-11).
+var hresultMeanings = map[uint32]string{
+	0x800704C7: "ended as cancelled. Windows returns this for a cancel, a YubiKey that isn't registered and a locked PIN alike; its own dialog said which (ERROR_CANCELLED)",
+	0x80090036: "cancelled by the user (NTE_USER_CANCELLED)",
+	0x80090027: "invalid parameter, for example no window for the Windows Security dialog (NTE_INVALID_PARAMETER)",
+	0x8009000F: "the YubiKey already holds this credential (NTE_EXISTS)",
+	0x80090029: "not supported by the YubiKey or by Windows (NTE_NOT_SUPPORTED)",
+	0x800705B4: "timed out: no touch in time (ERROR_TIMEOUT)",
+}

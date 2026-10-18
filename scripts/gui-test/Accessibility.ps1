@@ -11,7 +11,7 @@
 #                              control and would take its clicks
 # As a check:
 #   .\Accessibility.ps1 -Exe ..\..\sandbox\RestoreSafe.exe -Config C:\...\smoke\config.yaml
-#   walks the three pages, the backup plan dialog and the Restore window
+#   walks the three pages, the Create backup window and the Restore backup window
 #   and exits 1 on a problem.
 
 param([string]$Exe = "", [string]$Config = "")
@@ -72,8 +72,8 @@ if ($Exe) {
     Click-Control $main HeroPrimary
     $plan = Wait-Until { Find-Window $p.Id "RestoreSafePlan" } 20 "plan"
     Wait-Until { Find-Control $plan PlanStart -Enabled } 60 "plan" | Out-Null
-    $problems += Test-AccessKeys $plan "backup plan"
-    $problems += Test-Overlaps $plan "backup plan"
+    $problems += Test-AccessKeys $plan "Create backup window"
+    $problems += Test-Overlaps $plan "Create backup window"
     Click-Control $plan PlanCancel
     Start-Sleep -Seconds 1
     Go-Page $main 1
@@ -88,10 +88,10 @@ if ($Exe) {
     Click-Control $ver VerifyCancel
     Start-Sleep -Seconds 1
     Click-Control $main BackupsRestore
-    $win = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore window"
+    $win = Wait-Until { Find-Window $p.Id "RestoreSafeRestore" } 10 "Restore backup window"
     Wait-Until { Find-Control $win RestoreStart -Enabled } 20 "choices checked" | Out-Null
-    $problems += Test-AccessKeys $win "Restore window"
-    $problems += Test-Overlaps $win "Restore window"
+    $problems += Test-AccessKeys $win "Restore backup window"
+    $problems += Test-Overlaps $win "Restore backup window"
     Click-Control $win RestoreCancel
   } finally { Stop-Process $p -Force -ErrorAction SilentlyContinue }
   if ($problems) { $problems; exit 1 }

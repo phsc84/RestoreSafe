@@ -87,8 +87,12 @@ type KeysSummary struct {
 	Exists       bool
 	Created      time.Time
 	Methods      string
-	SpareYubiKey bool
 	RecoveryCode bool
+	// YubiKey is set when the current keys have a YubiKey slot.
+	YubiKey bool
+	// YubiKeyInBackups is set when the keys of any backup set have a YubiKey
+	// slot, also of sets older than the current keys (GUI spec YK-1).
+	YubiKeyInBackups bool
 	// YubiKeyConnected is nil when the configuration uses no YubiKey.
 	YubiKeyConnected *bool
 	// NewKeysReason is set when the next backup creates new keys.
@@ -304,6 +308,12 @@ func storage(backupDir string, infos []catalog.SetInfo, folders []FolderStatus) 
 
 func keysSummary(cfg *config.Config, infos []catalog.SetInfo, keys plan.Keys, connected *bool) KeysSummary {
 	k := KeysSummary{YubiKeyConnected: connected}
+	for _, info := range infos {
+		if info.Header != nil && info.Header.KeySet.AuthMode.UsesYubiKey() {
+			k.YubiKeyInBackups = true
+			break
+		}
+	}
 	ks := catalog.CurrentKeySet(infos)
 	if ks == nil {
 		return k
@@ -311,8 +321,8 @@ func keysSummary(cfg *config.Config, infos []catalog.SetInfo, keys plan.Keys, co
 	k.Exists = true
 	k.Created = ks.Created()
 	k.Methods = ks.AuthMode.Label()
-	k.SpareYubiKey = ks.YubiKeyCount() > 1
 	k.RecoveryCode = ks.HasSlotType(container.SlotRecovery)
+	k.YubiKey = ks.AuthMode.UsesYubiKey()
 	if keys.Existing == nil {
 		k.NewKeysReason = keys.NewKeysReason
 	}

@@ -54,11 +54,12 @@ type opRequest struct {
 
 // startOperation runs req in a worker goroutine. A backup opens its plan
 // dialog and shows its progress on Create backup; a verification shows its
-// progress on Restore backup; a restore runs in the Restore window, which
+// progress on Restore backup; a restore runs in the Restore backup window, which
 // started it, and shows its progress on Restore backup too.
 func (a *app) startOperation(req opRequest) {
 	op := req.op
-	if !a.machine.Start(op) {
+	// The YubiKey test holds the one worker slot (GUI spec YK-6).
+	if a.yk.testing || !a.machine.Start(op) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -198,7 +199,7 @@ func (a *app) onWorkerDone() {
 		a.useConfig(cfg)
 	}
 	if run := a.machine.Current(); run.Op == flow.OpRestore && a.restore != nil && a.restore.workerDone() {
-		// The restore ended before it started; the Restore window shows why.
+		// The restore ended before it started; the Restore backup window shows why.
 		a.refreshRun()
 		return
 	}

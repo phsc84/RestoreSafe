@@ -86,8 +86,6 @@ func writeRTFRow(b *strings.Builder, row interact.Row, fieldTab int) {
 		fmt.Fprintf(b, `\pard\sb60{\b %s}\par `, rtfEscape(row.Label))
 	case interact.RowField:
 		fmt.Fprintf(b, `\pard\tx%d{\cf%d %s}\tab %s\par `, fieldTab, colorMuted, rtfEscape(row.Label), rtfEscape(row.Text))
-	case interact.RowNote:
-		fmt.Fprintf(b, `\pard %s\par `, rtfEscape(row.Text))
 	case interact.RowItem:
 		writeRTFItem(b, row.Status, row.Text, row.Details, indentItem)
 	}

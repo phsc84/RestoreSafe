@@ -6,6 +6,8 @@ import (
 	"unsafe"
 
 	"github.com/phsc84/restoresafe/internal/gui/win32"
+
+	"golang.org/x/sys/windows"
 )
 
 // testTheme returns a theme at 96 dpi and a hidden top-level window to put
@@ -36,11 +38,23 @@ func testTheme(t *testing.T) (*Theme, win32.HWND) {
 	return &Theme{Palette: Light, Fonts: fonts, Scale: 96}, host
 }
 
+// procGetPixel reads the pixels a test rendered; the program never does.
+var procGetPixel = windows.NewLazySystemDLL("gdi32.dll").NewProc("GetPixel")
+
 // render sizes hwnd to w×h, paints it through WM_PRINTCLIENT, and returns
 // the pixels.
 func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
 	t.Helper()
 	win32.SetWindowPos(hwnd, win32.Rect{Right: w, Bottom: h})
+	mem, px := canvas(t, w, h)
+	win32.SendMessage(hwnd, win32.WM_PRINTCLIENT, mem, 0)
+	return px
+}
+
+// canvas returns a memory DC of w×h pixels and a function that reads its
+// pixels.
+func canvas(t *testing.T, w, h int32) (uintptr, func(x, y int32) Color) {
+	t.Helper()
 	screen := win32.GetDC(0)
 	mem := win32.CreateCompatibleDC(screen)
 	bmp := win32.CreateCompatibleBitmap(screen, w, h)
@@ -51,8 +65,10 @@ func render(t *testing.T, hwnd win32.HWND, w, h int32) func(x, y int32) Color {
 		win32.DeleteObject(bmp)
 		win32.DeleteDC(mem)
 	})
-	win32.SendMessage(hwnd, win32.WM_PRINTCLIENT, mem, 0)
-	return func(x, y int32) Color { return Color(win32.Pixel(mem, x, y)) }
+	return mem, func(x, y int32) Color {
+		r, _, _ := procGetPixel.Call(mem, uintptr(x), uintptr(y))
+		return Color(r)
+	}
 }
 
 func expect(t *testing.T, what string, got, want Color) {
@@ -135,27 +151,15 @@ func TestButtonsArePainted(t *testing.T) {
 	expect(t, "focus outline inside", px(60, 1), Light.Text)
 }
 
-func TestBadgeIconAndBar(t *testing.T) {
+func TestIconAndBar(t *testing.T) {
 	th, host := testTheme(t)
 	back := RGB(9, 9, 9)
-
-	b, err := NewBadge(th, host, back)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.Set("DIFF 3", Light.Diff, Light.DiffBack, "Differential 3")
-	if b.Width() <= 2*badgePadding {
-		t.Fatalf("badge width %d", b.Width())
-	}
-	px := render(t, b.HWND(), b.Width(), 18)
-	expect(t, "badge corner", px(0, 0), back)
-	expect(t, "badge fill", px(2, 9), Light.DiffBack)
 
 	i, err := NewIcon(th, host, back, TextIcon)
 	if err != nil {
 		t.Fatal(err)
 	}
-	px = render(t, i.HWND(), 52, 52)
+	px := render(t, i.HWND(), 52, 52)
 	expect(t, "icon without circle", px(26, 3), back)
 	i.Set(GlyphCheck, Light.Success, Light.SuccessBack, "Protected")
 	px = render(t, i.HWND(), 52, 52)
@@ -176,7 +180,7 @@ func TestBadgeIconAndBar(t *testing.T) {
 
 func TestSidebarSelection(t *testing.T) {
 	th, host := testTheme(t)
-	items := []SidebarItem{{GlyphArchive, "Create backup"}, {GlyphHistory, "Restore backup"}, {GlyphSettings, "Settings"}}
+	items := []SidebarItem{{Glyph: GlyphArchive, Text: "Create backup"}, {Glyph: GlyphHistory, Text: "Restore backup"}, {Glyph: GlyphSettings, Text: "Settings"}}
 	s, err := NewSidebar(th, host, 0, items)
 	if err != nil {
 		t.Fatal(err)
@@ -204,6 +208,74 @@ func TestSidebarSelection(t *testing.T) {
 	s.Select(2)
 	if len(chosen) != 4 {
 		t.Fatal("Select must not call OnSelect")
+	}
+
+	// The row under the mouse is filled, until the mouse leaves.
+	first := s.rowRect(0, win32.ClientRect(s.HWND()))
+	win32.SendMessage(s.HWND(), win32.WM_MOUSEMOVE, 0, uintptr(first.Top+2)<<16|uintptr(first.Left+2))
+	px = render(t, s.HWND(), SidebarWidth, 200)
+	expect(t, "hovered row", px(first.Right-10, first.Top+first.Height()/2), Light.Control)
+	expect(t, "no bar on the hovered row", px(first.Left+1, first.Top+first.Height()/2), Light.Control)
+	win32.SendMessage(s.HWND(), win32.WM_MOUSELEAVE, 0, 0)
+	px = render(t, s.HWND(), SidebarWidth, 200)
+	expect(t, "row after the mouse left", px(first.Right-10, first.Top+first.Height()/2), Light.SurfaceAlt)
+}
+
+// The YubiKey item sits at the bottom below a line and can be hidden; the
+// keys and the mouse skip a hidden item (GUI spec YK-1).
+func TestSidebarBottomGroupAndHiddenItems(t *testing.T) {
+	th, host := testTheme(t)
+	items := []SidebarItem{{Glyph: GlyphArchive, Text: "Create backup"}, {Glyph: GlyphHistory, Text: "Restore backup"}, {Glyph: GlyphSettings, Text: "Settings"}, {Glyph: GlyphKey, Text: "YubiKey", Bottom: true}}
+	s, err := NewSidebar(th, host, 0, items)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var chosen []int
+	s.OnSelect = func(i int) { chosen = append(chosen, i) }
+
+	const height = 400
+	px := render(t, s.HWND(), SidebarWidth, height)
+	client := win32.ClientRect(s.HWND())
+	yk := s.rowRect(3, client)
+	if yk.Bottom != client.Bottom-th.Scale.Px(sidebarPadding) || yk.Top <= s.rowRect(2, client).Bottom {
+		t.Fatalf("the bottom item must sit at the bottom edge: %+v in %+v", yk, client)
+	}
+	line, ok := s.lineRect(client)
+	if !ok || line.Bottom > yk.Top {
+		t.Fatalf("a line must separate the bottom group: %+v, %v", line, ok)
+	}
+	expect(t, "line", px(client.Width()/2, line.Top), Light.Lines)
+
+	for _, key := range []uintptr{win32.VK_END, win32.VK_UP} {
+		win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, key, 0)
+	}
+	if len(chosen) != 2 || chosen[0] != 3 || chosen[1] != 2 {
+		t.Fatalf("End reaches the bottom item: %v", chosen)
+	}
+
+	s.SetHidden(3, true)
+	if !s.Hidden(3) {
+		t.Fatal("SetHidden")
+	}
+	if _, ok := s.lineRect(client); ok {
+		t.Fatal("no line without a shown bottom item")
+	}
+	chosen = nil
+	for _, key := range []uintptr{win32.VK_DOWN, win32.VK_END} {
+		win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, key, 0)
+	}
+	win32.SendMessage(s.HWND(), win32.WM_LBUTTONDOWN, 0, uintptr(yk.Top+2)<<16|uintptr(yk.Left+2))
+	s.Select(3)
+	if len(chosen) != 0 || s.Selected() != 2 {
+		t.Fatalf("a hidden item can't be chosen: %v, selected %d", chosen, s.Selected())
+	}
+
+	// Hiding the top item: Home goes to the first shown one.
+	s.SetHidden(3, false)
+	s.SetHidden(0, true)
+	win32.SendMessage(s.HWND(), win32.WM_KEYDOWN, win32.VK_HOME, 0)
+	if s.Selected() != 1 || s.rowRect(1, client).Top != client.Top+th.Scale.Px(sidebarPadding) {
+		t.Fatalf("Home with the first item hidden: selected %d", s.Selected())
 	}
 }
 
@@ -291,10 +363,6 @@ func TestListViewGroupsAndItems(t *testing.T) {
 	}
 	if !win32.ListGroupCollapsed(lv, 1) || win32.ListGroupCollapsed(lv, 0) {
 		t.Fatal("group 1 starts collapsed, group 0 expanded")
-	}
-	win32.ListSetGroupCollapsed(lv, 1, false)
-	if win32.ListGroupCollapsed(lv, 1) {
-		t.Fatal("group 1 expanded")
 	}
 	win32.ListSelect(lv, 1)
 	if sel := win32.ListSelected(lv); sel != 1 || win32.ListParam(lv, sel) != 8 {
@@ -406,4 +474,38 @@ func TestTrailReportsClicksOnDoneSteps(t *testing.T) {
 	if len(clicked) != 1 || clicked[0] != 0 {
 		t.Fatalf("clicks %v", clicked)
 	}
+}
+
+func TestExpanderToggles(t *testing.T) {
+	th, host := testTheme(t)
+	e, err := NewExpander(th, host, Light.Surface, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []bool
+	e.OnToggle = func(open bool) { got = append(got, open) }
+	e.Set("Technical details", false)
+	if e.Open() || e.Width() <= 0 {
+		t.Fatalf("closed: open %v, width %d", e.Open(), e.Width())
+	}
+	px := render(t, e.HWND(), 300, 24)
+	expect(t, "background", px(299, 12), Light.Surface)
+
+	win32.SendMessage(e.HWND(), win32.WM_LBUTTONDOWN, 0, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_RETURN, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_SPACE, 0)
+	win32.SendMessage(e.HWND(), win32.WM_KEYDOWN, win32.VK_DOWN, 0)
+	if len(got) != 3 || !got[0] || got[1] || !got[2] || !e.Open() {
+		t.Fatalf("a click, Enter and Space toggle it, other keys don't: %v", got)
+	}
+	m := win32.Msg{Message: win32.WM_KEYDOWN, WParam: win32.VK_RETURN}
+	if r := win32.SendMessage(e.HWND(), win32.WM_GETDLGCODE, 0, uintptr(unsafe.Pointer(&m))); r != win32.DLGC_WANTMESSAGE {
+		t.Fatalf("Enter must reach the expander: %#x", r)
+	}
+	if r := win32.SendMessage(e.HWND(), win32.WM_GETDLGCODE, 0, 0); r != 0 {
+		t.Fatalf("without a message: %#x", r)
+	}
+	win32.SendMessage(e.HWND(), win32.WM_MOUSEMOVE, 0, 0)
+	win32.SendMessage(e.HWND(), win32.WM_MOUSELEAVE, 0, 0)
+	render(t, e.HWND(), 300, 24) // paints open, with the focus outline after the keys
 }

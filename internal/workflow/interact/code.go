@@ -20,6 +20,7 @@ const (
 	CodeNoBackups            Code = "NO_BACKUPS"
 	CodeArgon2Capped         Code = "ARGON2_CAPPED"
 	CodeYubiKeyNotConnected  Code = "YUBIKEY_NOT_CONNECTED"
+	CodeYubiKeysConnected    Code = "YUBIKEYS_CONNECTED" // more than one: no backup
 	CodeNewKeysNeeded        Code = "NEW_KEYS_NEEDED"
 	CodeOverdue              Code = "OVERDUE"
 	CodeSpaceLow             Code = "SPACE_LOW"

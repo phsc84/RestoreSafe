@@ -115,9 +115,10 @@ func headerValueOffset(t *testing.T, part string) int64 {
 // matrix (doc.go): a part deleted or truncated, and one bit flipped in each
 // region of the set. Verify and restore both fail with the cause. A fault
 // found before reading (preflight) leaves nothing behind; a fault found while
-// reading leaves the partial restore in place, marked INCOMPLETE (SPEC-2.0
+// reading leaves the partial restore in place, marked INCOMPLETE (SPEC-core
 // section 9).
 func TestDamagedSetIsRefused(t *testing.T) {
+	t.Parallel()
 	d := backUpThreeParts(t)
 	tr := d.trailer
 	total := tr.ManifestOffset + tr.ManifestLength + container.TrailerLen

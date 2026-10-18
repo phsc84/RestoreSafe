@@ -9,7 +9,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/logging"
-	"github.com/phsc84/restoresafe/internal/problem"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/security/recovery"
 	"github.com/phsc84/restoresafe/internal/security/yubikey"
@@ -21,14 +20,14 @@ import (
 // Injectable for tests.
 var (
 	checkYubiKeyConnectedFn = yubikey.CheckConnected
+	countYubiKeysFn         = yubikey.CountConnected
 	combineWithPasswordFn   = yubikey.CombineWithPassword
-	registerSpareFn         = yubikey.RegisterSpare
 	generateRecoveryCodeFn  = recovery.Generate
 	unlockKeySetFn          = unlock.KeySet
 )
 
 // maxEnrollAttempts bounds retries of each enrollment step (password entry,
-// spare registration, recovery code confirmation).
+// recovery code confirmation).
 const maxEnrollAttempts = 3
 
 // obtainKeys unlocks the planned key set or runs enrollment. The caller must
@@ -45,6 +44,34 @@ func obtainKeys(u interact.UI, cfg *config.Config, keys plan.Keys, log *logging.
 	return enrollKeySet(u, cfg, log)
 }
 
+// yubiKeyRefusedReason is why the plan after a YubiKey refusal creates new
+// keys.
+const yubiKeyRefusedReason = "Your YubiKey didn't unlock the current keys"
+
+// askAfterYubiKeyRefusal asks what to do when unlocking the existing keys
+// failed with err. Only a YubiKey that didn't unlock them is asked about: a
+// YubiKey that was reset or is another one can never unlock them again, and
+// new keys are the way on. Any other failure, or a cancelled question,
+// answers RefusalCancel, and the backup ends with err.
+func askAfterYubiKeyRefusal(u interact.UI, keys plan.Keys, err error, log *logging.Logger) interact.YubiKeyRefusalAnswer {
+	var yk *unlock.YubiKeyError
+	if keys.Existing == nil || !errors.As(err, &yk) {
+		return interact.RefusalCancel
+	}
+	log.WarnLogOnly("%v", err)
+	answer, qerr := u.YubiKeyRefused(interact.YubiKeyRefusal{RecoveryCode: keys.Existing.HasSlotType(container.SlotRecovery)})
+	if qerr != nil {
+		return interact.RefusalCancel
+	}
+	switch answer {
+	case interact.RefusalRetry:
+		log.InfoLogOnly("Trying the YubiKey again.")
+	case interact.RefusalNewKeys:
+		log.Info("New keys requested after the YubiKey didn't unlock the current keys.")
+	}
+	return answer
+}
+
 // newSlot is one slot to create during enrollment, with its secret.
 type newSlot struct {
 	slotType  string
@@ -55,8 +82,8 @@ type newSlot struct {
 }
 
 // enrollKeySet creates a new key set: a new password (unless YubiKey-only),
-// YubiKey registration (plus the spare, if configured), and a recovery code
-// (if configured). Every slot is checked to unlock before anything is written.
+// YubiKey registration, and a recovery code (if configured, and always with a
+// YubiKey). Every slot is checked to unlock before anything is written.
 func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*container.KeySet, []byte, error) {
 	out := u.Output()
 	mode := cfg.AuthenticationMode
@@ -89,14 +116,14 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 	if mode == config.AuthModePassword {
 		slots = append(slots, newSlot{slotType: container.SlotPassword, label: "Password", secret: append([]byte(nil), password...)})
 	} else {
-		yubiSlots, err := registerYubiKeys(u, password, mode, cfg.YubiKeySpare)
-		slots = append(slots, yubiSlots...)
+		slot, err := registerYubiKey(u, password, mode)
 		if err != nil {
 			return nil, nil, err
 		}
+		slots = append(slots, slot)
 	}
 
-	if cfg.RecoveryCode {
+	if cfg.CreatesRecoveryCode() {
 		code, err := createRecoveryCode(u)
 		if err != nil {
 			return nil, nil, err
@@ -166,65 +193,26 @@ func readNewPassword(u interact.UI, minLength int) ([]byte, error) {
 	return nil, fmt.Errorf("No valid new password entered. No backup was written.")
 }
 
-// registerYubiKeys registers YubiKey 1 and, when spare is set, the spare
-// YubiKey. It returns the slots registered so far even on error, so the
-// caller can zero their secrets.
-func registerYubiKeys(u interact.UI, password []byte, mode config.AuthMode, spare bool) ([]newSlot, error) {
+// registerYubiKey registers the connected YubiKey: Windows asks for its PIN
+// twice, to register the credential and to derive the secret.
+func registerYubiKey(u interact.UI, password []byte, mode config.AuthMode) (newSlot, error) {
 	out := u.Output()
-	slotType := container.RegularSlotType(mode)
 	if err := checkYubiKeyConnectedFn(); err != nil {
-		return nil, yubikey.ErrRequired
+		return newSlot{}, yubikey.ErrRequired
 	}
-	fmt.Fprintln(out, "YubiKey 1:")
+	fmt.Fprintln(out, "YubiKey:")
 	fmt.Fprintln(out, "  1. Windows first asks for your YubiKey PIN to register the backup credential.")
 	fmt.Fprintln(out, "  2. Windows asks again for your YubiKey PIN to derive the encryption key.")
 	combined, challengeJSON, err := combineWithPasswordFn(password, mode == config.AuthModeYubiKey)
 	if err != nil {
-		return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
+		return newSlot{}, fmt.Errorf("YubiKey authentication failed: %w", err)
 	}
-	primary, err := yubikey.ParseChallengeJSON(challengeJSON)
+	cd, err := yubikey.ParseChallengeJSON(challengeJSON)
 	if err != nil {
 		cryptox.ZeroBytes(combined)
-		return nil, fmt.Errorf("YubiKey registration returned invalid data: %w", err)
+		return newSlot{}, fmt.Errorf("YubiKey registration returned invalid data: %w", err)
 	}
-	slots := []newSlot{{slotType: slotType, label: "YubiKey 1", secret: combined, challenge: &primary}}
-	if !spare {
-		return slots, nil
-	}
-
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, "Spare YubiKey: remove YubiKey 1 and insert your spare YubiKey.")
-	var failure error
-	for attempt := 1; attempt <= maxEnrollAttempts; attempt++ {
-		connected, err := u.WaitForSpareYubiKey(interact.SpareQuestion{Attempt: enrollAttempt(attempt, failure)})
-		if err != nil {
-			return slots, err
-		}
-		if !connected {
-			return slots, problem.New("Spare YubiKey registration cancelled. No backup was written.").WithRemedy("Set 'yubikey_spare: false' in config.yaml to back up without a spare YubiKey.")
-		}
-		if err := checkYubiKeyConnectedFn(); err != nil {
-			failure = errors.New("No YubiKey detected. Insert the spare YubiKey.")
-			continue
-		}
-		fmt.Fprintln(out, "  Windows asks twice for the PIN of the spare YubiKey (register, then derive).")
-		combined, challengeJSON, err := registerSpareFn(password, primary)
-		if errors.Is(err, yubikey.ErrAlreadyRegistered) {
-			failure = errors.New("This is YubiKey 1. Remove it and insert your spare YubiKey.")
-			continue
-		}
-		if err != nil {
-			return slots, fmt.Errorf("Spare YubiKey registration failed: %w", err)
-		}
-		cd, err := yubikey.ParseChallengeJSON(challengeJSON)
-		if err != nil {
-			cryptox.ZeroBytes(combined)
-			return slots, fmt.Errorf("Spare YubiKey registration returned invalid data: %w", err)
-		}
-		fmt.Fprintln(out, "Spare YubiKey registered. Keep it in a safe place, separate from YubiKey 1.")
-		return append(slots, newSlot{slotType: slotType, label: "YubiKey 2 (spare)", secret: combined, challenge: &cd}), nil
-	}
-	return slots, fmt.Errorf("Spare YubiKey registration failed after %d attempts. No backup was written.", maxEnrollAttempts)
+	return newSlot{slotType: container.RegularSlotType(mode), label: "YubiKey", secret: combined, challenge: &cd}, nil
 }
 
 // createRecoveryCode creates a new recovery code and shows it once.

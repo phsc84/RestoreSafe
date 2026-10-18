@@ -1,39 +1,30 @@
 package interact
 
 import (
+	"bytes"
 	"errors"
-	"strings"
 	"testing"
 )
 
-// answers returns a password reader that returns inputs in order.
-func answers(inputs ...string) func(string) ([]byte, error) {
-	return func(string) ([]byte, error) {
-		if len(inputs) == 0 {
-			return nil, errors.New("Failed to read password: EOF")
-		}
-		in := inputs[0]
-		inputs = inputs[1:]
-		return []byte(in), nil
-	}
-}
-
-func TestReadPasswordConfirmed(t *testing.T) {
+func TestCheckNewPassword(t *testing.T) {
 	t.Parallel()
 
-	if pw, err := ReadPasswordConfirmed(answers("secret", "secret"), "Password: ", "Confirm: "); err != nil || string(pw) != "secret" {
+	confirm := []byte("secret")
+	if pw, err := CheckNewPassword([]byte("secret"), confirm); err != nil || string(pw) != "secret" {
 		t.Fatalf("matching passwords: got %q, %v", pw, err)
 	}
-	if _, err := ReadPasswordConfirmed(answers("secret", "other"), "Password: ", "Confirm: "); !errors.Is(err, ErrPasswordMismatch) {
+	if !bytes.Equal(confirm, make([]byte, len(confirm))) {
+		t.Fatal("the confirmation must be zeroed")
+	}
+
+	pw := []byte("secret")
+	if _, err := CheckNewPassword(pw, []byte("other")); !errors.Is(err, ErrPasswordMismatch) {
 		t.Fatalf("mismatch: expected ErrPasswordMismatch, got %v", err)
 	}
-	if _, err := ReadPasswordConfirmed(answers(""), "Password: ", "Confirm: "); !errors.Is(err, ErrPasswordEmpty) {
-		t.Fatalf("empty: expected ErrPasswordEmpty, got %v", err)
+	if !bytes.Equal(pw, make([]byte, len(pw))) {
+		t.Fatal("a refused password must be zeroed")
 	}
-	for _, in := range [][]string{nil, {"secret"}} {
-		_, err := ReadPasswordConfirmed(answers(in...), "Password: ", "Confirm: ")
-		if err == nil || !strings.Contains(err.Error(), "Failed to read password") {
-			t.Fatalf("read error after %d answer(s): got %v", len(in), err)
-		}
+	if _, err := CheckNewPassword(nil, nil); !errors.Is(err, ErrPasswordEmpty) {
+		t.Fatalf("empty: expected ErrPasswordEmpty, got %v", err)
 	}
 }

@@ -55,12 +55,12 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	first := selectedInfos[0].Header
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
-	log := job.OpenLogger(cfg, backupDir, first.Date, naming.BackupID(first.RunID), out)
+	log := job.OpenLogger(cfg, logPath, out)
 	warningCount := 0
-	if !log.IsConsoleOnly() {
+	if log.HasFile() {
 		u.LogStarted(logPath)
 	}
-	if log.IsConsoleOnly() {
+	if !log.HasFile() {
 		warningCount++
 	}
 	defer log.Close()
@@ -122,6 +122,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) er
 			o.log.Warn("Verification cancelled.")
 			return job.Cancelled("Verification")
 		}
+		o.log.Error("%v", err)
 		return err
 	}
 	if skipped > 0 {

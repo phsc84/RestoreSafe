@@ -13,11 +13,11 @@ import (
 	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
-// TestHealthCheckDerivesNoKeys checks that the health check, which runs at
+// TestInspectDerivesNoKeys checks that the health check, which runs at
 // every start, only reads the structure of the sets: a header can ask for
 // 4 GiB of Argon2 memory per key slot, which would allocate that much for
 // each key derived.
-func TestHealthCheckDerivesNoKeys(t *testing.T) {
+func TestInspectDerivesNoKeys(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	expensive := *fx.KeySet
 	expensive.Slots = slices.Clone(expensive.Slots)
@@ -38,7 +38,7 @@ func TestHealthCheckDerivesNoKeys(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	s := TakeSnapshot(Params{Config: cfg, ExeDir: exeDir, ConfigPath: filepath.Join(exeDir, "config.yaml"), Now: time.Now()})
-	Check(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
+	check(cfg, exeDir, filepath.Join(exeDir, "config.yaml"))
 	runtime.ReadMemStats(&after)
 
 	found := false

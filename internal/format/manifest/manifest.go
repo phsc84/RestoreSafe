@@ -163,15 +163,6 @@ func (b *Builder) SkipLastDirectory(p, reason string) bool {
 // Footer returns the totals of the entries collected so far.
 func (b *Builder) Footer() Footer { return computeFooter(b.entries) }
 
-// Bytes returns the serialized manifest; see Encode.
-func (b *Builder) Bytes() ([]byte, error) {
-	var buf bytes.Buffer
-	if err := b.Encode(&buf); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
 // Encode computes the footer, validates the manifest, and writes its
 // serialized form to w line by line, so that the serialized manifest is never
 // held in memory as a whole. Validation here guarantees RestoreSafe never
@@ -219,11 +210,6 @@ func computeFooter(entries []Entry) Footer {
 		}
 	}
 	return f
-}
-
-// Parse reads and validates a serialized manifest.
-func Parse(data []byte) (*Manifest, error) {
-	return Decode(bytes.NewReader(data))
 }
 
 // Decode reads and validates a serialized manifest from r line by line, so
@@ -292,7 +278,7 @@ func manifestErr(format string, args ...any) error {
 	return problem.Errorf("Invalid backup manifest: %s.", fmt.Sprintf(format, args...)).WithRemedy("Use an unmodified backup created by RestoreSafe.")
 }
 
-// Validate checks the manifest against the rules of the format (2.0 spec 5.2).
+// Validate checks the manifest against the rules of the format (core spec 5.2).
 // Consistency with the set header is checked by the caller.
 func (m *Manifest) Validate() error {
 	h := m.Header

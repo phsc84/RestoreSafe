@@ -34,6 +34,11 @@ var workflowRuns = []string{
 // layers, but production code must not import them.
 var testSupport = []string{"internal/testutil", "internal/e2e", "internal/architecture"}
 
+// devTools are development tools, such as the CI runner. They are not part
+// of the program: outside the layers, and separate from it in both
+// directions (TestDevToolsStandAlone).
+var devTools = []string{"tools"}
+
 // rel returns path relative to the module root: "." for the root package,
 // and path itself when it is outside the module.
 func rel(path string) string {
@@ -126,7 +131,7 @@ func moduleImports(t *testing.T) map[string][]string {
 
 func TestEveryPackageBelongsToALayer(t *testing.T) {
 	for pkg := range moduleImports(t) {
-		if layerOf(pkg) < 0 && !underAny(pkg, testSupport) {
+		if layerOf(pkg) < 0 && !underAny(pkg, testSupport) && !underAny(pkg, devTools) {
 			t.Errorf("package %s is in no layer; add it to layers in this test and to the plan", pkg)
 		}
 	}
@@ -218,6 +223,23 @@ func TestFlowKnowsNoWords(t *testing.T) {
 		for _, imp := range imports {
 			if under(imp, "internal/gui/view") {
 				t.Errorf("%s imports %s; view words flow, not the other way round", pkg, imp)
+			}
+		}
+	}
+}
+
+// TestDevToolsStandAlone keeps the development tools apart from the program:
+// a package under tools imports no package of the module, and no package
+// outside tools imports one under tools.
+func TestDevToolsStandAlone(t *testing.T) {
+	for pkg, imports := range moduleImports(t) {
+		inTools := underAny(pkg, devTools)
+		for _, imp := range imports {
+			switch toTools := underAny(imp, devTools); {
+			case inTools && !toTools:
+				t.Errorf("%s imports %s; development tools import no package of the program", pkg, imp)
+			case !inTools && toTools:
+				t.Errorf("%s imports %s; the program imports no development tool", pkg, imp)
 			}
 		}
 	}

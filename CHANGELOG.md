@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-18
+
+### Added
+- **YubiKey page**, at the bottom of the sidebar while your configuration or your backups use a YubiKey (`Ctrl+4`): whether Windows and the connected YubiKey are ready (FIDO2, firmware), **Test YubiKey…** to check that it opens your backups, help with the PIN, a reset and FIDO2 (it starts Yubico Authenticator, or opens its download page), and technical details to copy into a bug report. It updates when a YubiKey is plugged in or pulled out.
+- With a YubiKey, the Keys card on Create backup says how the first backup sets it up, and warns never to reset it.
+- When your YubiKey doesn't unlock your keys at the start of a backup, for example because it was reset, the backup no longer just fails: **Try again**, or **Create new keys + full backup**, which shows the plan with new keys to start. The dialog says whether your older backups still open with your recovery code.
+- The sidebar shows the item under the mouse.
+
+### Changed
+- A backup doesn't start while more than one YubiKey is connected: new keys would register the one you touch, and nothing would say which. Restore and verify work as before.
+- With a YubiKey (`authentication_mode` 2 or 3), new keys always come with a recovery code, whatever `recovery_code` says, so a lost or broken YubiKey doesn't lose your backups.
+- A setting RestoreSafe no longer uses no longer stops the start: it is ignored. At start, a dialog names such settings and the ones missing from `config.yaml`, and **Update config.yaml** removes the old ones and adds the missing ones with their defaults (a copy of the previous file is kept). **Not now** asks again at the next start. This replaces **Add to config.yaml** on the Settings page.
+- A new recovery code stays on screen until you tick **I have stored my recovery code**: only then is **Continue** (formerly **I have stored it**) enabled, so a habitual click on the blue button doesn't lose the code.
+- The windows that show the plan of a backup and of a restore are titled **Create backup** and **Restore backup**, like the pages they open from.
+- A failed backup, restore or verification, and a backup set that fails its check after the backup, are logged as **ERROR** lines with the reason. They used to be warnings, and the reason of a failed run was missing from the log. **Warnings and errors** in the log window shows them.
+
+### Removed
+- The spare YubiKey and its setting `yubikey_spare`: a key set has one YubiKey, and the recovery code is the fallback. RestoreSafe offers to remove `yubikey_spare` from `config.yaml`. Backups whose keys have a spare YubiKey can no longer be opened.
+- The developer tool `yubidiag`: the YubiKey page replaces it.
+
+### Fixed
+- Scrolling a page slowly no longer leaves controls painted over each other.
+- A restore and a verification of the same backup, run at the same time in two windows, no longer lose lines of each other's log.
+- A folder deleted while a backup runs no longer stops the backup or shows as a file that could not be read; like a deleted file, it is simply not in the backup.
+
+### Dependencies
+- `golang.org/x/crypto` 0.58.0 (was 0.57.0), `golang.org/x/sys` 0.49.0 (was 0.48.0).
+
 ## [2.0.0] - 2026-10-10
 
 **Breaking change:** RestoreSafe 2.0 uses a new backup format. It cannot restore backups created by 1.x, and 1.x cannot restore 2.0 backups. Keep RestoreSafe 1.0.2 to restore your 1.x backups; 2.0 never modifies or deletes them. Start from the new `config-SAMPLE.yaml`. See "Updating from RestoreSafe 1.x to 2.0" in the README.

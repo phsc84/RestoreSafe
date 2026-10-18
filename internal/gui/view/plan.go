@@ -11,7 +11,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// PlanRow is one folder of the backup plan (GUI spec BP-1).
+// PlanRow is one folder of the Create backup window (GUI spec BP-1).
 type PlanRow struct {
 	Name, Path string
 	// Badge is the planned type; nil for a folder that is not backed up.
@@ -38,7 +38,7 @@ type IssueLine struct {
 	Glyph Glyph
 }
 
-// BackupPlanView is the backup plan dialog (GUI spec 6.1).
+// BackupPlanView is the Create backup window (GUI spec 6.1).
 type BackupPlanView struct {
 	Title   string
 	Heading string
@@ -193,11 +193,8 @@ func unlockText(k interact.KeyPlan) string {
 		if k.Password {
 			steps = append(steps, unlockNewPassword)
 		}
-		switch k.YubiKeys {
-		case 1:
+		if k.YubiKey {
 			steps = append(steps, unlockRegisterOne)
-		case 2:
-			steps = append(steps, unlockRegisterTwo)
 		}
 		if k.RecoveryCode {
 			steps = append(steps, unlockRecoveryCode)
@@ -205,9 +202,9 @@ func unlockText(k interact.KeyPlan) string {
 		return capitalize(strings.Join(steps, ", "))
 	}
 	switch {
-	case k.Password && k.YubiKeys > 0:
+	case k.Password && k.YubiKey:
 		return unlockTouchAndPassword
-	case k.YubiKeys > 0:
+	case k.YubiKey:
 		return unlockTouch
 	}
 	return unlockPassword
@@ -355,7 +352,7 @@ func NewKeysConfirm(cfg *config.Config) Confirm {
 	if cfg.UseYubiKey() {
 		locks = append(locks, lockYubiKey)
 	}
-	if cfg.RecoveryCode {
+	if cfg.CreatesRecoveryCode() {
 		locks = append(locks, lockRecoveryCode)
 	}
 	return Confirm{

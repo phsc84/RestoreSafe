@@ -180,17 +180,6 @@ func (ks *KeySet) HasSlotType(slotType string) bool {
 	return len(ks.SlotIndexes(slotType)) > 0
 }
 
-// YubiKeyCount returns the number of registered YubiKey slots.
-func (ks *KeySet) YubiKeyCount() int {
-	n := 0
-	for _, s := range ks.Slots {
-		if s.UsesYubiKey() {
-			n++
-		}
-	}
-	return n
-}
-
 func slotAAD(keySetID string, index int, slotType string) []byte {
 	aad := make([]byte, 0, len(slotAADLabel)+len(keySetID)+4+len(slotType))
 	aad = append(aad, slotAADLabel...)
@@ -228,42 +217,17 @@ func (ks *KeySet) Validate() error {
 			return headerErr("slot %d: %v", i, err)
 		}
 	}
-	if regularCount < 1 || recoveryCount > 1 {
+	if regularCount != 1 || recoveryCount > 1 {
 		return headerErr("unexpected slot counts")
-	}
-	if regular == SlotPassword && regularCount != 1 {
-		return headerErr("password mode must have exactly one password slot")
-	}
-	if regular != SlotPassword && regularCount > 2 {
-		return headerErr("at most two YubiKey slots are supported")
-	}
-	// All YubiKeys of a key set share one hmac-secret salt so that restore can
-	// ask for any of them in a single request.
-	salt := ""
-	for _, s := range ks.Slots {
-		if !s.UsesYubiKey() {
-			continue
-		}
-		if salt != "" && s.Challenge.Salt != salt {
-			return headerErr("YubiKey slots use different salts")
-		}
-		salt = s.Challenge.Salt
 	}
 	return nil
 }
 
 // Summary returns a one-line description such as
-// "created 2026-09-01, password + YubiKey (2 YubiKeys), recovery code".
+// "created 2026-09-01, password + YubiKey, recovery code".
 func (ks *KeySet) Summary() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "created %s, %s", ks.Created().Local().Format("2006-01-02"), ks.AuthMode.Label())
-	if n := ks.YubiKeyCount(); n > 0 {
-		fmt.Fprintf(&b, " (%d YubiKey", n)
-		if n > 1 {
-			b.WriteString("s")
-		}
-		b.WriteString(")")
-	}
 	if ks.HasSlotType(SlotRecovery) {
 		b.WriteString(", recovery code")
 	}

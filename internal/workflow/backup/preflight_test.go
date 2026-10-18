@@ -14,6 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
 
@@ -151,7 +152,7 @@ func TestValidateBackupPartCountAllowsBackupsWithinLimit(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
+func TestProposalReportOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -170,7 +171,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	// A tiny source is nowhere near the part limit, so the summary should stay
@@ -183,7 +184,7 @@ func TestPrintBackupPreflightOmitsPartCountWhenWellBelowLimit(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
+func TestProposalReportShowsErrorSourceAndWarnSource(t *testing.T) {
 	t.Parallel()
 	backupDir := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, RetentionKeep: 0, AuthenticationMode: config.AuthModePassword, LogLevel: "info"}
@@ -193,7 +194,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	if !strings.Contains(output, "[ERROR]") {
@@ -213,7 +214,7 @@ func TestPrintBackupPreflightShowsErrorSourceAndWarnSource(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
+func TestProposalReportShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -229,7 +230,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -249,7 +250,7 @@ func TestPrintBackupPreflightShowsYubiKeyOKAfterAuthentication(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
+func TestProposalReportShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	t.Parallel()
 	tempRoot := t.TempDir()
 	backupDir := filepath.Join(tempRoot, "target")
@@ -265,7 +266,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return errors.New("no YubiKey detected") }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return errors.New("no YubiKey detected") }))
 	output := sb.String()
 
 	authLine := "Authentication: password + YubiKey"
@@ -285,7 +286,7 @@ func TestPrintBackupPreflightShowsYubiKeyWarnAfterAuthentication(t *testing.T) {
 	}
 }
 
-func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSummary(t *testing.T) {
+func TestProposalReportOrdersSourceBeforeTargetAndPlacesNeededSpaceInSummary(t *testing.T) {
 	t.Parallel()
 
 	tempRoot := t.TempDir()
@@ -306,7 +307,7 @@ func TestPrintBackupPreflightOrdersSourceBeforeTargetAndPlacesNeededSpaceInSumma
 	sources := []plan.Source{{Resolved: sourceDir}}
 
 	var sb strings.Builder
-	interact.WriteReport(&sb, backupPreflightReport(cfg, backupDir, sources, plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, nil, estimateBackupSpace(cfg, backupDir, sources, nil), func() error { return nil }))
+	interacttest.WriteReport(&sb, firstBackup(cfg, backupDir, sources).report(func() error { return nil }))
 	output := sb.String()
 
 	sourceIdx := strings.Index(output, "Source directory(s):")
@@ -351,7 +352,7 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 	cfg := &config.Config{SplitSizeMB: 1}
 	sources := []plan.Source{{Resolved: sourceDir}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	issues, err := backupPreflightIssues(root, sources, estimateBackupSpace(cfg, root, sources, nil), validateBackupPartCount(cfg, sources))
+	issues, err := backupPreflightIssues(root, sources, estimateBackupSpace(cfg, root, sources, nil), validateBackupPartCount(cfg, sources), nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "Backup preflight failed: 1 source directory(s)") {
 		t.Fatalf("expected the source error first, got %v", err)
 	}
@@ -365,18 +366,52 @@ func TestBackupPreflightIssuesCollectsEveryFailedCheck(t *testing.T) {
 		t.Fatalf("issue text must not repeat the error prefix: %q", issues[0].Text)
 	}
 
-	if issues, err := backupPreflightIssues(root, nil, spaceEstimate{}, nil); err != nil || len(issues) != 0 {
+	if issues, err := backupPreflightIssues(root, nil, spaceEstimate{}, nil, nil); err != nil || len(issues) != 0 {
 		t.Fatalf("no sources to check: got %+v, %v", issues, err)
 	}
 }
 
-func TestBackupPreflightReportStructure(t *testing.T) {
+// Two YubiKeys block a backup whose keys need a YubiKey (decision 12).
+// Not parallel: it replaces the count of connected YubiKeys.
+func TestSeveralYubiKeysBlockTheBackup(t *testing.T) {
+	prev := countYubiKeysFn
+	t.Cleanup(func() { countYubiKeysFn = prev })
+	countYubiKeysFn = func() (int, error) { return 2, nil }
+
+	yk := &config.Config{AuthenticationMode: config.AuthModeYubiKey}
+	pw := &config.Config{AuthenticationMode: config.AuthModePassword}
+	err := severalYubiKeys(yk, plan.Keys{})
+	if err == nil || !strings.Contains(err.Error(), "2 YubiKeys are connected") {
+		t.Fatalf("new YubiKey keys: %v", err)
+	}
+	if severalYubiKeys(pw, plan.Keys{}) != nil {
+		t.Fatal("new password keys need no YubiKey")
+	}
+	// The existing keys decide, not the configuration.
+	if severalYubiKeys(pw, plan.Keys{Existing: &container.KeySet{AuthMode: config.AuthModePasswordYubiKey}}) == nil {
+		t.Fatal("existing YubiKey keys")
+	}
+	if severalYubiKeys(yk, plan.Keys{Existing: &container.KeySet{AuthMode: config.AuthModePassword}}) != nil {
+		t.Fatal("existing password keys")
+	}
+	countYubiKeysFn = func() (int, error) { return 1, nil }
+	if severalYubiKeys(yk, plan.Keys{}) != nil {
+		t.Fatal("one YubiKey")
+	}
+
+	issues, blockErr := backupPreflightIssues(t.TempDir(), nil, spaceEstimate{}, nil, err)
+	if blockErr == nil || len(issues) != 1 || issues[0].Code != interact.CodeYubiKeysConnected || issues[0].Status != interact.StatusError || issues[0].Remedy == "" {
+		t.Fatalf("the issue must block: %+v, %v", issues, blockErr)
+	}
+}
+
+func TestProposalReportStructure(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	cfg := &config.Config{SplitSizeMB: 64, AuthenticationMode: config.AuthModeYubiKey, LogLevel: "info"}
 	sources := []plan.Source{{Resolved: root}, {Resolved: filepath.Join(root, "gone"), Err: errors.New("not found")}}
 
-	r := backupPreflightReport(cfg, root, sources, plan.Keys{NewKeysReason: "No existing keys"}, nil, spaceEstimate{}, func() error { return errors.New("no") })
+	r := proposal{cfg: cfg, backupDir: root, sources: sources, keys: plan.Keys{NewKeysReason: "No existing keys"}}.report(func() error { return errors.New("no") })
 	if r.Title != "Backup preflight" || len(r.Sections) != 2 {
 		t.Fatalf("unexpected report: %+v", r)
 	}
@@ -471,7 +506,7 @@ func TestEstimateBackupSpaceCountsOnlyChangedFilesForDifferentials(t *testing.T)
 	}
 }
 
-func TestValidateSpaceErrorOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
+func TestValidateTargetSpaceForBackupFailsOnlyWhenTheEstimateDoesNotFit(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	free, err := fsx.QueryFreeSpaceBytes(dir)
@@ -519,7 +554,7 @@ func TestBackupPreflightIssuesWarnsForALargeDifferential(t *testing.T) {
 		t.Skip("free space unknown")
 	}
 	est := spaceEstimate{full: int64(free) + 1<<30, likely: 1, anyDiff: true}
-	issues, err := backupPreflightIssues(dir, nil, est, nil)
+	issues, err := backupPreflightIssues(dir, nil, est, nil, nil)
 	if err != nil || len(issues) != 1 || issues[0].Status != interact.StatusWarn || issues[0].Code != interact.CodeSpaceEstimateOnly {
 		t.Fatalf("expected one warning and no error, got %+v, %v", issues, err)
 	}
@@ -533,5 +568,38 @@ func TestSourceProblemCode(t *testing.T) {
 	}
 	if got := sourceProblemCode([]plan.Source{{Err: errors.New("not a directory")}}); got != interact.CodeSourceInvalid {
 		t.Fatalf("other problem: got %s", got)
+	}
+}
+
+// estimateBackupSpace measures the sources and estimates the space plans
+// need.
+func estimateBackupSpace(cfg *config.Config, backupDir string, sources []plan.Source, plans map[string]*plan.Folder) spaceEstimate {
+	return measureSources(cfg, backupDir, sources, plans).estimate(plans)
+}
+
+// firstBackup is the proposal of a first backup of sources: new keys, every
+// folder a full backup.
+func firstBackup(cfg *config.Config, backupDir string, sources []plan.Source) proposal {
+	return proposal{cfg: cfg, backupDir: backupDir, sources: sources, keys: plan.Keys{NewKeysReason: "No existing keys found in the backup directory"}, est: estimateBackupSpace(cfg, backupDir, sources, nil)}
+}
+
+func TestKeyPlanForSaysWhichKeysLockTheBackups(t *testing.T) {
+	t.Parallel()
+
+	existing := &container.KeySet{AuthMode: config.AuthModePasswordYubiKey, CreatedUTC: "2026-03-14T09:00:00Z"}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: existing}); kp.New || !kp.Password || !kp.YubiKey {
+		t.Fatalf("existing password and YubiKey keys: %+v", kp)
+	}
+	yubiOnly := &container.KeySet{AuthMode: config.AuthModeYubiKey}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{Existing: yubiOnly}); kp.Password || !kp.YubiKey {
+		t.Fatalf("existing YubiKey-only keys: %+v", kp)
+	}
+	// With a YubiKey, new keys always get a recovery code.
+	cfg := &config.Config{AuthenticationMode: config.AuthModePasswordYubiKey}
+	if kp := keyPlanFor(cfg, plan.Keys{NewKeysReason: "authentication_mode changed"}); !kp.New || kp.NewKeysReason != "authentication_mode changed" || !kp.Password || !kp.YubiKey || !kp.RecoveryCode {
+		t.Fatalf("new keys with a YubiKey: %+v", kp)
+	}
+	if kp := keyPlanFor(&config.Config{}, plan.Keys{}); kp.YubiKey || kp.RecoveryCode {
+		t.Fatalf("new password keys without recovery_code: %+v", kp)
 	}
 }

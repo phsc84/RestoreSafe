@@ -9,7 +9,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// Control IDs of the plan dialog.
+// Control IDs of the Create backup window.
 const (
 	idPlanStart = 451 + iota
 	idPlanFull
@@ -19,7 +19,7 @@ const (
 	idPlanRemoves
 )
 
-// Sizes of the plan dialog, in DIPs.
+// Sizes of the Create backup window, in DIPs.
 const (
 	planWidth  = 680
 	planMargin = 18
@@ -27,7 +27,7 @@ const (
 
 const planClass = "RestoreSafePlan"
 
-// planDialog is the backup plan (GUI spec 6.1). It opens when the backup
+// planDialog is the Create backup window (GUI spec 6.1). It opens when the backup
 // starts, with a marquee while the workflow measures the folders, shows
 // each plan the workflow sends, and stays open while the user switches
 // plans. It is modal to the main window but runs in the main message
@@ -53,7 +53,7 @@ type planDialog struct {
 	left, right []win32.HWND
 }
 
-// openPlanDialog opens the plan dialog in its waiting state.
+// openPlanDialog opens the Create backup window in its waiting state.
 func (a *app) openPlanDialog() {
 	if a.plan != nil {
 		return
@@ -157,7 +157,7 @@ func (p *planDialog) layout(place bool) {
 	w := s.Px(planWidth)
 	h := p.table.fit(margin + st.height() + margin + buttonsH + margin)
 	p.win.resize(w, h, place)
-	st.place(margin, margin)
+	st.place(margin, margin, st.width)
 	left, right := p.left, p.right
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	for i := len(right) - 1; i >= 0; i-- {
@@ -195,10 +195,10 @@ func (p *planDialog) content(st *stack) {
 		st.gap(4)
 	}
 	if v.RemovesLink != "" {
-		st.row(stackLineHeight, cell{dip: stackLabelWidth}, cell{hwnd: p.link(view.Button{Text: v.RemovesLink, Enabled: true}, idPlanRemoves), fill: true})
+		st.row(stackLineHeight, labelColumn(0), cell{hwnd: p.link(view.Button{Text: v.RemovesLink, Enabled: true}, idPlanRemoves), fill: true})
 		if p.showRemoves {
 			for _, r := range v.Removes {
-				st.row(stackLineHeight, cell{dip: stackLabelWidth}, cell{hwnd: panel.Label(r, widget.TextSmall, pal.TextSecondary), fill: true})
+				st.row(stackLineHeight, labelColumn(0), cell{hwnd: panel.Label(r, widget.TextSmall, pal.TextSecondary), fill: true})
 			}
 		}
 	}

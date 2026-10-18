@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestPlanBackupSourcesReportsExpectedStatuses(t *testing.T) {
+func TestResolveSourcesReportsExpectedStatuses(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -43,7 +43,7 @@ func TestPlanBackupSourcesReportsExpectedStatuses(t *testing.T) {
 	}
 }
 
-func TestPlanBackupSourcesAssignsBaseNamesForUniqueDirectories(t *testing.T) {
+func TestResolveSourcesAssignsBaseNamesForUniqueDirectories(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -81,7 +81,7 @@ func TestPlanBackupSourcesAssignsBaseNamesForUniqueDirectories(t *testing.T) {
 	}
 }
 
-func TestPlanBackupSourcesAssignsAliasForDuplicateBasename(t *testing.T) {
+func TestResolveSourcesAssignsAliasForDuplicateBasename(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -118,7 +118,7 @@ func TestPlanBackupSourcesAssignsAliasForDuplicateBasename(t *testing.T) {
 	}
 }
 
-func TestPlanBackupSourcesMarksIdenticalDuplicateAsSkipped(t *testing.T) {
+func TestResolveSourcesMarksIdenticalDuplicateAsSkipped(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -148,7 +148,7 @@ func TestPlanBackupSourcesMarksIdenticalDuplicateAsSkipped(t *testing.T) {
 	}
 }
 
-func TestPlanBackupSourcesDistinguishesHyphenAndUnderscoreAliases(t *testing.T) {
+func TestResolveSourcesDistinguishesHyphenAndUnderscoreAliases(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -191,7 +191,7 @@ func TestPlanBackupSourcesDistinguishesHyphenAndUnderscoreAliases(t *testing.T) 
 	}
 }
 
-func TestPlanBackupSourcesDistinguishesSpaceFromHyphenAndUnderscoreAliases(t *testing.T) {
+func TestResolveSourcesDistinguishesSpaceFromHyphenAndUnderscoreAliases(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()
@@ -234,7 +234,7 @@ func TestPlanBackupSourcesDistinguishesSpaceFromHyphenAndUnderscoreAliases(t *te
 	}
 }
 
-func TestPlanBackupSourcesEncodesSpecialCharactersUniquely(t *testing.T) {
+func TestResolveSourcesEncodesSpecialCharactersUniquely(t *testing.T) {
 	t.Parallel()
 
 	exeDir := t.TempDir()

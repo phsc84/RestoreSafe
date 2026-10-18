@@ -113,7 +113,7 @@ func unlockingLine(r *flow.Run) string {
 	switch {
 	case k.New:
 		return progressCreatingKeys
-	case k.YubiKeys > 0:
+	case k.YubiKey:
 		return progressSecurityPrompt
 	}
 	return progressUnlocking
