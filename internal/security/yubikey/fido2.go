@@ -64,7 +64,7 @@ var fido2RuntimeReady = func() error {
 	if err := checkWebAuthnAPIVersion(); err != nil {
 		return err
 	}
-	if !yubiKeyVIDVisible() {
+	if n, err := CountConnected(); err != nil || n == 0 {
 		return ErrNotConnected
 	}
 	return nil
@@ -94,11 +94,7 @@ func CountConnected() (int, error) {
 	}
 	seen := map[string]bool{}
 	for _, d := range devices {
-		key := d.Parent
-		if key == "" {
-			key = d.InstanceID
-		}
-		seen[key] = true
+		seen[yubiKeyOf(d.Parent, d.InstanceID)] = true
 	}
 	return len(seen), nil
 }

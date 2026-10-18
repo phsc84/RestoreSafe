@@ -44,11 +44,14 @@ type hidDevice struct {
 // hidDevicesFn lists the connected Yubico HID interfaces; replaced in tests.
 var hidDevicesFn = yubicoHIDDevices
 
-// yubiKeyVIDVisible returns true if any HID device path contains the Yubico VID.
-// Used as a lightweight presence check that does not open any device handle.
-func yubiKeyVIDVisible() bool {
-	devices, err := hidDevicesFn()
-	return err == nil && len(devices) > 0
+// yubiKeyOf returns what tells YubiKeys apart for an interface: the USB
+// device it belongs to, or the interface itself when Windows didn't name
+// the device.
+func yubiKeyOf(parent, instanceID string) string {
+	if parent == "" {
+		return instanceID
+	}
+	return parent
 }
 
 func yubicoHIDDevices() ([]hidDevice, error) {

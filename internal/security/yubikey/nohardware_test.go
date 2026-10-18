@@ -72,8 +72,8 @@ func TestPlatformChecksRunWithoutAYubiKey(t *testing.T) {
 			t.Fatalf("a device of another vendor or without a path: %+v", dev)
 		}
 	}
-	if yubiKeyVIDVisible() != (len(devices) > 0) {
-		t.Fatal("yubiKeyVIDVisible must agree with yubicoHIDDevices")
+	if n, err := CountConnected(); err != nil || (n > 0) != (len(devices) > 0) {
+		t.Fatalf("CountConnected: %d, error %v; must agree with yubicoHIDDevices", n, err)
 	}
 	if d := Diagnose(); d.EnumErr != nil || len(d.Interfaces) != len(devices) {
 		t.Fatalf("Diagnose: %d interfaces, error %v; want %d", len(d.Interfaces), d.EnumErr, len(devices))

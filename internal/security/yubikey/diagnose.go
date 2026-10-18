@@ -107,10 +107,7 @@ func (d Diagnosis) Keys() []Key {
 	var keys []Key
 	index := map[string]int{}
 	for _, iface := range d.Interfaces {
-		device := iface.Device
-		if device == "" {
-			device = iface.InstanceID
-		}
+		device := yubiKeyOf(iface.Device, iface.InstanceID)
 		i, ok := index[device]
 		if !ok {
 			keys = append(keys, Key{Device: iface.Device, ProductID: iface.ProductID, Revision: iface.Revision})
