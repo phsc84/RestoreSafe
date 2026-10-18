@@ -6,6 +6,13 @@ import (
 	"github.com/phsc84/restoresafe/internal/gui/win32"
 )
 
+// cellGap is the gap between the cells of a row, in DIPs.
+const cellGap = 8
+
+// minWrapWidth is the narrowest width text is measured at, in DIPs: before
+// the first layout, a page has no width.
+const minWrapWidth = 80
+
 // card is a card of rows of cells, rebuilt on every update.
 type card struct {
 	theme  *widget.Theme
@@ -13,6 +20,9 @@ type card struct {
 	linkID uint16
 	acts   actions
 	rows   []cardRow
+	// width is the card's width in pixels at the last reset: its text
+	// wraps at it.
+	width int32
 }
 
 // cardRow is a row of a card, height in DIPs.
@@ -55,9 +65,55 @@ func (c *card) tip(hwnd win32.HWND, text string) win32.HWND {
 	return hwnd
 }
 
-func (c *card) reset() {
+// reset clears the card for rows built at width pixels; 0 when none of its
+// text wraps.
+func (c *card) reset(width int32) {
 	c.panel.Clear()
 	c.rows = nil
+	c.width = width
+}
+
+// textWidth returns the width in pixels of a fill cell after cells of lead
+// DIPs and their gaps; 0 for none.
+func (c *card) textWidth(lead int32) int32 {
+	s := c.theme.Scale
+	w := c.width - 2*s.Px(widget.CardPadding)
+	if lead > 0 {
+		w -= s.Px(lead + cellGap)
+	}
+	return w
+}
+
+// textHeight returns the height in DIPs that text in style needs, wrapped
+// at width pixels: at least minHeight DIPs.
+func (c *card) textHeight(text string, style widget.TextStyle, width, minHeight int32) int32 {
+	s := c.theme.Scale
+	px := max(c.theme.Fonts.MeasureWrapped(text, style, max(width, s.Px(minWrapWidth))), s.Px(minHeight))
+	return px*96/int32(s) + 1
+}
+
+// para adds text that wraps over the card's width, past an indent of
+// indent DIPs.
+func (c *card) para(text string, style widget.TextStyle, color widget.Color, indent int32) {
+	h := c.panel.Paragraph(text, style, color)
+	height := c.textHeight(text, style, c.textWidth(indent), stackLineHeight)
+	if indent > 0 {
+		c.row(height, cell{dip: indent}, cell{hwnd: h, fill: true})
+		return
+	}
+	c.row(height, cell{hwnd: h, fill: true})
+}
+
+// contentWidth returns the width in pixels of a page's content: its client
+// width less the padding at both sides.
+func contentWidth(t *widget.Theme, page win32.HWND) int32 {
+	return win32.ClientRect(page).Width() - 2*t.Scale.Px(widget.ContentPaddingX)
+}
+
+// lineHeight returns the height of a line of text in style, in DIPs.
+func lineHeight(t *widget.Theme, style widget.TextStyle) int32 {
+	_, h := t.Fonts.Measure("Ag", style)
+	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
 }
 
 func (c *card) label(text string, style widget.TextStyle, color widget.Color) win32.HWND {
@@ -107,7 +163,7 @@ func (c *card) place(r win32.Rect) {
 // layoutRow places the cells of a row from the left; fill cells share the
 // width the others leave.
 func layoutRow(s widget.Scale, r win32.Rect, cells []cell) {
-	gap := s.Px(8)
+	gap := s.Px(cellGap)
 	fixed, fills := int32(0), int32(0)
 	for _, c := range cells {
 		switch {

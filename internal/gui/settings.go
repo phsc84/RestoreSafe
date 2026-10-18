@@ -98,30 +98,30 @@ func (sp *settingsPage) update() {
 	pal := t.Palette
 
 	c := sp.config
-	c.reset()
+	c.reset(sp.cardWidth(c))
 	c.heading(v.ConfigTitle, nil)
 	c.row(cardRowHeight+4,
 		cell{hwnd: c.panel.PathLabel(v.ConfigPath, widget.TextBody, pal.Text), fill: true},
 		sp.button(c, v.Edit, idSettingsEdit),
 		sp.button(c, v.Reload, idSettingsReload))
-	sp.para(c, v.ConfigNote, widget.TextSmall, pal.TextSecondary)
+	c.para(v.ConfigNote, widget.TextSmall, pal.TextSecondary, 0)
 	if v.ConfigError != "" {
-		sp.para(c, v.ConfigError, widget.TextSmall, pal.Error)
+		c.para(v.ConfigError, widget.TextSmall, pal.Error, 0)
 	}
 
 	c = sp.folders
-	c.reset()
+	c.reset(sp.cardWidth(c))
 	c.heading(v.FoldersTitle, nil)
 	sp.foldersTable.set(v.FoldersTable())
 	c.row(sp.sizer.rowHeight(), sp.foldersTable.cell())
 	sp.rows(c, v.FolderRows)
 
 	c = sp.backupDir
-	c.reset()
+	c.reset(sp.cardWidth(c))
 	c.heading(v.BackupDirTitle, nil)
 	st := v.BackupDirState
 	c.row(cardRowHeight+4,
-		cell{hwnd: c.panel.PathLabel(v.BackupDir, widget.TextBody, pal.Text), fill: true, height: sp.lineHeight(widget.TextBody)},
+		cell{hwnd: c.panel.PathLabel(v.BackupDir, widget.TextBody, pal.Text), fill: true, height: lineHeight(sp.a.theme, widget.TextBody)},
 		sp.status(c, st.Value, st.Tone, st.Glyph),
 		sp.button(c, v.Open, idSettingsOpen))
 	sp.rows(c, v.BackupDirRows)
@@ -139,7 +139,7 @@ func (sp *settingsPage) update() {
 func (sp *settingsPage) fillCard(c *card, v view.SettingsCard) {
 	t := sp.a.theme
 	pal := t.Palette
-	c.reset()
+	c.reset(sp.cardWidth(c))
 	c.heading(v.Title, nil)
 	sp.rows(c, v.Rows)
 	if v.MoreLink != "" {
@@ -147,11 +147,11 @@ func (sp *settingsPage) fillCard(c *card, v view.SettingsCard) {
 		c.row(cardRowHeight, cell{hwnd: c.panel.Link(v.MoreLink, idSettingsMore), px: w + t.Scale.Px(linkPadding)})
 		if sp.showArgon2 {
 			sp.rows(c, v.More)
-			sp.para(c, v.MoreNote, widget.TextSmall, pal.TextSecondary)
+			c.para(v.MoreNote, widget.TextSmall, pal.TextSecondary, 0)
 		}
 	}
 	if v.Note != "" {
-		sp.para(c, v.Note, widget.TextSmall, toneColor(pal, v.NoteTone))
+		c.para(v.Note, widget.TextSmall, toneColor(pal, v.NoteTone), 0)
 	}
 }
 
@@ -161,40 +161,28 @@ func (sp *settingsPage) rows(c *card, rows []view.Setting) {
 	s := t.Scale
 	pal := t.Palette
 	labelDip := int32(settingLabelWidth)
-	if sp.cardWidth(c) < s.Px(2*settingLabelWidth+80) {
+	if c.width < s.Px(2*settingLabelWidth+80) {
 		labelDip = settingLabelWidth * 2 / 3
 	}
-	valueW := sp.cardWidth(c) - 2*s.Px(widget.CardPadding) - s.Px(labelDip) - s.Px(8)
 	for _, r := range rows {
 		value := pal.Text
 		if r.Tone != view.ToneNeutral {
 			value = toneColor(pal, r.Tone)
 		}
 		h := max(
-			t.Fonts.MeasureWrapped(r.Label, widget.TextSmall, s.Px(labelDip)),
-			t.Fonts.MeasureWrapped(r.Value, widget.TextBody, max(valueW, s.Px(80))),
-			s.Px(cardRowHeight))
-		c.row(h*96/int32(s)+1,
+			c.textHeight(r.Label, widget.TextSmall, s.Px(labelDip), cardRowHeight),
+			c.textHeight(r.Value, widget.TextBody, c.textWidth(labelDip), cardRowHeight))
+		c.row(h,
 			cell{hwnd: c.panel.Paragraph(r.Label, widget.TextSmall, pal.TextSecondary), dip: labelDip},
 			cell{hwnd: c.tip(c.panel.Paragraph(r.Value, widget.TextBody, value), view.KeyTip(r.Key)), fill: true})
 	}
-}
-
-// para adds text that wraps over the card's width.
-func (sp *settingsPage) para(c *card, text string, style widget.TextStyle, color widget.Color) {
-	t := sp.a.theme
-	s := t.Scale
-	h := c.panel.Paragraph(text, style, color)
-	width := sp.cardWidth(c) - 2*s.Px(widget.CardPadding)
-	px := max(t.Fonts.MeasureWrapped(text, style, max(width, s.Px(200))), s.Px(stackLineHeight))
-	c.row(px*96/int32(s)+1, cell{hwnd: h, fill: true})
 }
 
 // cardWidth returns the width a card gets, in pixels: the page's content
 // width, or half of it for the cards in pairs.
 func (sp *settingsPage) cardWidth(c *card) int32 {
 	s := sp.a.theme.Scale
-	w := win32.ClientRect(sp.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX)
+	w := contentWidth(sp.a.theme, sp.panel.HWND())
 	switch c {
 	case sp.differential, sp.retention, sp.checks, sp.keys:
 		return (w - s.Px(widget.CardGap)) / 2
@@ -212,7 +200,7 @@ func (sp *settingsPage) status(c *card, text string, tone view.Tone, glyph view.
 	w += t.Scale.Px(6)
 	// The text is as high as its line, so the row centers it like the
 	// buttons next to it; the icon centers its glyph in the same height.
-	height := sp.lineHeight(widget.TextSmall)
+	height := lineHeight(sp.a.theme, widget.TextSmall)
 	if glyph == view.GlyphNone {
 		return cell{hwnd: label, px: w, height: height}
 	}
@@ -225,13 +213,6 @@ func (sp *settingsPage) status(c *card, text string, tone view.Tone, glyph view.
 	c.panel.Adopt(icon.HWND())
 	icon.Set(glyphOf(glyph), color, widget.NoCircle, "")
 	return cell{hwnd: label, px: w + t.Scale.Px(iconWidth), icon: icon.HWND(), height: height}
-}
-
-// lineHeight returns the height of a line of text in style, in DIPs.
-func (sp *settingsPage) lineHeight(style widget.TextStyle) int32 {
-	t := sp.a.theme
-	_, h := t.Fonts.Measure("Ag", style)
-	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
 }
 
 // button creates a button cell for b.

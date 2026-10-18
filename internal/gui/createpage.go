@@ -1,7 +1,6 @@
 package gui
 
 import (
-	"strings"
 	"time"
 
 	"github.com/phsc84/restoresafe/internal/gui/flow"
@@ -45,11 +44,9 @@ type createPage struct {
 	view  view.CreatePage
 	acts  actions
 
-	title                      win32.HWND
-	heroIcon                   *widget.Icon
-	heroTitle, heroLine        win32.HWND
-	heroPrimary, heroSecondary win32.HWND
-	refresh                    win32.HWND
+	title   win32.HWND
+	hero    *hero
+	refresh win32.HWND
 
 	folders, storage, keys *card
 
@@ -76,16 +73,12 @@ func newCreatePage(a *app) (*createPage, error) {
 	}
 	o := &createPage{a: a, panel: panel, acts: actions{}}
 	panel.OnCommand = o.command
-	if o.heroIcon, err = widget.NewIcon(t, panel.HWND(), t.Palette.Surface, widget.TextIcon); err != nil {
-		return nil, err
-	}
 	o.title = panel.Label(view.CreatePageOf(nil, nil, time.Now()).Title, widget.TextTitle, t.Palette.Text)
 	// Creation order is the tab order.
-	o.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
-	win32.SetControlID(o.heroTitle, idHeroTitle)
-	o.heroLine = panel.Paragraph("", widget.TextSmall, t.Palette.TextSecondary)
-	o.heroPrimary = o.acts.button(panel, view.Button{Text: " "}, idHeroPrimary, true)
-	o.heroSecondary = o.acts.button(panel, view.Button{Text: " "}, idHeroSecondary, false)
+	if o.hero, err = newHero(t, panel, o.acts, idHeroPrimary, idHeroSecondary); err != nil {
+		return nil, err
+	}
+	win32.SetControlID(o.hero.title, idHeroTitle)
 	o.refresh = o.acts.button(panel, view.Button{Text: " "}, idRefresh, false)
 	if o.run, err = newRunCard(a, panel.HWND()); err != nil {
 		return nil, err
@@ -121,33 +114,23 @@ func (o *createPage) command(id, code uint16) {
 // update shows the current snapshot and the operation, if any.
 func (o *createPage) update() {
 	o.view = view.CreatePageOf(o.a.snapshot, o.a.opts.Config, time.Now())
-	t := o.a.theme
 	if o.a.reloadErr != nil && o.a.snapshot != nil {
 		o.view.Hero = view.ReloadErrorHero(o.a.reloadErr)
 	}
 	h := o.view.Hero
-	fore, circle := heroColors(t.Palette, h.Tone)
-	o.heroIcon.Set(glyphOf(h.Glyph), fore, circle, h.Title)
-	win32.SetText(o.heroTitle, h.Title)
-	// A path in the title keeps its end (the folder) when shortened.
-	style := win32.Style(o.heroTitle) &^ (win32.SS_ENDELLIPSIS | win32.SS_PATHELLIPSIS)
-	if strings.Contains(h.Title, ``) {
-		win32.SetStyle(o.heroTitle, style|win32.SS_PATHELLIPSIS)
-	} else {
-		win32.SetStyle(o.heroTitle, style|win32.SS_ENDELLIPSIS)
-	}
-	win32.SetText(o.heroLine, h.Line)
+	o.hero.set(h)
 	// While a restore or verification runs, no backup can start.
 	o.busy = o.a.machine.Busy()
 	idle := func(b view.Button) view.Button {
 		b.Enabled = b.Enabled && !(o.busy && b.Action == view.ActionBackUp)
 		return b
 	}
-	o.setButton(o.heroPrimary, idle(h.Primary), idHeroPrimary, true)
+	primary, secondary := o.hero.buttons[0], o.hero.buttons[1]
+	o.setButton(primary, idle(h.Primary), idHeroPrimary, true)
 	if h.Secondary != nil {
-		o.setButton(o.heroSecondary, idle(*h.Secondary), idHeroSecondary, true)
+		o.setButton(secondary, idle(*h.Secondary), idHeroSecondary, true)
 	} else {
-		o.setButton(o.heroSecondary, view.Button{}, idHeroSecondary, false)
+		o.setButton(secondary, view.Button{}, idHeroSecondary, false)
 	}
 	o.showRun()
 	o.fillFolders()
@@ -176,16 +159,7 @@ func (o *createPage) backupRun() *flow.Run {
 // its result is shown (GUI spec OV-7).
 func (o *createPage) showRun() {
 	o.run.follow(o.backupRun(), o.a.machine.Busy())
-	heroShown := o.run.mode == runHidden
-	win32.SetVisible(o.heroIcon.HWND(), heroShown)
-	for _, h := range []win32.HWND{o.heroTitle, o.heroLine} {
-		win32.SetVisible(h, heroShown)
-	}
-	for _, h := range []win32.HWND{o.heroPrimary, o.heroSecondary} {
-		if !heroShown {
-			setShown(h, false)
-		}
-	}
+	o.hero.show(o.run.mode == runHidden)
 	o.a.showRefresh(o.refresh, o.view.Refresh, o.acts, idRefresh)
 }
 
@@ -209,7 +183,7 @@ func (o *createPage) fillFolders() {
 	t := o.a.theme
 	v := o.view.Folders
 	c := o.folders
-	c.reset()
+	c.reset(contentWidth(t, o.panel.HWND()))
 	c.heading(v.Title, nil)
 	o.folderTable.set(v.Table(o.runStates()))
 	c.row(o.sizer.rowHeight(), o.folderTable.cell())
@@ -230,7 +204,7 @@ func (o *createPage) fillStorage() {
 	t := o.a.theme
 	v := o.view.Storage
 	c := o.storage
-	c.reset()
+	c.reset(contentWidth(t, o.panel.HWND()))
 	c.heading(v.Title, nil)
 	c.row(cardRowHeight,
 		cell{hwnd: c.panel.PathLabel(v.Path, widget.TextBody, t.Palette.Text), fill: true},
@@ -264,7 +238,7 @@ func (o *createPage) fillKeys() {
 	t := o.a.theme
 	v := o.view.Keys
 	c := o.keys
-	c.reset()
+	c.reset(contentWidth(t, o.panel.HWND()))
 	// The YubiKey status sits at the right of the methods line, like the
 	// used space on the storage card; without keys, at the right of the
 	// heading.
@@ -286,16 +260,11 @@ func (o *createPage) fillKeys() {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Details, widget.TextSmall, t.Palette.TextSecondary), fill: true})
 	}
 	if v.Note != "" {
-		o.para(c, v.Note, toneColor(t.Palette, v.Tone))
+		c.para(v.Note, widget.TextSmall, toneColor(t.Palette, v.Tone), 0)
 	}
 	if v.Warning != "" {
 		o.callout(c, v.Warning)
 	}
-}
-
-// para adds small text that wraps over the card's width.
-func (o *createPage) para(c *card, text string, color widget.Color) {
-	c.row(o.wrappedHeight(text, 0), cell{hwnd: c.panel.Paragraph(text, widget.TextSmall, color), fill: true})
 }
 
 // callout adds a warning that stands out: a warning icon and small text
@@ -306,7 +275,7 @@ func (o *createPage) callout(c *card, text string) {
 	pal := t.Palette
 	box, err := widget.NewPanel(t, c.panel.HWND(), 0, widget.PanelStyle{Back: pal.WarningBack, Outer: pal.Surface, Card: true})
 	if err != nil {
-		o.para(c, text, pal.Warning)
+		c.para(text, widget.TextSmall, pal.Warning, 0)
 		return
 	}
 	c.panel.Adopt(box.HWND())
@@ -316,7 +285,8 @@ func (o *createPage) callout(c *card, text string) {
 		icon = i.HWND()
 	}
 	label := box.Paragraph(text, widget.TextSmall, pal.Warning)
-	c.row(o.wrappedHeight(text, 2*calloutPadding+iconWidth)+2*calloutPadding, cell{fill: true, place: func(r win32.Rect) {
+	width := c.textWidth(0) - s.Px(2*calloutPadding+iconWidth)
+	c.row(c.textHeight(text, widget.TextSmall, width, stackLineHeight)+2*calloutPadding, cell{fill: true, place: func(r win32.Rect) {
 		win32.SetWindowPos(box.HWND(), r)
 		in := win32.Rect{Right: r.Width(), Bottom: r.Height()}
 		pad := s.Px(calloutPadding)
@@ -327,16 +297,6 @@ func (o *createPage) callout(c *card, text string) {
 		in.Left += s.Px(iconWidth)
 		win32.SetWindowPos(label, in)
 	}})
-}
-
-// wrappedHeight returns the height in DIPs of small text that wraps over
-// the card's width less indent DIPs.
-func (o *createPage) wrappedHeight(text string, indent int32) int32 {
-	t := o.a.theme
-	s := t.Scale
-	width := win32.ClientRect(o.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX) - 2*s.Px(widget.CardPadding) - s.Px(indent)
-	px := max(t.Fonts.MeasureWrapped(text, widget.TextSmall, max(width, s.Px(200))), s.Px(stackLineHeight))
-	return px*96/int32(s) + 1
 }
 
 // restyle applies new fonts after a DPI change.
@@ -356,8 +316,8 @@ func (o *createPage) focus() {
 		o.run.focus()
 		return
 	}
-	if win32.IsEnabled(o.heroPrimary) {
-		win32.SetFocus(o.heroPrimary)
+	if primary := o.hero.buttons[0]; win32.IsEnabled(primary) {
+		win32.SetFocus(primary)
 	}
 }
 
@@ -371,4 +331,72 @@ func (o *createPage) setButton(h win32.HWND, b view.Button, id uint16, shown boo
 	win32.Enable(h, shown && b.Enabled)
 	o.acts[id] = b.Action
 	win32.Invalidate(h)
+}
+
+// layout places the title, the hero or the run card below it, like on
+// Restore backup, and the cards. The page scrolls when they don't fit.
+func (o *createPage) layout() {
+	if w := win32.ClientRect(o.panel.HWND()).Width(); w != o.builtWidth && w > 0 {
+		o.update() // the wrapped lines need the new width
+		return
+	}
+	t := o.a.theme
+	s := t.Scale
+	client := win32.ClientRect(o.panel.HWND())
+	var total int32
+	// A scroll bar that comes or goes changes the width, and with it the
+	// hero's height.
+	for range 2 {
+		total = o.contentHeight(client.Width())
+		o.panel.SetScroll(total)
+		now := win32.ClientRect(o.panel.HWND())
+		if now.Width() == client.Width() {
+			break
+		}
+		client = now
+	}
+	page := client
+	page.Top -= o.panel.ScrollOffset()
+	page.Bottom = page.Top + max(total, client.Height())
+	area := widget.NewArea(s, page)
+	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
+	placeTitle(t, o.title, o.refresh, area.Top(pageTitleHeight))
+	area.Top(8)
+
+	if o.run.mode != runHidden {
+		o.run.place(area.TopPx(o.run.height(area.Rest().Width())))
+	} else {
+		o.hero.place(area.TopPx(o.hero.geometry(area.Rest().Width()).height))
+	}
+
+	for _, c := range []*card{o.folders, o.storage, o.keys} {
+		gap := area.Top(widget.CardGap)
+		if c == o.storage {
+			o.sizer.place(gap)
+		}
+		c.place(area.Top(c.height()))
+	}
+}
+
+// contentHeight returns the height in pixels of the page's content at a
+// page width.
+func (o *createPage) contentHeight(width int32) int32 {
+	s := o.a.theme.Scale
+	inner := width - 2*s.Px(widget.ContentPaddingX)
+	h := 2*s.Px(widget.ContentPaddingY) + s.Px(pageTitleHeight) + s.Px(8)
+	if o.run.mode != runHidden {
+		h += o.run.height(inner)
+	} else {
+		h += o.hero.geometry(inner).height
+	}
+	for _, c := range []*card{o.folders, o.storage, o.keys} {
+		h += s.Px(widget.CardGap) + s.Px(c.height())
+	}
+	return h
+}
+
+// measure returns the width text needs in style, with a little room.
+func measure(t *widget.Theme, text string, style widget.TextStyle) int32 {
+	w, _ := t.Fonts.Measure(text, style)
+	return w + t.Scale.Px(4)
 }

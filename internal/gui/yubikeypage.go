@@ -36,10 +36,8 @@ type yubiKeyPage struct {
 	view  view.YubiKeyPage
 	acts  actions
 
-	title, checkAgain   win32.HWND
-	heroIcon            *widget.Icon
-	heroTitle, heroLine win32.HWND
-	heroPrimary         win32.HWND
+	title, checkAgain win32.HWND
+	hero              *hero
 
 	checks, guide, details *card
 	// The heading of the details opens and closes them; it and their rich
@@ -58,15 +56,12 @@ func newYubiKeyPage(a *app) (*yubiKeyPage, error) {
 	p := &yubiKeyPage{a: a, panel: panel, acts: actions{}}
 	panel.OnCommand = p.command
 	panel.OnScroll = p.layout
-	if p.heroIcon, err = widget.NewIcon(t, panel.HWND(), t.Palette.Surface, widget.TextIcon); err != nil {
-		return nil, err
-	}
 	// Creation order is the tab order.
 	p.title = panel.Label(view.Navigation()[view.PageYubiKey], widget.TextTitle, t.Palette.Text)
 	p.checkAgain = p.acts.button(panel, view.Button{Text: " "}, idYubiKeyCheck, false)
-	p.heroTitle = panel.Label("", widget.TextHero, t.Palette.Text)
-	p.heroLine = panel.Paragraph("", widget.TextSmall, t.Palette.TextSecondary)
-	p.heroPrimary = p.acts.button(panel, view.Button{Text: " "}, idYubiKeyTest, true)
+	if p.hero, err = newHero(t, panel, p.acts, idYubiKeyTest); err != nil {
+		return nil, err
+	}
 	for _, c := range []**card{&p.checks, &p.guide, &p.details} {
 		if *c, err = newCard(t, panel.HWND(), 0, p.acts); err != nil {
 			return nil, err
@@ -105,18 +100,13 @@ func (p *yubiKeyPage) update() {
 	a := p.a
 	p.view = view.YubiKeyPageOf(a.snapshot, a.yubiKeyView(), time.Now())
 	v := p.view
-	t := a.theme
 
 	check := v.CheckAgain
 	check.Enabled = check.Enabled && !a.reloading
 	p.setButton(p.checkAgain, check, idYubiKeyCheck)
 
-	h := v.Hero
-	fore, circle := heroColors(t.Palette, h.Tone)
-	p.heroIcon.Set(glyphOf(h.Glyph), fore, circle, h.Title)
-	win32.SetText(p.heroTitle, h.Title)
-	win32.SetText(p.heroLine, h.Line)
-	p.setButton(p.heroPrimary, h.Primary, idYubiKeyTest)
+	p.hero.set(v.Hero)
+	p.setButton(p.hero.buttons[0], v.Hero.Primary, idYubiKeyTest)
 
 	p.fillChecks()
 	p.fillGuide()
@@ -144,15 +134,13 @@ func (p *yubiKeyPage) setButton(h win32.HWND, b view.Button, id uint16) {
 // the text.
 func (p *yubiKeyPage) fillChecks() {
 	t := p.a.theme
-	s := t.Scale
 	pal := t.Palette
 	c := p.checks
-	c.reset()
+	c.reset(contentWidth(t, p.panel.HWND()))
 	c.heading(p.view.ChecksTitle, nil)
-	line := p.lineHeight(widget.TextBody)
-	// The note starts under the text: past the icon, the label and their
-	// gap (para adds the gap after the indent).
-	noteIndent := int32(iconWidth + checkLabelWidth + 8)
+	line := lineHeight(t, widget.TextBody)
+	// The text and its note start past the icon and the label.
+	textIndent := int32(iconWidth + cellGap + checkLabelWidth)
 	for _, l := range p.view.Checks {
 		color := toneColor(pal, l.Tone)
 		if l.Tone == view.ToneNeutral {
@@ -166,13 +154,12 @@ func (p *yubiKeyPage) fillChecks() {
 				icon.hwnd = i.HWND()
 			}
 		}
-		width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(noteIndent+8)
-		c.row(p.dips(max(t.Fonts.MeasureWrapped(l.Text, widget.TextBody, max(width, s.Px(80))), s.Px(line))),
+		c.row(c.textHeight(l.Text, widget.TextBody, c.textWidth(textIndent), line),
 			icon,
 			cell{hwnd: c.panel.Paragraph(l.Label, widget.TextBody, pal.TextSecondary), dip: checkLabelWidth},
 			cell{hwnd: c.panel.Paragraph(l.Text, widget.TextBody, color), fill: true})
 		if l.Note != "" {
-			p.para(c, l.Note, widget.TextSmall, pal.TextSecondary, noteIndent)
+			c.para(l.Note, widget.TextSmall, pal.TextSecondary, textIndent)
 		}
 	}
 }
@@ -187,7 +174,7 @@ func (p *yubiKeyPage) fillGuide() {
 	pal := t.Palette
 	g := p.view.Guide
 	c := p.guide
-	c.reset()
+	c.reset(contentWidth(t, p.panel.HWND()))
 	c.heading(g.Title, nil)
 	for i, s := range g.Steps {
 		if i > 0 {
@@ -208,11 +195,8 @@ func (p *yubiKeyPage) fillGuide() {
 // itself, not under the bullet.
 func (p *yubiKeyPage) bullet(c *card, text string) {
 	t := p.a.theme
-	s := t.Scale
 	pal := t.Palette
-	width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(guideIndent+8)
-	px := max(t.Fonts.MeasureWrapped(text, widget.TextBody, max(width, s.Px(200))), s.Px(p.lineHeight(widget.TextBody)))
-	c.row(p.dips(px),
+	c.row(c.textHeight(text, widget.TextBody, c.textWidth(guideIndent), lineHeight(t, widget.TextBody)),
 		cell{hwnd: c.panel.Paragraph("•", widget.TextBody, pal.TextSecondary), dip: guideIndent},
 		cell{hwnd: c.panel.Paragraph(text, widget.TextBody, pal.Text), fill: true})
 }
@@ -222,7 +206,7 @@ func (p *yubiKeyPage) bullet(c *card, text string) {
 func (p *yubiKeyPage) fillDetails() {
 	t := p.a.theme
 	c := p.details
-	c.reset()
+	c.reset(0)
 	open := p.detailsHead.Open()
 	p.detailsHead.Set(p.view.DetailsTitle, open)
 	cells := []cell{{hwnd: p.detailsHead.HWND(), px: p.detailsHead.Width()}, {fill: true}}
@@ -242,39 +226,6 @@ func (p *yubiKeyPage) fillDetails() {
 	}
 }
 
-// lineHeight returns the height of a line of text in style, in DIPs.
-func (p *yubiKeyPage) lineHeight(style widget.TextStyle) int32 {
-	t := p.a.theme
-	_, h := t.Fonts.Measure("Ag", style)
-	return (h*96 + int32(t.Scale) - 1) / int32(t.Scale)
-}
-
-// para adds text that wraps over the card's width, indented by indent DIPs.
-func (p *yubiKeyPage) para(c *card, text string, style widget.TextStyle, color widget.Color, indent int32) {
-	t := p.a.theme
-	s := t.Scale
-	h := c.panel.Paragraph(text, style, color)
-	width := p.cardWidth() - 2*s.Px(widget.CardPadding)
-	if indent > 0 {
-		width -= s.Px(indent + 8) // the spacer and the gap after it
-	}
-	px := max(t.Fonts.MeasureWrapped(text, style, max(width, s.Px(200))), s.Px(stackLineHeight))
-	if indent > 0 {
-		c.row(p.dips(px), cell{dip: indent}, cell{hwnd: h, fill: true})
-		return
-	}
-	c.row(p.dips(px), cell{hwnd: h, fill: true})
-}
-
-// dips converts pixels to DIPs, rounding up.
-func (p *yubiKeyPage) dips(px int32) int32 { return px*96/int32(p.a.theme.Scale) + 1 }
-
-// cardWidth returns the width of the cards in pixels.
-func (p *yubiKeyPage) cardWidth() int32 {
-	s := p.a.theme.Scale
-	return win32.ClientRect(p.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX)
-}
-
 // layout places the title, the hero and the cards; the page scrolls when
 // they don't fit.
 func (p *yubiKeyPage) layout() {
@@ -285,8 +236,7 @@ func (p *yubiKeyPage) layout() {
 	t := p.a.theme
 	s := t.Scale
 	client := win32.ClientRect(p.panel.HWND())
-	inner := client.Width() - 2*s.Px(widget.ContentPaddingX)
-	heroH, textW, lineH := p.heroGeometry(inner)
+	heroH := p.hero.geometry(contentWidth(t, p.panel.HWND())).height
 	total := 2*s.Px(widget.ContentPaddingY) + s.Px(pageTitleHeight) + s.Px(8) + heroH
 	for _, c := range []*card{p.checks, p.guide, p.details} {
 		total += s.Px(widget.CardGap) + s.Px(c.height())
@@ -306,54 +256,17 @@ func (p *yubiKeyPage) layout() {
 	area.Inset(widget.ContentPaddingX, widget.ContentPaddingY, widget.ContentPaddingX, widget.ContentPaddingY)
 	placeTitle(t, p.title, p.checkAgain, area.Top(pageTitleHeight))
 	area.Top(8)
-
-	hero := widget.NewArea(s, area.TopPx(heroH))
-	iconRect := hero.Left(widget.HeroIconSize)
-	iconRect.Top += (iconRect.Height() - s.Px(widget.HeroIconSize)) / 2
-	iconRect.Bottom = iconRect.Top + s.Px(widget.HeroIconSize)
-	win32.SetWindowPos(p.heroIcon.HWND(), iconRect)
-	hero.Left(heroGap)
-	if win32.IsWindowVisible(p.heroPrimary) {
-		r := hero.RightPx(heroButtonWidth(t, p.heroPrimary))
-		r.Top += (r.Height() - s.Px(widget.ButtonHeight)) / 2
-		r.Bottom = r.Top + s.Px(widget.ButtonHeight)
-		win32.SetWindowPos(p.heroPrimary, r)
-	}
-	text := hero.Rest()
-	text.Top += (text.Height() - s.Px(heroTitleHeight) - lineH) / 2
-	x, y := text.Left, text.Top
-	win32.SetWindowPos(p.heroTitle, win32.Rect{Left: x, Top: y, Right: x + textW, Bottom: y + s.Px(heroTitleHeight)})
-	y += s.Px(heroTitleHeight)
-	win32.SetWindowPos(p.heroLine, win32.Rect{Left: x, Top: y, Right: x + textW, Bottom: y + lineH})
-
+	p.hero.place(area.TopPx(heroH))
 	for _, c := range []*card{p.checks, p.guide, p.details} {
 		area.Top(widget.CardGap)
 		c.place(area.Top(c.height()))
 	}
 }
 
-// heroGeometry lays the hero out at width pixels: its height, the width
-// of its text and the height of its line, which wraps.
-func (p *yubiKeyPage) heroGeometry(width int32) (height, textW, lineH int32) {
-	t := p.a.theme
-	s := t.Scale
-	textW = width - s.Px(widget.HeroIconSize+heroGap+12)
-	if win32.IsWindowVisible(p.heroPrimary) {
-		textW -= heroButtonWidth(t, p.heroPrimary) + s.Px(8)
-	}
-	textW = max(textW, s.Px(200))
-	lineH = 0
-	if line := win32.Text(p.heroLine); line != "" {
-		lineH = max(t.Fonts.MeasureWrapped(line, widget.TextSmall, textW), s.Px(heroLineHeight))
-	}
-	height = max(s.Px(heroHeight), s.Px(heroTitleHeight)+lineH+s.Px(8))
-	return height, textW, lineH
-}
-
 // focus puts the keyboard focus on the hero's action, or on Check again.
 func (p *yubiKeyPage) focus() {
-	if win32.IsWindowVisible(p.heroPrimary) && win32.IsEnabled(p.heroPrimary) {
-		win32.SetFocus(p.heroPrimary)
+	if test := p.hero.buttons[0]; win32.IsWindowVisible(test) && win32.IsEnabled(test) {
+		win32.SetFocus(test)
 		return
 	}
 	if win32.IsEnabled(p.checkAgain) {

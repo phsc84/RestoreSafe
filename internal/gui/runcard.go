@@ -81,7 +81,7 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 	t := r.theme
 	p := r.card.panel
 	if r.mode != runProgress {
-		r.card.reset()
+		r.card.reset(0)
 		r.mode = runProgress
 		r.title = p.Label("", widget.TextTitle, t.Palette.Text)
 		win32.SetControlID(r.title, idRunTitle)
@@ -127,7 +127,7 @@ func (r *runCard) showProgress(v view.ProgressCard) {
 func (r *runCard) showResult(v view.ResultCard) {
 	t := r.theme
 	p := r.card.panel
-	r.card.reset()
+	r.card.reset(0)
 	r.mode = runResult
 	r.result = v
 	r.lines = nil
@@ -190,7 +190,7 @@ func (r *runCard) hide() {
 	if r.mode == runHidden {
 		return
 	}
-	r.card.reset()
+	r.card.reset(0)
 	r.mode = runHidden
 	r.trail, r.bar, r.icon = nil, nil, nil
 	r.card.panel.Show(false)
