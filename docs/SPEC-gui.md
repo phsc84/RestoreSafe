@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-09. |
-| Planned | For 2.1.0: editing the configuration and dark mode (decisions 1 and 4), the YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10), no spare YubiKey (decision 11), and one YubiKey for a backup (decision 12), implemented 2026-10-18 ([PLAN-yubikey-page.md](PLAN-yubikey-page.md)); the manual tests of the YubiKey page passed on 2026-10-18. |
+| Planned | Later: editing the configuration and dark mode (decisions 1 and 4; moved out of 2.1.0 on 2026-10-18). In 2.1.0: the YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10), no spare YubiKey (decision 11), and one YubiKey for a backup (decision 12), implemented 2026-10-18 ([PLAN-yubikey-page.md](PLAN-yubikey-page.md)); the manual tests of the YubiKey page passed on 2026-10-18. |
 | Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
 | Manual tests | [GUIDE-gui-test.md](GUIDE-gui-test.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
@@ -80,7 +80,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 | Common Controls | Version 6 via the application manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
 | DPI | `PerMonitorV2` (application manifest). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
 | Text | UTF-16 (`W` APIs) throughout. |
-| Theme | Light only in 2.0.0. Dark mode follows in 2.1.0 (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
+| Theme | Light only in 2.0.0. Dark mode follows later (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
 | Fonts | Segoe UI Variable Text (fallback: the system message font) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
 | State | RestoreSafe is portable and keeps no state outside the backup directory. The UI stores nothing: no registry, no settings file, no remembered window position or column widths. |
 
@@ -96,7 +96,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 
 ### 3.3 Visual language
 
-| Role | Light | Dark (2.1.0) | Use |
+| Role | Light | Dark (later) | Use |
 |---|---|---|---|
 | Surface | `#FFFFFF` | `#1D2126` | Window content, cards |
 | Surface, secondary | `#F0F2F5` | `#252A30` | Sidebar, title bar, group headers, action bars |
@@ -699,7 +699,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 
 ### 10.1 Settings page
 
-Purpose: show what RestoreSafe is configured to do and where to change it. The configuration is `config.yaml` (or the file given with `-config`). In 2.0.0 the page is **read-only**; editing in the app follows in 2.1.0 (decision 1). Each card shows the effective values in plain words, with the `config.yaml` key in the tooltip, so a user knows what to change in the file.
+Purpose: show what RestoreSafe is configured to do and where to change it. The configuration is `config.yaml` (or the file given with `-config`). The page is **read-only**; editing in the app follows later (decision 1). Each card shows the effective values in plain words, with the `config.yaml` key in the tooltip, so a user knows what to change in the file.
 
 **Figure 10.1: Settings.**
 
@@ -1366,10 +1366,10 @@ A release that changes the window ships only when:
 
 | # | Topic | Decision |
 |---|---|---|
-| 1 | Editing the configuration in the app | 2.0.0: read-only with **Edit config.yaml** and **Reload** instead of a restart. 2.1.0: editing in the app; it needs a YAML writer that keeps the comments of `config.yaml`, validation per field, and a Save / Discard flow. The Settings cards are laid out so their values can become controls. |
+| 1 | Editing the configuration in the app | 2.0.0: read-only with **Edit config.yaml** and **Reload** instead of a restart. Later (moved out of 2.1.0 on 2026-10-18): editing in the app; it needs a YAML writer that keeps the comments of `config.yaml`, validation per field, and a Save / Discard flow. The Settings cards are laid out so their values can become controls. |
 | 2 | Backup reminder | New configuration key `reminder_days` (default 7, 0 = off), added to `config-SAMPLE.yaml`, the config validation and the README's option table. The hero turns amber when the newest complete backup is older. It's only evaluated while RestoreSafe is open; there is no background check (1). |
 | 3 | Verification history | Verify results are written as structured lines into the run's log (11.4), so "Verified <time>" and "Damaged" survive a restart and disappear with the run. |
-| 4 | Dark mode | 2.0.0: light only (Win32 common controls have no supported dark mode). 2.1.0: dark mode (the tokens in 3.3 are ready); common controls need `DarkMode_Explorer` themes and custom drawing for buttons and group boxes. |
+| 4 | Dark mode | 2.0.0: light only (Win32 common controls have no supported dark mode). Later (moved out of 2.1.0 on 2026-10-18): dark mode (the tokens in 3.3 are ready); common controls need `DarkMode_Explorer` themes and custom drawing for buttons and group boxes. |
 | 5 | Deleting backups in the app | Not offered. Retention removes chains safely after each backup; manual deletion stays in Explorer, and the health check reports what it breaks. |
 | 6 | Single-file restore | Not offered (core spec 13.5). It needs the manifest, which is encrypted, so browsing would require unlocking first. |
 | 7 | Damaged backups | A damaged backup can't be restored beyond the first mismatch (core spec 7.7). Recovery mode (core spec 13.6) isn't offered. |
