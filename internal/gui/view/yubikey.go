@@ -25,9 +25,11 @@ type CheckLine struct {
 	Note string
 }
 
-// GuideStep is a part of the YubiKey help: what to do, and its button.
+// GuideStep is a part of the YubiKey help: its title, short points, and its
+// button.
 type GuideStep struct {
-	Title, Text string
+	Title  string
+	Points []string
 	// Action is the step's button, if it has one.
 	Action *Button
 }
@@ -270,8 +272,8 @@ func yubiKeyGuide() YubiKeyGuide {
 	return YubiKeyGuide{
 		Title: ykGuideTitle,
 		Steps: []GuideStep{
-			{Title: ykStep1, Text: ykStep1Text, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
-			{Title: ykStep2, Text: ykStep2Text, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
+			{Title: ykStep1, Points: []string{ykPIN1, ykPIN2, ykPIN3}, Action: &Button{Text: buttonSignIn, Action: ActionOpenSignInSettings, Enabled: true}},
+			{Title: ykStep2, Points: []string{ykFIDO1, ykFIDO2, ykFIDO3}, Action: &Button{Text: buttonAuthenticator, Action: ActionOpenAuthenticator, Enabled: true}},
 		},
 	}
 }

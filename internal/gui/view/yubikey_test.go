@@ -190,7 +190,7 @@ func TestYubiKeyHelpIsAlwaysThere(t *testing.T) {
 	t.Parallel()
 	for _, st := range []YubiKeyState{{}, {Diagnosis: yubiKey5(0x0574, true)}, {Diagnosis: yubiKey5(0x0574, false)}} {
 		g := YubiKeyPageOf(snapshotWith(yubiKeys), st, ykNow).Guide
-		if g.Title != "YubiKey help" || len(g.Steps) != 2 || g.Steps[0].Action == nil || g.Steps[0].Action.Action != ActionOpenSignInSettings || g.Steps[1].Action == nil || g.Steps[1].Action.Action != ActionOpenAuthenticator {
+		if g.Title != "YubiKey help" || len(g.Steps) != 2 || len(g.Steps[0].Points) != 3 || len(g.Steps[1].Points) != 3 || g.Steps[0].Action == nil || g.Steps[0].Action.Action != ActionOpenSignInSettings || g.Steps[1].Action == nil || g.Steps[1].Action.Action != ActionOpenAuthenticator {
 			t.Fatalf("%+v", g)
 		}
 	}

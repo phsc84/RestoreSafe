@@ -180,7 +180,8 @@ func (p *yubiKeyPage) fillChecks() {
 // guideIDs are the control IDs of the help's buttons, in order.
 var guideIDs = []uint16{idYubiKeySignIn, idYubiKeyAuthenticator}
 
-// fillGuide shows the YubiKey help, always open.
+// fillGuide shows the YubiKey help, always open: per part its title, its
+// points as a list, and its button, with a gap before the next part.
 func (p *yubiKeyPage) fillGuide() {
 	t := p.a.theme
 	pal := t.Palette
@@ -189,13 +190,31 @@ func (p *yubiKeyPage) fillGuide() {
 	c.reset()
 	c.heading(g.Title, nil)
 	for i, s := range g.Steps {
-		c.row(cardRowHeight, cell{dip: guideIndent}, cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
-		p.para(c, s.Text, widget.TextSmall, pal.TextSecondary, guideIndent)
+		if i > 0 {
+			c.row(rowGap * 2)
+		}
+		c.row(cardRowHeight, cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
+		for _, point := range s.Points {
+			p.bullet(c, point)
+		}
 		if s.Action != nil && i < len(guideIDs) {
 			h := c.acts.button(c.panel, *s.Action, guideIDs[i], false)
 			c.row(widget.ButtonHeight+4, cell{dip: guideIndent}, cell{hwnd: h, px: buttonWidth(t, h), height: widget.ButtonHeight})
 		}
 	}
+}
+
+// bullet adds a point of a list: a bullet, and the text that wraps under
+// itself, not under the bullet.
+func (p *yubiKeyPage) bullet(c *card, text string) {
+	t := p.a.theme
+	s := t.Scale
+	pal := t.Palette
+	width := p.cardWidth() - 2*s.Px(widget.CardPadding) - s.Px(guideIndent+8)
+	px := max(t.Fonts.MeasureWrapped(text, widget.TextBody, max(width, s.Px(200))), s.Px(p.lineHeight(widget.TextBody)))
+	c.row(p.dips(px),
+		cell{hwnd: c.panel.Paragraph("•", widget.TextBody, pal.TextSecondary), dip: guideIndent},
+		cell{hwnd: c.panel.Paragraph(text, widget.TextBody, pal.Text), fill: true})
 }
 
 // fillDetails shows the technical details: the heading opens and closes

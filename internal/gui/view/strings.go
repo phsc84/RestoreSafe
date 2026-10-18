@@ -580,9 +580,13 @@ const (
 	ykKeysFailed      = "The test didn't work"
 	ykGuideTitle      = "YubiKey help"
 	ykStep1           = "PIN and reset"
-	ykStep1Text       = "Windows asks for this PIN at every backup and restore. A new YubiKey has none: Windows asks you to create one at the first test or backup. Windows Settings sets and changes the PIN, and resets a YubiKey whose PIN is locked after too many wrong tries. A reset makes the YubiKey forget your keys for good: then only your recovery code opens your backups. Create new keys with New keys + full backup… at your next backup."
+	ykPIN1            = "Windows asks for the PIN at every backup and restore. A new YubiKey gets one at its first test or backup."
+	ykPIN2            = "Change the PIN or reset the YubiKey in Windows Settings."
+	ykPIN3            = "After too many wrong PINs, only a reset unlocks the YubiKey. It then forgets your keys: open your backups with your recovery code and create new keys."
 	ykStep2           = "Turn on FIDO2"
-	ykStep2Text       = "RestoreSafe needs the FIDO2 function of the YubiKey. If the checks above show it off, turn it on in Yubico Authenticator; Windows can't. It runs as administrator for this, so Windows asks for permission. Without Yubico Authenticator, its download page opens."
+	ykFIDO1           = "Needed when Checks shows FIDO2 as off."
+	ykFIDO2           = "Yubico Authenticator turns it on; Windows asks for administrator permission."
+	ykFIDO3           = "Not installed? The button opens its download page."
 	ykDetailsTitle    = "Technical details"
 )
 
