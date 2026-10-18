@@ -327,8 +327,8 @@ The example is version 2.1.0; replace it with the version you release. The steps
 
 1. On `dev`: in `CHANGELOG.md`, the section of the coming version is headed `## [2.1.0] - Unreleased`. Review it and replace `Unreleased` with today's date (`## [2.1.0] - 2026-12-01`).
 2. Set the version in `build\versioninfo.json` (four places: `FileVersion` and `ProductVersion`, each as numbers and as text).
-3. Commit, push, and wait for CI on `dev` to be green (`gh run list --branch dev --limit 1`).
-4. Write the release notes for users into `dist\RELEASE-NOTES-2.1.0.md` (ignored by Git): the highlights, what users must know before updating, and the Download section (SmartScreen, Smart App Control, the optional checksum). The CHANGELOG section is the source; link to it for the full list.
+3. Write the release notes for users into `release-notes\2.1.0.md`, one file per release next to the earlier ones: the highlights, what users must know before updating, and the Download section (SmartScreen, Smart App Control, the optional checksum). The CHANGELOG section is the source; link to it for the full list. Links into the repository point at the release's tag (`blob/v2.1.0/...`, `raw.githubusercontent.com/.../v2.1.0/...`), so they keep showing what was released; they work once the tag is pushed (Step 3 below).
+4. Commit the three files together, push, and wait for CI on `dev` to be green (`gh run list --branch dev --limit 1`). The pull request of step 2 then shows the release notes for review with the rest of the release.
 
 ### Step 2 – Merge `dev` into `main`
 
@@ -356,7 +356,7 @@ git push origin v2.1.0
 ### Step 4 – Create the release as a draft
 
 ```powershell
-gh release create v2.1.0 --draft --title "RestoreSafe 2.1.0" --notes-file dist\RELEASE-NOTES-2.1.0.md dist\RestoreSafe-2.1.0.zip dist\SHA256SUMS.txt
+gh release create v2.1.0 --draft --title "RestoreSafe 2.1.0" --notes-file release-notes\2.1.0.md dist\RestoreSafe-2.1.0.zip dist\SHA256SUMS.txt
 ```
 
 Or on the web: https://github.com/phsc84/RestoreSafe/releases, "Draft a new release", select the tag, paste the notes, attach the ZIP and `SHA256SUMS.txt`, and click "Save draft".
