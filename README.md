@@ -85,7 +85,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
 ### Usability
 - Portable, standalone `.exe` - no runtime dependencies
-- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a Create backup window with the plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, and a Settings page with Reload
+- Windows application: a Create backup page that shows at a glance whether your folders are protected and what to do if not, a Create backup window with the plan before every backup, progress with speed, Cancel at any time, a Restore backup page with every run, its log, restore and verification, a Settings page with Reload, and a YubiKey page that checks and tests your YubiKey without any other tool
 - Operable by keyboard (access keys, Enter, Esc) and readable by screen readers
 - Custom config path via `-config` argument
 - One password entry and at most one YubiKey touch per backup run
@@ -172,11 +172,12 @@ RestoreSafe 2.0 uses a new backup format. **2.0 cannot restore backups created b
 
 ## Usage
 
-Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`:
+Double-click RestoreSafe.exe. The window has three pages, chosen in the sidebar or with `Ctrl+1` to `Ctrl+3`, and a fourth while you use a YubiKey:
 
 - **Create backup** - whether your folders are protected, and **Back up now…**. The status at the top is green when every folder has a recent complete backup, amber for a warning (e.g. your last backup is older than `reminder_days`), and red for an error (e.g. the backup directory is not reachable); it names the problem and offers the action that fixes it. Below: your folders with the date of their newest backup and the type of the next one (and a note when the last backup failed or was cancelled); the backup directory and its free space; and your keys.
 - **Restore backup** - every backup run with its backup sets and a **Show log** link, and **Restore…** and **Verify…** for the selected run. Clicking a run or any of its folders selects the run; to act on a single folder, choose it in the folder filter at the top.
 - **Settings** - what `config.yaml` says, in words; **Edit config.yaml** and **Reload**.
+- **YubiKey** - at the bottom of the sidebar (`Ctrl+4`), while your configuration or your backups use a YubiKey: whether Windows and your YubiKey are ready, **Test YubiKey…** to check that it opens your backups, help with the PIN, a reset and FIDO2, and technical details to copy into a bug report. It updates when you plug a YubiKey in or pull it out.
 
 RestoreSafe checks your backups when it starts, after every operation, with **Refresh** (on Create backup and Restore backup) or `F5` (which also reads `config.yaml` again), and when you return to it after five minutes.
 
@@ -406,11 +407,11 @@ RestoreSafe uses the Windows WebAuthn API for YubiKey authentication. In plain E
 
 ### Requirements
 
-- YubiKey 5 series
-- A FIDO2 PIN set on the YubiKey
+- A YubiKey 5 Series or Security Key Series key with firmware 5.2 or later (YubiKey 4 and YubiKey NEO don't work), with its FIDO2 function turned on
+- A FIDO2 PIN on the YubiKey; Windows asks you to create one if it has none
 - Windows 11 version 22H2 or later
 
-Other FIDO2 security keys may support similar technology, but RestoreSafe currently detects and supports Yubico YubiKeys only. Use a YubiKey 5-series device for YubiKey authentication.
+Other FIDO2 security keys may support similar technology, but RestoreSafe currently detects and supports Yubico YubiKeys only. The YubiKey page shows whether yours qualifies.
 
 ### Before first use
 
@@ -418,6 +419,7 @@ Other FIDO2 security keys may support similar technology, but RestoreSafe curren
    - `2` - password + YubiKey (2FA)
    - `3` - YubiKey-only (no password)
 2. Your YubiKey needs a FIDO2 PIN, which authorizes the Windows Security prompts during backup, restore, and verify. A YubiKey without one gets it at the first backup: Windows asks you to create it. To change it later, use Windows Settings > Accounts > Sign-in options > Security key > Manage. No other software is needed.
+3. Open the **YubiKey** page and click **Test YubiKey…**: it checks the PIN and that the YubiKey can protect your backups. Nothing stays on the YubiKey.
 
 ### What RestoreSafe stores
 
@@ -438,6 +440,7 @@ The important part: the YubiKey secret stays inside the YubiKey. Windows is the 
 
 - **Key setup (first backup, or new keys):** two Windows Security prompts - **Register security key** (enter PIN, touch) and **Use your security key** (enter PIN, touch).
 - **Every other backup, restore, and verify:** one **Use your security key** prompt.
+- **Only one YubiKey at a time for a backup:** with two connected, RestoreSafe doesn't start a backup, so it's always clear which YubiKey holds your keys.
 
 If your YubiKey is lost or broken, restore with your recovery code, which RestoreSafe always creates with a YubiKey.
 

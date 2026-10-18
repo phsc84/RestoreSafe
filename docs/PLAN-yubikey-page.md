@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Agreed 2026-10-15; phases 1 to 5 done, phase 6 next |
+| Status | Done 2026-10-18 (agreed 2026-10-15); ships with 2.1.0, then this plan is deleted |
 | Implements | [SPEC-gui.md](SPEC-gui.md) 10.2 (YK-1 to YK-11) and decision 10 |
 | Release | 2.1.0 |
 | Branch | `dev` |
@@ -156,25 +156,17 @@ The spare YubiKey goes completely, as if it had never existed. The owner is the 
 
 ### Phase 6: Manual test, docs, release notes
 
-- [ ] [GUIDE-gui-test.md](GUIDE-gui-test.md): a section for the YubiKey page, with the cases of section 4 that one key can do, and a note on what needs a second key or a Security Key.
-- [ ] Session with the real key, through the page:
-  - not connected, then plug in (the page updates);
-  - Capability without key sets;
-  - a backup in a test directory registers the key, then Match answers "YubiKey 1";
-  - cancel;
-  - Copy details, pasted and read for secrets;
-  - pull the key out during the test;
-  - Reload;
-  - password-only configuration with older YubiKey sets (item visible);
-  - Narrator names on the page.
-- [ ] Screenshots of figures 10.2 and 10.3 for the visual review against 3.3. The README gets a YubiKey page paragraph in its user part (it replaces the yubidiag section removed in phase 1). Whether a screenshot goes in the README is decided then.
-- [ ] [SPEC-gui.md](SPEC-gui.md): header "Planned" updated, and 10.2 matches what was built.
-- [ ] [CHANGELOG.md](../CHANGELOG.md): 2.1.0 entry for the YubiKey page and the removal of `yubidiag`.
-- [ ] This plan's status set to done. It is deleted after the 2.1.0 release ([docs/README.md](README.md)).
+- [x] [GUIDE-gui-test.md](GUIDE-gui-test.md): section 7, YubiKey page, with what one key can do and hints for what needs a second key, a Security Key or old firmware; Display gets the sidebar hover and slow scrolling, the keyboard row `Ctrl+4`. The later sections moved up by one.
+- [x] Session with the real key, through the page: the owner's hand check, 2026-10-18, after the four reviews of phase 5 (plugging in and out, the test with and without keys, cancel, an unknown key, wrong and blocked PINs, a reset, Copy details, the help's buttons).
+- [x] Visual review: the owner's hand check of the page in the window, instead of screenshots: the screenshot scripts run without a YubiKey and in password mode, where the page is hidden. No screenshot of the page in the README.
+- [x] README: the YubiKey page in Usage and Features; the requirements (Security Key Series, firmware 5.2, FIDO2 on, Windows asks for a PIN); the test as step 3 of "Before first use"; one YubiKey at a time for a backup.
+- [x] [SPEC-gui.md](SPEC-gui.md): header updated; 10.2 matches what was built (the reviews of phase 5 updated it as they went).
+- [x] [CHANGELOG.md](../CHANGELOG.md): 2.1.0 Added (YubiKey page, Keys card texts, sidebar hover), Changed (one YubiKey for a backup, recovery code with a YubiKey), Removed (spare YubiKey, `yubidiag`), Fixed (slow scrolling). Two items an earlier insert had put under Removed went back to Changed.
+- [x] This plan's status set to done. It is deleted after the 2.1.0 release ([docs/README.md](README.md)).
 
 ## Open questions
 
-None at the start. Phase 2 may raise some; they are answered here before phase 4.
+None left. The questions that came up were answered by the owner as they did and are recorded in the phases: no spare YubiKey (2b), one YubiKey for a backup (decision 12), and the reviews of phase 5.
 
 ## Done when
 

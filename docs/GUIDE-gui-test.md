@@ -107,7 +107,33 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | ST-3 | Folders card: the splitter below it makes the table taller or shorter (three rows at least), the cards below keep their height, and the page scrolls | |
 | 14 | Broken `config.yaml` at start: message box, then RestoreSafe ends | |
 
-## 7. Display
+## 7. YubiKey page
+
+Use a test YubiKey: some checks block its PIN or reset it, and a reset makes it forget every registration. One YubiKey covers most rows; the hints name what needs more.
+
+| ID | Check | Hints |
+|---|---|---|
+| YK-1 | **YubiKey** sits at the bottom of the sidebar, below a line, in modes 2 and 3, and in mode 1 while older backups need a YubiKey; it is hidden in mode 1 without such backups. Changing the mode and **Reload** while the page is shown switches to Settings | |
+| YK-1 | `Ctrl+4` opens the page while the item is shown, and does nothing while it is hidden; the arrow keys skip the hidden item | |
+| YK-3 | Plug the YubiKey in and pull it out with the page shown: within about half a second the hero and the Checks card follow, and "YubiKey connected" on the Keys card of Create backup too. **Check again** and `F5` check again | |
+| YK-4 | Checks card: Windows, YubiKey, FIDO2, Firmware and Your keys in the words of the summary in Technical details; the notes under Windows and YubiKey; icon, label and text on one line | |
+| YK-4 | Two YubiKeys connected: YubiKey in red ("2 connected…"), the hero on Create backup "More than one YubiKey is connected", **Back up now…** disabled; restore and verify still possible. Pulling one out ends it | Needs two YubiKeys (decision 12). |
+| YK-5 | **Test YubiKey…** with YubiKey keys: the PIN and one touch, then "Your YubiKey opens your backups" with the time, and Your keys "…: your YubiKey answered" | |
+| YK-5 | **Test YubiKey…** without YubiKey keys: the PIN twice and two touches, then "Your YubiKey is ready"; nothing stays on the YubiKey | A test backup directory without backups. |
+| YK-6 | While the test runs: "Follow the Windows Security prompt", **Test YubiKey…** and **Check again** disabled, no backup or restore can start; pulling the YubiKey out after a test clears the result | |
+| YK-7 | **Cancel** in the Windows dialog: "The test was cancelled" with both hints | |
+| YK-7 | A YubiKey that isn't registered for the keys (reset, or another one): Windows says it doesn't look familiar; after **Abbrechen**/**Cancel**, the cancel hero | YK-11 |
+| YK-11 | A reset YubiKey without a PIN: Windows asks to create one during the test or the first backup | Reset in Windows Settings first. |
+| YK-11 | Wrong PINs: Windows' own messages (3 wrong: unplug and plug in; then a typed phrase; a warning before the last try; blocked); the page shows the cancel hero | Blocks the YubiKey's PIN: reset it afterwards. |
+| YK-8 | YubiKey help is always shown, as short points; **Open Windows settings…** opens Sign-in options | |
+| YK-8 | **Open Yubico Authenticator…**: installed, Windows asks for administrator permission and the app starts; refusing the permission opens nothing; not installed, the download page opens in the browser | Rename the install folder to test the download page. |
+| YK-4 | FIDO2 turned off in Yubico Authenticator: FIDO2 "Off or missing…" in red, the hero "This YubiKey can't protect your backups", no **Test YubiKey…**; turned on again, everything back | Optional. |
+| YK-4 | A YubiKey with firmware below 5.2, or a FIDO-only Security Key (no `MI_xx` in its path) | Needs such a key. |
+| YK-9 | **Technical details** opens and closes with a click, `Enter` and `Space`, the chevron turns; **Copy details** shows only while open; the page doesn't get wider when the scroll bar appears; long lines scroll sideways | |
+| YK-9 | **Copy details** pasted into Notepad: the sections of figure 10.5, values in one column, no PIN, secret, salt or credential ID; after a test, LAST TEST with the error code in words and the trace | |
+| YK-9 | Narrator announces Technical details as collapsed or expanded | |
+
+## 8. Display
 
 | ID | Check | Hints |
 |---|---|---|
@@ -115,17 +141,19 @@ For each condition: prepare it, start RestoreSafe, compare the hero with figure 
 | 15 | 100%, 125%, 150% and 200%: layout, fonts, icons, badges on every page and dialog | |
 | 15 | Moving the window between monitors with different scaling | Without a second monitor: change the scaling in Windows settings while RestoreSafe runs, with the main window and a dialog open; Windows sends the same `WM_DPICHANGED`. |
 | 3.2 | Minimum window size: nothing overlaps, all buttons visible | |
+| 3.2 | Sidebar: the row under the mouse is filled, without the accent bar; the fill goes when the mouse leaves | |
+| 3.4 | Scrolling slowly (mouse wheel, scroll bar arrows, dragging the thumb) on every page that scrolls: no controls painted over each other | |
 | 15 | High contrast (Aquatic and Desert): every status still readable, icons visible, focus visible | |
 
-## 8. Keyboard and screen reader
+## 9. Keyboard and screen reader
 
 | ID | Check | Hints |
 |---|---|---|
-| 3.2 | Keyboard only: `Ctrl+1` to `Ctrl+3`, `Ctrl+B`, `F5`, Tab order on every page, `Enter` and `Esc` in every dialog, a full backup and restore without the mouse | |
+| 3.2 | Keyboard only: `Ctrl+1` to `Ctrl+3`, `Ctrl+4` while the YubiKey page is in the sidebar, `Ctrl+B`, `F5`, Tab order on every page, `Enter` and `Esc` in every dialog, a full backup and restore without the mouse | |
 | 15 | Access keys are unique per page and dialog; hidden pages don't react to them | `Accessibility.ps1` |
 | 15 | Narrator: sidebar, hero state, card contents, list rows with status, step trail, progress, credential fields are announced in a sensible order | |
 
-## 9. Usability session (16.6)
+## 10. Usability session (16.6)
 
 For a major change of the window: give one person who hasn't seen it a test configuration and the tasks of GUI spec 16.6, without further help, and write down where they hesitate or go wrong.
 
