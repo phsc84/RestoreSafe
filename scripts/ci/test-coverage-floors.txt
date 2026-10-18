@@ -27,7 +27,10 @@ internal/logging                 91
 internal/gui/view                92
 internal/gui/flow                95
 internal/gui/widget              85
-internal/security/yubikey        72
+# yubikey: the CI runner has no YubiKey and no Yubico entries in the
+# registry, so the device loops don't run there (61 %; 72 % with a YubiKey
+# plugged in). Its floor follows the CI number (PLAN-yubikey-page, phase 5).
+internal/security/yubikey        61
 
 # The CI runner (SPEC-ci section 8).
 tools/ci/check                   90
