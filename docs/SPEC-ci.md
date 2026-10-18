@@ -220,7 +220,7 @@ Every job has this shape; only `name`, `timeout-minutes` and the artifact differ
 Decided by the owner, 2026-10-14:
 
 1. **Race without a gcc, locally: skipped.** The summary shows `SKIP` with the reason, exit code 0. The development machine has no gcc; the race detector runs on the GitHub runner on every push and stays a required check for `main`. On the runner, a missing gcc fails the job (6.3).
-2. **Pre-push hook: yes, tried out.** Commits stay unchecked; pushes are checked, so pushing less often (several commits at once) keeps the wait small. If the wait turns out to be a nuisance, the hook is dropped again; that is a change of GUIDE-development.md only.
+2. **Pre-push hook: yes.** Commits stay unchecked; pushes are checked, so pushing less often (several commits at once) keeps the wait small. Tried out from 2026-10-14 through the 2.1.0 release and settled on 2026-10-18.
 
 ### 10.1 The pre-push hook
 
