@@ -1,14 +1,17 @@
-# Checks every pull request, and every push to main and dev, on
-# Windows, the only platform RestoreSafe supports (refactoring 2.0 RF-1).
-# A branch with a pull request runs once per push, through the pull request.
+# Checks every push to a branch on Windows, the only platform RestoreSafe
+# supports (refactoring 2.0 RF-1). Each commit runs once: there is no
+# pull_request trigger, which ran every job a second time for the release
+# pull request from dev. A pull request shows the checks of its newest
+# commit, and the ruleset of main requires them by name on that commit,
+# whichever event ran them. Skipping the pull_request runs with an if
+# instead would report each job as successful under the same name.
 # Each job's checks are one run of the CI runner, tools/ci, which runs the
 # same way locally: go run ./tools/ci <job> (docs/GUIDE-ci.md, docs/SPEC-ci.md).
 name: CI
 
 on:
   push:
-    branches: [main, dev]
-  pull_request:
+    branches: ["**"] # branches only, not tags
 
 permissions:
   contents: read

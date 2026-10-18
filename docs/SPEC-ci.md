@@ -54,11 +54,12 @@ go run ./tools/ci gui         # the GUI smoke test (takes over mouse and keyboar
 | Job | Check | Section |
 |---|---|---|
 | static | `gofmt -l .` is empty | 6.1 step 1 |
-| static | `go vet ./...` | 6.1 step 2 |
-| static | `go build -trimpath ./...` with `CGO_ENABLED=0` | 6.1 step 3 |
-| static | `go tool staticcheck ./...` | 6.1 step 4 |
-| static | `go tool govulncheck ./...` | 6.1 step 5 |
-| static | deadcode, with and without `-test` | 6.1 step 6 |
+| static | `go mod tidy -diff` shows no difference | 6.1 step 2 |
+| static | `go vet ./...` | 6.1 step 3 |
+| static | `go build -trimpath ./...` with `CGO_ENABLED=0` | 6.1 step 4 |
+| static | `go tool staticcheck ./...` | 6.1 step 5 |
+| static | `go tool govulncheck ./...` | 6.1 step 6 |
+| static | deadcode, with and without `-test` | 6.1 step 7 |
 | test | `go test -count=1 -json -coverprofile ./...`, a failure annotation per failing test | 6.2 step 1 |
 | test | coverage floors | 6.2 step 2 |
 | test | every benchmark once | 6.2 step 3 |
@@ -105,13 +106,14 @@ Each step prints a header with its name before it starts. A command's output is 
 | Step | Command | Fails when |
 |---|---|---|
 | 1. gofmt | `gofmt -l .` | it lists a file; the files are printed |
-| 2. vet | `go vet ./...` | exit code ≠ 0 |
-| 3. build | `go build -trimpath ./...`, `CGO_ENABLED=0` | exit code ≠ 0 |
-| 4. staticcheck | `go tool staticcheck ./...` | exit code ≠ 0 |
-| 5. govulncheck | `go tool govulncheck ./...` | exit code ≠ 0 |
-| 6. deadcode | `go tool deadcode -test ./...`, then `go tool deadcode ./...` | see below |
+| 2. tidy | `go mod tidy -diff` (changes nothing) | exit code ≠ 0: `go.mod` or `go.sum` differs from what `go mod tidy` makes; the difference is printed |
+| 3. vet | `go vet ./...` | exit code ≠ 0 |
+| 4. build | `go build -trimpath ./...`, `CGO_ENABLED=0` | exit code ≠ 0 |
+| 5. staticcheck | `go tool staticcheck ./...` | exit code ≠ 0 |
+| 6. govulncheck | `go tool govulncheck ./...` | exit code ≠ 0 |
+| 7. deadcode | `go tool deadcode -test ./...`, then `go tool deadcode ./...` | see below |
 
-Step 6 (RF-70, RF-86):
+Step 7 (RF-70, RF-86):
 
 - the first pass fails on any line it prints ("functions nothing calls");
 - the second pass fails on any line that is not under `internal/testutil/` or `internal/workflow/interact/interacttest/` (either path separator) and not already printed by the first pass ("production functions only tests call");
@@ -186,6 +188,7 @@ Every job has this shape; only `name`, `timeout-minutes` and the artifact differ
           path: ${{ runner.temp }}/ci/test/cover.out
 ```
 
+- **Trigger:** `push` to any branch (`branches: ["**"]`, so no tag), and no `pull_request`. Each commit runs once; a pull request shows the checks of its newest commit, and the ruleset of `main` requires them by name on that commit, whichever event ran them. With both triggers, every job ran twice for the release pull request from `dev`. Skipping the `pull_request` runs with a job-level `if` is not an option: a skipped job reports Success under the same name as the push run, which could hide a failure from the ruleset.
 - The steps run in the runner's default shell, PowerShell 7; no `defaults.run.shell`.
 - Artifacts: `coverage` from `ci/test/cover.out` (always); `fuzz-failures` from `internal/**/testdata/fuzz/` (on failure); `gui-screenshots` from `ci/gui/work/shots` and `ci/gui/work/states` (on failure).
 
@@ -231,7 +234,7 @@ Decided by the owner, 2026-10-14:
 ## 11. Not part of this spec
 
 - Moving to another forge or CI service, mirroring the repository, self-hosted runners.
-- Changing triggers, schedules or which checks are required (e.g. fuzzing only on pull requests into `main`).
+- Changing schedules or which checks are required (e.g. fuzzing only on pull requests into `main`). The trigger is in 7.1.
 - Running jobs in parallel locally.
 - `build-release.bat`, `build-dev.bat`, releases, `scripts/apply-rulesets.ps1`, `scripts/gui-test/`.
 - A job summary page (`GITHUB_STEP_SUMMARY`); annotations and the log are enough for now.

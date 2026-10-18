@@ -49,7 +49,7 @@ A pull request (PR) asks to merge one branch into another. GitHub shows its comm
 
 ## 4. CI (GitHub Actions)
 
-GitHub Actions runs five jobs on every push to `main` and `dev` and to a branch with an open pull request: `static` (format, vet, build, static analysis), `test` (tests and coverage), `race` (race detector), `fuzz` (fuzzing), and `gui` (GUI smoke test). A pull request into `main` can be merged only when all five are green.
+GitHub Actions runs five jobs on every push to a branch, once per commit; a pull request shows the result of its newest commit: `static` (format, vet, build, static analysis), `test` (tests and coverage), `race` (race detector), `fuzz` (fuzzing), and `gui` (GUI smoke test). A pull request into `main` can be merged only when all five are green.
 
 Before pushing, run what CI runs, with the same runner (the tools are pinned in `go.mod`; nothing to install):
 

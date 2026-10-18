@@ -10,7 +10,7 @@ import (
 var testSupport = regexp.MustCompile(`^internal[\\/](testutil|workflow[\\/]interact[\\/]interacttest)[\\/]`)
 
 // FilterDeadcode returns the findings of the two deadcode passes (SPEC-ci
-// 6.1 step 6): withTest is the output of deadcode -test, functions nothing
+// 6.1 step 7): withTest is the output of deadcode -test, functions nothing
 // calls; without is the output of deadcode without -test, from which it keeps
 // the production functions only tests call, outside the test-support
 // packages and not already among the first.

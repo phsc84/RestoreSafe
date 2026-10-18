@@ -8,10 +8,7 @@ GitHub Actions runs the checks of [.github/workflows/ci.yml](../.github/workflow
 
 ### When it runs
 
-- On every push to a branch with an open pull request; the result shows on the PR.
-- On every push to `main` and `dev`; for `main` that means after every merge.
-
-A push to any other branch without a PR runs nothing.
+On every push to a branch of the repository, once per commit; for `main` that means after every merge. A pull request shows the result for its newest commit, the run of the push that brought it; opening a PR runs nothing more. A pull request from a fork runs nothing: its commits come into a branch of the repository first.
 
 ### The jobs
 
@@ -76,6 +73,7 @@ A job can turn red on `dev` without a change of yours: govulncheck learns of new
 | Step | Fails when | Narrower, to fix it |
 |---|---|---|
 | gofmt | a file is not formatted | `gofmt -l .` lists the files; `gofmt -w .` formats them |
+| tidy | `go.mod` or `go.sum` is not what `go mod tidy` makes of them | the step prints the difference; `go mod tidy` fixes it, then commit both files |
 | vet | vet reports a finding | `go vet ./internal/<package>` |
 | build | the code does not build with `CGO_ENABLED=0 -trimpath` | `go build ./...` |
 | staticcheck | staticcheck reports a finding | `go tool staticcheck ./internal/<package>` |
