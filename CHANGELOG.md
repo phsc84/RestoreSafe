@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.0] - Unreleased
+## [2.1.0] - 2026-10-18
 
 ### Added
 - **YubiKey page**, at the bottom of the sidebar while your configuration or your backups use a YubiKey (`Ctrl+4`): whether Windows and the connected YubiKey are ready (FIDO2, firmware), **Test YubiKey…** to check that it opens your backups, help with the PIN, a reset and FIDO2 (it starts Yubico Authenticator, or opens its download page), and technical details to copy into a bug report. It updates when a YubiKey is plugged in or pulled out.
