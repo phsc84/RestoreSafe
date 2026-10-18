@@ -213,8 +213,6 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 		"  FIDO2           On\n",
 		"  Firmware        5.7.4 (RestoreSafe needs 5.2 or later)\n",
 		"  Your keys       Password + YubiKey, created 2026-09-01, with recovery code\n",
-		"  In backups      Some backups need a YubiKey\n",
-		"  Last test       Match, Fri 16 Oct 2026, 08:52:00: cancelled\n",
 		"\nYUBIKEY 1\n  Product ID      0x0407\n  Firmware        5.7.4 (USB device version 0x0574)\n  USB device      usb1\n",
 		"  Interface       FIDO  usage page 0xF1D0, usage 0x0001, write access denied (normal: Windows keeps the FIDO interface for itself)\n                  " + `\\?\hid#vid_1050&pid_0407&mi_01#fido` + "\n",
 		"  Interface       OTP   usage page 0x0001, usage 0x0006, write access granted\n",
@@ -234,21 +232,24 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 
 	// Before the first check, without keys or a test: the summary says so.
 	got = YubiKeyDetails(noKeys, YubiKeyState{AppVersion: "2.1.0", WindowsVersion: "10.0.19045"})
-	for _, w := range []string{"  Windows         Not checked yet\n", "  YubiKeys        Not checked yet\n", "  Your keys       None yet: your first backup creates them\n",
-		"  In backups      No backup needs a YubiKey\n", "  Last test       None in this session\n", "  Version         Windows 10 (10.0.19045)\n"} {
+	for _, w := range []string{"  Windows         Not checked yet\n", "  YubiKeys        Not checked yet\n", "  Version         Windows 10 (10.0.19045)\n"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("empty details lack %q:\n%s", w, got)
 		}
 	}
-	if strings.Contains(got, "LAST TEST") || strings.Contains(got, "YUBIKEY 1") || strings.Contains(got, "WebAuthn API") {
-		t.Fatalf("sections without data:\n%s", got)
+	// Lines and sections without anything to diagnose are left out: keys
+	// without a YubiKey, no test, no YubiKey.
+	for _, w := range []string{"Your keys", "In backups", "Last test", "LAST TEST", "YUBIKEY 1", "WebAuthn API"} {
+		if strings.Contains(got, w) {
+			t.Fatalf("details contain %q without data:\n%s", w, got)
+		}
 	}
 
 	// Windows too old, no YubiKey, a listing error, a failed capability test.
 	windows := &yubikey.Diagnosis{APIMinimum: 4, APIErr: errors.New("webauthn.dll not available"), EnumErr: errors.New("SetupDiGetClassDevsEx: denied")}
 	got = YubiKeyDetails(noKeys, YubiKeyState{Diagnosis: windows, WindowsVersion: "odd", Test: result(keycheck.Capability, errors.New("failed"), false, 0x12345678)})
 	for _, w := range []string{"Not ready: needs Windows 11 version 22H2 or later", "  YubiKeys        None connected\n", "  FIDO2           Unknown: no YubiKey connected\n",
-		"Capability, Fri 16 Oct 2026, 08:52:00: failed", "  Kind            Capability: registers", "  Error code      0x12345678\n",
+		"  Kind            Capability: registers", "  Error code      0x12345678\n",
 		"  Version         odd\n", "  WebAuthn error  webauthn.dll not available\n", "  Listing error   SetupDiGetClassDevsEx: denied\n", "  HID drivers     None\n"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("details lack %q:\n%s", w, got)
@@ -261,7 +262,7 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	two.Interfaces[0].WriteAccess, two.Interfaces[0].OpenErr = false, errors.New("in use")
 	old := yubiKey5(0x0437, true)
 	got = YubiKeyDetails(yubiKeys, YubiKeyState{Diagnosis: two, Test: result(keycheck.Match, nil, false, 0)})
-	for _, w := range []string{"2 connected: no backup until only one is", "YUBIKEY 2", "write access denied: in use", "Match, Fri 16 Oct 2026, 08:52:00: passed", "  Result          Passed\n"} {
+	for _, w := range []string{"2 connected: no backup until only one is", "YUBIKEY 2", "write access denied: in use", "  Result          Passed\n"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("details lack %q:\n%s", w, got)
 		}

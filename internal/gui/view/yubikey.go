@@ -331,9 +331,10 @@ func YubiKeyDetails(keys health.KeysSummary, st YubiKeyState) string {
 	} else if dg != nil {
 		d.line(ydLabelFIDO, ydUnknown)
 	}
-	d.line(ydLabelKeys, detailsKeys(keys))
-	d.line(ydLabelInBackups, map[bool]string{true: ydInBackupsYes, false: ydInBackupsNo}[keys.YubiKeyInBackups])
-	d.line(ydLabelTest, detailsTestLine(st.Test))
+	// The keys the YubiKey must hold a registration for, when they use one.
+	if keys.YubiKey {
+		d.line(ydLabelKeys, detailsKeys(keys))
+	}
 
 	if dg != nil {
 		for i, k := range dg.Keys() {
@@ -419,25 +420,11 @@ func detailsCount(d *yubikey.Diagnosis) string {
 }
 
 func detailsKeys(k health.KeysSummary) string {
-	if !k.Exists {
-		return ydKeysNone
-	}
 	format := ydKeys
 	if k.RecoveryCode {
 		format = ydKeysRecovery
 	}
 	return fmt.Sprintf(format, capitalize(k.Methods), k.Created.Local().Format("2006-01-02"))
-}
-
-func detailsTestLine(r *keycheck.Result) string {
-	if r == nil {
-		return ydTestNone
-	}
-	kind := ydCapability
-	if r.Kind == keycheck.Match {
-		kind = ydMatch
-	}
-	return fmt.Sprintf(ydTestLine, kind, Exact(r.Time), testResult(r))
 }
 
 func testResult(r *keycheck.Result) string {
