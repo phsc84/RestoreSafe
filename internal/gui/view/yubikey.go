@@ -193,6 +193,11 @@ func yubiKeyHero(keys health.KeysSummary, st YubiKeyState, now time.Time) Hero {
 	return Hero{Tone: ToneError, Glyph: GlyphError, Title: ykFailed, Line: ykFailedLine, Primary: test}
 }
 
+// yubiKeyChecks are the lines of the Checks card and of the summary of the
+// technical details, in the same words (YK-4, YK-9): Windows, the YubiKey,
+// its FIDO2 function and firmware, and the current keys with the test. The
+// notes explain a line in the Checks card. No lines before the first
+// diagnosis.
 func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 	d := st.Diagnosis
 	if d == nil {
@@ -208,64 +213,78 @@ func yubiKeyChecks(keys health.KeysSummary, st YubiKeyState) []CheckLine {
 		return CheckLine{Label: label, Text: text, Tone: ToneNeutral}
 	}
 
-	lines := []CheckLine{ok(ykCheckWindows, ykWindowsReady)}
+	windows := ok(ykCheckWindows, ykWindowsReady)
 	if d.APIErr != nil {
-		lines[0] = bad(ykCheckWindows, ykWindowsOld)
+		windows = bad(ykCheckWindows, ykWindowsOld)
 	}
+	windows.Note = ykWindowsNote
 
-	// Connected says which YubiKey it is, with a note on which kinds work;
-	// FIDO2 whether its FIDO2 function is on.
-	var connected, fido CheckLine
-	f, firmware := keyFault(d)
-	switch f {
-	case faultNoKey:
-		connected, fido = neutral(ykCheckConnected, ykNoneConnected), neutral(ykCheckFIDO, ykFIDOUnknown)
-	case faultNoFIDO:
-		connected, fido = ok(ykCheckConnected, connectedText(d.Keys())), bad(ykCheckFIDO, ykFIDOOff)
-	case faultFirmware:
-		connected, fido = bad(ykCheckConnected, fmt.Sprintf(ykFirmwareOld, firmware)), ok(ykCheckFIDO, ykFIDOOn)
-	default:
-		connected, fido = ok(ykCheckConnected, connectedText(d.Keys())), ok(ykCheckFIDO, ykFIDOOn)
-	}
 	// More than one YubiKey blocks backups: new keys would register the one
 	// the user touches (decision 12).
-	if len(d.Keys()) > 1 {
-		connected = bad(ykCheckConnected, connectedText(d.Keys()))
-	}
-	connected.Note = ykSupported
-	lines = append(lines, connected, fido)
-
-	r := st.Test
-	switch {
-	case !keys.YubiKey && keys.YubiKeyInBackups:
-		lines = append(lines, neutral(ykCheckKeys, ykKeysOlder))
-	case !keys.YubiKey:
-		lines = append(lines, neutral(ykCheckKeys, ykKeysNone))
-	case r == nil || r.Kind != keycheck.Match:
-		lines = append(lines, neutral(ykCheckKeys, ykKeysNotTested))
-	case r.Passed():
-		lines = append(lines, ok(ykCheckKeys, fmt.Sprintf(ykKeysAnswered, keys.Created.Local().Format("Mon 2 Jan 2006"))))
-	case r.Cancelled:
-		lines = append(lines, neutral(ykCheckKeys, ykKeysCancelled))
+	var yubiKey CheckLine
+	switch n := len(d.Keys()); {
+	case n == 0:
+		yubiKey = neutral(ykCheckYubiKey, ykNotConnected)
+	case n == 1:
+		yubiKey = ok(ykCheckYubiKey, ykOneConnected)
 	default:
-		lines = append(lines, bad(ykCheckKeys, ykKeysFailed))
+		yubiKey = bad(ykCheckYubiKey, fmt.Sprintf(ykManyConnected, n))
+	}
+	yubiKey.Note = ykSupported
+	lines := []CheckLine{windows, yubiKey}
+
+	switch {
+	case len(d.Keys()) == 0:
+		lines = append(lines, neutral(ykCheckFIDO, ykFIDOUnknown))
+	case d.FIDO():
+		lines = append(lines, ok(ykCheckFIDO, ykFIDOOn))
+	default:
+		lines = append(lines, bad(ykCheckFIDO, ykFIDOOff))
+	}
+	if k := firmwareKey(d); k.Revision != 0 {
+		firmware := yubikey.FormatRevision(k.Revision)
+		if k.Revision < minFirmware {
+			lines = append(lines, bad(ykCheckFirmware, fmt.Sprintf(ykFirmwareOld, firmware)))
+		} else {
+			lines = append(lines, ok(ykCheckFirmware, fmt.Sprintf(ykFirmware, firmware)))
+		}
+	}
+
+	if !keys.YubiKey {
+		text := ykKeysNone
+		if keys.YubiKeyInBackups {
+			text = ykKeysOlder
+		}
+		return append(lines, neutral(ykCheckKeys, text))
+	}
+	// The keys name the registration the YubiKey must hold; the test says
+	// whether it does.
+	text := func(status string) string {
+		return fmt.Sprintf(ykKeys, capitalize(keys.Methods), keys.Created.Local().Format("Mon 2 Jan 2006"), status)
+	}
+	switch r := st.Test; {
+	case r == nil || r.Kind != keycheck.Match:
+		lines = append(lines, neutral(ykCheckKeys, text(ykKeysNotTested)))
+	case r.Passed():
+		lines = append(lines, ok(ykCheckKeys, text(ykKeysAnswered)))
+	case r.Cancelled:
+		lines = append(lines, neutral(ykCheckKeys, text(ykKeysCancelled)))
+	default:
+		lines = append(lines, bad(ykCheckKeys, text(ykKeysFailed)))
 	}
 	return lines
 }
 
-// connectedText words the connected YubiKeys: "1 YubiKey, firmware 5.7.4".
-// Its other USB functions don't matter to RestoreSafe, and FIDO2 has a
-// line of its own (YK-4).
-func connectedText(keys []yubikey.Key) string {
-	if len(keys) > 1 {
-		return fmt.Sprintf(ykManyKeys, len(keys))
+// firmwareKey returns the YubiKey whose firmware the checks show: the one
+// with FIDO2, or else the first.
+func firmwareKey(d *yubikey.Diagnosis) yubikey.Key {
+	if k := fidoKey(d); k.Revision != 0 {
+		return k
 	}
-	k := keys[0]
-	text := ykOneKey
-	if k.Revision != 0 {
-		text = fmt.Sprintf(ykWithFirmware, text, yubikey.FormatRevision(k.Revision))
+	if keys := d.Keys(); len(keys) > 0 {
+		return keys[0]
 	}
-	return text
+	return yubikey.Key{}
 }
 
 func yubiKeyGuide() YubiKeyGuide {
@@ -312,28 +331,17 @@ func YubiKeyDetails(keys health.KeysSummary, st YubiKeyState) string {
 	var d details
 	dg := st.Diagnosis
 
+	// The summary says what the Checks card says, without its notes; keys
+	// without a YubiKey diagnose nothing.
 	d.section(ydSummary)
-	d.line(ydLabelWindows, detailsWindowsState(dg))
-	d.line(ydLabelYubiKeys, detailsCount(dg))
-	if dg != nil && len(dg.Keys()) > 0 {
-		k := fidoKey(dg)
-		d.line(ydLabelFIDO, map[bool]string{true: ydFIDOOn, false: ydFIDOOff}[dg.FIDO()])
-		if k.Revision == 0 {
-			k = dg.Keys()[0]
-		}
-		if k.Revision != 0 {
-			format := ydFirmware
-			if k.Revision < minFirmware {
-				format = ydFirmwareOld
-			}
-			d.line(ydLabelFirmware, fmt.Sprintf(format, yubikey.FormatRevision(k.Revision)))
-		}
-	} else if dg != nil {
-		d.line(ydLabelFIDO, ydUnknown)
+	if dg == nil {
+		d.line(ykCheckWindows, ydNotChecked)
+		d.line(ykCheckYubiKey, ydNotChecked)
 	}
-	// The keys the YubiKey must hold a registration for, when they use one.
-	if keys.YubiKey {
-		d.line(ydLabelKeys, detailsKeys(keys))
+	for _, l := range yubiKeyChecks(keys, st) {
+		if l.Label != ykCheckKeys || keys.YubiKey {
+			d.line(l.Label, l.Text)
+		}
 	}
 
 	if dg != nil {
@@ -393,38 +401,6 @@ func YubiKeyDetails(keys health.KeysSummary, st YubiKeyState) string {
 		d.line(ydLabelDrivers, drivers)
 	}
 	return "RestoreSafe " + st.AppVersion + "\n\n" + d.b.String()
-}
-
-func detailsWindowsState(d *yubikey.Diagnosis) string {
-	switch {
-	case d == nil:
-		return ydNotChecked
-	case d.APIErr != nil:
-		return ydNotReady
-	}
-	return ydReady
-}
-
-func detailsCount(d *yubikey.Diagnosis) string {
-	if d == nil {
-		return ydNotChecked
-	}
-	switch n := len(d.Keys()); n {
-	case 0:
-		return ydNoneConnected
-	case 1:
-		return ydOneConnected
-	default:
-		return fmt.Sprintf(ydManyConnected, n)
-	}
-}
-
-func detailsKeys(k health.KeysSummary) string {
-	format := ydKeys
-	if k.RecoveryCode {
-		format = ydKeysRecovery
-	}
-	return fmt.Sprintf(format, capitalize(k.Methods), k.Created.Local().Format("2006-01-02"))
 }
 
 func testResult(r *keycheck.Result) string {

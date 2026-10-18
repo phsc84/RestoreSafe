@@ -31,7 +31,7 @@ func yubiKey5(rev uint16, fido bool) *yubikey.Diagnosis {
 func snapshotWith(k health.KeysSummary) *health.Snapshot { return &health.Snapshot{Keys: k} }
 
 var (
-	yubiKeys    = health.KeysSummary{Exists: true, Created: time.Date(2026, 9, 1, 8, 0, 0, 0, time.Local), YubiKey: true, YubiKeyInBackups: true}
+	yubiKeys    = health.KeysSummary{Exists: true, Created: time.Date(2026, 9, 1, 8, 0, 0, 0, time.Local), Methods: "password + YubiKey", YubiKey: true, YubiKeyInBackups: true}
 	noKeys      = health.KeysSummary{}
 	passwordNow = health.KeysSummary{Exists: true, YubiKeyInBackups: true}
 )
@@ -127,18 +127,20 @@ func TestYubiKeyChecksLines(t *testing.T) {
 	}
 
 	d := yubiKey5(0x0574, true)
-	want := []string{"Windows: Ready for YubiKeys", "Connected: 1 YubiKey, firmware 5.7.4", "FIDO2: On", "Your keys: Not tested"}
+	want := []string{"Windows: Ready for YubiKeys", "YubiKey: Connected", "FIDO2: On", "Firmware: 5.7.4 (RestoreSafe needs 5.2 or later)",
+		"Your keys: Password + YubiKey, created Tue 1 Sep 2026: not tested"}
 	if got := text(yubiKeys, YubiKeyState{Diagnosis: d}); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("connected: %q", got)
 	}
 	// More than one YubiKey blocks backups (decision 12): an error.
-	if l := YubiKeyPageOf(snapshotWith(yubiKeys), YubiKeyState{Diagnosis: twoKeys()}, ykNow).Checks[1]; l.Tone != ToneError || l.Glyph != GlyphError || !strings.Contains(l.Text, "Connect only the one you back up with") {
+	if l := YubiKeyPageOf(snapshotWith(yubiKeys), YubiKeyState{Diagnosis: twoKeys()}, ykNow).Checks[1]; l.Tone != ToneError || l.Glyph != GlyphError || !strings.Contains(l.Text, "connect only the one you back up with") {
 		t.Fatalf("two YubiKeys: %+v", l)
 	}
-	// Which YubiKeys work is noted under Connected, connected or not.
-	for _, st := range []YubiKeyState{{Diagnosis: d}, {Diagnosis: &yubikey.Diagnosis{}}, {Diagnosis: yubiKey5(0x0437, true)}} {
-		if l := YubiKeyPageOf(snapshotWith(yubiKeys), st, ykNow).Checks[1]; l.Label != "Connected" || !strings.Contains(l.Note, "YubiKey 5 Series") {
-			t.Fatalf("Connected note: %+v", l)
+	// Notes explain Windows and which YubiKeys work, whatever the line says.
+	for _, st := range []YubiKeyState{{Diagnosis: d}, {Diagnosis: &yubikey.Diagnosis{APIErr: errors.New("old")}}, {Diagnosis: yubiKey5(0x0437, true)}} {
+		checks := YubiKeyPageOf(snapshotWith(yubiKeys), st, ykNow).Checks
+		if checks[0].Label != "Windows" || !strings.Contains(checks[0].Note, "WebAuthn") || checks[1].Label != "YubiKey" || !strings.Contains(checks[1].Note, "YubiKey 5 Series") {
+			t.Fatalf("notes: %+v", checks[:2])
 		}
 	}
 
@@ -148,17 +150,17 @@ func TestYubiKeyChecksLines(t *testing.T) {
 		st   YubiKeyState
 		want string
 	}{
-		{"Windows too old", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{APIErr: errors.New("old")}}, "Windows: Needs Windows 11 version 22H2 or later"},
-		{"none connected", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{}}, "Connected: No YubiKey connected|FIDO2: Shown when a YubiKey is connected"},
-		{"no FIDO", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, "Connected: 1 YubiKey, firmware 5.7.4|FIDO2: Off or missing"},
-		{"old firmware", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, "Connected: Firmware 4.3.7: FIDO2 needs 5.2 or later"},
-		{"two keys", yubiKeys, YubiKeyState{Diagnosis: twoKeys()}, "Connected: 2 YubiKeys"},
+		{"Windows too old", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{APIErr: errors.New("old")}}, "Windows: Not ready: needs Windows 11 version 22H2 or later"},
+		{"none connected", yubiKeys, YubiKeyState{Diagnosis: &yubikey.Diagnosis{}}, "YubiKey: Not connected|FIDO2: Unknown: no YubiKey connected|Your keys"},
+		{"no FIDO", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0574, false)}, "YubiKey: Connected|FIDO2: Off or missing: YubiKey help below shows how to turn it on|Firmware: 5.7.4"},
+		{"old firmware", yubiKeys, YubiKeyState{Diagnosis: yubiKey5(0x0437, true)}, "Firmware: 4.3.7: too old, RestoreSafe needs 5.2 or later"},
+		{"two keys", yubiKeys, YubiKeyState{Diagnosis: twoKeys()}, "YubiKey: 2 connected: connect only the one you back up with; backups wait until then"},
 		{"no keys", noKeys, YubiKeyState{Diagnosis: d}, "Your keys: None yet. Your first backup registers your YubiKey."},
 		{"older keys", passwordNow, YubiKeyState{Diagnosis: d}, "Your keys: Your current keys use no YubiKey; older backups do."},
-		{"answered", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, nil, false, 0)}, "Your keys: Your YubiKey answered (keys created Tue 1 Sep 2026)"},
-		{"cancelled", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("c"), true, 0x800704C7)}, "Your keys: The test was cancelled"},
-		{"failed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("f"), false, 1)}, "Your keys: The test didn't work"},
-		{"a capability result", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Capability, nil, false, 0)}, "Your keys: Not tested"},
+		{"answered", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, nil, false, 0)}, "Your keys: Password + YubiKey, created Tue 1 Sep 2026: your YubiKey answered"},
+		{"cancelled", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("c"), true, 0x800704C7)}, ": the test was cancelled"},
+		{"failed", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Match, errors.New("f"), false, 1)}, ": the test didn't work"},
+		{"a capability result", yubiKeys, YubiKeyState{Diagnosis: d, Test: result(keycheck.Capability, nil, false, 0)}, ": not tested"},
 	} {
 		if got := text(tc.keys, tc.st); !strings.Contains(strings.Join(got, "|"), tc.want) {
 			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
@@ -174,16 +176,6 @@ func twoKeys() *yubikey.Diagnosis {
 		d.Interfaces = append(d.Interfaces, i)
 	}
 	return d
-}
-
-func TestConnectedTextWithoutFirmware(t *testing.T) {
-	t.Parallel()
-	if got := connectedText([]yubikey.Key{{ProductID: 0x9999}}); got != "1 YubiKey" {
-		t.Fatalf("no USB device version: %q", got)
-	}
-	if got := connectedText([]yubikey.Key{{ProductID: 0x0120, Revision: 0x0571}}); got != "1 YubiKey, firmware 5.7.1" {
-		t.Fatalf("Security Key: %q", got)
-	}
 }
 
 func TestYubiKeyHelpIsAlwaysThere(t *testing.T) {
@@ -209,10 +201,10 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	want := []string{
 		"RestoreSafe 2.1.0\n\nSUMMARY\n",
 		"  Windows         Ready for YubiKeys\n",
-		"  YubiKeys        1 connected\n",
+		"  YubiKey         Connected\n",
 		"  FIDO2           On\n",
 		"  Firmware        5.7.4 (RestoreSafe needs 5.2 or later)\n",
-		"  Your keys       Password + YubiKey, created 2026-09-01, with recovery code\n",
+		"  Your keys       Password + YubiKey, created Tue 1 Sep 2026: the test was cancelled\n",
 		"\nYUBIKEY 1\n  Product ID      0x0407\n  Firmware        5.7.4 (USB device version 0x0574)\n  USB device      usb1\n",
 		"  Interface       FIDO  usage page 0xF1D0, usage 0x0001, write access denied (normal: Windows keeps the FIDO interface for itself)\n                  " + `\\?\hid#vid_1050&pid_0407&mi_01#fido` + "\n",
 		"  Interface       OTP   usage page 0x0001, usage 0x0006, write access granted\n",
@@ -232,7 +224,7 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 
 	// Before the first check, without keys or a test: the summary says so.
 	got = YubiKeyDetails(noKeys, YubiKeyState{AppVersion: "2.1.0", WindowsVersion: "10.0.19045"})
-	for _, w := range []string{"  Windows         Not checked yet\n", "  YubiKeys        Not checked yet\n", "  Version         Windows 10 (10.0.19045)\n"} {
+	for _, w := range []string{"  Windows         Not checked yet\n", "  YubiKey         Not checked yet\n", "  Version         Windows 10 (10.0.19045)\n"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("empty details lack %q:\n%s", w, got)
 		}
@@ -248,7 +240,7 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	// Windows too old, no YubiKey, a listing error, a failed capability test.
 	windows := &yubikey.Diagnosis{APIMinimum: 4, APIErr: errors.New("webauthn.dll not available"), EnumErr: errors.New("SetupDiGetClassDevsEx: denied")}
 	got = YubiKeyDetails(noKeys, YubiKeyState{Diagnosis: windows, WindowsVersion: "odd", Test: result(keycheck.Capability, errors.New("failed"), false, 0x12345678)})
-	for _, w := range []string{"Not ready: needs Windows 11 version 22H2 or later", "  YubiKeys        None connected\n", "  FIDO2           Unknown: no YubiKey connected\n",
+	for _, w := range []string{"Not ready: needs Windows 11 version 22H2 or later", "  YubiKey         Not connected\n", "  FIDO2           Unknown: no YubiKey connected\n",
 		"  Kind            Capability: registers", "  Error code      0x12345678\n",
 		"  Version         odd\n", "  WebAuthn error  webauthn.dll not available\n", "  Listing error   SetupDiGetClassDevsEx: denied\n", "  HID drivers     None\n"} {
 		if !strings.Contains(got, w) {
@@ -262,7 +254,7 @@ func TestYubiKeyDetailsForABugReport(t *testing.T) {
 	two.Interfaces[0].WriteAccess, two.Interfaces[0].OpenErr = false, errors.New("in use")
 	old := yubiKey5(0x0437, true)
 	got = YubiKeyDetails(yubiKeys, YubiKeyState{Diagnosis: two, Test: result(keycheck.Match, nil, false, 0)})
-	for _, w := range []string{"2 connected: no backup until only one is", "YUBIKEY 2", "write access denied: in use", "  Result          Passed\n"} {
+	for _, w := range []string{"2 connected: connect only the one you back up with", "YUBIKEY 2", "write access denied: in use", "  Result          Passed\n"} {
 		if !strings.Contains(got, w) {
 			t.Errorf("details lack %q:\n%s", w, got)
 		}
