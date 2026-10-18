@@ -80,7 +80,7 @@ This document specifies RestoreSafe's window application, a status-first interfa
 | Common Controls | Version 6 via the application manifest `build/RestoreSafe.manifest`. Required for `TaskDialog`, ListView groups and themed controls. |
 | DPI | `PerMonitorV2` (application manifest). All metrics, fonts, icons and custom drawing scale with the window DPI and are recomputed on `WM_DPICHANGED`. |
 | Text | UTF-16 (`W` APIs) throughout. |
-| Theme | Light only in 2.0.0. Dark mode follows later (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
+| Theme | Light only, as of 2.1.0. Dark mode follows later (decision 4): follow the system setting live, title bar via `DWMWA_USE_IMMERSIVE_DARK_MODE`, controls via `SetWindowTheme`. High contrast mode uses system colors only (required in 2.0.0). |
 | Fonts | Segoe UI Variable Text (fallback: the system message font) for UI text. Icons are glyphs of Segoe Fluent Icons drawn with `DrawTextW`, so there are no image assets to scale (fallback: the text markers ✔ ⚠ ✖ ⓘ). Consolas for the log, IDs and the recovery code. |
 | State | RestoreSafe is portable and keeps no state outside the backup directory. The UI stores nothing: no registry, no settings file, no remembered window position or column widths. |
 
