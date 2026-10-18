@@ -21,6 +21,9 @@ type Dialogs interface {
 	// takes the password with the choice answers it as secret, which the
 	// caller zeroes; nil otherwise.
 	ChooseUnlockMethod(q interact.UnlockChoice, answer func(recovery bool, secret []byte, err error))
+	// YubiKeyRefused asks what to do when the YubiKey didn't unlock the
+	// keys of a backup.
+	YubiKeyRefused(q interact.YubiKeyRefusal, answer func(interact.YubiKeyRefusalAnswer, error))
 	// Password answers the secret; the caller zeroes it.
 	Password(q interact.SecretQuestion, answer func(secret []byte, err error))
 	// NewPassword answers the password and its confirmation, or ok=false
@@ -104,6 +107,15 @@ func (u *UI) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 	}
 	u.pendingSecret = c.secret
 	return c.recovery, nil
+}
+
+// YubiKeyRefused asks whether to try the YubiKey again, create new keys, or
+// cancel the backup.
+func (u *UI) YubiKeyRefused(q interact.YubiKeyRefusal) (interact.YubiKeyRefusalAnswer, error) {
+	v, err := u.b.Ask(func(answer func(any, error)) {
+		u.d.YubiKeyRefused(q, func(a interact.YubiKeyRefusalAnswer, err error) { answer(a, err) })
+	}, interact.RefusalCancel, interact.ErrCancelled)
+	return v.(interact.YubiKeyRefusalAnswer), err
 }
 
 // Password asks for a secret without echo.

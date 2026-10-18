@@ -365,7 +365,7 @@ The Create backup window is the backup preflight (core spec 6.2). It opens immed
 | BP-3 | New keys (first backup, configuration changed, or chosen): a note at the top in the Information color: "New keys will be created: <reason>. Every folder gets a full backup." |
 | BP-4 | Buttons: **Start** (default), **Full backup instead** (only when at least one differential is planned; replans every folder as full and checks the space again, the dialog stays open), **New keys + full backup…** (only when existing keys are reused; confirms with figure 6.2, then replans), **Cancel**. They map to `interact.BackupAsPlanned`, `BackupFull`, `BackupNewKeys` and `BackupCancel`. "Full backup instead" becomes "Back to plan" after it was used. |
 | BP-5 | Blocking issues (`Report.HasErrors`) remove **Start**; the issues are listed in red above the buttons with their remedy. Warnings are listed in amber and don't block. "Show details" shows the full preflight report (split size, exclude patterns, unreadable-file rule, Argon2, log level) in the report view. |
-| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Create backup page shows no result card for it. |
+| BP-6 | **Start** closes the plan and opens the credential dialogs (section 9). Cancelling a credential dialog ends the backup before anything is written; the Create backup page shows no result card for it. When the YubiKey doesn't unlock the keys, figure 9.4 asks first (CR-5); new keys reopen this window. |
 
 ### 6.2 Progress
 
@@ -688,11 +688,35 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 └────────────────────────────────────────────────────┘
 ```
 
+**Figure 9.4: The YubiKey didn't unlock** (backup only).
+
+```text
+┌────────────────────────────────────────────────────┐
+│ Unlock your backups                            [x] │
+├────────────────────────────────────────────────────┤
+│ Your YubiKey didn't unlock your backups.           │
+│ If you cancelled the Windows Security prompt, try  │
+│ again. If Windows said the security key doesn't    │
+│ look familiar, this YubiKey was reset or is a      │
+│ different one: it can never unlock these keys      │
+│ again. Create new keys, and every folder gets a    │
+│ full backup.                                       │
+│                                                    │
+│ Create new keys + full backup                      │
+│                                                    │
+│ Your older backups keep opening with your recovery │
+│ code.                                              │
+│                                                    │
+│                          [ Try again ]  [ Cancel ] │
+└────────────────────────────────────────────────────┘
+```
+
 | ID | Requirement |
 |---|---|
 | CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): when the selection uses more than one key set, the notice above the field names the backup that needs other keys and their creation date, which the question carries (`interact.OtherKeys`). After a failed try, the reason and the attempts left, which the question also carries (`interact.Attempt`), are shown under the field. The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
 | CR-2 | New keys (`NewPassword`, YubiKey registration, `ShowRecoveryCode`): the password dialog is titled "Create your keys". YubiKey registration has no dialog of its own (the Windows Security prompt) and the recovery code dialog asks nothing; when there is more than one step, the "Steps:" line names them all. Mismatch and length errors from the workflow appear under the fields. In modes 2 and 3 the recovery code always follows (core spec 4.4.2). |
 | CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step, **Continue** disabled until **I have stored my recovery code** is ticked). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
+| CR-5 | YubiKey refused (`YubiKeyRefused`, figure 9.4): when the YubiKey doesn't unlock the keys a backup reuses, the backup asks instead of ending. Windows reports a reset or different YubiKey, wrong PINs and a cancel with the same `0x800704C7` (YK-7), so the text covers a cancel and a reset. **Try again** asks Windows again; **Create new keys + full backup** reopens the Create backup window with the plan with new keys (BP-3, reason "Your YubiKey didn't unlock the current keys"), which the user starts or cancels, so no second confirmation (figure 6.2) is asked; **Cancel** ends the backup with the YubiKey error, nothing written. The note says what the older backups need: "Your older backups keep opening with your recovery code." when the keys have a recovery slot, otherwise "These keys have no recovery code: if this YubiKey was reset, your older backups can't be opened any more." Restore and verify don't ask: they offer the recovery code (CR-1). |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
 ## 10. Settings and YubiKey pages
@@ -1192,6 +1216,7 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 | `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore backup window itself after its **Start** (RW-6b). |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |
+| `YubiKeyRefused` | The YubiKey didn't unlock (9.4, CR-5); new keys reopen the Create backup window. |
 | `NewPassword`, `ShowRecoveryCode` | New-keys dialogs (9.2, 9.3). |
 | `Progress` | Progress card (6.2). |
 

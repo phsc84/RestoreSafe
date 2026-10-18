@@ -27,6 +27,7 @@ type fakeDialogs struct {
 	confirmStart bool
 	codes        [][]byte
 	codeOK       bool
+	refusal      interact.YubiKeyRefusalAnswer
 }
 
 func (f *fakeDialogs) BackupPlan(p interact.BackupPlan, answer func()) {
@@ -51,6 +52,10 @@ func (f *fakeDialogs) ConfirmStart(action string, answer func(bool, error)) {
 }
 func (f *fakeDialogs) ChooseUnlockMethod(_ interact.UnlockChoice, answer func(bool, []byte, error)) {
 	answer(f.recovery, f.choiceSecret, nil)
+}
+func (f *fakeDialogs) YubiKeyRefused(q interact.YubiKeyRefusal, answer func(interact.YubiKeyRefusalAnswer, error)) {
+	f.questions = append(f.questions, q)
+	answer(f.refusal, nil)
 }
 func (f *fakeDialogs) RecoveryCode(code []byte, answer func(bool)) {
 	f.codes = append(f.codes, code)
@@ -381,5 +386,40 @@ func TestUIPasswordTypedWithTheUnlockChoice(t *testing.T) {
 	}
 	if code, _ := ur.Password(interact.SecretQuestion{Kind: interact.SecretRecoveryCode}); string(code) != "CODE" || len(r.questions) != 1 {
 		t.Fatalf("the recovery code is asked: %q", code)
+	}
+}
+
+func TestUIYubiKeyRefusedAnswers(t *testing.T) {
+	t.Parallel()
+	d := &fakeDialogs{refusal: interact.RefusalNewKeys}
+	u := newTestUI(t, d)
+	q := interact.YubiKeyRefusal{RecoveryCode: true}
+	if a, err := u.YubiKeyRefused(q); err != nil || a != interact.RefusalNewKeys || len(d.questions) != 1 || d.questions[0] != q {
+		t.Fatalf("answer %v, %v; questions %+v", a, err, d.questions)
+	}
+}
+
+// Choosing new keys after the YubiKey didn't unlock the keys shows the plan
+// again: the run is back to planning, and Cancel needs no confirmation.
+func TestMachineReplan(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC)
+	var m Machine
+	m.Start(OpBackup)
+	m.Confirmed(now)
+	m.Progressed(interact.Progress{Phase: interact.PhaseUnlocking}, now)
+	m.Replan()
+	r := m.Current()
+	if m.Stage() != StagePlanning || !r.Started.IsZero() || r.Progress.Phase != 0 || m.CancelRequested() != CancelNow {
+		t.Fatalf("after Replan: %+v", r)
+	}
+	m.Confirmed(now)
+	if m.Stage() != StageRunning {
+		t.Fatal("the new plan can be started")
+	}
+	m.Cancelling()
+	m.Replan()
+	if m.Stage() != StageCancelling {
+		t.Fatal("Replan changes only a running backup")
 	}
 }

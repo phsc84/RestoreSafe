@@ -44,6 +44,34 @@ func obtainKeys(u interact.UI, cfg *config.Config, keys plan.Keys, log *logging.
 	return enrollKeySet(u, cfg, log)
 }
 
+// yubiKeyRefusedReason is why the plan after a YubiKey refusal creates new
+// keys.
+const yubiKeyRefusedReason = "Your YubiKey didn't unlock the current keys"
+
+// askAfterYubiKeyRefusal asks what to do when unlocking the existing keys
+// failed with err. Only a YubiKey that didn't unlock them is asked about: a
+// YubiKey that was reset or is another one can never unlock them again, and
+// new keys are the way on. Any other failure, or a cancelled question,
+// answers RefusalCancel, and the backup ends with err.
+func askAfterYubiKeyRefusal(u interact.UI, keys plan.Keys, err error, log *logging.Logger) interact.YubiKeyRefusalAnswer {
+	var yk *unlock.YubiKeyError
+	if keys.Existing == nil || !errors.As(err, &yk) {
+		return interact.RefusalCancel
+	}
+	log.WarnLogOnly("%v", err)
+	answer, qerr := u.YubiKeyRefused(interact.YubiKeyRefusal{RecoveryCode: keys.Existing.HasSlotType(container.SlotRecovery)})
+	if qerr != nil {
+		return interact.RefusalCancel
+	}
+	switch answer {
+	case interact.RefusalRetry:
+		log.InfoLogOnly("Trying the YubiKey again.")
+	case interact.RefusalNewKeys:
+		log.Info("New keys requested after the YubiKey didn't unlock the current keys.")
+	}
+	return answer
+}
+
 // newSlot is one slot to create during enrollment, with its secret.
 type newSlot struct {
 	slotType  string

@@ -89,6 +89,9 @@ type UI interface {
 	// ChooseUnlockMethod asks whether to unlock with the regular credentials
 	// or the recovery code. It returns true for the recovery code.
 	ChooseUnlockMethod(q UnlockChoice) (bool, error)
+	// YubiKeyRefused asks what to do when the YubiKey didn't unlock the keys
+	// a backup reuses: try again, create new keys, or cancel.
+	YubiKeyRefused(q YubiKeyRefusal) (YubiKeyRefusalAnswer, error)
 	// Password asks for a secret (password or recovery code) without echo.
 	Password(q SecretQuestion) ([]byte, error)
 	// NewPassword asks for a new password and its confirmation. It returns

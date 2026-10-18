@@ -94,3 +94,21 @@ func TestUnlockChoiceByKeyType(t *testing.T) {
 		t.Fatalf("a retry shows the error instead: %+v", d)
 	}
 }
+
+func TestYubiKeyRefusalDialog(t *testing.T) {
+	t.Parallel()
+	d := YubiKeyRefusalDialogOf(interact.YubiKeyRefusal{})
+	if d.OK != "Try again" || d.Link == "" || d.Cancel == "" || len(d.Fields) != 0 {
+		t.Fatalf("answers %+v", d)
+	}
+	if !strings.Contains(d.Note, "no recovery code") {
+		t.Fatalf("without a recovery code: %q", d.Note)
+	}
+	checkWriting(t, d)
+
+	d = YubiKeyRefusalDialogOf(interact.YubiKeyRefusal{RecoveryCode: true})
+	if !strings.Contains(d.Note, "keep opening with your recovery code") {
+		t.Fatalf("with a recovery code: %q", d.Note)
+	}
+	checkWriting(t, d)
+}

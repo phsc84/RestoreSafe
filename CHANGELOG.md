@@ -9,6 +9,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - **YubiKey page**, at the bottom of the sidebar while your configuration or your backups use a YubiKey (`Ctrl+4`): whether Windows and the connected YubiKey are ready (FIDO2, firmware), **Test YubiKey…** to check that it opens your backups, help with the PIN, a reset and FIDO2 (it starts Yubico Authenticator, or opens its download page), and technical details to copy into a bug report. It updates when a YubiKey is plugged in or pulled out.
 - With a YubiKey, the Keys card on Create backup says how the first backup sets it up, and warns never to reset it.
+- When your YubiKey doesn't unlock your keys at the start of a backup, for example because it was reset, the backup no longer just fails: **Try again**, or **Create new keys + full backup**, which shows the plan with new keys to start. The dialog says whether your older backups still open with your recovery code.
 - The sidebar shows the item under the mouse.
 
 ### Changed

@@ -72,6 +72,25 @@ func UnlockChoiceOf(q interact.UnlockChoice) CredentialDialog {
 	return d
 }
 
+// YubiKeyRefusalDialogOf words the question after the YubiKey didn't unlock
+// the keys of a backup (figure 9.4): Try again, the link to new keys, or
+// Cancel. The note says what the older backups need from now on.
+func YubiKeyRefusalDialogOf(q interact.YubiKeyRefusal) CredentialDialog {
+	d := CredentialDialog{
+		Title:  unlockTitle,
+		Intro:  refusedIntro,
+		Hint:   refusedHint,
+		Note:   refusedNoRecovery,
+		OK:     buttonTryAgain,
+		Cancel: buttonCancel,
+		Link:   linkNewKeys,
+	}
+	if q.RecoveryCode {
+		d.Note = refusedRecovery
+	}
+	return d
+}
+
 // otherKeysNotice names the backup that needs keys other than the
 // operation's first (CR-1); "" for the first keys and on a retry, which
 // unlockError words.

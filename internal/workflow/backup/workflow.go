@@ -75,19 +75,34 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	removeLeftoverTempParts(backupDir, log)
 
-	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos)
+	keys, plans, start, err := choosePlan(u, cfg, backupDir, sources, infos, "")
 	if err != nil {
 		return err
 	}
-	if !start {
-		log.InfoLogOnly("Backup cancelled by user before start")
-		fmt.Fprintln(out, "Backup cancelled.")
-		return nil
-	}
-
-	job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
-	keySet, master, err := obtainKeys(u, cfg, keys, log)
-	if err != nil {
+	var keySet *container.KeySet
+	var master []byte
+	for {
+		if !start {
+			log.InfoLogOnly("Backup cancelled by user before start")
+			fmt.Fprintln(out, "Backup cancelled.")
+			return nil
+		}
+		job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
+		keySet, master, err = obtainKeys(u, cfg, keys, log)
+		if err == nil {
+			break
+		}
+		answer := askAfterYubiKeyRefusal(u, keys, err, log)
+		switch answer {
+		case interact.RefusalRetry:
+			continue
+		case interact.RefusalNewKeys:
+			keys, plans, start, err = choosePlan(u, cfg, backupDir, sources, infos, yubiKeyRefusedReason)
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		return err
 	}
 	defer cryptox.ZeroBytes(master)

@@ -72,7 +72,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		master, err := ks.Unlock(slotIndex, yubiSecret)
 		if err != nil {
 			if errors.Is(err, cryptox.ErrWrongPassword) {
-				return nil, problem.New("YubiKey authentication failed: this YubiKey does not unlock the backup.").WithRemedy("Use a YubiKey that was registered for this backup.")
+				return nil, &YubiKeyError{Err: problem.New("YubiKey authentication failed: this YubiKey does not unlock the backup.").WithRemedy("Use a YubiKey that was registered for this backup.")}
 			}
 			return nil, err
 		}
@@ -154,6 +154,16 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, l
 	return nil, fmt.Errorf("Too many failed recovery code attempts.")
 }
 
+// YubiKeyError is a YubiKey that didn't unlock a key set: Windows refused
+// it, or the secret it derived isn't the key set's. Windows reports a
+// YubiKey that doesn't know the credential (reset, or another one), a wrong
+// or blocked PIN and a cancelled prompt with the same HRESULT, so they can't
+// be told apart.
+type YubiKeyError struct{ Err error }
+
+func (e *YubiKeyError) Error() string { return e.Err.Error() }
+func (e *YubiKeyError) Unwrap() error { return e.Err }
+
 // MasterKeys maps key set IDs to unlocked master keys.
 type MasterKeys map[string][]byte
 
@@ -197,7 +207,7 @@ func deriveYubiKeySecret(u interact.UI, slot container.Slot) ([]byte, error) {
 	fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
 	secret, err := deriveYubiKeySecretFn(*slot.Challenge)
 	if err != nil {
-		return nil, fmt.Errorf("YubiKey authentication failed: %w", err)
+		return nil, &YubiKeyError{Err: fmt.Errorf("YubiKey authentication failed: %w", err)}
 	}
 	return secret, nil
 }

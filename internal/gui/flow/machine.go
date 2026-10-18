@@ -115,6 +115,17 @@ func (m *Machine) Confirmed(now time.Time) {
 	}
 }
 
+// Replan records that the started backup shows its plan again, before
+// anything is written: after the YubiKey didn't unlock the keys, the user
+// chose new keys.
+func (m *Machine) Replan() {
+	if r := m.run; r != nil && r.Stage == StageRunning {
+		r.Stage = StagePlanning
+		r.Started = time.Time{}
+		r.Progress, r.Speed = interact.Progress{}, Speed{}
+	}
+}
+
 // Progressed records a progress report.
 func (m *Machine) Progressed(p interact.Progress, now time.Time) {
 	r := m.run

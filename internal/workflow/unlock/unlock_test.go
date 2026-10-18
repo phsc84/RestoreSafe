@@ -134,7 +134,8 @@ func TestKeySetYubiKeyOnlyRejectsOtherYubiKey(t *testing.T) {
 
 	stub = stubUnlockInputs(t, nil, bytes.Repeat([]byte{8}, 32))
 	_, _, err = stub.unlock(t, ks, Options{Action: "restore"})
-	if err == nil || !strings.Contains(err.Error(), "does not unlock the backup") {
+	var yk *YubiKeyError
+	if !errors.As(err, &yk) || !strings.Contains(err.Error(), "does not unlock the backup") {
 		t.Fatalf("expected wrong-YubiKey error, got %v", err)
 	}
 }
@@ -144,13 +145,15 @@ func TestKeySetReportsAMissingOrFailingYubiKey(t *testing.T) {
 
 	stub := stubUnlockInputs(t, nil, nil)
 	checkYubiKeyConnectedFn = func() error { return errors.New("not connected") }
-	if _, _, err := stub.unlock(t, ks, Options{Action: "restore"}); !errors.Is(err, yubikey.ErrRequired) {
+	if _, _, err := stub.unlock(t, ks, Options{Action: "restore"}); !errors.Is(err, yubikey.ErrRequired) || errors.As(err, new(*YubiKeyError)) {
 		t.Fatalf("no YubiKey: got %v, want yubikey.ErrRequired", err)
 	}
 
 	stub = stubUnlockInputs(t, nil, nil)
-	deriveYubiKeySecretFn = func(yubikey.ChallengeData) ([]byte, error) { return nil, errors.New("touch timed out") }
-	if _, _, err := stub.unlock(t, ks, Options{Action: "restore"}); err == nil || !strings.Contains(err.Error(), "YubiKey authentication failed: touch timed out") {
+	timedOut := errors.New("touch timed out")
+	deriveYubiKeySecretFn = func(yubikey.ChallengeData) ([]byte, error) { return nil, timedOut }
+	var yk *YubiKeyError
+	if _, _, err := stub.unlock(t, ks, Options{Action: "restore"}); !errors.As(err, &yk) || !errors.Is(err, timedOut) || !strings.Contains(err.Error(), "YubiKey authentication failed: touch timed out") {
 		t.Fatalf("failing YubiKey: %v", err)
 	}
 }

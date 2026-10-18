@@ -87,6 +87,24 @@ func (q questions) ChooseUnlockMethod(qu interact.UnlockChoice, answer func(bool
 	}
 }
 
+// YubiKeyRefused asks what to do after the YubiKey didn't unlock the keys
+// (figure 9.4). New keys reopen the Create backup window, which shows the
+// plan with new keys and asks again.
+func (q questions) YubiKeyRefused(qu interact.YubiKeyRefusal, answer func(interact.YubiKeyRefusalAnswer, error)) {
+	res := q.a.runCredentialDialog(view.YubiKeyRefusalDialogOf(qu))
+	switch {
+	case res.link:
+		q.a.machine.Replan()
+		q.a.refreshRun()
+		q.a.openPlanDialog()
+		answer(interact.RefusalNewKeys, nil)
+	case res.ok:
+		answer(interact.RefusalRetry, nil)
+	default:
+		answer(interact.RefusalCancel, nil)
+	}
+}
+
 // keys returns the key plan of the backup being run; nil for restore and
 // verify.
 func (q questions) keys() *interact.KeyPlan {

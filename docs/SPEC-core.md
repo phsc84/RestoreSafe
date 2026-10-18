@@ -357,6 +357,7 @@ The preflight shows, per directory, the planned type with its base or the reason
 - Modes 1/2: prompt the password **once** (no confirmation needed; the slot validates it). Wrong password: up to 3 attempts, as in 1.x.
 - Modes 2/3: the YubiKey PIN and one touch (4.4.3).
 - The unlocked key set is used for every directory in the run, full and differential alike.
+- The YubiKey doesn't unlock the key set (modes 2/3): a YubiKey that was reset or is another one doesn't know the credential and can never unlock it again, but Windows reports this, wrong PINs and a cancelled prompt with the same error. So the backup asks (`YubiKeyRefused`): try again, or new keys + full backup, which shows the preflight with new keys (6.2) and asks again whether to start, or cancel (nothing written). The question says whether the key set has a recovery code, which keeps opening the older backups.
 
 **Enrollment** (no usable key set, configuration changed, or new keys chosen in the preflight):
 1. Modes 1/2: new password + confirmation; minimum length enforced (6.6).

@@ -202,6 +202,33 @@ func (s *Script) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
 	}
 }
 
+// YubiKeyRefused asks whether to try the YubiKey again (default), create new
+// keys, or cancel.
+func (s *Script) YubiKeyRefused(q interact.YubiKeyRefusal) (interact.YubiKeyRefusalAnswer, error) {
+	s.println("The YubiKey didn't unlock the keys of your backups. If it was reset or is another one, it can never unlock them: create new keys.")
+	if q.RecoveryCode {
+		s.println("Older backups keep opening with your recovery code.")
+	} else {
+		s.println("These keys have no recovery code: without this YubiKey registration, older backups can't be opened.")
+	}
+	for {
+		answer, err := s.readLine("[Y] try again (default) / [K] new keys + full backup / [N] cancel: ")
+		if err != nil {
+			return interact.RefusalCancel, err
+		}
+		switch strings.ToLower(strings.TrimSpace(answer)) {
+		case "", "y", "yes":
+			return interact.RefusalRetry, nil
+		case "k":
+			return interact.RefusalNewKeys, nil
+		case "n", "no":
+			return interact.RefusalCancel, nil
+		default:
+			s.println("Please enter y (try again), k (new keys) or n (no).")
+		}
+	}
+}
+
 // ShowRecoveryCode prints the recovery code with instructions for keeping it.
 func (s *Script) ShowRecoveryCode(code []byte) error {
 	s.println()
