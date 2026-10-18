@@ -274,13 +274,13 @@ func TestKeysCardWithAYubiKey(t *testing.T) {
 	yk := &config.Config{AuthenticationMode: config.AuthModeYubiKey}
 	pw := &config.Config{AuthenticationMode: config.AuthModePassword}
 	s := snapshotWith(noKeys)
-	if c := keysOf(s, pw); c.Setup != "" || c.Warning != "" {
+	if c := keysOf(s, pw); c.Note != "Your first backup creates your keys." || c.Warning != "" {
 		t.Fatalf("Keys card without a YubiKey: %+v", c)
 	}
-	if c := keysOf(s, yk); !strings.Contains(c.Setup, "first backup sets up your YubiKey") || !strings.Contains(c.Warning, "Never reset your YubiKey") {
+	if c := keysOf(s, yk); !strings.Contains(c.Note, "first backup sets up your YubiKey, then creates your keys") || !strings.Contains(c.Warning, "Never reset your YubiKey") {
 		t.Fatalf("Keys card with a YubiKey, no keys yet: %+v", c)
 	}
-	if c := keysOf(snapshotWith(yubiKeys), yk); c.Setup != "" || c.Warning == "" {
+	if c := keysOf(snapshotWith(yubiKeys), yk); strings.Contains(c.Note, "sets up your YubiKey") || c.Warning == "" {
 		t.Fatalf("Keys card with YubiKey keys: %+v", c)
 	}
 }

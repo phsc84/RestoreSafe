@@ -85,8 +85,6 @@ type KeysCard struct {
 	// YubiKey is whether the YubiKey is connected, "" when none is used.
 	YubiKey     string
 	YubiKeyTone Tone
-	// Setup tells how a YubiKey gets set up, before the first backup.
-	Setup string
 	// Warning warns not to reset the YubiKey, while one is used (YK-8).
 	Warning string
 }
@@ -401,9 +399,6 @@ func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 	card := KeysCard{Title: cardKeys}
 	if cfg.UseYubiKey() {
 		card.Warning = keysNeverReset
-		if !k.Exists {
-			card.Setup = keysYubiKeySetup
-		}
 	}
 	switch {
 	case k.YubiKeyConnected != nil && *k.YubiKeyConnected:
@@ -412,7 +407,12 @@ func keysOf(s *health.Snapshot, cfg *config.Config) KeysCard {
 		card.YubiKey, card.YubiKeyTone = yubiKeyMissing, ToneInfo
 	}
 	if !k.Exists {
+		// With a YubiKey, the note also tells how it gets set up: first,
+		// as the keys it protects need it.
 		card.Note, card.Tone = keysNone, ToneInfo
+		if cfg.UseYubiKey() {
+			card.Note = keysYubiKeySetup
+		}
 		return card
 	}
 	card.Methods = capitalize(k.Methods)

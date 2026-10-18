@@ -32,6 +32,7 @@ const (
 	cardHeadingHeight = 22
 	barHeight         = 8
 	iconWidth         = 22
+	calloutPadding    = 8
 	linkPadding       = 12
 	refreshHeight     = 22
 )
@@ -264,11 +265,16 @@ func (o *createPage) fillKeys() {
 	v := o.view.Keys
 	c := o.keys
 	c.reset()
-	c.heading(v.Title, nil)
 	// The YubiKey status sits at the right of the methods line, like the
-	// used space on the storage card.
+	// used space on the storage card; without keys, at the right of the
+	// heading.
 	yubi := func() cell {
 		return cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), px: measure(t, v.YubiKey, widget.TextSmall)}
+	}
+	if v.Methods == "" && v.YubiKey != "" {
+		c.row(cardHeadingHeight, cell{hwnd: c.label(v.Title, widget.TextStrong, t.Palette.Text), fill: true}, yubi())
+	} else {
+		c.heading(v.Title, nil)
 	}
 	switch {
 	case v.Methods != "" && v.YubiKey != "":
@@ -280,26 +286,57 @@ func (o *createPage) fillKeys() {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Details, widget.TextSmall, t.Palette.TextSecondary), fill: true})
 	}
 	if v.Note != "" {
-		c.row(cardRowHeight, cell{hwnd: c.label(v.Note, widget.TextSmall, toneColor(t.Palette, v.Tone)), fill: true})
-	}
-	if v.Methods == "" && v.YubiKey != "" {
-		c.row(cardRowHeight, cell{hwnd: c.label(v.YubiKey, widget.TextSmall, toneColor(t.Palette, v.YubiKeyTone)), fill: true})
-	}
-	if v.Setup != "" {
-		o.para(c, v.Setup, t.Palette.TextSecondary)
+		o.para(c, v.Note, toneColor(t.Palette, v.Tone))
 	}
 	if v.Warning != "" {
-		o.para(c, v.Warning, toneColor(t.Palette, view.ToneWarning))
+		o.callout(c, v.Warning)
 	}
 }
 
 // para adds small text that wraps over the card's width.
 func (o *createPage) para(c *card, text string, color widget.Color) {
+	c.row(o.wrappedHeight(text, 0), cell{hwnd: c.panel.Paragraph(text, widget.TextSmall, color), fill: true})
+}
+
+// callout adds a warning that stands out: a warning icon and small text
+// that wraps, in a box of the warning's background color.
+func (o *createPage) callout(c *card, text string) {
 	t := o.a.theme
 	s := t.Scale
-	width := win32.ClientRect(o.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX) - 2*s.Px(widget.CardPadding)
+	pal := t.Palette
+	box, err := widget.NewPanel(t, c.panel.HWND(), 0, widget.PanelStyle{Back: pal.WarningBack, Outer: pal.Surface, Card: true})
+	if err != nil {
+		o.para(c, text, pal.Warning)
+		return
+	}
+	c.panel.Adopt(box.HWND())
+	var icon win32.HWND
+	if i, err := widget.NewIcon(t, box.HWND(), pal.WarningBack, widget.TextIconSmall); err == nil {
+		i.Set(widget.GlyphWarning, pal.Warning, widget.NoCircle, "")
+		icon = i.HWND()
+	}
+	label := box.Paragraph(text, widget.TextSmall, pal.Warning)
+	c.row(o.wrappedHeight(text, 2*calloutPadding+iconWidth)+2*calloutPadding, cell{fill: true, place: func(r win32.Rect) {
+		win32.SetWindowPos(box.HWND(), r)
+		in := win32.Rect{Right: r.Width(), Bottom: r.Height()}
+		pad := s.Px(calloutPadding)
+		in.Left, in.Top, in.Right, in.Bottom = pad, pad, in.Right-pad, in.Bottom-pad
+		if icon != 0 {
+			win32.SetWindowPos(icon, win32.Rect{Left: in.Left, Top: in.Top, Right: in.Left + s.Px(iconWidth), Bottom: in.Top + s.Px(stackLineHeight)})
+		}
+		in.Left += s.Px(iconWidth)
+		win32.SetWindowPos(label, in)
+	}})
+}
+
+// wrappedHeight returns the height in DIPs of small text that wraps over
+// the card's width less indent DIPs.
+func (o *createPage) wrappedHeight(text string, indent int32) int32 {
+	t := o.a.theme
+	s := t.Scale
+	width := win32.ClientRect(o.panel.HWND()).Width() - 2*s.Px(widget.ContentPaddingX) - 2*s.Px(widget.CardPadding) - s.Px(indent)
 	px := max(t.Fonts.MeasureWrapped(text, widget.TextSmall, max(width, s.Px(200))), s.Px(stackLineHeight))
-	c.row(px*96/int32(s)+1, cell{hwnd: c.panel.Paragraph(text, widget.TextSmall, color), fill: true})
+	return px*96/int32(s) + 1
 }
 
 // restyle applies new fonts after a DPI change.
