@@ -53,6 +53,10 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 	if r.Title != "Your recovery code" || r.Cancel != "" || string(r.Code) != "K7QF-9M2D-XW4P-HT6N-3JBV-R8LC" || len(r.Fields) != 0 {
 		t.Fatalf("recovery code %+v", r)
 	}
+	if r.Check != "I have stored my recovery code" || r.OK != "Continue" {
+		t.Fatalf("recovery code checkbox %q, button %q", r.Check, r.OK)
+	}
+	checkWriting(t, r)
 
 	only := interact.KeyPlan{New: true, Password: true}
 	mismatch := q

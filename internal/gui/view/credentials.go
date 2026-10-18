@@ -35,6 +35,8 @@ type CredentialDialog struct {
 	// Link is an alternative answer, e.g. "Use your recovery code instead";
 	// "" for none.
 	Link string
+	// Check is a checkbox the user ticks before OK is enabled; "" for none.
+	Check string
 }
 
 // UnlockDialogOf words the question for the password or the recovery code
@@ -101,14 +103,16 @@ func NewPasswordDialogOf(q interact.NewPasswordQuestion, keys interact.KeyPlan) 
 // RecoveryCodeDialogOf shows the new recovery code once (figure 9.3), with a
 // button that copies it, e.g. into a password manager. It has no Cancel
 // button, but closing it cancels. It is not a numbered step: it asks
-// nothing.
+// nothing. Continue is enabled only once "I have stored my recovery code" is
+// ticked, so a habitual click on the blue button does not lose the code.
 func RecoveryCodeDialogOf(code []byte, _ interact.KeyPlan) CredentialDialog {
 	return CredentialDialog{
 		Title: recoveryTitle,
 		Intro: recoveryIntro,
 		Code:  code,
 		Note:  recoveryNote,
-		OK:    buttonStored,
+		Check: recoveryStored,
+		OK:    buttonContinue,
 	}
 }
 

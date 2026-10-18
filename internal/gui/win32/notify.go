@@ -13,6 +13,7 @@ const (
 	NM_RETURN = ^uint32(3) // -4
 
 	BS_AUTOCHECKBOX = 0x0003
+	BM_GETCHECK     = 0x00F0
 	BM_SETCHECK     = 0x00F1
 	BST_CHECKED     = 1
 	EN_CHANGE       = 0x0300
@@ -40,4 +41,9 @@ func SetChecked(hwnd HWND, checked bool) {
 		v = BST_CHECKED
 	}
 	SendMessage(hwnd, BM_SETCHECK, v, 0)
+}
+
+// IsChecked reports whether a checkbox is checked.
+func IsChecked(hwnd HWND) bool {
+	return SendMessage(hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED
 }

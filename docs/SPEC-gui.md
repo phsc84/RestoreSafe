@@ -679,10 +679,12 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 │                                                    │
 │           K7QF-9M2D-XW4P-HT6N-3JBV-R8LC            │
 │                                                    │
+│ [ ] I have stored my recovery code                 │
+│                                                    │
 │ Keep it in a safe place, never next to your        │
 │ backups or unencrypted on this computer.           │
 ├────────────────────────────────────────────────────┤
-│ [ Copy ]                      [ I have stored it ] │
+│ [ Copy ]                              [ Continue ] │
 └────────────────────────────────────────────────────┘
 ```
 
@@ -690,7 +692,7 @@ The dialogs keep the behavior and secret handling of 12.3 and 13. This section o
 |---|---|
 | CR-1 | Unlock (`Password`, `ChooseUnlockMethod`): when the selection uses more than one key set, the notice above the field names the backup that needs other keys and their creation date, which the question carries (`interact.OtherKeys`). After a failed try, the reason and the attempts left, which the question also carries (`interact.Attempt`), are shown under the field. The YubiKey touch comes before the password (the workflow derives the YubiKey secret first), so while the keys are unlocked in a YubiKey mode the progress card reads "Unlocking keys… Follow the Windows Security prompt."; in YubiKey-only mode there is no password dialog at all. "Use your recovery code instead" appears only when the key set has a recovery slot and answers `ChooseUnlockMethod` with true; the dialog then asks for the code (unmasked, grouped as it's printed). |
 | CR-2 | New keys (`NewPassword`, YubiKey registration, `ShowRecoveryCode`): the password dialog is titled "Create your keys". YubiKey registration has no dialog of its own (the Windows Security prompt) and the recovery code dialog asks nothing; when there is more than one step, the "Steps:" line names them all. Mismatch and length errors from the workflow appear under the fields. In modes 2 and 3 the recovery code always follows (core spec 4.4.2). |
-| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
+| CR-3 | Recovery code: 13.3 applies (static control, **Copy** button kept out of the clipboard history, overwritten on close, no retype step, **Continue** disabled until **I have stored my recovery code** is ticked). It has no Cancel button, but closing it (title bar ×, Esc) cancels the backup before anything is written. |
 | CR-4 | While a Windows Security prompt is open, the RestoreSafe window shows "Follow the Windows Security prompt" (progress card or dialog line) and doesn't steal focus (13.4). |
 
 ## 10. Settings and YubiKey pages
@@ -1224,7 +1226,7 @@ As 13.1 for both fields. The dialog returns both entries; `guiUI.NewPassword` ch
 
 - Shown once in its own dialog (figure 9.3), in large bold Consolas on one line (one code, so one line; the font is one and a half times the message font, so all six groups fit). The code is a static control, so it cannot be selected; there is no Print or Save button. A task dialog is never used, because task dialogs copy their text to the clipboard on `Ctrl+C` without the protection below.
 - **Copy** puts the whole code on the clipboard as one line with dashes, e.g. for a password manager, and then reads **Copied**. The clipboard data carries the formats `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory` = 0 and `CanUploadToCloudClipboard` = 0, so Windows keeps it out of the clipboard history and the cloud clipboard.
-- **I have stored it** (or closing the dialog) overwrites the displayed code and closes the dialog; the backup continues. There is no retype step: like the recovery codes of other services, the user is trusted to store it. The code reaches the GUI as a Go string, so it is not zeroed.
+- Under the code, the checkbox **I have stored my recovery code** is unticked, and has the focus, when the dialog opens. **Continue** is disabled, and Enter does nothing, until it is ticked, so a habitual click on the blue button doesn't lose the code. **Continue** (or closing the dialog) overwrites the displayed code and closes the dialog; the backup continues. There is no retype step: like the recovery codes of other services, the user is trusted to store it. The code reaches the GUI as a Go string, so it is not zeroed.
 
 ### 13.4 YubiKey and Windows Security dialogs
 

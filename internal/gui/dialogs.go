@@ -19,6 +19,7 @@ const (
 	credentialMargin = 18
 	fieldLabelHeight = 20
 	codeLineHeight   = 32
+	checkLineHeight  = 24
 	dialogButton     = 96
 )
 
@@ -28,6 +29,7 @@ const (
 	idCredentialCancel = 470
 	idCredentialLink   = 471
 	idCredentialCopy   = 472
+	idCredentialCheck  = 473
 )
 
 // credentialDialog is the open credential dialog (GUI spec 9); the GUI shows
@@ -70,11 +72,19 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	pal := t.Palette
 	d := &credentialDialog{win: win, fields: v.Fields, open: true}
 	a.credential = d
-	var copyButton win32.HWND
+	var copyButton, okButton, check win32.HWND
+	// checked is whether OK may close the dialog: the checkbox, if any, is
+	// ticked. OK is disabled until then, and Enter does nothing.
+	checked := func() bool { return check == 0 || win32.IsChecked(check) }
 	win.onCommand = func(id uint16) {
 		switch id {
 		case idCredentialOK:
+			if !checked() {
+				return
+			}
 			d.close(true)
+		case idCredentialCheck:
+			win32.Enable(okButton, checked())
 		case idCredentialCancel, win32.IDCANCEL:
 			d.close(false)
 		case idCredentialLink:
@@ -87,7 +97,12 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 			}
 		}
 	}
-	win.defID = func() uint16 { return idCredentialOK }
+	win.defID = func() uint16 {
+		if checked() {
+			return idCredentialOK
+		}
+		return 0
+	}
 
 	panel := win.panel
 	st := newStack(t, panel, s.Px(credentialWidth-2*credentialMargin))
@@ -114,6 +129,11 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		d.code = h
 		st.row(codeLineHeight, cell{hwnd: h, fill: true})
 		st.gap(8)
+	}
+	if v.Check != "" {
+		st.gap(4)
+		check = panel.Checkbox(v.Check, idCredentialCheck)
+		st.row(checkLineHeight, cell{hwnd: check, fill: true})
 	}
 	for _, f := range v.Fields {
 		st.gap(10)
@@ -143,7 +163,8 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 		st.para(v.Note, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 	}
 
-	okButton := panel.PrimaryButton(v.OK, idCredentialOK)
+	okButton = panel.PrimaryButton(v.OK, idCredentialOK)
+	win32.Enable(okButton, checked())
 	var cancel win32.HWND
 	if v.Cancel != "" {
 		cancel = panel.Button(v.Cancel, idCredentialCancel)
@@ -175,9 +196,12 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	a.modal = win.hwnd
 	win32.Enable(owner, false)
 	win32.ShowWindow(win.hwnd, win32.SW_SHOWNORMAL)
-	if len(d.edits) > 0 {
+	switch {
+	case len(d.edits) > 0:
 		win32.SetFocus(d.edits[0])
-	} else {
+	case check != 0:
+		win32.SetFocus(check)
+	default:
 		win32.SetFocus(okButton)
 	}
 

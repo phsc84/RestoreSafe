@@ -183,7 +183,7 @@ function Click-TaskButton([int]$procId, [string]$text, [int]$seconds = 30) {
 
 # Answer-Credentials answers the credential dialogs until $done returns
 # true: a new password (two fields), the password (one masked field), the
-# recovery code shown at key setup (read, then confirmed), and nothing
+# recovery code shown at key setup (read, ticked, then continued), and nothing
 # else. It returns the recovery code it saw, if any.
 function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done, [int]$seconds = 180) {
   $code = $script:RecoveryCode
@@ -196,6 +196,9 @@ function Answer-Credentials([int]$procId, [string]$password, [scriptblock]$done,
     $lines = @([U]::Children($dlg) | Where-Object { [U]::Class($_) -eq "Static" } | ForEach-Object { [U]::Text($_) } | Where-Object { $_ -match '^[0-9A-Z]{4,}(-[0-9A-Z]{4,})+$' })
     if ($edits.Count -eq 0 -and $lines.Count -gt 0) {
       $script:RecoveryCode = $lines -join "-"
+      # Continue is enabled only once the checkbox is ticked.
+      Click ([U]::Children($dlg) | Where-Object { [U]::Id($_) -eq 473 } | Select-Object -First 1)
+      Start-Sleep -Milliseconds 300
       [U]::PostMessage($dlg, 0x0111, [IntPtr]1, [IntPtr]::Zero) | Out-Null
     } elseif ($edits.Count -eq 2) {
       Fill-Dialog $dlg @($password, $password)
