@@ -155,7 +155,7 @@ func (d *verifyDialog) layout(place bool) {
 	w := s.Px(planWidth)
 	h := d.table.fit(margin + st.height() + margin + buttonsH + margin)
 	d.win.resize(w, h, place)
-	st.place(margin, margin)
+	st.place(margin, margin, st.width)
 	buttons := d.buttons
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	for i := len(buttons) - 1; i >= 0; i-- {

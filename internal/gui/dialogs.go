@@ -177,7 +177,7 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 	w := s.Px(credentialWidth)
 	h := margin + st.height() + 2*margin + buttonsH
 	win.resize(w, h, true)
-	st.place(margin, margin)
+	st.place(margin, margin, st.width)
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	if cancel != 0 {
 		win32.SetWindowPos(cancel, row.RightPx(max(buttonWidth(t, cancel), s.Px(dialogButton))))

@@ -303,8 +303,8 @@ func (z *tableSizer) moved(top int32) {
 	cardBottom := top - (s.Px(widget.CardGap)-s.Px(widget.SplitterHeight))/2
 	z.height = max(s.Dip(cardBottom-(cr.Bottom-tr.Bottom)-tableTop), z.table.heightOf(tableMinRows))
 	// The table is the card's second row, below the heading.
-	if len(z.card.rows) > 1 {
-		z.card.rows[1].height = z.rowHeight()
+	if len(z.card.items) > 1 {
+		z.card.items[1].height = s.Px(z.rowHeight())
 	}
 }
 

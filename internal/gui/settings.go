@@ -104,9 +104,9 @@ func (sp *settingsPage) update() {
 		cell{hwnd: c.panel.PathLabel(v.ConfigPath, widget.TextBody, pal.Text), fill: true},
 		sp.button(c, v.Edit, idSettingsEdit),
 		sp.button(c, v.Reload, idSettingsReload))
-	c.para(v.ConfigNote, widget.TextSmall, pal.TextSecondary, 0)
+	c.para(v.ConfigNote, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 	if v.ConfigError != "" {
-		c.para(v.ConfigError, widget.TextSmall, pal.Error, 0)
+		c.para(v.ConfigError, widget.TextSmall, pal.Error, view.GlyphNone)
 	}
 
 	c = sp.folders
@@ -147,11 +147,11 @@ func (sp *settingsPage) fillCard(c *card, v view.SettingsCard) {
 		c.row(cardRowHeight, cell{hwnd: c.panel.Link(v.MoreLink, idSettingsMore), px: w + t.Scale.Px(linkPadding)})
 		if sp.showArgon2 {
 			sp.rows(c, v.More)
-			c.para(v.MoreNote, widget.TextSmall, pal.TextSecondary, 0)
+			c.para(v.MoreNote, widget.TextSmall, pal.TextSecondary, view.GlyphNone)
 		}
 	}
 	if v.Note != "" {
-		c.para(v.Note, widget.TextSmall, toneColor(pal, v.NoteTone), 0)
+		c.para(v.Note, widget.TextSmall, toneColor(pal, v.NoteTone), view.GlyphNone)
 	}
 }
 
@@ -161,20 +161,19 @@ func (sp *settingsPage) rows(c *card, rows []view.Setting) {
 	s := t.Scale
 	pal := t.Palette
 	labelDip := int32(settingLabelWidth)
-	if c.width < s.Px(2*settingLabelWidth+80) {
+	if sp.cardWidth(c) < s.Px(2*settingLabelWidth+80) {
 		labelDip = settingLabelWidth * 2 / 3
 	}
 	for _, r := range rows {
-		value := pal.Text
+		color := pal.Text
 		if r.Tone != view.ToneNeutral {
-			value = toneColor(pal, r.Tone)
+			color = toneColor(pal, r.Tone)
 		}
-		h := max(
-			c.textHeight(r.Label, widget.TextSmall, s.Px(labelDip), cardRowHeight),
-			c.textHeight(r.Value, widget.TextBody, c.textWidth(labelDip), cardRowHeight))
-		c.row(h,
-			cell{hwnd: c.panel.Paragraph(r.Label, widget.TextSmall, pal.TextSecondary), dip: labelDip},
-			cell{hwnd: c.tip(c.panel.Paragraph(r.Value, widget.TextBody, value), view.KeyTip(r.Key)), fill: true})
+		label := c.text(r.Label, widget.TextSmall, pal.TextSecondary)
+		label.fill, label.dip = false, labelDip
+		value := c.text(r.Value, widget.TextBody, color)
+		c.tip(value.hwnd, view.KeyTip(r.Key))
+		c.row(cardRowHeight, label, value)
 	}
 }
 
@@ -193,26 +192,15 @@ func (sp *settingsPage) cardWidth(c *card) int32 {
 // status creates a status cell: an icon and its text.
 func (sp *settingsPage) status(c *card, text string, tone view.Tone, glyph view.Glyph) cell {
 	t := sp.a.theme
-	pal := t.Palette
-	color := toneColor(pal, tone)
-	label := c.label(text, widget.TextSmall, color)
+	color := toneColor(t.Palette, tone)
 	w, _ := t.Fonts.Measure(text, widget.TextSmall)
-	w += t.Scale.Px(6)
 	// The text is as high as its line, so the row centers it like the
-	// buttons next to it; the icon centers its glyph in the same height.
-	height := lineHeight(sp.a.theme, widget.TextSmall)
-	if glyph == view.GlyphNone {
-		return cell{hwnd: label, px: w, height: height}
+	// buttons next to it; an icon goes in front of it, within the cell.
+	status := cell{hwnd: c.label(text, widget.TextSmall, color), px: w + t.Scale.Px(6), height: lineHeight(t, widget.TextSmall)}
+	if status.icon = c.icon(glyph, color); status.icon != 0 {
+		status.px += t.Scale.Px(iconWidth)
 	}
-	// The icon and the text share the cell: the icon is placed by the row,
-	// the text after it.
-	icon, err := widget.NewIcon(t, c.panel.HWND(), pal.Surface, widget.TextIconSmall)
-	if err != nil {
-		return cell{hwnd: label, px: w, height: height}
-	}
-	c.panel.Adopt(icon.HWND())
-	icon.Set(glyphOf(glyph), color, widget.NoCircle, "")
-	return cell{hwnd: label, px: w + t.Scale.Px(iconWidth), icon: icon.HWND(), height: height}
+	return status
 }
 
 // button creates a button cell for b.
@@ -235,10 +223,10 @@ func (sp *settingsPage) layout() {
 	// The content's height decides whether the page scrolls.
 	total := 2*padY + s.Px(settingsTitleHeight)
 	for _, c := range []*card{sp.config, sp.folders, sp.backupDir, sp.logging} {
-		total += gap + s.Px(c.height())
+		total += gap + c.height()
 	}
 	for _, pair := range [][2]*card{{sp.differential, sp.retention}, {sp.checks, sp.keys}} {
-		total += gap + s.Px(max(pair[0].height(), pair[1].height()))
+		total += gap + max(pair[0].height(), pair[1].height())
 	}
 	sp.panel.SetScroll(total)
 	client := win32.ClientRect(sp.panel.HWND())
@@ -252,13 +240,13 @@ func (sp *settingsPage) layout() {
 			sp.sizer.place(win32.Rect{Left: left, Top: y, Right: right, Bottom: y + gap})
 		}
 		y += gap
-		h := s.Px(c.height())
+		h := c.height()
 		c.place(win32.Rect{Left: left, Top: y, Right: right, Bottom: y + h})
 		y += h
 	}
 	pair := func(a, b *card) {
 		y += gap
-		h := s.Px(max(a.height(), b.height()))
+		h := max(a.height(), b.height())
 		mid := left + (right-left-gap)/2
 		a.place(win32.Rect{Left: left, Top: y, Right: mid, Bottom: y + h})
 		b.place(win32.Rect{Left: mid + gap, Top: y, Right: right, Bottom: y + h})

@@ -42,7 +42,6 @@ const (
 	filterDropHeight = 300
 	actionBarHeight  = 36
 	minListHeight    = 160
-	lineGap          = 4
 )
 
 // Column widths of the list, in DIPs; the status column takes the rest.
@@ -59,11 +58,10 @@ type restorePage struct {
 	title, filter, refresh win32.HWND
 	// run is the restore or verification at the top of the page: its
 	// progress, then its result.
-	run         *runCard
-	lines       *widget.Panel
-	linesStack  *stack
-	linesSig    string
-	linesHeight int32 // pixels
+	run *runCard
+	// lines is the card of the retention and problem lines above the list.
+	lines    *card
+	linesSig string
 
 	list    win32.HWND
 	listSig string
@@ -103,10 +101,10 @@ func newRestorePage(a *app) (*restorePage, error) {
 	b.run.decorate = func(c *view.ResultCard) {
 		view.AddProblemHint(c, a.snapshot, a.opts.Config, time.Now(), true)
 	}
-	if b.lines, err = widget.NewPanel(t, panel.HWND(), 0, widget.PanelStyle{Back: pal.Surface, Outer: pal.Surface, Card: true}); err != nil {
+	if b.lines, err = newCard(t, panel.HWND(), 0, b.acts); err != nil {
 		return nil, err
 	}
-	b.lines.OnCommand = b.command
+	b.lines.panel.OnCommand = b.command
 	b.list = b.child(win32.WC_LISTVIEW, win32.WS_TABSTOP|win32.WS_BORDER|win32.LVS_REPORT|win32.LVS_SINGLESEL|win32.LVS_SHOWSELALWAYS|win32.LVS_NOSORTHEADER, idBackupsList)
 	win32.ListSetup(b.list)
 	widget.StyleListHeader(t, b.list)
@@ -140,7 +138,7 @@ func (b *restorePage) restyle() {
 	t := b.a.theme
 	b.panel.Restyle()
 	b.run.card.panel.Restyle()
-	b.lines.Restyle()
+	b.lines.panel.Restyle()
 	for _, h := range []win32.HWND{b.filter, b.list} {
 		win32.SetFont(h, t.Fonts.Get(widget.TextBody))
 	}
@@ -165,7 +163,7 @@ func (b *restorePage) update() {
 	}
 
 	b.showRun()
-	b.lines.Show(v.Retention != nil || len(v.Lines) > 0)
+	b.lines.panel.Show(v.Retention != nil || len(v.Lines) > 0)
 	b.fillLines()
 	b.fillList()
 	b.updateBar()
@@ -234,33 +232,19 @@ func (b *restorePage) fillLines() {
 	}
 	b.linesSig = sig.String()
 	t := b.a.theme
-	s := t.Scale
-	p := b.lines
-	p.Clear()
-	width := win32.ClientRect(b.panel.HWND()).Width() - s.Px(2*widget.ContentPaddingX+2*widget.CardPadding)
-	st := newStack(t, p, max(width, s.Px(200)))
+	c := b.lines
+	c.reset(contentWidth(t, b.panel.HWND()))
 	for i, l := range lines {
-		if i > 0 {
-			st.gap(lineGap)
-		}
 		color := toneColor(t.Palette, l.Tone)
+		text := c.text(l.Text, widget.TextSmall, color)
+		text.icon = c.icon(l.Glyph, color)
 		if l.Button == nil {
-			st.para(l.Text, widget.TextSmall, color, l.Glyph)
+			c.row(stackLineHeight, text)
 			continue
 		}
-		bw, _ := t.Fonts.Measure(l.Button.Text, widget.TextBody)
-		bw += s.Px(buttonPadding)
-		inner := newStack(t, p, st.width-bw-s.Px(8))
-		inner.para(l.Text, widget.TextSmall, color, l.Glyph)
-		btn := b.acts.button(p, *l.Button, uint16(idLineButtons+i), false)
-		h := max(inner.height(), s.Px(widget.ButtonHeight))
-		st.items = append(st.items, stackItem{height: h, place: func(r win32.Rect) {
-			inner.place(r.Left, r.Top)
-			win32.SetWindowPos(btn, win32.Rect{Left: r.Right - bw, Top: r.Top, Right: r.Right, Bottom: r.Top + s.Px(widget.ButtonHeight)})
-		}})
+		btn := c.acts.button(c.panel, *l.Button, uint16(idLineButtons+i), false)
+		c.row(stackLineHeight, text, cell{hwnd: btn, px: buttonWidth(t, btn), height: widget.ButtonHeight, top: true})
 	}
-	b.linesHeight = st.height() + 2*s.Px(widget.CardPadding)
-	b.linesStack = st
 }
 
 // updateBar shows the selection and its actions.

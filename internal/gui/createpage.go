@@ -260,7 +260,7 @@ func (o *createPage) fillKeys() {
 		c.row(cardRowHeight, cell{hwnd: c.label(v.Details, widget.TextSmall, t.Palette.TextSecondary), fill: true})
 	}
 	if v.Note != "" {
-		c.para(v.Note, widget.TextSmall, toneColor(t.Palette, v.Tone), 0)
+		c.para(v.Note, widget.TextSmall, toneColor(t.Palette, v.Tone), view.GlyphNone)
 	}
 	if v.Warning != "" {
 		o.callout(c, v.Warning)
@@ -271,32 +271,20 @@ func (o *createPage) fillKeys() {
 // that wraps, in a box of the warning's background color.
 func (o *createPage) callout(c *card, text string) {
 	t := o.a.theme
-	s := t.Scale
 	pal := t.Palette
 	box, err := widget.NewPanel(t, c.panel.HWND(), 0, widget.PanelStyle{Back: pal.WarningBack, Outer: pal.Surface, Card: true})
 	if err != nil {
-		c.para(text, widget.TextSmall, pal.Warning, 0)
+		c.para(text, widget.TextSmall, pal.Warning, view.GlyphWarning)
 		return
 	}
 	c.panel.Adopt(box.HWND())
-	var icon win32.HWND
-	if i, err := widget.NewIcon(t, box.HWND(), pal.WarningBack, widget.TextIconSmall); err == nil {
-		i.Set(widget.GlyphWarning, pal.Warning, widget.NoCircle, "")
-		icon = i.HWND()
-	}
-	label := box.Paragraph(text, widget.TextSmall, pal.Warning)
-	width := c.textWidth(0) - s.Px(2*calloutPadding+iconWidth)
-	c.row(c.textHeight(text, widget.TextSmall, width, stackLineHeight)+2*calloutPadding, cell{fill: true, place: func(r win32.Rect) {
+	pad := t.Scale.Px(calloutPadding)
+	in := newStack(t, box, c.width-2*pad)
+	in.para(text, widget.TextSmall, pal.Warning, view.GlyphWarning)
+	c.add(in.height()+2*pad, func(r win32.Rect) {
 		win32.SetWindowPos(box.HWND(), r)
-		in := win32.Rect{Right: r.Width(), Bottom: r.Height()}
-		pad := s.Px(calloutPadding)
-		in.Left, in.Top, in.Right, in.Bottom = pad, pad, in.Right-pad, in.Bottom-pad
-		if icon != 0 {
-			win32.SetWindowPos(icon, win32.Rect{Left: in.Left, Top: in.Top, Right: in.Left + s.Px(iconWidth), Bottom: in.Top + s.Px(stackLineHeight)})
-		}
-		in.Left += s.Px(iconWidth)
-		win32.SetWindowPos(label, in)
-	}})
+		in.place(pad, pad, r.Width()-2*pad)
+	})
 }
 
 // restyle applies new fonts after a DPI change.
@@ -320,8 +308,6 @@ func (o *createPage) focus() {
 		win32.SetFocus(primary)
 	}
 }
-
-// Colors of the view's tones and kinds.
 
 // setButton shows b on the existing control h, or hides it.
 func (o *createPage) setButton(h win32.HWND, b view.Button, id uint16, shown bool) {
@@ -374,7 +360,7 @@ func (o *createPage) layout() {
 		if c == o.storage {
 			o.sizer.place(gap)
 		}
-		c.place(area.Top(c.height()))
+		c.place(area.TopPx(c.height()))
 	}
 }
 
@@ -390,7 +376,7 @@ func (o *createPage) contentHeight(width int32) int32 {
 		h += o.hero.geometry(inner).height
 	}
 	for _, c := range []*card{o.folders, o.storage, o.keys} {
-		h += s.Px(widget.CardGap) + s.Px(c.height())
+		h += s.Px(widget.CardGap) + c.height()
 	}
 	return h
 }

@@ -139,27 +139,20 @@ func (p *yubiKeyPage) fillChecks() {
 	c.reset(contentWidth(t, p.panel.HWND()))
 	c.heading(p.view.ChecksTitle, nil)
 	line := lineHeight(t, widget.TextBody)
-	// The text and its note start past the icon and the label.
-	textIndent := int32(iconWidth + cellGap + checkLabelWidth)
+	// The note starts under the text: past the icon, the label and their
+	// gaps.
+	noteIndent := cell{dip: iconWidth + cellGap + checkLabelWidth}
 	for _, l := range p.view.Checks {
 		color := toneColor(pal, l.Tone)
 		if l.Tone == view.ToneNeutral {
 			color = pal.Text
 		}
-		icon := cell{dip: iconWidth, height: line, top: true}
-		if l.Glyph != view.GlyphNone {
-			if i, err := widget.NewIcon(t, c.panel.HWND(), pal.Surface, widget.TextIconSmall); err == nil {
-				c.panel.Adopt(i.HWND())
-				i.Set(glyphOf(l.Glyph), color, widget.NoCircle, "")
-				icon.hwnd = i.HWND()
-			}
-		}
-		c.row(c.textHeight(l.Text, widget.TextBody, c.textWidth(textIndent), line),
-			icon,
+		c.row(line,
+			cell{hwnd: c.icon(l.Glyph, color), dip: iconWidth, height: line, top: true},
 			cell{hwnd: c.panel.Paragraph(l.Label, widget.TextBody, pal.TextSecondary), dip: checkLabelWidth},
-			cell{hwnd: c.panel.Paragraph(l.Text, widget.TextBody, color), fill: true})
+			c.text(l.Text, widget.TextBody, color))
 		if l.Note != "" {
-			c.para(l.Note, widget.TextSmall, pal.TextSecondary, textIndent)
+			c.row(stackLineHeight, noteIndent, c.text(l.Note, widget.TextSmall, pal.TextSecondary))
 		}
 	}
 }
@@ -178,7 +171,7 @@ func (p *yubiKeyPage) fillGuide() {
 	c.heading(g.Title, nil)
 	for i, s := range g.Steps {
 		if i > 0 {
-			c.row(rowGap * 2)
+			c.gap(rowGap * 4)
 		}
 		c.row(cardRowHeight, cell{hwnd: c.label(s.Title, widget.TextStrong, pal.Text), fill: true})
 		for _, point := range s.Points {
@@ -194,11 +187,10 @@ func (p *yubiKeyPage) fillGuide() {
 // bullet adds a point of a list: a bullet, and the text that wraps under
 // itself, not under the bullet.
 func (p *yubiKeyPage) bullet(c *card, text string) {
-	t := p.a.theme
-	pal := t.Palette
-	c.row(c.textHeight(text, widget.TextBody, c.textWidth(guideIndent), lineHeight(t, widget.TextBody)),
+	pal := p.a.theme.Palette
+	c.row(stackLineHeight,
 		cell{hwnd: c.panel.Paragraph("•", widget.TextBody, pal.TextSecondary), dip: guideIndent},
-		cell{hwnd: c.panel.Paragraph(text, widget.TextBody, pal.Text), fill: true})
+		c.text(text, widget.TextBody, pal.Text))
 }
 
 // fillDetails shows the technical details: the heading opens and closes
@@ -239,7 +231,7 @@ func (p *yubiKeyPage) layout() {
 	heroH := p.hero.geometry(contentWidth(t, p.panel.HWND())).height
 	total := 2*s.Px(widget.ContentPaddingY) + s.Px(pageTitleHeight) + s.Px(8) + heroH
 	for _, c := range []*card{p.checks, p.guide, p.details} {
-		total += s.Px(widget.CardGap) + s.Px(c.height())
+		total += s.Px(widget.CardGap) + c.height()
 	}
 	p.panel.SetScroll(total)
 	if win32.ClientRect(p.panel.HWND()).Width() != client.Width() {
@@ -259,7 +251,7 @@ func (p *yubiKeyPage) layout() {
 	p.hero.place(area.TopPx(heroH))
 	for _, c := range []*card{p.checks, p.guide, p.details} {
 		area.Top(widget.CardGap)
-		c.place(area.Top(c.height()))
+		c.place(area.TopPx(c.height()))
 	}
 }
 

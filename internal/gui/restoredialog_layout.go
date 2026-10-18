@@ -57,7 +57,7 @@ func (w *restoreDialog) layout() {
 	if w.lines != nil {
 		win32.SetWindowPos(w.lines.HWND(), area.Rest())
 		if w.linesSt != nil {
-			w.linesSt.place(0, 0)
+			w.linesSt.place(0, 0, w.linesSt.width)
 		}
 	}
 }

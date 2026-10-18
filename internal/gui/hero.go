@@ -89,7 +89,7 @@ func (h *hero) geometry(width int32) heroGeometry {
 	s := t.Scale
 	g := heroGeometry{textWidth: width - s.Px(widget.HeroIconSize+heroGap+12)}
 	for _, b := range h.shownButtons() {
-		g.textWidth -= heroButtonWidth(t, b) + s.Px(8)
+		g.textWidth -= buttonWidth(t, b) + s.Px(8)
 	}
 	g.textWidth = max(g.textWidth, s.Px(200))
 	if line := win32.Text(h.line); line != "" {
@@ -112,7 +112,7 @@ func (h *hero) place(r win32.Rect) {
 	win32.SetWindowPos(h.icon.HWND(), iconRect)
 	area.Left(heroGap)
 	for _, b := range h.shownButtons() {
-		br := area.RightPx(heroButtonWidth(t, b))
+		br := area.RightPx(buttonWidth(t, b))
 		br.Top += (br.Height() - s.Px(widget.ButtonHeight)) / 2
 		br.Bottom = br.Top + s.Px(widget.ButtonHeight)
 		win32.SetWindowPos(b, br)
@@ -124,9 +124,4 @@ func (h *hero) place(r win32.Rect) {
 	win32.SetWindowPos(h.title, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + s.Px(heroTitleHeight)})
 	y += s.Px(heroTitleHeight)
 	win32.SetWindowPos(h.line, win32.Rect{Left: x, Top: y, Right: x + g.textWidth, Bottom: y + g.lineHeight})
-}
-
-func heroButtonWidth(t *widget.Theme, b win32.HWND) int32 {
-	w, _ := t.Fonts.Measure(win32.Text(b), widget.TextBody)
-	return max(w+t.Scale.Px(buttonPadding), t.Scale.Px(minButtonWidth))
 }

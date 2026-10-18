@@ -157,7 +157,7 @@ func (p *planDialog) layout(place bool) {
 	w := s.Px(planWidth)
 	h := p.table.fit(margin + st.height() + margin + buttonsH + margin)
 	p.win.resize(w, h, place)
-	st.place(margin, margin)
+	st.place(margin, margin, st.width)
 	left, right := p.left, p.right
 	row := widget.NewArea(s, win32.Rect{Left: margin, Top: h - margin - buttonsH, Right: w - margin, Bottom: h - margin})
 	for i := len(right) - 1; i >= 0; i-- {
@@ -195,10 +195,10 @@ func (p *planDialog) content(st *stack) {
 		st.gap(4)
 	}
 	if v.RemovesLink != "" {
-		st.row(stackLineHeight, cell{dip: stackLabelWidth}, cell{hwnd: p.link(view.Button{Text: v.RemovesLink, Enabled: true}, idPlanRemoves), fill: true})
+		st.row(stackLineHeight, labelColumn(0), cell{hwnd: p.link(view.Button{Text: v.RemovesLink, Enabled: true}, idPlanRemoves), fill: true})
 		if p.showRemoves {
 			for _, r := range v.Removes {
-				st.row(stackLineHeight, cell{dip: stackLabelWidth}, cell{hwnd: panel.Label(r, widget.TextSmall, pal.TextSecondary), fill: true})
+				st.row(stackLineHeight, labelColumn(0), cell{hwnd: panel.Label(r, widget.TextSmall, pal.TextSecondary), fill: true})
 			}
 		}
 	}
