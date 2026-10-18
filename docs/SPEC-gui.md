@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Status | Living. Released with 2.0.0 (2026-10-10); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-09. |
-| Planned | Later: editing the configuration and dark mode (decisions 1 and 4; moved out of 2.1.0 on 2026-10-18). In 2.1.0: the YubiKey page (10.2), which replaces `cmd/yubidiag` (decision 10), no spare YubiKey (decision 11), and one YubiKey for a backup (decision 12), implemented 2026-10-18 ([PLAN-yubikey-page.md](PLAN-yubikey-page.md)); the manual tests of the YubiKey page passed on 2026-10-18. |
+| Status | Living. Released with 2.1.0 (2026-10-18); the manual tests of [GUIDE-gui-test.md](GUIDE-gui-test.md) passed on 2026-10-18. 2.1.0 added the YubiKey page (10.2, decision 10), dropped the spare YubiKey (decision 11), allows one YubiKey for a backup (decision 12) and asks about an out-of-date config.yaml at start (decision 13). |
+| Planned | Later: editing the configuration and dark mode (decisions 1 and 4; moved out of 2.1.0 on 2026-10-18). |
 | Builds on | [SPEC-core.md](SPEC-core.md): formats, keys and workflow behavior |
 | Manual tests | [GUIDE-gui-test.md](GUIDE-gui-test.md) |
 | Dependencies | None new: Win32 through `golang.org/x/sys/windows`, no cgo |
