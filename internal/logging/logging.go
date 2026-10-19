@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/phsc84/restoresafe/internal/buildinfo"
+	"github.com/phsc84/restoresafe/internal/fsx"
 	"github.com/phsc84/restoresafe/internal/problem"
 )
 
@@ -120,7 +121,7 @@ func (l *Logger) Close() {
 			fmt.Fprintf(l.output, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
 			return
 		}
-		if err := appendFile(l.originalPath, data); err != nil {
+		if err := fsx.AppendFile(l.originalPath, data); err != nil {
 			fmt.Fprintf(l.output, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
 			fmt.Fprintf(l.output, "Log file is located in temp directory: %s\n", l.actualPath)
 			// Intentionally do not remove the temp file — it is the user's only copy.
@@ -128,19 +129,6 @@ func (l *Logger) Close() {
 		}
 		_ = os.Remove(l.actualPath)
 	}
-}
-
-// appendFile appends data to the file at path, which it creates if needed.
-func appendFile(path string, data []byte) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
 }
 
 // Info logs an informational message.

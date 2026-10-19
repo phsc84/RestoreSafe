@@ -8,7 +8,7 @@
 //	gui             gui, gui/win32
 //	workflow        interact, plan, backup, restore, verify, health, unlock, restorepoint, job, keycheck
 //	format          archive, container, manifest, catalog, naming, setwriter
-//	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo
+//	config, logging config -> security/cryptox (Argon2 bounds); logging -> buildinfo, fsx
 //	security        cryptox, recovery, yubikey (recovery and yubikey -> cryptox)
 //	fsx, buildinfo, problem  no imports from higher layers (fsx -> problem)
 //
