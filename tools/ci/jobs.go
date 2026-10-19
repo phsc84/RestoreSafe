@@ -32,6 +32,9 @@ func (r *runner) static() {
 		}
 		return true
 	})
+	// -diff changes nothing; it prints what go mod tidy would change and
+	// fails then (2.1.0 stopped at its release build on stale go.sum lines).
+	r.simple("tidy", false, "go", "mod", "tidy", "-diff")
 	r.simple("vet", false, "go", "vet", "./...")
 	r.simple("build", false, "go", "build", "-trimpath", "./...")
 	r.simple("staticcheck", false, "go", "tool", "staticcheck", "./...")
