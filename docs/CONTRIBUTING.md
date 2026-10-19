@@ -6,7 +6,7 @@ How changes get from an idea into a release: branches, commits, pull requests, t
 
 | Branch | Holds | Rules |
 |---|---|---|
-| `main` | The latest release (now 2.1.0) | Changes only at a release, through a pull request from `dev` (section 7). GitHub shows `main` by default. |
+| `main` | The latest release (now 2.1.1) | Changes only at a release, through a pull request from `dev` (section 7). GitHub shows `main` by default. |
 | `dev` | The work towards the next release: features, fixes, refactoring rounds | Committed and pushed to directly; CI runs on every push. Keep it building and green, so a release can be made from it at any time. |
 | A branch for larger work, e.g. `v3` or `feature-<name>` | A next major version or a feature that takes longer than one release | Created from `dev` only when needed; bring it up to date with `git merge dev` regularly, and merge it back into `dev` with a pull request when it is done. Then delete it. |
 

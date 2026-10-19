@@ -4,7 +4,7 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.1.1] - Unreleased
+## [2.1.1] - 2026-10-19
 
 ### Fixed
 - The log of a backup, restore or verification is written again to a backup directory on some network shares (for example a NAS). Since 2.1.0, the log there stayed empty, and its lines were left in a file in the TEMP folder.
