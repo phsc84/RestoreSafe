@@ -250,7 +250,7 @@ cd C:\dev\RestoreSafe
 
 `build-release.bat` builds the released state, whatever branch you are on: it brings the local `main` up to date with `origin/main` (`git fetch origin main:main`), switches to `main`, builds, and switches back to the branch it started on, also when the build fails. It needs a clean working tree (commit or stash first), since `git switch` would carry changes to `main` and Go stamps them into the exe as `vcs.modified`. The build runs from a copy of the script in `%TEMP%`, because `git switch` replaces `build-release.bat` while it runs.
 
-It writes `RestoreSafe-<version>.zip`, its checksum `SHA256SUMS.txt`, and a copy of `release-notes\<version>.md` as `RELEASE-NOTES-<version>.md` to `dist\`, and `RestoreSafe.exe` to `sandbox\`. It fails when the release notes are missing. It changes no tracked file: it fails instead when `go.mod` or `go.sum` is not tidy (run `go mod tidy` and commit). Two builds of the same commit give the same `RestoreSafe.exe`. It deletes older `RestoreSafe-*.zip` and `RELEASE-NOTES-*.md` files in `dist\`, so keep release archives you want to keep elsewhere.
+It writes `RestoreSafe-<version>.zip`, its checksum `SHA256SUMS.txt`, and a copy of `release-notes\<version>.md` as `RELEASE-NOTES-<version>.md` to `dist\`, and `RestoreSafe.exe` to `sandbox\`. It fails when the release notes are missing, and when the tag `v<version>` already marks another commit (the version in `build\versioninfo.json` was not raised). After the build it prints the tag command for the built commit, or confirms that the tag already marks it. It changes no tracked file: it fails instead when `go.mod` or `go.sum` is not tidy (run `go mod tidy` and commit). Two builds of the same commit give the same `RestoreSafe.exe`. It deletes older `RestoreSafe-*.zip` and `RELEASE-NOTES-*.md` files in `dist\`, so keep release archives you want to keep elsewhere.
 
 For manual testing between releases, build only the exe:
 
@@ -345,7 +345,7 @@ gh pr merge --merge
 
 ### Step 3 – Build from `main` and tag
 
-`build-release.bat` updates the local `main`, builds exactly the merge commit on it, and returns to `dev`. Tag that commit of `main`:
+`build-release.bat` updates the local `main`, builds exactly the merge commit on it, and returns to `dev`. Tag that commit of `main`; the script prints the command with the commit hash:
 
 ```powershell
 .\build-release.bat

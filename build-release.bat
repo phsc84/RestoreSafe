@@ -114,6 +114,7 @@ if errorlevel 1 (
 )
 
 echo [BUILD] Extract version from %VERSIONINFO%...
+set VERSION=
 for /f "delims=" %%i in ('powershell -NoProfile -Command "(Get-Content '%VERSIONINFO%' | ConvertFrom-Json).StringFileInfo.ProductVersion"') do set VERSION=%%i
 if not defined VERSION (
     echo [WARN] Could not extract version, using fallback
@@ -124,6 +125,17 @@ echo [BUILD] Version: %VERSION%
 set NOTES=release-notes\%VERSION%.md
 if not exist %NOTES% (
     echo [ERROR] %NOTES% is missing: write the release notes first
+    exit /b 1
+)
+
+echo [BUILD] Check tag v%VERSION%...
+REM A tag of this version on another commit means the version was not
+REM raised: the build would replace the released archive in dist\.
+for /f "delims=" %%i in ('git rev-parse HEAD') do set BUILD_COMMIT=%%i
+set TAG_COMMIT=
+for /f "delims=" %%i in ('git rev-list -n 1 refs/tags/v%VERSION% 2^>nul') do set TAG_COMMIT=%%i
+if defined TAG_COMMIT if not "%TAG_COMMIT%"=="%BUILD_COMMIT%" (
+    echo [ERROR] Tag v%VERSION% marks another commit: set the new version in %VERSIONINFO% first
     exit /b 1
 )
 
@@ -198,5 +210,12 @@ echo [OK] Successfully created: %CD%\%DIST_DIR%\%ZIP_NAME%
 echo [OK] Checksum: %CD%\%DIST_DIR%\SHA256SUMS.txt
 echo [OK] Release notes: %CD%\%DIST_DIR%\RELEASE-NOTES-%VERSION%.md
 echo [OK] Successfully compiled: %CD%\%SANDBOX_DIR%\RestoreSafe.exe
+if defined TAG_COMMIT (
+    echo [OK] Tag v%VERSION% marks the built commit %BUILD_COMMIT%
+) else (
+    echo [NEXT] Tag the built commit:
+    echo        git tag -a v%VERSION% %BUILD_COMMIT% -m "Release version %VERSION%"
+    echo        git push origin v%VERSION%
+)
 echo.
 exit /b 0

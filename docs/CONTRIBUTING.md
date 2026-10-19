@@ -83,6 +83,6 @@ The standing constraints of refactoring work are in [SPEC-refactoring.md](SPEC-r
 1. On `dev`: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, write the release notes for users into `release-notes/<version>.md`, push, and wait for CI to be green.
 2. Merge `dev` into `main` with a pull request (`gh pr create --base main --head dev --title "Release 2.1.0"`); CI checks the release state once more before `main` changes.
 3. On `dev`, with a clean working tree, run `build-release.bat`: it updates the local `main` from `origin`, switches to it, builds, and switches back to `dev`. It writes `dist/RestoreSafe-<version>.zip`, `dist/SHA256SUMS.txt`, and `dist/RELEASE-NOTES-<version>.md`, and `sandbox/RestoreSafe.exe`. Always build in your working checkout, not in a separate clone, so `dist/` and `sandbox/` hold the release.
-4. Tag that commit of `main` with an annotated tag (`git tag -a v2.1.0 main -m "Release version 2.1.0"`, `git push origin v2.1.0`).
+4. Tag that commit of `main` with an annotated tag; `build-release.bat` prints the command (`git tag -a v2.1.0 main -m "Release version 2.1.0"`, `git push origin v2.1.0`).
 5. Create the GitHub release as a **draft** with the release notes of `release-notes/<version>.md`, the ZIP, and `SHA256SUMS.txt`. Download the ZIP from the draft, check it, and run it once; then publish.
 6. Bring `dev` up to date with the merge (`git merge main`).
