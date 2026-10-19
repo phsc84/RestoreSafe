@@ -21,7 +21,7 @@ GitHub enforces this for `main` with the ruleset in [.github/rulesets/release-br
 
 The JSON file is the definition. To change a rule, edit the file, commit it, and run `powershell -ExecutionPolicy Bypass -File scripts\apply-rulesets.ps1` (Windows blocks scripts by default; the bypass applies to that run only), which replaces the ruleset on GitHub with the file's content (it needs `gh` logged in with admin rights). A change made in the GitHub settings instead is overwritten by the next run of the script. `dev` and the other branches are not protected.
 
-Stay on `dev` for daily work. To bring your local `main` up to date without leaving it, run `git fetch origin main:main` (it only moves `main` forward, so it cannot lose anything). Switch to `main` (`git switch main`) only to build exactly what is released, and switch back afterwards: a commit made on `main` cannot be pushed.
+Stay on `dev` for daily work. To bring your local `main` up to date without leaving it, run `git fetch origin main:main` (it only moves `main` forward, so it cannot lose anything). `build-release.bat` switches to `main` by itself to build exactly what is released, and back afterwards; don't stay on `main`: a commit made on `main` cannot be pushed.
 
 A pull request lives on GitHub, not in Git: its commits are those of its branch. See them with `gh pr list --state all`, `gh pr view <number>`, and `gh pr checks <number>`.
 
@@ -82,7 +82,7 @@ The standing constraints of refactoring work are in [SPEC-refactoring.md](SPEC-r
 
 1. On `dev`: give the unreleased section of CHANGELOG.md its version and date, set the version in `build/versioninfo.json`, write the release notes for users into `release-notes/<version>.md`, push, and wait for CI to be green.
 2. Merge `dev` into `main` with a pull request (`gh pr create --base main --head dev --title "Release 2.1.0"`); CI checks the release state once more before `main` changes.
-3. Update the local `main` (`git fetch origin main:main`), switch to it (`git switch main`), and run `build-release.bat`: it writes `dist/RestoreSafe-<version>.zip` and `dist/SHA256SUMS.txt`.
-4. Tag that commit of `main` with an annotated tag (`git tag -a v2.1.0 -m "Release version 2.1.0"`, `git push origin v2.1.0`).
+3. On `dev`, with a clean working tree, run `build-release.bat`: it updates the local `main` from `origin`, switches to it, builds, and switches back to `dev`. It writes `dist/RestoreSafe-<version>.zip`, `dist/SHA256SUMS.txt`, and `dist/RELEASE-NOTES-<version>.md`, and `sandbox/RestoreSafe.exe`. Always build in your working checkout, not in a separate clone, so `dist/` and `sandbox/` hold the release.
+4. Tag that commit of `main` with an annotated tag (`git tag -a v2.1.0 main -m "Release version 2.1.0"`, `git push origin v2.1.0`).
 5. Create the GitHub release as a **draft** with the release notes of `release-notes/<version>.md`, the ZIP, and `SHA256SUMS.txt`. Download the ZIP from the draft, check it, and run it once; then publish.
-6. Switch back to `dev` and bring it up to date with the merge (`git switch dev`, `git merge main`).
+6. Bring `dev` up to date with the merge (`git merge main`).

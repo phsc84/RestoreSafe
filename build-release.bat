@@ -1,19 +1,97 @@
 @echo off
 REM ============================================================
 REM  RestoreSafe release build
-REM  Builds dist\RestoreSafe-<version>.zip with dist\SHA256SUMS.txt
-REM  and moves the compiled RestoreSafe.exe to sandbox\ for manual
-REM  testing. It changes no tracked file, and the same commit gives
-REM  the same RestoreSafe.exe.
+REM  Brings the local main up to date with origin/main, switches to
+REM  it, and builds there: dist\RestoreSafe-<version>.zip with
+REM  dist\SHA256SUMS.txt, a copy of release-notes\<version>.md as
+REM  dist\RELEASE-NOTES-<version>.md, and the compiled RestoreSafe.exe
+REM  in sandbox\ for manual testing. Then it switches back to the
+REM  branch it started on, also when the build fails.
+REM  It needs a clean working tree, changes no tracked file, and the
+REM  same commit gives the same RestoreSafe.exe.
 REM  The version is managed manually in build\versioninfo.json
 REM ============================================================
 
+REM git switch replaces this file while it runs, and cmd reads a
+REM batch file from disk line by line. So the build runs from a copy
+REM in %TEMP%; without call, the copy takes over and this file is not
+REM read again.
+if /i not "%~1"=="--from-temp" (
+    copy /y "%~f0" "%TEMP%\RestoreSafe-build-release.bat" >nul
+    if errorlevel 1 (
+        echo [ERROR] Could not copy build-release.bat to %TEMP%
+        exit /b 1
+    )
+    "%TEMP%\RestoreSafe-build-release.bat" --from-temp "%~dp0."
+)
+
 setlocal
+cd /d "%~2"
+if errorlevel 1 (
+    echo [ERROR] Could not change to the repository "%~2"
+    exit /b 1
+)
 
 set VERSIONINFO=build\versioninfo.json
 set DIST_DIR=dist
 set SANDBOX_DIR=sandbox
+set RELEASE_BRANCH=main
 
+echo [GIT] Check the working tree...
+REM go build stamps uncommitted and untracked files as vcs.modified
+REM into the exe, and git switch would carry them over to main.
+for /f "delims=" %%i in ('git status --porcelain') do (
+    echo [ERROR] The working tree is not clean: commit or stash your changes first
+    exit /b 1
+)
+
+set START_BRANCH=
+for /f "delims=" %%i in ('git branch --show-current') do set START_BRANCH=%%i
+if not defined START_BRANCH (
+    echo [ERROR] HEAD is detached: switch to a branch first
+    exit /b 1
+)
+
+echo [GIT] Update %RELEASE_BRANCH% from origin...
+REM fetch into the branch that is checked out is refused; pull instead.
+if "%START_BRANCH%"=="%RELEASE_BRANCH%" (
+    git pull --ff-only origin %RELEASE_BRANCH%
+) else (
+    git fetch origin %RELEASE_BRANCH%:%RELEASE_BRANCH%
+)
+if errorlevel 1 (
+    echo [ERROR] Could not bring %RELEASE_BRANCH% up to date with origin/%RELEASE_BRANCH%
+    exit /b 1
+)
+
+if not "%START_BRANCH%"=="%RELEASE_BRANCH%" (
+    echo [GIT] Switch from %START_BRANCH% to %RELEASE_BRANCH%...
+    git switch %RELEASE_BRANCH%
+    if errorlevel 1 (
+        echo [ERROR] Could not switch to %RELEASE_BRANCH%
+        exit /b 1
+    )
+)
+
+call :build
+set BUILD_RESULT=%errorlevel%
+
+if not "%START_BRANCH%"=="%RELEASE_BRANCH%" (
+    echo [GIT] Switch back to %START_BRANCH%...
+    git switch %START_BRANCH%
+    if errorlevel 1 (
+        echo [ERROR] Could not switch back to %START_BRANCH%
+        exit /b 1
+    )
+)
+
+exit /b %BUILD_RESULT%
+
+REM ------------------------------------------------------------
+REM  The build of the checked-out commit. exit /b returns to the
+REM  caller above, which switches back to the start branch.
+REM ------------------------------------------------------------
+:build
 echo [BUILD] Check dependencies...
 REM Only the success line goes to stdout; mismatches still print on stderr.
 go mod verify >nul
@@ -42,6 +120,12 @@ if not defined VERSION (
     set VERSION=dev
 )
 echo [BUILD] Version: %VERSION%
+
+set NOTES=release-notes\%VERSION%.md
+if not exist %NOTES% (
+    echo [ERROR] %NOTES% is missing: write the release notes first
+    exit /b 1
+)
 
 echo [BUILD] Prepare %DIST_DIR% directory...
 if not exist %DIST_DIR%\ (
@@ -86,6 +170,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo [BUILD] Copy %NOTES% to %DIST_DIR%...
+for %%f in (%DIST_DIR%\RELEASE-NOTES-*.md) do (
+    del /f /q "%%f"
+    if errorlevel 1 (
+        echo [WARN] Could not delete "%%f"
+    )
+)
+copy /y "%NOTES%" "%DIST_DIR%\RELEASE-NOTES-%VERSION%.md" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy %NOTES% to %DIST_DIR%
+    exit /b 1
+)
+
 echo [BUILD] Move RestoreSafe.exe to %SANDBOX_DIR%...
 if not exist %SANDBOX_DIR%\ (
     mkdir %SANDBOX_DIR%
@@ -99,7 +196,7 @@ if errorlevel 1 (
 echo.
 echo [OK] Successfully created: %CD%\%DIST_DIR%\%ZIP_NAME%
 echo [OK] Checksum: %CD%\%DIST_DIR%\SHA256SUMS.txt
+echo [OK] Release notes: %CD%\%DIST_DIR%\RELEASE-NOTES-%VERSION%.md
 echo [OK] Successfully compiled: %CD%\%SANDBOX_DIR%\RestoreSafe.exe
 echo.
-
-endlocal
+exit /b 0

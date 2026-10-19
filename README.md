@@ -459,9 +459,9 @@ Branches, commits, pull requests, and the rules every change keeps are in [docs/
 build-release.bat
 ```
 
-This compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` in `dist\`. The executable is then moved to `sandbox\` for manual testing.
+This builds the released state: it updates the local `main` from `origin`, switches to it, and switches back to your branch afterwards (it needs a clean working tree). It compiles `RestoreSafe.exe` (a Windows application with the icon, manifest, and version information from `build\`) and creates `RestoreSafe-<version>.zip`, its checksum `SHA256SUMS.txt`, and `RELEASE-NOTES-<version>.md` (from `release-notes\`) in `dist\`. The executable is then moved to `sandbox\` for manual testing.
 
-`build-dev.bat` compiles only `sandbox\RestoreSafe.exe` and leaves `dist\` as it is.
+`build-dev.bat` compiles only `sandbox\RestoreSafe.exe` from the branch you are on and leaves `dist\` as it is.
 
 ### Project layout
 

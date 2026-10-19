@@ -226,7 +226,7 @@ go mod tidy
 
 ### Step 4 – Validate the project
 
-Run the checks of CONTRIBUTING.md section 4, then `build-release.bat`.
+Run the checks of CONTRIBUTING.md section 4, then `build-dev.bat` (`build-release.bat` builds `main`, not the update on `dev`).
 
 ### Step 5 – Record and commit
 
@@ -248,7 +248,9 @@ cd C:\dev\RestoreSafe
 .\build-release.bat
 ```
 
-`build-release.bat` writes `RestoreSafe-<version>.zip` and its checksum `SHA256SUMS.txt` to `dist\`, and `RestoreSafe.exe` to `sandbox\`. It changes no tracked file: it fails instead when `go.mod` or `go.sum` is not tidy (run `go mod tidy` and commit). Two builds of the same commit give the same `RestoreSafe.exe`. It deletes older `RestoreSafe-*.zip` files in `dist\`, so keep release archives you want to keep elsewhere.
+`build-release.bat` builds the released state, whatever branch you are on: it brings the local `main` up to date with `origin/main` (`git fetch origin main:main`), switches to `main`, builds, and switches back to the branch it started on, also when the build fails. It needs a clean working tree (commit or stash first), since `git switch` would carry changes to `main` and Go stamps them into the exe as `vcs.modified`. The build runs from a copy of the script in `%TEMP%`, because `git switch` replaces `build-release.bat` while it runs.
+
+It writes `RestoreSafe-<version>.zip`, its checksum `SHA256SUMS.txt`, and a copy of `release-notes\<version>.md` as `RELEASE-NOTES-<version>.md` to `dist\`, and `RestoreSafe.exe` to `sandbox\`. It fails when the release notes are missing. It changes no tracked file: it fails instead when `go.mod` or `go.sum` is not tidy (run `go mod tidy` and commit). Two builds of the same commit give the same `RestoreSafe.exe`. It deletes older `RestoreSafe-*.zip` and `RELEASE-NOTES-*.md` files in `dist\`, so keep release archives you want to keep elsewhere.
 
 For manual testing between releases, build only the exe:
 
@@ -343,13 +345,11 @@ gh pr merge --merge
 
 ### Step 3 – Build from `main` and tag
 
-Build from exactly the merge commit on `main`, and tag that commit:
+`build-release.bat` updates the local `main`, builds exactly the merge commit on it, and returns to `dev`. Tag that commit of `main`:
 
 ```powershell
-git fetch origin main:main
-git switch main
 .\build-release.bat
-git tag -a v2.1.0 -m "Release version 2.1.0"
+git tag -a v2.1.0 main -m "Release version 2.1.0"
 git push origin v2.1.0
 ```
 
@@ -368,10 +368,9 @@ Or on the web: https://github.com/phsc84/RestoreSafe/releases, "Draft a new rele
 3. Make one backup and one restore with a test configuration.
 4. Publish: `gh release edit v2.1.0 --draft=false`, or "Publish release" on the web.
 
-### Step 6 – Back to `dev`
+### Step 6 – Bring `dev` up to date
 
 ```powershell
-git switch dev
 git merge main
 git push
 ```
