@@ -38,6 +38,11 @@ set SANDBOX_DIR=sandbox
 set RELEASE_BRANCH=main
 
 echo [GIT] Check the working tree...
+git rev-parse --is-inside-work-tree >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] "%CD%" is not a Git working tree
+    exit /b 1
+)
 REM go build stamps uncommitted and untracked files as vcs.modified
 REM into the exe, and git switch would carry them over to main.
 for /f "delims=" %%i in ('git status --porcelain') do (
