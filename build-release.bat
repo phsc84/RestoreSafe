@@ -69,6 +69,21 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM pull --ff-only accepts a local main that is ahead of origin/main;
+REM the release is exactly what origin/main holds, nothing else.
+set LOCAL_COMMIT=
+set REMOTE_COMMIT=
+for /f "delims=" %%i in ('git rev-parse refs/heads/%RELEASE_BRANCH%') do set LOCAL_COMMIT=%%i
+for /f "delims=" %%i in ('git rev-parse refs/remotes/origin/%RELEASE_BRANCH%') do set REMOTE_COMMIT=%%i
+if not defined REMOTE_COMMIT (
+    echo [ERROR] origin/%RELEASE_BRANCH% is unknown: check the remote origin
+    exit /b 1
+)
+if not "%LOCAL_COMMIT%"=="%REMOTE_COMMIT%" (
+    echo [ERROR] %RELEASE_BRANCH% has commits that origin/%RELEASE_BRANCH% doesn't: push them through a pull request, or reset %RELEASE_BRANCH% to origin/%RELEASE_BRANCH%
+    exit /b 1
+)
+
 if not "%START_BRANCH%"=="%RELEASE_BRANCH%" (
     echo [GIT] Switch from %START_BRANCH% to %RELEASE_BRANCH%...
     git switch %RELEASE_BRANCH%
