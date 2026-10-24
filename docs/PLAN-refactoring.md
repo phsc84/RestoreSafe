@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Prepared 2026-10-18; baseline measured 2026-10-18, review not started |
+| Status | Prepared 2026-10-18; baseline measured 2026-10-18; review started 2026-10-24 with the size of the code (sections 6 to 9), the other areas of the checklist not yet |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
 | Previous round | The round after 2.0.0 (RF-40, RF-65 to RF-97), done 2026-10-15; its plan is in git history (`git show v2.1.0:docs/PLAN-refactoring.md`). The round of 2.0 (RF-1 to RF-64): `git show v2.0.0:docs/PLAN-refactoring.md` |
 | Baseline | `dev` at `139ab93` (2.1.0 is `735395c`; since then only `tools/ci` changed in Go) |
@@ -46,6 +46,8 @@ Coverage by package at the start of this round (CI run of `139ab93`): cryptox 94
 ## 3. Constraints
 
 The standing constraints of SPEC-refactoring section 2 apply. The format fixtures in `internal/format/testdata/v2.0.0/` describe the released format: they never change.
+
+Added for this round: **fewer lines is not a goal of its own.** An item that makes the code smaller must not loosen a layer rule or blur what a package is for, move logic from a well-tested package (`gui/view` 92.7 %, `gui/flow` 95.9 %, the workflows) into one that is barely tested (`gui` 1.8 %, `gui/win32` 10.4 %), lower a coverage floor, add production code that only tests call, or replace plain types with options and flags. Candidates from the size review that would have done so are left out (section "Not part of this round").
 
 ## 4. Carried over from the round after 2.0.0
 
@@ -102,9 +104,51 @@ Round 3 (restore outcome, platform limits, secrets, KDF consistency):
 - **Change: facts carry the set's nonce** (GUI 11.4), so a reused differential number doesn't inherit a verification result.
 - **Owner, before 2.2.0:** after these changes, add a dated line to the Status rows of SPEC-core and SPEC-gui naming the review, and copy SPEC-kdf 0.4 to MountSafe if it has diverged again (done for 0.4 on 2026-10-24).
 
-## 6.-n. Items by area
+## 6. Structure: the window (RF-98 to RF-102)
 
-<RF items in the format of SPEC-refactoring section 6, written after the review>
+From the size review of 2026-10-24. The code is lean by the tools: `deadcode` and staticcheck report nothing, and `dupl` (threshold 40) finds only short clone pairs, mostly the constants of `gui/view/strings.go`. What is left is the same structure written several times, almost all of it in `internal/gui`, whose root package has 1.8 % coverage. So every item of this section is checked by the GUI scripts (`scripts/gui-test`) and the rows of `GUIDE-gui-test.md` it names, one structure per commit. Line counts are estimates of production lines removed.
+
+**RF-98 (P2) One plan window for Create backup and Verify.** Evidence: [plandialog.go](../internal/gui/plandialog.go) (308 lines) and [verifydialog.go](../internal/gui/verifydialog.go) (273) repeat the same frame line for line: opening with `newDialogTable` and `defID`, the waiting state with its marquee, the button row, `layout`, `focus`, `takeAnswer` and `close` (`dupl` reports 118-123, 189-196, 236-242, 299-308 of `plandialog.go`).
+Change: a `planWindow` that both embed: the frame, the stack, the table, the waiting state and the button rows. Each dialog keeps its own content, commands and answer type; no flags select behaviour.
+Acceptance: about 150 lines fewer; GUI scripts pass; manual rows of the Create backup window (6.1) and the Verify window (7.3) pass, including a blocked plan (BP-5) and Cancel while waiting.
+
+**RF-99 (P2) One table that a splitter sizes.** Evidence: three implementations of "a table whose height a splitter sets": `tableSizer` and `dialogTable` ([table.go:252](../internal/gui/table.go#L252), [table.go:316](../internal/gui/table.go#L316)) and the Restore backup window's `listHeights`, `rowsHeight`, `splitMoved` and `fitColumns` ([restoredialog_layout.go:67-138](../internal/gui/restoredialog_layout.go#L67-L138)), which also repeats `table.fit`.
+Change: one sizer for the page cards and the dialogs; the Restore backup window uses it for its list.
+Acceptance: about 80 lines fewer; dragging the splitter on Create backup, Settings, the Create backup window and the Restore backup window behaves as before, including at a second DPI.
+
+**RF-100 (P3) One way to draw a table's cells.** Evidence: three `customDraw` functions draw tone colours, greyed rows and type badges ([table.go:207](../internal/gui/table.go#L207), [restoredialog_list.go:62](../internal/gui/restoredialog_list.go#L62), [restorepage_list.go:259](../internal/gui/restorepage_list.go#L259)). The Restore backup window decides in `gui` which colour its Check column takes, from `w.view.Checks`.
+Change: `table` gains check boxes and disabled rows, and the Restore backup window's list becomes a `table` fed with `view.TableRow`s, so the colour of each cell is decided in `gui/view`, where it is tested. The Restore backup page keeps its own list (groups, context menu) and shares only the drawing of a badge cell.
+Acceptance: about 120 lines fewer in `gui`; the Check column's tones covered by a `gui/view` test; `gui/view` stays at or above its floor; the `win32` list wrappers that lose their last caller are deleted (`deadcode`).
+
+**RF-101 (P2) Pages laid out on a stack.** Evidence: the four pages each write the same steps by hand: panel, title and Refresh, cards, total height, scroll bar, place, restyle ([createpage.go:324](../internal/gui/createpage.go#L324), [yubikeypage.go:223](../internal/gui/yubikeypage.go#L223), [settings.go:213](../internal/gui/settings.go#L213), [restorepage_layout.go:25](../internal/gui/restorepage_layout.go#L25)). They react in three different ways to a scroll bar that comes or goes: Create backup and Restore backup measure twice, YubiKey calls `update`, Settings waits for the next `layout`. `child` and `setButton` exist twice ([restoredialog.go:187](../internal/gui/restoredialog.go#L187), [restorepage.go:127](../internal/gui/restorepage.go#L127); [createpage.go:313](../internal/gui/createpage.go#L313), [yubikeypage.go:120](../internal/gui/yubikeypage.go#L120)).
+Change: a scrolling page built on the existing `stack`: one place that handles the scroll bar, and one `child` and `setButton`. Settings' card pairs are a row of two cells.
+Acceptance: about 130 lines fewer; every page scrolls, resizes and changes DPI as before (manual rows of GUI spec 5, 7, 10.1 and 10.2), at a width at which the scroll bar appears.
+
+## 7. Structure: workflows and view (RF-103 to RF-107)
+
+**RF-103 (P3) Restore and verification start the same way.** Evidence: [restore/run.go:44-112](../internal/workflow/restore/run.go#L44-L112) and [verify/workflow.go:37-98](../internal/workflow/verify/workflow.go#L37-L98) lock the backup directory, read the inventory, select the sets, open the log, add the lock issue, ask to start and unlock, in the same order with the same texts.
+Change: two plain functions in `job` (open the selection and its log; confirm and unlock), called by both. No callbacks; each workflow keeps its own preflight, plan and checks.
+Acceptance: about 50 lines fewer; the restore and verify tests pass unchanged; `restore`, `verify` and `job` stay at or above their floors.
+
+**RF-104 (P3) One helper for singular and plural.** Evidence: `folderPhrase`, `backupCount`, `chainCount`, `more`, `otherWarnings` and about 13 more `if n == 1` branches in `gui/view` choose between two constants the same way.
+Change: `plural(n, one, many)` in `gui/view`; the constants stay as they are.
+Acceptance: about 50 lines fewer; the texts unchanged (the existing `gui/view` tests).
+
+## 8. Dead and legacy code (RF-108 to RF-112)
+
+**RF-108 (P2) The workflows' text output reaches nobody.** Evidence: everything the workflows write to `interact.UI.Output` ends in `app.logText` ([operation.go:142](../internal/gui/operation.go#L142)), which nothing reads ([app.go:101](../internal/gui/app.go#L101)). It carries about 12 `Fprintln` calls in the workflows (`Restore cancelled.`, the YubiKey steps), every log line the logger mirrors there ([logging.go:27-35](../internal/logging/logging.go#L27-L35); the "window's log pane" it names is gone), and the bridge's buffer and note (`Write`, `TakeOutput`, `NoteOutput`, [bridge.go:125-145](../internal/gui/flow/bridge.go#L125-L145)). It is the first GUI's protocol, left over. Neither tool reports it, because the field is written (new checklist point in SPEC-refactoring 5.2).
+Change: after RF-109, delete `Output` from `interact.UI`, the bridge's output, `onOutput` and `logText`, the logger's mirror and its `output` parameter, `NewOutputLogger`, and the prints in the workflows. `InfoLogOnly` and `WarnLogOnly` become `Info` and `Warn`. GUI spec 11 (first paragraph), 12.2 (`WM_APP_OUTPUT` and the "live log" it fills) and 12.3 (the `Output` row) lose the channel in the same commit. Tests that read the output (about 10 test files set `Out`, plus `bridge_test.go:93` and `flow_test.go:106`) read the log file instead, which is what the user sees.
+Acceptance: about 110 lines fewer; the log file's content unchanged (a test compares a run's log with the one before); `logging`, `job`, `flow` and the workflows at or above their floors; `deadcode` with and without `-test` clean.
+
+**RF-109 (P1) Problems with the log file itself are lost.** Evidence: when the log can't be opened, synced, read back from TEMP or appended to the backup directory, the logger and `job.OpenLogger` write that only to the output ([logging.go:112-126](../internal/logging/logging.go#L112-L126), [runtime.go:21](../internal/workflow/job/runtime.go#L21)), which reaches nobody (RF-108). When the append fails, "Log file is located in temp directory" is the user's only pointer to their only copy of the log, and nobody sees it. A log that couldn't be opened is counted as a warning; the other cases aren't even that.
+Change: the logger returns its problems (`Close` returns an error; opening already does), and the workflow adds them to the result as a warning that names the path of the copy in TEMP. This is a behaviour change: CHANGELOG entry and the wording in GUI spec 6.3 and 11.5 (open question 1).
+Acceptance: a test makes the append fail (the backup directory read-only) and finds the warning with the TEMP path in the result; then RF-108 can delete the output without losing a message.
+
+## 9. Tests (RF-113 to RF-117)
+
+**RF-113 (P3) The test UI answers with values, not typed text.** Evidence: `interacttest.Script` ([script.go](../internal/workflow/interact/interacttest/script.go), 291 lines) still plays the 1.x console: it builds prompts ("Start %s now? [Y/n]: "), parses typed answers ("y", "yes", "n"), loops on "Please enter y (yes) or n (no).", and prints the announcements of other keys. 35 tests build a `Script` and answer through `ReadLine` and `ReadPassword` with strings, a protocol that relies on text (SPEC-refactoring 5.2).
+Change: `Script` gets one typed field or function per question of `interact.UI` (start, backup choice, unlock method, password, recovery code); the prompts, parsing and printing go. Do it after RF-108, which removes `Output`.
+Acceptance: about 140 lines fewer in `interacttest` and about 100 to 200 in the tests; every test that used a `Script` still runs and the coverage of the workflows doesn't drop.
 
 ## n. Found during the work
 
@@ -115,9 +159,18 @@ Round 3 (restore outcome, platform limits, secrets, KDF consistency):
 
 ## Open questions
 
+1. **RF-109: how to show a problem with the log file.** Decided 2026-10-24: as a warning in the result card that names the TEMP copy, shipped with a patch release as a fix.
+
 ## Not part of this round
 
 - Editing the configuration in the window and dark mode: feature work, planned for later (GUI spec, decisions 1 and 4).
+- From the size review (2026-10-24), left out because they would cost architecture or testability (section 3):
+  - **The Restore backup window on the plan window of RF-98.** It is sized by the user, checks while the user types and has its own destination field; sharing more than the table and sizer of RF-99 and RF-100 would put options for all three on the shared window.
+  - **One registry for window procedures** (`handlers` in [registry.go](../internal/gui/registry.go), `controls` in [widget/window.go](../internal/gui/widget/window.go)). A shared one would put Go objects into `gui/win32`, which only wraps the Windows API, or the top-level windows into `gui/widget`, whose controls are reusable. It would save about 40 lines.
+  - **A common core of the three plan views** (`BackupPlanView`, `VerifyPlanView`, `RestoreView`). Their fields differ (Start is a `*Button` in two, a `Button` in one; the restore view has hints and checks), so it would couple three views that are tested on their own for a few lines.
+  - **Merging `gui/view` into `gui`**: fewer types, but the window's logic would leave its tested package (92.7 %).
+  - **Comments (about 4,200 lines) and the texts of `gui/view/strings.go`**: not code; the texts are frozen by standing constraint 2.
+  - **Generated Win32 bindings and merging the 56 `win32` wrappers that each have one caller**: generated code counts too, and the wrappers keep `unsafe` in one package.
 
 ## Done when
 

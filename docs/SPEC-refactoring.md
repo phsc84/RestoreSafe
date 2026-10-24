@@ -79,6 +79,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 ### 5.2 Dead and legacy code
 
 - `deadcode` with and without `-test`, and staticcheck U1000 findings. `-test` counts tests as callers, so it misses production code only tests call (RF-70): delete it, or move it into the tests that need it. Struct fields that only keep a Windows ABI layout are not dead; they carry a `//lint:ignore U1000` with the reason and a layout test.
+- Write-only state: fields, buffers and writers that are filled but never read. `deadcode` and staticcheck don't see them, because writing counts as a use. Follow each `strings.Builder`, `bytes.Buffer` and `io.Writer` a workflow or the GUI is given to where it is read; a sink that nothing reads is dead, and so is everything that writes into it. Before deleting it, check that no message reaches the user only that way (refactoring after 2.1.0 RF-108, RF-109: `app.logText` was the end of all workflow output, including the logger's own problems).
 - Wrapper functions in `gui/win32` with no caller.
 - Conversions that undo each other (a value turned into flags and back).
 - Wording and comments of an older version: file kinds, formats or screens that no longer exist (e.g. 1.x `.challenge` files, the first GUI).
