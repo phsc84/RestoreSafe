@@ -8,6 +8,7 @@
 | [GUIDE-gui-test.md](GUIDE-gui-test.md) | Manual tests of the window before a release | Living |
 | [SPEC-core.md](SPEC-core.md) | Container format 2, keys, manifest, what backup, restore, verify and retention do, configuration, security | Living; the format part is frozen for 2.x |
 | [SPEC-gui.md](SPEC-gui.md) | The window: pages, dialogs, requirement IDs (`OV-1`, `BP-3`, ...), the workflow interface the window needs | Living |
+| [SPEC-kdf.md](SPEC-kdf.md) | Argon2id parameters of the key sets: threat model, defaults, enrollment and read limits, memory check; identical copy in MountSafe | Draft, not implemented |
 | [SPEC-ci.md](SPEC-ci.md) | The CI runner `tools/ci`: command line, jobs and their steps, GitHub annotations, its tests, the pre-push hook; for whoever changes it (using CI: GUIDE-ci.md) | Living |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
 | [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.1.0: the points carried over from the round after 2.0.0 and what 2.1.0 added; items follow with the review | Prepared 2026-10-18 |
