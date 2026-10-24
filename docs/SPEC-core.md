@@ -65,7 +65,7 @@ Main topics:
 | D3 | The manifest is embedded in the `.enc` part files (second encrypted section + trailer), not a separate file and not inside the TAR. | Hidden from the user, cannot be lost or overwritten independently. The trailer allows reading the manifest without decrypting the (possibly very large) data section. |
 | D4 | Key sets with slots (like BitLocker/LUKS) instead of deriving the data key directly from the credential. | Enables a recovery code without weakening encryption. YubiKey challenges live in the header; `.challenge` files are removed. |
 | D5 | One key set is reused for all backups in the backup directory until the user creates new keys. | One password entry and at most one YubiKey touch per backup run (1.x: two prompts per run). A differential and its base always share a key set, so restoring a differential needs one unlock. |
-| D6 | Change detection compares size, last-write time, and NTFS change time for exact equality. | Fast (metadata only). Equality (not "newer than") makes it immune to clock changes. NTFS change time is updated on every write and attribute change and cannot be reset by ordinary applications, closing the "tool preserved the modification time" gap. |
+| D6 | Change detection compares size, last-write time, NTFS change time, creation time and attributes for exact equality. | Fast (metadata only). Equality (not "newer than") makes it immune to clock changes. NTFS updates the change time on every write and attribute change, and applications that preserve the modification time (copy tools, archivers) leave it alone, closing the "tool preserved the modification time" gap. It is not tamper-proof: any program with write access can set it (`SetFileInformationByHandle`, `FileBasicInfo`); 13.1 covers that case. |
 | D7 | Retention operates on chains. | A full is never deleted while a kept differential depends on it. |
 | D8 | Part files are written under temporary names and renamed only after the set is complete. | An interrupted backup never looks like a valid backup set or a usable base. |
 | D9 | Manifest format: JSON Lines, Go standard library only. | Streamable (constant memory to write), strictly typed, debuggable, no new dependency. |
@@ -206,13 +206,16 @@ man_key   = HKDF-SHA256(V, salt = header_hash, info = "RestoreSafe v2 manifest")
 - Unlocking tries only the slot(s) matching the factor the user provides, so each unlock costs one Argon2 derivation (as in 1.x).
 - A wrong password or wrong YubiKey fails GCM authentication of the slot, so the credential is validated immediately from the header, before any data is read.
 - New slots can only be created by someone who knows V. An attacker with write access to the backup directory can destroy backups but cannot add a slot they control to an existing key set.
+- A key set read from a header is **untrusted until proven**: a slot that unwraps proves only that slot, not its sibling slots, and the plaintext header of a set can be forged as a whole (a valid trailer needs no key). What proves the whole key set is a section of the set it was read from: `man_key` depends on `header_hash`, so a manifest chunk that authenticates proves that the complete header, every slot included, was written by someone who knew V. Section 6.3 uses this before a key set is reused.
 - HKDF comes from Go's standard `crypto/hkdf`; no new dependency.
 
 #### 4.4.2 Recovery code
 
-- 25 random characters (125 bits) in Crockford Base32 (no I, L, O, U), followed by a 5-character checksum group (first bits of SHA-256 over the 25 characters), displayed as 6 groups of 5: `7KQ2M-X9D4T-...-CHECK`.
-- Input is case-insensitive and ignores spaces and dashes. The checksum catches typos before the slow Argon2 derivation.
-- `check` in the slot stores the checksum group only (not secret; it's derivable from the code).
+- 25 random characters (125 bits) in Crockford Base32 (alphabet `0123456789ABCDEFGHJKMNPQRSTVWXYZ`: no I, L, O, U), followed by a 5-character checksum group, displayed as 6 groups of 5: `7KQ2M-X9D4T-...-CHECK`. The 25 characters are the first 125 bits of 16 random bytes, 5 bits per character, most significant first.
+- Checksum: `SHA-256("RestoreSafe recovery code|" || the 25 characters)`; its first 25 bits, 5 per character, most significant first, in the same alphabet.
+- The slot's `secret` (4.4.1) is the 25 data characters as uppercase ASCII bytes, without dashes and without the checksum group.
+- Input is case-insensitive and ignores spaces, tabs and dashes; I and L are read as 1, O as 0 (Crockford). Any other character, or a count other than 30, is rejected. The checksum catches typos before the slow Argon2 derivation.
+- `check` in the slot stores the checksum group only. It is not secret, but it lets an attacker test a guessed code with one SHA-256 instead of one Argon2 derivation; with 125 random bits that search remains infeasible, which is why the recovery slot's security never rests on the KDF (SPEC-kdf 1).
 - The recovery code alone unlocks the key set, **in every mode including 2FA**. The enrollment screen says so explicitly and tells the user to store the code in a password manager or offline (paper, safe), never next to the backups.
 - Modes 2 and 3 always create a recovery code, whatever `recovery_code` says: it is the only way into the backups when the YubiKey is lost or broken. `recovery_code` decides only in mode 1.
 
@@ -246,13 +249,15 @@ Last 64 bytes of the logical stream, big-endian:
 [16] first 16 bytes of SHA-256 over the preceding 48 bytes
 ```
 
-The trailer is a locator and a completeness marker, not a security boundary: a tampered trailer can only point to bytes that then fail authentication. Without the password, RestoreSafe checks: trailer magic and checksum valid, part count equals the number of part files present, `header + data + manifest + 64 == total size of all parts`, sections adjacent and in bounds.
+The trailer is a locator and a completeness marker, not a security boundary: a tampered trailer can only point to bytes that then fail authentication. Without the password, RestoreSafe checks: trailer magic and checksum valid, the part files present are exactly `001` to `N` (no gap, none above `N`, each name parsed and matching the header), `header + data + manifest + 64 == total size of all parts`, sections adjacent and in bounds, `reserved = 0`.
+
+None of these checks authenticates anything: a forged set with a valid header and trailer passes them. Everything a password-free check decides (completeness, chain grouping, ordering, the current key set) is therefore a hint for planning and display; nothing is written, encrypted with, or deleted on the strength of plaintext alone where 6.3 and 9 say otherwise.
 
 ### 4.7 Atomic finalization
 
-1. Write all parts as `<name>.enc.tmp` in the backup directory.
-2. After the trailer is written, sync and close the last part.
-3. Rename parts `.tmp` -> `.enc` in ascending order.
+1. Write all parts as `<name>.enc.tmp` in the backup directory, each created exclusively (it must not exist).
+2. Flush (`FlushFileBuffers`) and close every part as soon as it is full; after the trailer is written, flush and close the last part. A failed flush fails the set.
+3. Rename parts `.tmp` -> `.enc` in ascending order, so the part holding the trailer is renamed last. A rename never replaces an existing file.
 4. A set is considered complete only if the checks of 4.6 pass. A set with a missing or invalid trailer is reported as incomplete, is never offered as a restore point, and is never used as a base or as the source of the current key set.
 5. At the start of every backup run (under the backup lock), leftover `*.enc.tmp` files matching the 2.0 naming pattern are deleted and logged.
 
@@ -279,8 +284,8 @@ Entry lines (short keys keep the manifest small at high file counts):
 
 | Key | Meaning |
 |---|---|
-| `p` | Path relative to the source directory, `/` separators, same validation rules as TAR entry names. |
-| `t` | `"f"` regular file, `"d"` directory, `"s"` skipped file (6.5). Other types (symlinks, junctions, devices) are not recorded, as in 1.x. |
+| `p` | Path relative to the source directory, `/` separators, valid per 5.2.1 (the same rules apply to TAR entry names). |
+| `t` | `"f"` regular file, `"d"` directory, `"s"` skipped file (6.5). Links are not recorded, as in 1.x (6.4.1). |
 | `s` | File size in bytes. |
 | `m` | Last-write time, UTC, nanoseconds since Unix epoch (NTFS 100 ns precision). |
 | `c` | NTFS change time, same unit. `0` if unavailable (e.g. FAT/exFAT sources). |
@@ -305,7 +310,18 @@ Footer line:
 
 ### 5.2 Validation rules (reader)
 
-Hard error on any of: unknown `manifest_version`, header line fields disagreeing with the set header, missing footer, footer counts not matching the entries, duplicate path, duplicate path under case-insensitive comparison (would collide on NTFS), path failing TAR path validation, entry whose parent directory entry is missing, invalid hash length, negative size, unknown attribute bits, origin other than `"F"` (full) or `"F"`/`"D"` (differential), `off` present without the content being in this set, `x` in a full backup.
+Hard error on any of: unknown `manifest_version`, header line fields disagreeing with the set header, missing footer, footer counts not matching the entries, duplicate path, duplicate path under case-insensitive comparison (would collide on NTFS), path failing 5.2.1, entry whose parent directory entry is missing, invalid hash length, negative size, unknown attribute bits, origin other than `"F"` (full) or `"F"`/`"D"` (differential), `off` present without the content being in this set, `off` missing for content in this set, two entries with the same `off`, `x` in a full backup.
+
+#### 5.2.1 Path rules
+
+A path (`p`, TAR entry name) is valid only when all of these hold; restore and verify check them before anything is created, and a backup records a source file whose relative path breaks one as skipped (6.5) instead of writing a path no restore would accept:
+
+- Relative, `/`-separated, not empty, already clean (`path.Clean(p) == p`): no `.` or `..` segment, no empty segment, no leading or trailing `/`.
+- No `\`, `:` (drive letters and alternate data streams), NUL, other control characters (below 0x20), or `< > " | ? *`.
+- No segment that Windows changes or reserves: ending with a dot or a space, or a device name (`CON`, `PRN`, `AUX`, `NUL`, `COM0`-`COM9`, `LPT0`-`LPT9`, also with an extension, case-insensitive).
+- At most 32,000 UTF-16 code units, the destination prefix included (checked in the restore preflight).
+
+The reader enforces the rules even though the manifest is authenticated: they are what keeps a restore inside its destination if a key set is ever compromised.
 
 ### 5.3 Size and memory
 
@@ -315,7 +331,7 @@ About 250-300 bytes per entry: 15,000 files ≈ 5 MB, 1,000,000 files ≈ 300 MB
 
 ### 6.1 Automatic type selection (per source directory, before the password prompt)
 
-First, the **current key set** is determined: the key set of the newest complete set in the backup directory (by `created_utc`), if it matches the configuration (`authentication_mode`; `recovery_code` in mode 1 only). Otherwise a new key set is needed, which means a full backup for every directory (reason shown in the preflight, e.g. "New keys needed: recovery_code enabled in config.yaml").
+First, the **current key set** is determined: the key set of the newest complete set in the backup directory (by `created_utc`, ignoring sets dated in the future, 6.1.1), if it matches the configuration (`authentication_mode`; `recovery_code` in mode 1 only). Otherwise a new key set is needed, which means a full backup for every directory (reason shown in the preflight, e.g. "New keys needed: recovery_code enabled in config.yaml").
 
 If the backup directory contains no complete 2.0 backup set (first run, or the user deleted all backups), the preflight says: *"No existing keys found in the backup directory: new keys will be created."* Whenever new keys are created, the preflight also states that YubiKey registrations and any recovery code from earlier keys do not work for the new backups (they still open older backups that carry the old key set).
 
@@ -335,6 +351,16 @@ All checks need no password, so the complete plan is known and shown in the pref
 The size check compares the encrypted data section lengths from the trailers, which include TAR and encryption overhead; for real data this is negligible, for tiny test sources it is not. Differential numbers count every differential of the chain, complete or incomplete, so a number is never reused.
 
 After the credentials are entered, the base is opened and its manifest is decrypted and validated (5.2). If that fails, the directory gets a full backup instead, and the run shows a warning naming the base and the reason; a differential is never written on top of a base that cannot be read.
+
+#### 6.1.1 Sets dated in the future
+
+`created_utc` is plaintext (4.6) and the clock that wrote it may have been wrong. A set whose `created_utc` lies more than 24 hours after the current time:
+
+- is not used as the source of the current key set, nor as a base;
+- is reported by the health check and the preflight as a warning naming the set and its date ("dated in the future"), with the remedy: check the PC clock that wrote it; delete the set if it isn't needed, or restore it like any other set (restore and verify still accept it);
+- is never deleted by retention, and does not count as newest when retention ranks chains (9).
+
+A clock that is wrong *now* (the new set is the one in the future) is not detectable this way; the 24-hour margin only absorbs time zones and small clock errors.
 
 ### 6.2 Preflight and override
 
@@ -356,6 +382,7 @@ The preflight shows, per directory, the planned type with its base or the reason
 **Existing key set** (the normal case):
 - Modes 1/2: prompt the password **once** (no confirmation needed; the slot validates it). Wrong password: up to 3 attempts, as in 1.x.
 - Modes 2/3: the YubiKey PIN and one touch (4.4.3).
+- Before the key set is reused, the set it was read from is authenticated (4.4.1): its first manifest chunk must decrypt with `man_key` derived from the unlocked V and that set's `header_hash`. If it does not, the key set is not reused and nothing is written; the run stops with an error naming the set ("its header was changed or doesn't belong to these keys") and the remedy to remove that set or to choose **New keys + full backup**. RestoreSafe never falls back silently to an older set's key set.
 - The unlocked key set is used for every directory in the run, full and differential alike.
 - The YubiKey doesn't unlock the key set (modes 2/3): a YubiKey that was reset or is another one doesn't know the credential and can never unlock it again, but Windows reports this, wrong PINs and a cancelled prompt with the same error. So the backup asks (`YubiKeyRefused`): try again, or new keys + full backup, which shows the preflight with new keys (6.2) and asks again whether to start, or cancel (nothing written). The question says whether the key set has a recovery code, which keeps opening the older backups.
 
@@ -363,7 +390,7 @@ The preflight shows, per directory, the planned type with its base or the reason
 1. Modes 1/2: new password + confirmation; minimum length enforced (6.6).
 2. Modes 2/3: register the YubiKey and derive its secret (two Windows prompts, as in 1.x). A YubiKey without a FIDO2 PIN gets one in the first prompt: Windows asks for a new PIN.
 3. If `recovery_code: true`, and always in modes 2/3: show the code with the warning of 4.4.2; the user stores it (copy button or paper) before the backup starts. There is no retype step.
-4. Generate V, create all slots, and check each slot unwraps with the in-memory KEK before anything is written.
+4. Generate V, create all slots, and check each slot unwraps with the in-memory KEK before anything is written. For the recovery slot, the check starts from the **displayed** text: it is parsed with the input rules of 4.4.2, its KEK derived again, and the slot must unwrap to V. A code that would not work when typed in is never shown as valid.
 
 The preflight states exactly which prompts will appear (password, YubiKey, recovery code).
 
@@ -386,11 +413,34 @@ exclude:
 - Changing the list does not force a full: newly excluded files disappear from the next differential (like deletions); newly included files appear as new files.
 - Invalid patterns are rejected at startup (config validation), not during the backup.
 
+#### 6.4.1 What the walk records
+
+The walk classifies every entry by its attributes and reparse tag, not by what a library reports as "regular":
+
+| Entry | Recorded as | Notes |
+|---|---|---|
+| Directory without reparse point | `t:"d"`, walked | |
+| File without reparse point | `t:"f"` | |
+| File or directory whose reparse tag is **not a name surrogate** (`IsReparseTagNameSurrogate` false): cloud files (`IO_REPARSE_TAG_CLOUD*`, OneDrive, iCloud), WOF-compressed files (`compact /exe`), deduplicated files, and any tag not listed here | like the same entry without reparse point (`t:"f"`, or `t:"d"` and walked) | They hold the user's data. A cloud file that is online-only is downloaded by Windows when it is read; the preflight counts such files (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`) and their size, and says they will be downloaded. A file Windows can't provide (offline, sync error) is unreadable (6.5). |
+| **Name surrogate** (symbolic link, junction, mount point) | not recorded, never followed | Following could leave the source or loop. |
+| Device, pipe, or other non-file | not recorded | |
+
+Every entry that is not recorded is counted per kind, and its path is written to the log; the result and the preflight of the next run state the count ("12 links were not backed up"). Nothing is left out without a word. The source directory itself may be a junction or mount point (a redirected Documents folder): it is resolved once, and its target is walked.
+
+#### 6.4.2 Overlapping folders
+
+- The backup directory, when it lies inside a source, is left out of that source with its whole subtree, like an exclude pattern, and the preflight says so.
+- A source that lies inside the backup directory, or equals it, is rejected (`SOURCE_INVALID`): its backup would contain the backup sets.
+- A source that lies inside another source is backed up twice, once in each; the health check reports it as information, so the user can exclude it on purpose.
+- The comparison uses the resolved final paths (6.4.1), case-insensitive.
+
 ### 6.5 Unreadable files
 
 `on_unreadable_file: fail | skip` (default `fail`).
 
-A file is unreadable when it cannot be opened (e.g. locked by another process, access denied), a read fails, or its size changes while it is being copied. A directory is unreadable when it cannot be listed.
+A file is unreadable when it cannot be opened (e.g. locked by another process, access denied), a read fails, or it changes while it is being copied. A directory is unreadable when it cannot be listed.
+
+"Changes while it is being copied": the size, last-write time and change time are read from the open handle (`GetFileInformationByHandleEx`) before the first byte is copied and again after the last; any difference makes the file unreadable. The manifest records the values read **before** the copy, so if a change slips between the two reads unnoticed (a write within the time resolution), the next differential still sees new metadata and stores the file again.
 
 A file or directory deleted while the backup is running is not unreadable: it is simply not part of the backup, like a file deleted before the backup started. The count is logged per directory; this applies to both settings, so temporary files vanishing mid-run never abort a backup.
 
@@ -407,6 +457,8 @@ A file or directory deleted while the backup is running is not unreadable: it is
 
 When a new key set is created in modes 1 and 2, the password must have at least `password_min_length` characters (default 12). The value is configurable but never below 8; lower values are rejected at startup so a typo cannot allow trivially short passwords. Characters are counted, not bytes. The rule only applies to enrollment; unlocking an existing key set accepts whatever password was set.
 
+**Encoding.** The password's bytes for the KDF are the UTF-8 encoding of exactly the UTF-16 text the edit control returns: no Unicode normalization, no trimming of spaces, no case folding. Text that is not valid UTF-16 (a lone surrogate) is rejected, at enrollment and at unlock, instead of being replaced. A password must be typed the same way on every PC that restores, possibly with a different keyboard layout; when a new password contains a character outside printable ASCII, the enrollment dialog says so ("Make sure you can type é on the PC you'll restore on") without refusing it. At most 1,024 characters.
+
 ### 6.7 Creating a full backup
 
 As today (walk -> TAR -> encrypt -> split), plus:
@@ -418,7 +470,7 @@ As today (walk -> TAR -> encrypt -> split), plus:
 1. Load and validate the base manifest (5.2) into a map.
 2. Walk the source in the same order as a full backup. For each entry:
    - Directory: record in the manifest.
-   - File present in base with identical `s`, `m`, and `c`: record with the base's `h`, `b`, `a`, and `o = "F"`. Not read.
+   - File present in base as `t:"f"`, not stale, with identical `s`, `m`, `c`, `b` and `a`: record with the base's `h` and `o = "F"`. Not read. When `c` is `0` (FAT/exFAT), only size, times and attributes decide; a change that keeps all of them is missed, as described in D6.
    - Otherwise (new or changed): stream into the TAR, hash while copying, record with `o = "D"` and `off`.
    - Unreadable: see 6.5.
 3. Paths in the base but not in the walk are deleted; they simply do not appear in the new manifest.
@@ -438,7 +490,20 @@ Restore points are listed per backup run, newest run first; every complete set i
 
 ### 7.2 Preflight
 
-Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. Each set is restored into a new folder `<destination>\<backup name>`, which must not exist yet; existing files are never overwritten.
+Lists every set required (for a differential: `→ with full backup <name> (parts: N)` below the differential) with part count and completeness status. The space estimate adds the full backup's size for a differential, because both are read. Each set is restored into a new folder `<destination>\<backup name>`, which must not exist yet, and neither may `<destination>\<backup name> (incomplete)` (7.7); existing files are never overwritten.
+
+The preflight also checks the destination's file system (`GetVolumeInformation`):
+
+- FAT32: a file of 4 GiB or more in the restore point (from the manifest's sizes once unlocked; before that, from the set's data length as an upper bound) is an error before anything is written.
+- FAT32 and exFAT: a warning that timestamps are rounded (FAT32: 2 seconds) and that the restored files can't be compared by change time; the restore still checks every hash.
+- A file system that doesn't report persistent ACLs or is a network share: no check; 7.6 applies as far as the target keeps times and attributes, and a failure to set them is a warning per file, not a failed restore.
+
+#### 7.2.1 Writing inside the destination
+
+- The restore writes into `<destination>\<backup name> (incomplete)`, created with a call that fails when it exists (`CreateDirectory`) at the start of the restore, not only checked in the preflight; if it exists by then, the restore stops before writing. Only after the final checks of 7.7 pass is it renamed to `<destination>\<backup name>` (a rename that fails when the target exists). A rename that fails, for example because a virus scanner still holds a file, is retried for up to 30 seconds; if it still fails, the restore is reported as complete and verified, in the folder with the `(incomplete)` name, with the remedy to rename it.
+- The destination folder and the restore folder must not be reparse points (junctions, symlinks, mount points). Before each directory or file is created, its parent directory is checked again: if a folder of the restore tree has become a reparse point (another process replaced it), the restore stops as failed.
+- Every file and directory is created exclusively (`CREATE_NEW`; a directory with `CreateDirectory`); a name that exists already, also by case-insensitive or short-name collision, is a hard error, never an overwrite.
+- Files are opened without following reparse points, and long paths use the `\\?\` form, so 5.2.1 is the only rule on names.
 
 ### 7.3 Credentials
 
@@ -451,9 +516,12 @@ One unlock per distinct key set in the selection (normally one). The user authen
 3. Stream the data section, extract every file whose manifest entry has content in this set, and hash every file while writing. Skip TAR entries marked `v:1`.
 4. Final steps (7.6, 7.7).
 
+Binding of TAR entries to the manifest (7.4 and 7.5): a TAR entry is accepted only when it is a regular file (`TypeReg`; PAX extended headers for long names are allowed, any other type flag, links included, is a hard error), its name equals the `p` of a manifest entry whose content is in this set, its header starts at that entry's `off`, and its size equals the entry's `s`. A TAR entry that matches no such entry is a hard error, except the void entries marked `v:1`. Entries after the TAR end-of-archive marker, or data section bytes after it other than padding, are a hard error.
+
 ### 7.5 Restoring a differential
 
 1. Decrypt the differential's manifest (target state). Decrypt the base's manifest; check `SHA-256(base manifest) == base_manifest_sha256`, that `chain_id`, `directory_name`, and `base_date` match the base header, and that both use the same key set. One unlock (7.3) opens both sets.
+   Before anything is written, every target entry with `o = "F"` (stale ones included) must have a base entry with the same path, `t:"f"`, the same `s` and `h`, content in the base's data section and no `v:1`. Any entry without one is a hard error naming it, so a broken pair fails in seconds instead of after the base's data section has been read.
 2. Create all directories listed in the target manifest.
 3. Stream the base's data section: extract only files whose target entry has `o = "F"`; skip everything else (superseded or deleted files are never written). For each extracted file, the hash must equal the target entry's `h`.
 4. Stream the differential's data section: extract every file with a target entry `o = "D"` and a matching hash; skip TAR entries marked `v:1`. Any other TAR entry is a hard error.
@@ -470,7 +538,7 @@ Still not restored (README "Known limitations"): symlinks/junctions, permissions
 - Every file entry of the target manifest was written exactly once with a matching hash and size.
 - No TAR entry was ignored except those explicitly skipped (superseded in 7.5 step 3, `v:1`).
 - Skipped and stale files are listed in the log and counted in the result (GUI spec RW-8): files that are not in this restore point because they could not be read during backup, and files restored in an older version from the full backup's date.
-- On any failure: stop, report which entries are affected, leave the partially restored destination in place, and state clearly that the restore is **incomplete** (the log lists the missing/invalid paths). The destination is never presented as a successful restore.
+- On any failure, cancellation included: stop, report which entries are affected, leave the partially restored folder in place under its `(incomplete)` name (7.2.1), and state clearly that the restore is **incomplete** (the log lists the missing/invalid paths). A file whose hash or size did not match is deleted, so no file with wrong content is left under its real name. The folder is never renamed to its final name and never presented as a successful restore; its name keeps saying so after RestoreSafe is closed.
 
 ## 8. Verify workflow
 
@@ -478,19 +546,30 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 
 ## 9. Retention
 
-- `retention_keep` = number of **chains** to keep per directory (0 = keep all). Chains are ordered by their full's `created_utc`.
-- Deleting a chain deletes its full and all its differentials.
+**When retention runs for a directory.** At the end of a backup run, per directory, and only when all of these hold:
+
+1. This run wrote a new complete set for the directory. A directory whose backup failed, was cancelled, or was not reached is left untouched.
+2. That new set was read back from disk after its rename and passes the checks of 4.6 (header parsed and matching its file names, trailer valid, part sizes adding up), and, with `verify_after_backup`, its verification (8) passed.
+3. The set contains no skipped or stale entries (6.5).
+4. The metadata of every set of the directory could be read.
+
+**What it never deletes:** the sets this run wrote; the chain of the directory's newest complete set; a set dated in the future (6.1.1); anything not matching the 2.0 naming pattern.
+
+**Counting.**
+
+- `retention_keep` = number of **chains** to keep per directory (0 = keep all). Only chains whose full is complete count; they are ordered by their full's `created_utc`, sets dated in the future excluded from the ranking (they are kept in addition).
+- Deleting a chain deletes its full and all its differentials, complete or not: the differentials first, highest number first, the full last, so an interrupted cleanup never leaves differentials without their full.
 - A log file is deleted when no remaining set has its run ID as `run_id` (header).
-- `differential.retention_keep_differentials` (0 = keep all) limits differentials within **each** kept chain; the oldest (lowest numbers) are deleted first. The newest differential is always kept, so differential numbers are never reused. The two settings are independent: either one alone enables cleanup.
+- `differential.retention_keep_differentials` (0 = keep all) limits the **complete** differentials within **each** kept chain; the oldest (lowest numbers) are deleted first. The newest complete differential is always kept, and so is any differential with a higher number (complete or not), so differential numbers are never reused. The two settings are independent: either one alone enables cleanup.
 - Incomplete sets (no valid trailer) older than the newest complete set of the same directory are deleted and logged. Incomplete sets newer than that are kept and reported (possibly a crash that should be investigated).
-- Retention never deletes files that do not match the 2.0 naming pattern.
-- Unchanged: retention is skipped when post-backup verification failed or when any set's metadata cannot be read.
-- New: retention is skipped for a directory whose newest set contains skipped or stale files (6.5).
+- Every deletion is logged with the set's name; a deletion that fails is logged, the remaining deletions of that chain are not attempted (a chain is never left with a deleted full and kept differentials on purpose), and the run ends with warnings.
 
 ## 10. Security considerations
 
-- File names, file contents, and all metadata of backed-up files are only in encrypted sections.
-- Plaintext header content: directory name, dates, IDs, backup type, key set ID, slot types and labels, Argon2 parameters, YubiKey credential IDs and hmac salts. None of these is secret.
+- File names, file contents, and all metadata of backed-up files are only in encrypted sections, with the exception of the log file below.
+- Plaintext header content: directory name, dates, `created_utc` (to the second), `app_version`, IDs, backup type, key set ID and creation time, slot types and labels, Argon2 parameters, YubiKey credential IDs and hmac salts. None of these is secret, but the credential ID links all key sets made with one YubiKey.
+- Plaintext trailer and file sizes: the data section length reveals the stored size of each set (for a differential, how much changed), and the manifest section length the approximate number of entries (about 250-300 bytes each, 5.3).
+- **The log file** (`YYYY-MM-DD_RUNID.log`) is plaintext in the backup directory. It names the source paths and, for skipped, stale or failed files, their relative paths and the OS error; at `log_level: "debug"` more file paths. The README and the enrollment screen say that the backup directory therefore reveals these names. Facts in the log (GUI spec 11.4) are unauthenticated: they feed display only (warnings, verification badges) and never a decision to write, reuse keys, or delete.
 - Header, slots, and sections are authenticated; any tampering fails decryption rather than producing wrong data.
 - The recovery code is a full alternative credential: it bypasses the YubiKey in mode 2. It is optional and off by default.
 - The key set is reused until the user creates new keys (6.2). Compromise of the password (mode 1) exposes all backups using that key set, as with 1.x when the same password was used. Creating new keys is the documented response to a suspected compromise.
@@ -590,23 +669,31 @@ Allow `exclude` per source directory in addition to the global list.
 - A differential is never written if its base cannot be fully validated (header, trailer, manifest decryption, manifest validation).
 - The plaintext manifest exists only in memory; it is never written to a temp file.
 - Key material (password, hmac-secret, KEK, V, derived keys, recovery code) is zeroed after use, as 1.x does for passwords.
-- The existing backup lock serializes backup runs; restore/verify stay read-only on the backup directory.
+- The existing backup lock serializes backup runs; restore/verify never change a set: the only thing they write in the backup directory is their run's log file.
+- **The lock** is a byte-range lock (`LockFileEx`, first byte) on `restoresafe.lock` in the backup directory, taken without waiting: a backup takes it exclusively, restore and verify shared, so any number of restores and verifications run together but never beside a backup, and retention never deletes parts another process reads. The lock is held from before the first file of the backup directory is read until the run's last write. The file's existence means nothing: a lock file left behind by a crash never blocks, since Windows releases the lock with the process. On a medium where the lock file can't be created or opened, a backup refuses to start (`BACKUP_DIR_NOT_WRITABLE`), and restore and verify go on with the warning `BACKUP_DIR_NOT_LOCKED`. On a network share, a lock held by a process that ended while the share was unreachable can persist on the server for minutes; the "locked" message says so (refactoring plan, section 5).
 
 ## 15. Test plan
 
 ### 15.1 Unit tests
 
 - Header: encode/decode, every field validated, unknown fields rejected, length bounds, `compression` other than `"none"` rejected, bit flip in any header byte causes authentication failure of the sections.
-- Key sets: each slot type unwraps with the correct credential and fails with a wrong one; slot swap/reorder fails (AAD); modified slot fails; recovery code format, checksum, normalization (case, dashes, spaces); a second YubiKey slot rejected; key material zeroed.
-- Trailer: checksum, bounds, part-count mismatch, trailer spanning two parts.
+- Key sets: each slot type unwraps with the correct credential and fails with a wrong one; slot swap/reorder fails (AAD); modified slot fails; recovery code format, checksum (with its prefix, against a fixed known-answer vector), normalization (case, dashes, spaces, I/L/O); a second YubiKey slot rejected; key material zeroed.
+- Key set trust (6.3): a forged newest set (copied header with the recovery slot replaced, valid trailer, garbage sections) is detected after unlock, nothing is written, and the error names the set.
+- Future dates (6.1.1): a set dated more than 24 hours ahead is neither key set source nor base, is reported, and is neither deleted nor ranked newest by retention.
+- Trailer: checksum, bounds, part-count mismatch, a gap in the part numbers with the right count, trailer spanning two parts.
+- Restore safety (5.2.1, 7.2.1, 7.4): every path rule; a reparse point placed in the restore tree during the restore; an existing file of the same name (also differing in case); a TAR link entry, a TAR entry whose name, offset or size disagrees with the manifest, bytes after the end-of-archive marker.
 - Sections: key separation (data key cannot decrypt manifest), section swap between sets fails, truncation of each section detected.
 - Manifest: round trip, every rule in 5.2, fuzz tests for the header JSON and manifest parsers.
-- Change detection: new, changed size, changed mtime only, changed ctime only (mtime reset via `SetFileTime`), attribute change only, unchanged, deleted file, deleted directory, new empty directory, case-only rename, FAT source (`c = 0`).
+- Change detection: new, changed size, changed mtime only, changed ctime only (mtime reset via `SetFileTime`), attribute change only (also on a FAT source), creation time change only, unchanged, deleted file, deleted directory, new empty directory, case-only rename, FAT source (`c = 0`).
 - Exclude patterns: name vs rooted patterns, case-insensitivity, directory subtree, invalid pattern rejected at startup, pattern change between full and differential.
 - Unreadable files: locked file with `fail` and `skip`, failure after TAR header (void entry), stale entry in differential, retention skipped.
 - Password minimum: shorter than `password_min_length` rejected, characters counted (not bytes), config values below 8 rejected, only at enrollment.
 - Type selection: every rule in 6.1 including boundary values and key set mismatch.
-- Retention: chains, keep-differentials, incomplete sets, 1.x files untouched, logs kept while any set references their run ID, skipped/stale rule.
+- Retention: chains, keep-differentials, incomplete sets, 1.x files untouched, logs kept while any set references their run ID, skipped/stale rule; each precondition of section 9 (a directory whose backup failed or was cancelled keeps everything; a new set whose re-read fails keeps everything); a chain with an incomplete full doesn't count; deletion order; a failed deletion stops that chain's cleanup.
+- Walk (6.4.1, 6.4.2): a cloud file (online-only and local), a WOF-compressed file and a deduplicated file are backed up; a symbolic link, junction and mount point are counted, logged and not followed; a junction as source root is walked; the backup directory inside a source is left out; a source inside the backup directory is rejected.
+- Torn copy (6.5): a file rewritten during the copy with the same size is unreadable; the recorded metadata are those before the copy.
+- Enrollment (6.3): a recovery slot that doesn't unwrap from the parsed display text stops enrollment.
+- Differential restore (7.5): an `o:"F"` entry without a matching base entry fails before anything is written.
 - Naming: parse/format round trip, differential numbers never reused after retention, a DIFF file renamed to another chain ID is rejected (file name/header mismatch), and a DIFF whose header `chain_id` was edited fails authentication.
 
 ### 15.2 Round-trip tests (restore result compared byte-for-byte and structurally with the source, including timestamps and attributes)
@@ -623,6 +710,9 @@ Allow `exclude` per source directory in addition to the global list.
 
 - Missing base, base from another chain (renamed files), missing/extra/truncated part of base or differential, wrong password during backup, interrupted backup (process killed before rename) -> set not listed and not usable as a base or key set source, `.tmp` cleanup.
 - Source file changes size during backup with `fail` (clean abort) and `skip` (void entry, warning).
+- Restore that fails (a hash mismatch) and restore that is cancelled: the folder keeps its `(incomplete)` name, the mismatching file is gone, a second restore into the same destination is refused until the folder is removed; a successful restore is renamed; a rename held by an open handle is retried and then reported (7.2.1, 7.7).
+- Destination on FAT32 with a file of 4 GiB or more: refused before writing; on exFAT: warning, restore succeeds.
+- Password encoding (6.6): a password with non-ASCII characters round-trips; a lone surrogate is rejected; leading and trailing spaces are part of the password.
 
 ### 15.4 Scale test
 

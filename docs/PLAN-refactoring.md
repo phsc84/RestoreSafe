@@ -65,6 +65,43 @@ Inputs for the review from the work on 2.1.0; like the carried-over points, not 
 - **Retention right after a backup, on a NAS whose flushes are not durable** (found 2026-10-24 by the MountSafe spike on the Mac mini share, MountSafe SPEC-core 14.5 item 7). The Mac's SMB server confirms `FlushFileBuffers` after about an `fsync` (0.70 ms over the network; `F_FULLFSYNC` on the Mac takes 3.07 ms), so the last writes it confirmed can be lost when the Mac loses power. A backup counts as complete when its last flush returns, and retention then deletes older backups in the same run (**Clean up**, GUI spec BR-2); a power loss shortly after can leave the new set damaged and the older ones already gone. `verify_after_backup` does not help: it may read back from the Mac's cache. To look at: run retention at the start of the next run, after the newest set has been checked again (`health`), or keep the previous complete set until the next run has checked the newest one. A change of when retention deletes is a behaviour change with a CHANGELOG entry; the format does not change.
 - **The backup lock after a network drop** (same spike, MountSafe SPEC-core 6.6). A RestoreSafe run that ends while the NAS is unreachable (killed, crashed, PC switched off) leaves its open of the lock file on the Mac until the SMB durable timeout, about 3 minutes after the connection is back; until then the next backup, restore or verification reports the backup directory as locked. Measured on the Mac: a drop of a few seconds is hidden by Windows; after about a minute, handles kept open reattach; a handle closed during a drop leaves the orphan. To look at: whether `fsx/lock.go` and the workflows close handles on network errors (they should not), and whether the "locked" message can say that a lock left by this PC clears itself within minutes (as MountSafe SPEC-core 6.2 step 2 does).
 
+### 5.1 From the specification review of 2026-10-24
+
+A three-round review of SPEC-core, SPEC-gui and SPEC-kdf for gaps, security and robustness changed the specs only; these are the code follow-ups it leaves. Like the points above, they are inputs, not items yet. "Check" means the code probably does it already and the spec only now says so; "change" is a behaviour change with a CHANGELOG entry (standing constraint 2); none changes the format.
+
+Round 1 (format precision, trust in plaintext, restore safety):
+
+- **Check: recovery code against the spec** (core 4.4.2, now exact: checksum prefix, 25-bit check, secret = 25 ASCII characters). Add a known-answer test with a fixed code, so the frozen format is pinned by a vector and not only by the code that computes it ([recovery.go](../internal/security/recovery/recovery.go)).
+- **Change: authenticate the key set before reuse** (core 4.4.1, 6.3). After unlock, decrypt the first manifest chunk of the set the current key set comes from; stop with an error if it fails. Today a forged newest set with a replaced recovery slot would be copied into every new backup.
+- **Change: sets dated in the future** (core 6.1.1, GUI `SET_FUTURE_DATE`): not a key set source or base, reported, kept by retention and not ranked newest.
+- **Check: path rules** (core 5.2.1) against `manifest.ValidatePath` ([manifest.go:420](../internal/format/manifest/manifest.go#L420)), which rejects `\`, `:`, NUL, absolute and unclean paths but not control characters, `< > " | ? *`, trailing dot or space, or device names; and the backup side, which must record such a source file as skipped.
+- **Check: TAR binding in a full restore** (core 7.4): type flag, name, `off` and size against the manifest, bytes after end-of-archive. 7.5 already required it for a differential.
+- **Check: part numbering without gaps** (core 4.6): `001`-`N` exactly, not only the count.
+- **Change: change detection also compares `b` and `a`** (core D6, 6.8). The first differential after the update stores again the files whose creation time or attributes changed without a change time (FAT/exFAT sources); the CHANGELOG says so.
+- **Change: say that the log reveals file names** (core 10): README (encryption section) and the enrollment screen text.
+
+Round 2 (backup and retention):
+
+- **P1 candidate, change: files behind non-link reparse points are skipped silently** (core 6.4.1). `isRegularOrDir` ([winfile.go:142](../internal/format/archive/winfile.go#L142)) keeps only `Mode().IsRegular()` and `IsDir()`; Go sets `ModeIrregular` for every reparse tag other than symlink, AF_UNIX and dedup (`os/types_windows.go`), so OneDrive files (local ones too), WOF-compressed files (`compact /exe`) and other data-bearing reparse points are left out of the backup without a log line. Classify by `IsReparseTagNameSurrogate`; count and log what is not recorded. Needs a test on a real OneDrive folder and a `compact /exe:lzx` file, done by the owner before the release that ships it (SPEC-refactoring 5.5).
+- **Check: retention preconditions and counting** (core 9) against `applyRetentionPolicy` ([retention.go:23](../internal/workflow/backup/retention.go#L23)): only directories with a new, re-read set from this run; chains with an incomplete full not counted; newest complete differential kept; deletion order differentials-then-full; stop a chain's cleanup on a failed deletion.
+- **Change: torn-copy detection** (core 6.5): metadata from the open handle before and after the copy.
+- **Check: overlapping folders** (core 6.4.2): the backup directory is already left out of a source (`normalizeExcludes`, [build.go:452](../internal/format/archive/build.go#L452)); a source inside the backup directory and a nested source are not yet reported.
+- **Change: recovery code round trip at enrollment** (core 6.3 step 4).
+- **Change: early `o:"F"` check in a differential restore** (core 7.5 step 1).
+- **Check: lock semantics** (core 14) match [lock.go](../internal/fsx/lock.go); one difference: `Release` of an exclusive lock deletes the lock file, which the spec doesn't need (the file's existence means nothing). Deleting it while another process has just opened it is harmless only while Go opens files without `FILE_SHARE_DELETE`; keeping the file removes the question.
+
+Round 3 (restore outcome, platform limits, secrets, KDF consistency):
+
+- **P1 candidate, part of the KDF feature for 2.2.0: old configurations** (SPEC-kdf 5.1, GUI 11.6). `config-SAMPLE.yaml` sets `time: 3`, `memory_mb: 512`, `threads: 4` explicitly ([config-SAMPLE.yaml:158](../config-SAMPLE.yaml#L158)); with SPEC-kdf 0.3, such a file would stop RestoreSafe at start, restores included, and an explicit 512 would keep these users off the new defaults. Treat that block as a retired default; replace the capping in `clampArgon2` ([config.go:265](../internal/config/config.go#L265)) and `ARGON2_CAPPED` ([health.go:167](../internal/workflow/health/health.go#L167)) with `ARGON2_OUT_OF_RANGE`, which blocks only a backup that creates new keys. Update the sample's argon2 block and its comment (lines 156-161) with RF-98.
+- **Part of the KDF feature: enrollment memory rule** on the installed memory (SPEC-kdf 4.4 step 1-2), with a test for an 8 GiB machine reporting 7.8 GiB.
+- **Change: restore into `<backup name> (incomplete)`, renamed on success; delete a file whose hash failed** (core 7.2.1, 7.7; GUI RW-5, RW-8).
+- **Change: destination file-system check** (core 7.2): FAT32 file size limit, FAT/exFAT warning.
+- **Check: password encoding** (core 6.6): UTF-16 to UTF-8 without normalization or trimming; lone surrogates rejected (today probably replaced by U+FFFD in the conversion, which would make two different passwords equal); the hint for non-ASCII characters is new.
+- **P2 candidate: the recovery code passes through a Go string** in the GUI (GUI 13.3 said so; now `[]byte` end to end), against SPEC-refactoring 5.4. Also: empty the clipboard on close when it still holds the code; the typed recovery code follows 13.1.
+- **Change: PIN warning after the second YubiKey refusal** (GUI CR-5).
+- **Change: facts carry the set's nonce** (GUI 11.4), so a reused differential number doesn't inherit a verification result.
+- **Owner, before 2.2.0:** after these changes, add a dated line to the Status rows of SPEC-core and SPEC-gui naming the review, and copy SPEC-kdf 0.4 to MountSafe if it has diverged again (done for 0.4 on 2026-10-24).
+
 ## 6.-n. Items by area
 
 <RF items in the format of SPEC-refactoring section 6, written after the review>
