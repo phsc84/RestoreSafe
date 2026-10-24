@@ -11,7 +11,7 @@
 | [SPEC-kdf.md](SPEC-kdf.md) | Argon2id parameters of the key sets: threat model, defaults, enrollment and read limits, memory check; identical copy in MountSafe | Draft, not implemented |
 | [SPEC-ci.md](SPEC-ci.md) | The CI runner `tools/ci`: command line, jobs and their steps, GitHub annotations, its tests, the pre-push hook; for whoever changes it (using CI: GUIDE-ci.md) | Living |
 | [SPEC-refactoring.md](SPEC-refactoring.md) | How a refactoring round works: when, standing constraints, baseline, review checklist, item format, template | Living |
-| [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.1.0: the points carried over from the round after 2.0.0 and what 2.1.0 added; items follow with the review | Prepared 2026-10-18 |
+| [PLAN-refactoring.md](PLAN-refactoring.md) | The refactoring round after 2.1.0: the points carried over from the round after 2.0.0 and what 2.1.0 added; items RF-98 to RF-122 from the review | Reviewed 2026-10-24, except performance |
 
 The names say what kind of document it is: `GUIDE-` how to do something (set up a machine, use CI, test the window), `SPEC-` what the program or a tool must do (living, kept up to date with the code), `PLAN-` work in progress. [CONTRIBUTING.md](CONTRIBUTING.md), the rules of the project, keeps the name GitHub recognises, which links it where pull requests and issues are opened.
 

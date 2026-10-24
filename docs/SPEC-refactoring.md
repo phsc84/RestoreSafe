@@ -111,7 +111,7 @@ For each area: what to look at, and how to find it. Not every point yields an it
 - Coverage counts only a package's own tests: code that only the tests of another package reach is not covered, and a split or a new method can lower a package that was not touched. Before a push, `go run ./tools/ci fast` checks every floor, not only those of the changed packages (RF-96).
 - Inputs that decide which branch runs are fixed in a test, not random: a random recovery code covered different branches from run to run, so the coverage of its package moved by 3 points and broke its floor (RF-40).
 - Tests that are flaky, slow (over 10 s per package), sleep, depend on today's date, or touch process-global state (`os.Stdout`, environment, working directory) while running in parallel.
-- The fault-injection matrix (damaged, missing, truncated parts; full disk; cancel in every phase) has a test per row.
+- The fault-injection matrix in `internal/e2e/doc.go` (damaged, missing, truncated parts; full disk; cancel in every phase) has a test per row and operation, and no row reads "not simulated".
 - The format fixtures restore bit-exact.
 - The GUI scripts in `scripts/gui-test` still find every control (`ids_test.go`) and run.
 - The manual checklist (`docs/GUIDE-gui-test.md`) has no row that a script could cover instead.

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Prepared 2026-10-18; baseline measured 2026-10-18; review started 2026-10-24 with the size of the code (sections 6 to 9), the other areas of the checklist not yet |
+| Status | Prepared 2026-10-18; baseline measured 2026-10-18; reviewed 2026-10-24: the size of the code and SPEC-refactoring 5.1, 5.2 and 5.4 to 5.7 (sections 6 to 11); 5.3 Performance postponed; phases proposed |
 | Follows | [SPEC-refactoring.md](SPEC-refactoring.md) |
 | Previous round | The round after 2.0.0 (RF-40, RF-65 to RF-97), done 2026-10-15; its plan is in git history (`git show v2.1.0:docs/PLAN-refactoring.md`). The round of 2.0 (RF-1 to RF-64): `git show v2.0.0:docs/PLAN-refactoring.md` |
 | Baseline | `dev` at `139ab93` (2.1.0 is `735395c`; since then only `tools/ci` changed in Go) |
@@ -76,15 +76,15 @@ Round 1 (format precision, trust in plaintext, restore safety):
 - **Check: recovery code against the spec** (core 4.4.2, now exact: checksum prefix, 25-bit check, secret = 25 ASCII characters). Add a known-answer test with a fixed code, so the frozen format is pinned by a vector and not only by the code that computes it ([recovery.go](../internal/security/recovery/recovery.go)).
 - **Change: authenticate the key set before reuse** (core 4.4.1, 6.3). After unlock, decrypt the first manifest chunk of the set the current key set comes from; stop with an error if it fails. Today a forged newest set with a replaced recovery slot would be copied into every new backup.
 - **Change: sets dated in the future** (core 6.1.1, GUI `SET_FUTURE_DATE`): not a key set source or base, reported, kept by retention and not ranked newest.
-- **Check: path rules** (core 5.2.1) against `manifest.ValidatePath` ([manifest.go:420](../internal/format/manifest/manifest.go#L420)), which rejects `\`, `:`, NUL, absolute and unclean paths but not control characters, `< > " | ? *`, trailing dot or space, or device names; and the backup side, which must record such a source file as skipped.
+- **Check: path rules** (core 5.2.1) against `manifest.ValidatePath` ([manifest.go:420](../internal/format/manifest/manifest.go#L420)), which rejects `\`, `:`, NUL, absolute and unclean paths but not control characters, `< > " | ? *`, trailing dot or space, or device names; and the backup side, which must record such a source file as skipped. → RF-121.
 - **Check: TAR binding in a full restore** (core 7.4): type flag, name, `off` and size against the manifest, bytes after end-of-archive. 7.5 already required it for a differential.
 - **Check: part numbering without gaps** (core 4.6): `001`-`N` exactly, not only the count.
 - **Change: change detection also compares `b` and `a`** (core D6, 6.8). The first differential after the update stores again the files whose creation time or attributes changed without a change time (FAT/exFAT sources); the CHANGELOG says so.
-- **Change: say that the log reveals file names** (core 10): README (encryption section) and the enrollment screen text.
+- **Change: say that the log reveals file names** (core 10): README (encryption section) and the enrollment screen text. → RF-120.
 
 Round 2 (backup and retention):
 
-- **P1 candidate, change: files behind non-link reparse points are skipped silently** (core 6.4.1). `isRegularOrDir` ([winfile.go:142](../internal/format/archive/winfile.go#L142)) keeps only `Mode().IsRegular()` and `IsDir()`; Go sets `ModeIrregular` for every reparse tag other than symlink, AF_UNIX and dedup (`os/types_windows.go`), so OneDrive files (local ones too), WOF-compressed files (`compact /exe`) and other data-bearing reparse points are left out of the backup without a log line. Classify by `IsReparseTagNameSurrogate`; count and log what is not recorded. Needs a test on a real OneDrive folder and a `compact /exe:lzx` file, done by the owner before the release that ships it (SPEC-refactoring 5.5).
+- **P1 candidate, change: files behind non-link reparse points are skipped silently** (core 6.4.1). `isRegularOrDir` ([winfile.go:142](../internal/format/archive/winfile.go#L142)) keeps only `Mode().IsRegular()` and `IsDir()`; Go sets `ModeIrregular` for every reparse tag other than symlink, AF_UNIX and dedup (`os/types_windows.go`), so OneDrive files (local ones too), WOF-compressed files (`compact /exe`) and other data-bearing reparse points are left out of the backup without a log line. Classify by `IsReparseTagNameSurrogate`; count and log what is not recorded. Needs a test on a real OneDrive folder and a `compact /exe:lzx` file, done by the owner before the release that ships it (SPEC-refactoring 5.5). → RF-118.
 - **Check: retention preconditions and counting** (core 9) against `applyRetentionPolicy` ([retention.go:23](../internal/workflow/backup/retention.go#L23)): only directories with a new, re-read set from this run; chains with an incomplete full not counted; newest complete differential kept; deletion order differentials-then-full; stop a chain's cleanup on a failed deletion.
 - **Change: torn-copy detection** (core 6.5): metadata from the open handle before and after the copy.
 - **Check: overlapping folders** (core 6.4.2): the backup directory is already left out of a source (`normalizeExcludes`, [build.go:452](../internal/format/archive/build.go#L452)); a source inside the backup directory and a nested source are not yet reported.
@@ -99,7 +99,7 @@ Round 3 (restore outcome, platform limits, secrets, KDF consistency):
 - **Change: restore into `<backup name> (incomplete)`, renamed on success; delete a file whose hash failed** (core 7.2.1, 7.7; GUI RW-5, RW-8).
 - **Change: destination file-system check** (core 7.2): FAT32 file size limit, FAT/exFAT warning.
 - **Check: password encoding** (core 6.6): UTF-16 to UTF-8 without normalization or trimming; lone surrogates rejected (today probably replaced by U+FFFD in the conversion, which would make two different passwords equal); the hint for non-ASCII characters is new.
-- **P2 candidate: the recovery code passes through a Go string** in the GUI (GUI 13.3 said so; now `[]byte` end to end), against SPEC-refactoring 5.4. Also: empty the clipboard on close when it still holds the code; the typed recovery code follows 13.1.
+- **P2 candidate: the recovery code passes through a Go string** in the GUI (GUI 13.3 said so; now `[]byte` end to end), against SPEC-refactoring 5.4. Also: empty the clipboard on close when it still holds the code; the typed recovery code follows 13.1. → RF-119.
 - **Change: PIN warning after the second YubiKey refusal** (GUI CR-5).
 - **Change: facts carry the set's nonce** (GUI 11.4), so a reused differential number doesn't inherit a verification result.
 - **Owner, before 2.2.0:** after these changes, add a dated line to the Status rows of SPEC-core and SPEC-gui naming the review, and copy SPEC-kdf 0.4 to MountSafe if it has diverged again (done for 0.4 on 2026-10-24).
@@ -124,6 +124,10 @@ Acceptance: about 120 lines fewer in `gui`; the Check column's tones covered by 
 Change: a scrolling page built on the existing `stack`: one place that handles the scroll bar, and one `child` and `setButton`. Settings' card pairs are a row of two cells.
 Acceptance: about 130 lines fewer; every page scrolls, resizes and changes DPI as before (manual rows of GUI spec 5, 7, 10.1 and 10.2), at a width at which the scroll bar appears.
 
+**RF-102 (P3) The credential dialog in parts.** Evidence: `runCredentialDialog` ([dialogs.go:60](../internal/gui/dialogs.go#L60)) is 170 lines, the longest function of the module: it builds the controls, handles the commands, sizes the dialog and runs the modal loop in one body, in a package without tests. It handles the secrets of GUI spec 13.
+Change: the same parts as functions of `credentialDialog` (build, command, layout, run), as RF-98 does for the plan window; no change of behaviour. It adds a few lines; the reason is that RF-119 changes this code, and its secret handling should be readable at a glance.
+Acceptance: no function of `dialogs.go` over 80 lines; the credential rows of `GUIDE-gui-test.md` (CR-1, CR-2) pass.
+
 ## 7. Structure: workflows and view (RF-103 to RF-107)
 
 **RF-103 (P3) Restore and verification start the same way.** Evidence: [restore/run.go:44-112](../internal/workflow/restore/run.go#L44-L112) and [verify/workflow.go:37-98](../internal/workflow/verify/workflow.go#L37-L98) lock the backup directory, read the inventory, select the sets, open the log, add the lock issue, ask to start and unlock, in the same order with the same texts.
@@ -133,6 +137,10 @@ Acceptance: about 50 lines fewer; the restore and verify tests pass unchanged; `
 **RF-104 (P3) One helper for singular and plural.** Evidence: `folderPhrase`, `backupCount`, `chainCount`, `more`, `otherWarnings` and about 13 more `if n == 1` branches in `gui/view` choose between two constants the same way.
 Change: `plural(n, one, many)` in `gui/view`; the constants stay as they are.
 Acceptance: about 50 lines fewer; the texts unchanged (the existing `gui/view` tests).
+
+**RF-105 (P3) The Restore backup window's choices as one value.** Evidence: `RestoreViewOf` ([restore.go:164](../internal/gui/view/restore.go#L164)) takes 7 parameters (folders, checked, when, destination, plan, error, checking), over the 6 of SPEC-refactoring 5.1; the window keeps the same seven as separate fields.
+Change: a `RestoreChoices` struct in `gui/view` that the window holds and `RestoreViewOf` takes.
+Acceptance: the `gui/view` tests pass with the struct; no line-count goal.
 
 ## 8. Dead and legacy code (RF-108 to RF-112)
 
@@ -144,11 +152,71 @@ Acceptance: about 110 lines fewer; the log file's content unchanged (a test comp
 Change: the logger returns its problems (`Close` returns an error; opening already does), and the workflow adds them to the result as a warning that names the path of the copy in TEMP. This is a behaviour change: CHANGELOG entry and the wording in GUI spec 6.3 and 11.5 (open question 1).
 Acceptance: a test makes the append fail (the backup directory read-only) and finds the warning with the TEMP path in the result; then RF-108 can delete the output without losing a message.
 
+**RF-110 (P2) Retired keys are found in yaml's error text.** Evidence: `config.parse` decodes with `KnownFields(true)` ([config.go:228](../internal/config/config.go#L228)), and `unknownKeys` tells retired keys from unknown ones by matching yaml.v3's message `line N: field X not found in type config.Y` with a regular expression, and the Go type name in it with `blockOfType` ([keys.go:123-127](../internal/config/keys.go#L123-L127), [keys.go:149](../internal/config/keys.go#L149)). That message is meant for people. If a yaml update words it differently, a file with `io_diagnostics` or `yubikey_spare` stops RestoreSafe at start instead of loading with a notice (GUI spec 11.6). The tests would catch it, but only after an update. A rename of the Go type `Differential` or `Argon2` would break it the same way.
+Change: find unknown keys structurally. The file is already parsed into a `yaml.Node` for `missingKeys`, so walk it against `settings`, `requiredKeys` and the list keys, with the line numbers the nodes carry; decode without `KnownFields`. The regular expression and `blockOfType` go. (`syntaxError` also matches yaml's text, but only to add a hint about backslashes; a miss loses the hint, nothing else. It stays.)
+Acceptance: the retired and unknown key tests pass unchanged, including their line numbers; a new test renames nothing but decodes a file with an unknown key inside `differential` and gets `differential.<key>`; `config` at or above its floor.
+
+**RF-111 (P3) Comments name the log pane and `cmd/yubidiag`.** Evidence: "log pane" in [logviewer.go:10](../internal/gui/view/logviewer.go#L10) and 16, [problem.go:15](../internal/problem/problem.go#L15), [report.go:90](../internal/workflow/interact/report.go#L90), [interact.go:6](../internal/workflow/interact/interact.go#L6), [logging.go:27](../internal/logging/logging.go#L27) and [testutil/output.go:9](../internal/testutil/output.go#L9); the page has no log pane since 2.0 (GUI spec BK-5), only the log window. GUI spec 12.1 still says the YubiKey enumeration "moves here from `cmd/yubidiag`", which 2.1.0 removed.
+Change: "log window" where the window is meant; the comments of RF-108's code go with it; 12.1 states where the enumeration is.
+Acceptance: `git grep -n "log pane"` finds only the control-ID note in `restorepage.go`, which says what the IDs were.
+
+**RF-112 (P3) `gui/view` takes its own words apart.** Evidence: `setWords` ([restorepage_actions.go:97](../internal/gui/view/restorepage_actions.go#L97)) cuts "today, 09:12" at the comma to get the day, and the differential number out of the badge text with `TrimPrefix(row.Badge.Text, "DIFF ")`; the hero chooses its ellipsis by looking for `\` in its title ([hero.go:45](../internal/gui/hero.go#L45)). Each depends on how another function words its text.
+Change: `BackupRow` and `Hero` carry the values (the day, the differential number, whether the title is a path), set where the words are made.
+Acceptance: the `gui/view` tests pass; a test of `setWords` for a day without a time.
+
 ## 9. Tests (RF-113 to RF-117)
 
 **RF-113 (P3) The test UI answers with values, not typed text.** Evidence: `interacttest.Script` ([script.go](../internal/workflow/interact/interacttest/script.go), 291 lines) still plays the 1.x console: it builds prompts ("Start %s now? [Y/n]: "), parses typed answers ("y", "yes", "n"), loops on "Please enter y (yes) or n (no).", and prints the announcements of other keys. 35 tests build a `Script` and answer through `ReadLine` and `ReadPassword` with strings, a protocol that relies on text (SPEC-refactoring 5.2).
 Change: `Script` gets one typed field or function per question of `interact.UI` (start, backup choice, unlock method, password, recovery code); the prompts, parsing and printing go. Do it after RF-108, which removes `Output`.
 Acceptance: about 140 lines fewer in `interacttest` and about 100 to 200 in the tests; every test that used a `Script` still runs and the coverage of the workflows doesn't drop.
+
+**RF-114 (P3) A full disk during a restore is not tested.** Evidence: the fault-injection matrix ([e2e/doc.go](../internal/e2e/doc.go)) has a test for every fault and operation but one: "Disk full during a part" for restore reads "not simulated: a write error ends the restore like a damaged data section … INCOMPLETE". That is a claim about the restore's error path that no test checks. SPEC-refactoring 5.5 names the matrix without saying where it is, so a review has to find it first.
+Change: a test whose destination fails writes after some bytes (a seam where `archive` creates a restored file, like `failingWriter` on the backup side in [refuse_test.go](../internal/format/archive/refuse_test.go#L200)), checking the error and the INCOMPLETE line; the matrix names it. SPEC-refactoring 5.5 cites `internal/e2e/doc.go`.
+Acceptance: the matrix has no "not simulated"; the test passes; `archive` at or above its floor.
+
+**RF-115 (P2) Script the GUI rows that say "Scripted walk possible".** Evidence: four manual rows of [GUIDE-gui-test.md](GUIDE-gui-test.md) say so and have no script: BP-4 (Full backup instead and Back to plan), CR-1 (wrong password, then the right one), ST-2 (Reload after a valid and after an invalid change). They are the Create backup window, the credential dialog and the pages that RF-98, RF-101 and RF-102 change, in a package with 1.8 % coverage (SPEC-refactoring 5.5: "the manual checklist has no row that a script could cover instead").
+Change: steps for them in `Smoke-BackupRestore.ps1` or a script of their own, with `GuiDriver.ps1`; the rows name the script. A safety net, so before RF-98, RF-101 and RF-102.
+Acceptance: the scripts run from `scripts/ci/gui-smoke.ps1`, which the `gui` CI job runs; the four rows' hints name them.
+
+**RF-116 (P3) Raise two coverage floors.** Evidence: `logging` measures 93.2 % (floor 91) and `fsx` 94.2 % (floor 92) on `a92e3e6` ([test-coverage-floors.txt](../scripts/ci/test-coverage-floors.txt): "raise a floor when a package's coverage has risen for good").
+Change: `logging` 93, `fsx` 94, after RF-108 and RF-109 have changed `logging`, measured in CI.
+Acceptance: CI passes with the new floors.
+
+## 10. Security hardening (RF-118 to RF-122)
+
+The review of SPEC-refactoring 5.4 on 2026-10-24. What it found sound is in section 11.
+
+**RF-118 (P1) Files behind cloud and compression reparse points are left out without a word.** Evidence: the walk keeps an entry only when `isRegularOrDir` holds ([winfile.go:142](../internal/format/archive/winfile.go#L142)) and returns `nil` for any other, without counting or logging it ([build.go:188](../internal/format/archive/build.go#L188)). Go gives every reparse tag other than symlink, AF_UNIX and dedup `ModeIrregular` (`os/types_windows.go`, `fileStat.mode`), so files and folders with a cloud tag (OneDrive, also "Always keep on this device") or a WOF tag (`compact /exe`) are neither backed up nor reported: the backup says it succeeded. Junctions are left out on purpose (core 6.4.1), but just as silently. From the spec review, round 2 (section 5.1).
+Change: the walk of core 6.4.1, which already says what to do: classify by attributes and reparse tag (`IsReparseTagNameSurrogate`); entries with any other tag are recorded like plain files and folders; name surrogates (symlinks, junctions, mount points), devices and pipes are not recorded, but counted per kind with their paths in the log, and the result and the next preflight state the count; online-only cloud files (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS`) are counted with their size in the preflight, which says they will be downloaded; a source directory that is itself a junction is resolved once. Behaviour change: CHANGELOG entry.
+Acceptance: tests with a junction and a WOF-compressed file (`compact /c /exe:xpress` works without OneDrive); a test that the junction is counted and logged. **Owner, before the release that ships it:** a real OneDrive folder with files on the device and files only online.
+
+**RF-119 (P2) The recovery code is handled as GUI spec 13 says.** Evidence: three gaps. (1) The recovery code typed in the unlock dialog is read with `win32.Text` into a Go string and converted to `[]byte` ([dialogs.go:260](../internal/gui/dialogs.go#L260)), and on Cancel only masked fields are cleared ([dialogs.go:267](../internal/gui/dialogs.go#L267)); 13.1 says the typed code follows the password's steps. (2) Closing the recovery code dialog doesn't empty the clipboard when it still holds the code; 13.3 says it does, using `GetClipboardSequenceNumber` (nothing in the code calls it). (3) The dialog's note "The copied code is removed from the clipboard when you continue." is not in `gui/view`. From the spec review, round 3 (section 5.1).
+Change: the field is read and cleared like a masked one, without being masked; `CopySecret` returns the sequence number, and the dialog's close empties the clipboard if it is unchanged; the note is added.
+Acceptance: a `win32` test that reading an unmasked secret field leaves no string (as `TestReadSecretReturnsUTF8AndClearsTheControl` does for masked ones); CR-2's manual row extended: copy, continue, and the clipboard is empty; copy, copy something else, continue, and that stays.
+
+**RF-120 (P2) README doesn't say that the logs are readable.** Evidence: the logs are next to the backups ([naming.go:111](../internal/format/naming/naming.go#L111)), in plaintext, and name the source folders with their paths ([workflow.go:191](../internal/workflow/backup/workflow.go#L191)) and every file that couldn't be read ([workflow.go:409](../internal/workflow/backup/workflow.go#L409), [412](../internal/workflow/backup/workflow.go#L412)). README's "What is not encrypted" lists the folder name, dates, the key slots and the sizes, not the logs; its first section says "file names ... are encrypted". From the spec review, round 1 (section 5.1).
+Change: README names the logs and what they reveal, with the remedy (keep the backup directory private, or move logs elsewhere if that becomes an option); the enrollment screen text says it in one sentence (core 10). A documentation change; no code.
+Acceptance: README and the enrollment text match core 10.
+
+**RF-121 (P3) Windows names in a backup path.** Evidence: `manifest.ValidatePath` ([manifest.go:420](../internal/format/manifest/manifest.go#L420)) rejects `\`, `:`, NUL, absolute and unclean paths, but not device names (`CON`, `NUL`, `COM1`), a trailing dot or space, or `< > " | ? *` and control characters. A manifest is authenticated, so only someone with the keys can write such a path; on restore, Windows would strip the trailing dot of `a.` or open a device. From the spec review, round 1 (section 5.1).
+Change: `ValidatePath` also requires `filepath.IsLocal` (Go rejects reserved names in every element) and refuses the rest of core 5.2.1; the backup records a source file with such a name as skipped, which needs no format change.
+Acceptance: `FuzzValidatePath` seeds with each case; a unit test per rule.
+
+**RF-122 (P3) Fuzz the readers of the log and of temporary part names.** Evidence: the backup directory is untrusted input (SPEC-refactoring 5.4), and every check of the GUI reads its logs with `logging.ReadFacts` ([facts.go:88](../internal/logging/facts.go#L88), through `ParseLine` and `parseFact`), but neither has a fuzz target; nor has `naming.ParseTempPartFileName` ([naming.go:134](../internal/format/naming/naming.go#L134)), which decides what the next backup deletes as a leftover. The 11 fuzz targets cover the other parsers.
+Change: `FuzzParseLine` (with `parseFact`) and `FuzzParseTempPartFileName`, seeded from real lines and names; the fuzz job finds them by name (`go test -list ^Fuzz`).
+Acceptance: 30 s each without a crash, in CI's fuzzing job.
+
+## 11. Reviewed without an item (2026-10-24)
+
+Every point of the checklist is looked at (SPEC-refactoring 5); these gave no item.
+
+- **5.1 Structure.** Layer rules: the only change since 2.1.0 is the doc line for `logging` → `fsx` (`0547311`), a dependency downward into the lowest layer; the test is unchanged. Packages that change together since 2.0.0: `gui` with `gui/view` (12 commits; by design, the view words what the window shows), restore with verify (3; RF-103). Files over 500 lines: `gui/view/strings.go` (659, texts only) and `archive/build.go` (554, carried over; the walk could go to a file of its own, no item since RF-118 changes it first). Functions over 80 lines besides RF-102: the window procedure `app.message` (a switch), `backup.operation.run`, `setwriter.Write` and `config.updated` (each the steps of a spec section in order), `SettingsOf`, `groupsOf`, `realMakeCredential` (ABI marshalling); splitting them would add indirection without a gain. Package-level state: 24 function variables that tests swap (YubiKey, disk space, recovery code); only sequential tests swap them, each with a cleanup, so they stay.
+- **5.2 Dead code.** `deadcode` with and without `-test` and staticcheck: nothing (baseline). Conversions that undo each other: none found. Wording of 1.x: the `.challenge` files and RestoreSafe 1.0.2 are named on purpose (core 1.x support).
+- **5.4 Security.** Algorithms: AES-256-GCM per chunk with a counter nonce, under a key per set and section from HKDF-SHA256 salted with the header hash, which holds a 32-byte random nonce, so no key is used for two streams; chunk index and final flag in the associated data; Argon2id within 2-20 passes, 64-4096 MiB, 1-255 threads, checked on every derivation, also for a header read before anything is authenticated. Current guidance (RFC 9106, OWASP) is met; the defaults are SPEC-kdf's. Parsers: header (64 KiB), chunk lengths, manifest lines and key set are bounded; restore refuses unclean paths, reparse points in the destination, and existing files (`O_EXCL`). Windows: DLLs from System32 only (`SetDefaultDllDirectories` first in `main`), the manifest asks for no elevation, files are created in folders whose ACLs they inherit. Supply chain: tools pinned in `go.mod`, govulncheck in CI, CI with read-only `contents`, releases built locally with `SHA256SUMS.txt`; two builds of the same commit are byte-identical (checked 2026-10-24). Concurrency between processes: the lock points of section 5 stay inputs until the NAS checks.
+- **5.5 Tests.** All packages at or above their floors (`a92e3e6`). No test sleeps, depends on today's date, or changes process-global state while running in parallel. Packages over 10 s: `container` 42 s (20 s of it is the million-entry memory test of core 5.3, slow by design), `backup` 32 s, `e2e` 28 s, `gui/view` 20 s, the rest under 17 s; the slowest tests after the memory test derive keys, with Argon2 at the format's minimum (64 MiB per derivation), which tests can't lower. The fault-injection matrix ([e2e/doc.go](../internal/e2e/doc.go)) has a test per row except one (RF-114). Elevated and not elevated: handled by RF-59 and RF-68 of earlier rounds. The format fixtures restore bit-exact (`e2e/fixtures_test.go`); `ids_test.go` exists for the GUI scripts.
+- **5.6 Tooling.** Go 1.27.2 and every direct dependency and tool current; no markers; CI fails on each cheap measure (format, vet, staticcheck, govulncheck, both deadcode passes, tidy, coverage floors); `* text=auto` covers every file type in the repository, and the one golden-file test normalises CRLF.
+- **5.7 Documentation.** `docs/README.md` lists every document; `config-SAMPLE.yaml` has every key with the code's defaults (the argon2 block changes with the KDF feature); every "GUI spec n" and "core spec n" cited in a comment exists.
+- **5.3 Performance: postponed** (owner, 2026-10-24). The baseline (section 2) shows backup within the machine's variance and restore 6 % lower, under the 10 % of SPEC-refactoring 5.3; nothing points to a problem. The next round reviews it.
 
 ## n. Found during the work
 
@@ -156,6 +224,13 @@ Acceptance: about 140 lines fewer in `interacttest` and about 100 to 200 in the 
 
 | Phase | Items | When | Why then |
 |---|---|---|---|
+| 1. Fixes | RF-109, RF-118, RF-119, RF-120 | First, in a 2.1.2 patch release; RF-118 after the owner's OneDrive test | The P1 items and the P2 items users notice: a lost log, files missing from backups, a recovery code left on the clipboard, a README that says less than the logs reveal. Small diffs that don't conflict with the later phases. RF-109 also comes before RF-108, so that removing the output loses no message. |
+| 2. Safety net | RF-115, RF-114, RF-122, RF-121 | After phase 1 | SPEC-refactoring 7: tests before change. RF-115 scripts the GUI rows that phases 4 and 5 rely on; RF-114 and RF-122 close the gaps in the fault matrix and the fuzz targets; RF-121 comes with RF-122's fuzzing of paths and seeds `FuzzValidatePath`. |
+| 3. Legacy code | RF-108, RF-110, RF-111, RF-112, RF-113, RF-116 | After phase 2 | Removes the text protocols: RF-108 the workflows' output (after RF-109), RF-113 the console in the test UI (after RF-108, which removes `Output`), RF-110 the yaml error text, RF-112 the view's own words; RF-111 rewords the comments RF-108 doesn't delete. RF-116 raises the floors once RF-108 and RF-109 have changed `logging`. |
+| 4. Workflows and view | RF-103, RF-104, RF-105 | After phase 3 | Small structural changes in tested packages; RF-105 gives the Restore backup window the value phase 5 builds on. |
+| 5. The window | RF-102, RF-98, RF-99, RF-100, RF-101 | Last, one item per commit, each followed by the GUI scripts and the rows it names | The largest diffs, in the package with the least coverage, so they come after the safety net of phase 2 and don't conflict with the fixes. RF-102 first (it touches the code RF-119 changed), then the plan window (RF-98), the table sizer (RF-99) and the cell drawing (RF-100), which the pages (RF-101) use. |
+
+Each phase ends with the baseline commands of SPEC-refactoring section 4 and their results in this plan (SPEC-refactoring 7).
 
 ## Open questions
 
@@ -164,6 +239,8 @@ Acceptance: about 140 lines fewer in `interacttest` and about 100 to 200 in the 
 ## Not part of this round
 
 - Editing the configuration in the window and dark mode: feature work, planned for later (GUI spec, decisions 1 and 4).
+- SPEC-refactoring 5.3 Performance: postponed to the next round (section 11).
+- The KDF defaults and limits: the feature of SPEC-kdf for 2.2.0, with its own commits (section 4).
 - From the size review (2026-10-24), left out because they would cost architecture or testability (section 3):
   - **The Restore backup window on the plan window of RF-98.** It is sized by the user, checks while the user types and has its own destination field; sharing more than the table and sizer of RF-99 and RF-100 would put options for all three on the shared window.
   - **One registry for window procedures** (`handlers` in [registry.go](../internal/gui/registry.go), `controls` in [widget/window.go](../internal/gui/widget/window.go)). A shared one would put Go objects into `gui/win32`, which only wraps the Windows API, or the top-level windows into `gui/widget`, whose controls are reusable. It would save about 40 lines.
@@ -173,5 +250,9 @@ Acceptance: about 140 lines fewer in `interacttest` and about 100 to 200 in the 
   - **Generated Win32 bindings and merging the 56 `win32` wrappers that each have one caller**: generated code counts too, and the wrappers keep `unsafe` in one package.
 
 ## Done when
+
+- Every P1 and P2 item is done or dropped with a reason (SPEC-refactoring 8).
+- The baseline of section 4 is run once more and recorded as this round's result; no coverage floor is lower, and `deadcode` and staticcheck report nothing.
+- The inputs of sections 4 and 5 that are no item yet are an item, dropped with a reason, or carried over.
 
 ## Carried over (filled in when the round closes)
