@@ -1,27 +1,41 @@
-// Package interacttest provides Script, a text implementation of interact.UI
-// for tests of the workflows.
+// Package interacttest provides Script, an implementation of interact.UI for
+// tests of the workflows.
 package interacttest
 
 import (
 	"fmt"
-	"io"
-	"strings"
 
-	"github.com/phsc84/restoresafe/internal/format/naming"
-	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// Script is a text UI for tests: questions are text prompts whose answers
-// come from ReadLine and ReadPassword, and output goes to Out. It reads
-// nothing from the terminal.
+// Script is a UI for tests: it answers each question with the next answer
+// of its kind and records what the workflow showed and asked. A question
+// whose answers are used up is an error that names it.
 type Script struct {
-	// Out receives the output; nil discards it.
-	Out io.Writer
-	// ReadLine and ReadPassword answer the prompts, e.g. Answers("y"). A
-	// prompt without an answer function is an error that names the prompt.
-	ReadLine     func(prompt string) (string, error)
-	ReadPassword func(prompt string) ([]byte, error)
+	// Starts answers ConfirmBackupStart and ConfirmStart, in order.
+	// ConfirmStart starts on BackupAsPlanned and cancels on BackupCancel.
+	Starts []interact.BackupStart
+	// Recovery answers ChooseUnlockMethod, in order: true unlocks with the
+	// recovery code.
+	Recovery []bool
+	// Refusals answers YubiKeyRefused, in order.
+	Refusals []interact.YubiKeyRefusalAnswer
+	// Secrets answers Password, one each, and NewPassword, two each: the
+	// password and its confirmation.
+	Secrets []string
+
+	// Questions are the questions asked, in order: the action of
+	// ConfirmStart, or the interact type ConfirmBackupStart (options),
+	// ChooseUnlockMethod, YubiKeyRefused, Password or NewPassword got.
+	Questions []any
+	// BackupPlans, RestorePlans and VerifyPlans are the plans shown.
+	BackupPlans  []interact.BackupPlan
+	RestorePlans []interact.RestorePlan
+	VerifyPlans  []interact.VerifyPlan
+	// RecoveryCodes are the recovery codes shown.
+	RecoveryCodes []string
+	// Results are the results shown.
+	Results []interact.Result
 	// LogPath is the log file the workflow reported; LogFailures are the
 	// problems with it the workflow reported.
 	LogPath     string
@@ -30,280 +44,131 @@ type Script struct {
 	// called after each, e.g. to cancel the wait.
 	LockWaits  []string
 	OnLockWait func()
-	// announced is the backup whose other keys were last announced.
-	announced naming.BackupEntry
 }
 
 var _ interact.UI = (*Script)(nil)
 
-// writer returns where the script writes.
-func (s *Script) writer() io.Writer {
-	if s.Out != nil {
-		return s.Out
+// next takes the first of answers for the question q.
+func next[T any](answers *[]T, q string) (T, error) {
+	var zero T
+	if len(*answers) == 0 {
+		return zero, fmt.Errorf("no scripted answer for %s", q)
 	}
-	return io.Discard
+	a := (*answers)[0]
+	*answers = (*answers)[1:]
+	return a, nil
 }
 
-func (s *Script) printf(format string, args ...any) {
-	fmt.Fprintf(s.writer(), format, args...)
-}
-
-func (s *Script) println(args ...any) {
-	fmt.Fprintln(s.writer(), args...)
-}
-
-func (s *Script) readLine(prompt string) (string, error) {
-	if s.ReadLine != nil {
-		return s.ReadLine(prompt)
-	}
-	return "", fmt.Errorf("no scripted answer for %q", prompt)
-}
-
-func (s *Script) readSecret(prompt string) ([]byte, error) {
-	if s.ReadPassword != nil {
-		return s.ReadPassword(prompt)
-	}
-	return nil, fmt.Errorf("no scripted answer for %q", prompt)
-}
-
-// announceKeys says once which backup needs other keys.
-func (s *Script) announceKeys(k *interact.OtherKeys) {
-	if k == nil || s.announced == k.Set {
-		return
-	}
-	s.announced = k.Set
-	s.printf("Backup %s uses different keys (created %s). Authenticate with the credentials of those keys.\n", k.Set.String(), k.Created.Local().Format("2006-01-02"))
-}
-
-// Password answers a secret prompt, after the reason the previous answer
-// failed.
-func (s *Script) Password(q interact.SecretQuestion) ([]byte, error) {
-	s.announceKeys(q.Keys)
-	if q.Failure != nil {
-		s.printf("%v %d attempt(s) remaining.\n", q.Failure, q.Left)
-	}
-	if q.Kind == interact.SecretRecoveryCode {
-		return s.readSecret("Enter recovery code: ")
-	}
-	return s.readSecret(fmt.Sprintf("Enter %s password: ", q.Action))
-}
-
-// NewPassword reads a new password twice, after the reason the previous
-// one was refused.
-func (s *Script) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
-	if q.Failure != nil {
-		s.printf("%v Please try again.\n", q.Failure)
-	}
-	pw, err := s.readSecret(fmt.Sprintf("Enter new backup password (at least %d characters): ", q.MinLength))
-	if err != nil || len(pw) == 0 {
-		if err != nil {
-			return nil, err
-		}
-		return interact.CheckNewPassword(pw, nil) // empty: no confirmation asked
-	}
-	confirm, err := s.readSecret("Re-enter new backup password: ")
+func (s *Script) secret(q string) ([]byte, error) {
+	secret, err := next(&s.Secrets, q)
 	if err != nil {
-		cryptox.ZeroBytes(pw)
+		return nil, err
+	}
+	return []byte(secret), nil
+}
+
+// Password answers with the next secret.
+func (s *Script) Password(q interact.SecretQuestion) ([]byte, error) {
+	s.Questions = append(s.Questions, q)
+	return s.secret("Password")
+}
+
+// NewPassword answers with the next two secrets, checked as the window
+// checks the password and its confirmation.
+func (s *Script) NewPassword(q interact.NewPasswordQuestion) ([]byte, error) {
+	s.Questions = append(s.Questions, q)
+	pw, err := s.secret("NewPassword")
+	if err != nil {
+		return nil, err
+	}
+	confirm, err := s.secret("NewPassword (confirmation)")
+	if err != nil {
 		return nil, err
 	}
 	return interact.CheckNewPassword(pw, confirm)
 }
 
-// ConfirmStart asks a yes/no question; yes is the default.
+// ConfirmStart answers with the next start.
 func (s *Script) ConfirmStart(action string) (bool, error) {
-	for {
-		s.println()
-		answer, err := s.readLine(fmt.Sprintf("Start %s now? [Y/n]: ", action))
-		s.println()
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return true, nil
-		case "n", "no":
-			return false, nil
-		default:
-			s.println("Please enter y (yes) or n (no).")
-		}
-	}
+	s.Questions = append(s.Questions, action)
+	start, err := next(&s.Starts, "ConfirmStart("+action+")")
+	return start == interact.BackupAsPlanned, err
 }
 
-// ConfirmBackupStart asks whether to start the backup. [F] makes every
-// directory a full backup; [K] creates new keys, to change the password,
-// replace a lost YubiKey, or get a new recovery code; [A] returns to the
-// automatic plan. A plan with errors offers no start.
+// ConfirmBackupStart answers with the next start; one that opts doesn't
+// offer is an error.
 func (s *Script) ConfirmBackupStart(opts interact.BackupStartOptions) (interact.BackupStart, error) {
-	if !opts.Blocked && !opts.OfferFull && !opts.OfferNewKeys && !opts.OfferAutomatic {
-		ok, err := s.ConfirmStart("backup")
-		if !ok || err != nil {
-			return interact.BackupCancel, err
-		}
-		return interact.BackupAsPlanned, nil
+	s.Questions = append(s.Questions, opts)
+	start, err := next(&s.Starts, "ConfirmBackupStart")
+	if err != nil {
+		return interact.BackupCancel, err
 	}
-	var options, valid []string
-	if !opts.Blocked {
-		options, valid = append(options, "[Y] yes"), append(valid, "y (yes)")
+	offered := map[interact.BackupStart]bool{
+		interact.BackupCancel:    true,
+		interact.BackupAsPlanned: !opts.Blocked,
+		interact.BackupFull:      opts.OfferFull,
+		interact.BackupNewKeys:   opts.OfferNewKeys,
+		interact.BackupAutomatic: opts.OfferAutomatic,
 	}
-	if opts.OfferFull {
-		options, valid = append(options, "[F] full backup"), append(valid, "f (full backup)")
+	if !offered[start] {
+		return interact.BackupCancel, fmt.Errorf("start %d is not offered: %+v", start, opts)
 	}
-	if opts.OfferNewKeys {
-		options, valid = append(options, "[K] new keys + full backup"), append(valid, "k (new keys)")
-	}
-	if opts.OfferAutomatic {
-		options, valid = append(options, "[A] automatic plan"), append(valid, "a (automatic plan)")
-	}
-	options, valid = append(options, "[N] cancel"), append(valid, "n (no)")
-	for {
-		s.println()
-		answer, err := s.readLine("Start backup now? " + strings.Join(options, " / ") + ": ")
-		s.println()
-		if err != nil {
-			return interact.BackupCancel, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			if !opts.Blocked {
-				return interact.BackupAsPlanned, nil
-			}
-		case "f":
-			if opts.OfferFull {
-				s.println("Every source directory gets a full backup with the current keys.")
-				return interact.BackupFull, nil
-			}
-		case "k":
-			if opts.OfferNewKeys {
-				s.println("New keys will be created and every source directory gets a full backup. Passwords, YubiKey registrations, and recovery codes of the current keys will not open the new backups (they still open older backups).")
-				return interact.BackupNewKeys, nil
-			}
-		case "a":
-			if opts.OfferAutomatic {
-				return interact.BackupAutomatic, nil
-			}
-		case "n", "no":
-			return interact.BackupCancel, nil
-		}
-		s.printf("Please enter %s.\n", strings.Join(valid, ", "))
-	}
+	return start, nil
 }
 
-// ChooseUnlockMethod asks for the regular credentials (default) or the
-// recovery code.
+// ChooseUnlockMethod answers with the next unlock method.
 func (s *Script) ChooseUnlockMethod(q interact.UnlockChoice) (bool, error) {
-	s.announceKeys(q.Keys)
-	for {
-		answer, err := s.readLine(fmt.Sprintf("Unlock with [Y] %s (default) or [R] recovery code? [Y/r]: ", q.Mode.Label()))
-		if err != nil {
-			return false, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return false, nil
-		case "r":
-			return true, nil
-		default:
-			s.println("Please enter y (password/YubiKey) or r (recovery code).")
-		}
-	}
+	s.Questions = append(s.Questions, q)
+	return next(&s.Recovery, "ChooseUnlockMethod")
 }
 
-// YubiKeyRefused asks whether to try the YubiKey again (default), create new
-// keys, or cancel.
+// YubiKeyRefused answers with the next refusal answer.
 func (s *Script) YubiKeyRefused(q interact.YubiKeyRefusal) (interact.YubiKeyRefusalAnswer, error) {
-	s.println("The YubiKey didn't unlock the keys of your backups. If it was reset or is another one, it can never unlock them: create new keys.")
-	if q.RecoveryCode {
-		s.println("Older backups keep opening with your recovery code.")
-	} else {
-		s.println("These keys have no recovery code: without this YubiKey registration, older backups can't be opened.")
+	s.Questions = append(s.Questions, q)
+	a, err := next(&s.Refusals, "YubiKeyRefused")
+	if err != nil {
+		return interact.RefusalCancel, err
 	}
-	for {
-		answer, err := s.readLine("[Y] try again (default) / [K] new keys + full backup / [N] cancel: ")
-		if err != nil {
-			return interact.RefusalCancel, err
-		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
-		case "", "y", "yes":
-			return interact.RefusalRetry, nil
-		case "k":
-			return interact.RefusalNewKeys, nil
-		case "n", "no":
-			return interact.RefusalCancel, nil
-		default:
-			s.println("Please enter y (try again), k (new keys) or n (no).")
-		}
-	}
+	return a, nil
 }
 
-// ShowRecoveryCode prints the recovery code with instructions for keeping it.
+// ShowRecoveryCode records the code.
 func (s *Script) ShowRecoveryCode(code []byte) error {
-	s.println()
-	s.println("Your recovery code:")
-	s.println()
-	s.printf("    %s\n", code)
-	s.println()
-	s.println("  - This code alone restores every backup made with these keys, even without")
-	s.println("    password or YubiKey. Treat it like the key to a safe.")
-	s.println("  - Store it in your password manager or on paper in a safe place, never next to your backups.")
-	s.println("  - It is shown only this once.")
-	s.println()
+	s.RecoveryCodes = append(s.RecoveryCodes, string(code))
 	return nil
 }
 
-func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.writer(), p.Details) }
+// ShowBackupPlan records the plan.
+func (s *Script) ShowBackupPlan(p interact.BackupPlan) { s.BackupPlans = append(s.BackupPlans, p) }
 
-// ShowRestorePlan prints the preflight summary of the plan.
-func (s *Script) ShowRestorePlan(p interact.RestorePlan) { WriteReport(s.writer(), p.Details) }
+// ShowRestorePlan records the plan.
+func (s *Script) ShowRestorePlan(p interact.RestorePlan) { s.RestorePlans = append(s.RestorePlans, p) }
 
-// ShowVerifyPlan prints the preflight summary of the plan.
-func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { WriteReport(s.writer(), p.Details) }
+// ShowVerifyPlan records the plan.
+func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { s.VerifyPlans = append(s.VerifyPlans, p) }
 
 // Progress is ignored.
 func (s *Script) Progress(interact.Progress) {}
 
-// ShowResult prints the warning count (if any) and the log file path.
-func (s *Script) ShowResult(r interact.Result) {
-	if r.Warnings > 0 {
-		s.printf("Warnings: %d\n", r.Warnings)
-	}
-	s.printf("\nLog file: %s\n", r.LogPath)
-}
+// ShowResult records the result.
+func (s *Script) ShowResult(r interact.Result) { s.Results = append(s.Results, r) }
 
-// Answers returns a ReadLine function that answers the prompts with lines,
-// in order; once they are used up, every prompt is an error.
-func Answers(lines ...string) func(prompt string) (string, error) {
-	return func(prompt string) (string, error) {
-		if len(lines) == 0 {
-			return "", fmt.Errorf("no more scripted answers (prompt %q)", prompt)
-		}
-		line := lines[0]
-		lines = lines[1:]
-		return line, nil
-	}
-}
-
-// WaitingForLock prints and records the text.
+// WaitingForLock records the text.
 func (s *Script) WaitingForLock(text string) {
-	s.println(text)
 	s.LockWaits = append(s.LockWaits, text)
 	if s.OnLockWait != nil {
 		s.OnLockWait()
 	}
 }
 
-// LogStarted records the log file; the script prints it with the result.
+// LogStarted records the log file.
 func (s *Script) LogStarted(path string) { s.LogPath = path }
 
 // LogFailed records a problem with the log file.
 func (s *Script) LogFailed(f interact.LogFailure) { s.LogFailures = append(s.LogFailures, f) }
 
-// Answering returns a Script that writes to out and answers every line
-// prompt with line and every secret prompt with a copy of secret: a run that
-// asks to start and for one password, as often as it asks.
-func Answering(out io.Writer, line string, secret []byte) *Script {
-	return &Script{
-		Out:          out,
-		ReadLine:     func(string) (string, error) { return line, nil },
-		ReadPassword: func(string) ([]byte, error) { return append([]byte(nil), secret...), nil },
-	}
+// Starting returns a Script that starts once and answers the secret
+// questions with secrets.
+func Starting(secrets ...string) *Script {
+	return &Script{Starts: []interact.BackupStart{interact.BackupAsPlanned}, Secrets: secrets}
 }

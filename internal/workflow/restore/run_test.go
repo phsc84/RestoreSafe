@@ -56,14 +56,13 @@ func TestRunRestoresAfterUnlockingWithThePassword(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("restore-run-pw"))
 	req := request(t, fx)
 
-	var out testutil.Output
-	s := interacttest.Answering(&out, "y", fx.Password)
+	s := interacttest.Starting(string(fx.Password))
 	if err := Run(context.Background(), s, fx.Config(), "", req); err != nil {
-		t.Fatalf("Run: %v\n%s", err, out.String())
+		t.Fatalf("Run: %v", err)
 	}
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(req.Destination, fx.Entry.DirectoryName))
-	if s.LogPath == "" || !strings.Contains(out.String(), "Log file: "+s.LogPath) {
-		t.Fatalf("expected the result with the log file, got %q", out.String())
+	if s.LogPath == "" || len(s.Results) != 1 || s.Results[0].LogPath != s.LogPath {
+		t.Fatalf("expected the result with the log file %q, got %+v", s.LogPath, s.Results)
 	}
 }
 
@@ -72,7 +71,7 @@ func TestRunWritesNothingWhenTheUserDeclinesTheStart(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	req := request(t, fx)
 
-	s := interacttest.Answering(nil, "n", nil)
+	s := &interacttest.Script{Starts: []interact.BackupStart{interact.BackupCancel}}
 	if err := Run(context.Background(), s, fx.Config(), "", req); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
@@ -93,10 +92,9 @@ func TestRunRefusesADestinationThatHoldsTheFolderBeforeAsking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var out testutil.Output
-	err := Run(context.Background(), &interacttest.Script{Out: &out}, fx.Config(), "", req)
+	err := Run(context.Background(), &interacttest.Script{}, fx.Config(), "", req)
 	if err == nil || !strings.Contains(err.Error(), "Restore preflight failed") {
-		t.Fatalf("expected the preflight to refuse the destination, got %v\n%s", err, out.String())
+		t.Fatalf("expected the preflight to refuse the destination, got %v", err)
 	}
 	if entries, _ := os.ReadDir(existing); len(entries) != 0 {
 		t.Fatalf("the existing folder must stay untouched, got %d entries", len(entries))
@@ -182,16 +180,16 @@ func TestRunWarnsAboutFilesTheBackupCouldNotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out testutil.Output
 	restorePath := filepath.Join(t.TempDir(), "restore")
 	op := &operation{selected: infos, inventory: infos, backupDir: backupDir, restorePath: restorePath, logPath: logPath, masters: unlock.MasterKeys{ks.ID: master}, log: log}
-	runErr := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
+	ui := &interacttest.Script{}
+	runErr := op.run(context.Background(), ui, 0)
 	log.Close()
 	if runErr != nil {
 		t.Fatalf("restore: %v", runErr)
 	}
-	if !strings.Contains(out.String(), "Warnings: 1") {
-		t.Fatalf("expected the result to count a warning, got %q", out.String())
+	if len(ui.Results) != 1 || ui.Results[0].Warnings != 1 {
+		t.Fatalf("expected the result to count a warning, got %+v", ui.Results)
 	}
 	facts, err := logging.ReadFacts(logPath)
 	if fact := facts.Restored[entry.String()]; err != nil || fact.Result != logging.ResultWarnings || fact.Skipped != 1 {
@@ -321,9 +319,8 @@ func TestOperationRunCountsALogLeftInTemp(t *testing.T) {
 	if err := os.Mkdir(logPath, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	var out testutil.Output
 	log, _ := logging.NewLogger(logPath, "info")
-	ui := &interacttest.Script{Out: &out}
+	ui := &interacttest.Script{}
 
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, logPath: logPath, masters: masterKeys(fx.BackupFixture), log: log}
 	if err := op.run(context.Background(), ui, 0); err != nil {
@@ -333,8 +330,8 @@ func TestOperationRunCountsALogLeftInTemp(t *testing.T) {
 		t.Fatalf("log failures %+v, want the copy in TEMP", ui.LogFailures)
 	}
 	t.Cleanup(func() { os.Remove(ui.LogFailures[0].Kept) })
-	if !strings.Contains(out.String(), "Warnings: 1") {
-		t.Fatalf("the result doesn't count the problem: %q", out.String())
+	if len(ui.Results) != 1 || ui.Results[0].Warnings != 1 {
+		t.Fatalf("the result doesn't count the problem: %+v", ui.Results)
 	}
 }
 
@@ -412,7 +409,7 @@ func TestRunRejectsIncompleteRequests(t *testing.T) {
 		{"no backup", Request{Destination: dest}, "No backup chosen"},
 		{"unknown backup", Request{Sets: []naming.BackupEntry{{DirectoryName: "Other", ChainID: "ZZZ999", Date: "2026-03-14"}}, Destination: dest}, "no longer in the backup directory"},
 	} {
-		err := Run(context.Background(), &interacttest.Script{Out: &bytes.Buffer{}}, cfg, "", tc.req)
+		err := Run(context.Background(), &interacttest.Script{}, cfg, "", tc.req)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%s: expected an error with %q, got %v", tc.name, tc.want, err)
 		}
@@ -426,9 +423,8 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("prompt-pw"))
 
-	var out strings.Builder
 	req := Request{Sets: []naming.BackupEntry{fx.Entry}, Destination: filepath.Join(t.TempDir(), "restore")}
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out}, &config.Config{BackupDirectory: fx.BackupDir}, "", req)
+	runErr := Run(context.Background(), &interacttest.Script{}, &config.Config{BackupDirectory: fx.BackupDir}, "", req)
 	if runErr == nil {
 		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}

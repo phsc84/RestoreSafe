@@ -11,7 +11,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -22,6 +21,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/filelock"
+	"github.com/phsc84/restoresafe/internal/workflow/backup"
 	"github.com/phsc84/restoresafe/internal/workflow/restore"
 
 	"golang.org/x/sys/windows"
@@ -157,17 +157,21 @@ func writeFixtureBackups(t *testing.T, root string) (recoveryCode string) {
 
 		// Full backup: the mail archive is open in a mail program and skipped.
 		release := filelock.Hold(t, filepath.Join(docs, "Mail", "archive.pst"))
-		out := runBackup(t, cfg, []string{"y"}, fixturePassword, fixturePassword)
+		s := useScript(t, yes, fixturePassword, fixturePassword)
+		err := backup.Run(context.Background(), s.ui, cfg, "")
 		release()
-		if !strings.Contains(out, "Skipped (could not be read): Mail/archive.pst") {
+		if err != nil {
+			t.Fatalf("backup: %v", err)
+		}
+		s.done()
+		if out := s.output(); !strings.Contains(out, "Skipped (could not be read): Mail/archive.pst") {
 			t.Fatalf("the full backup must skip the locked file: %q", out)
 		}
 		if c.recoveryCode {
-			m := regexp.MustCompile(`Your recovery code:\n\n    (\S+)\n`).FindStringSubmatch(out)
-			if m == nil {
-				t.Fatalf("no recovery code in %q", out)
+			if len(s.ui.RecoveryCodes) != 1 {
+				t.Fatalf("expected one recovery code, got %d", len(s.ui.RecoveryCodes))
 			}
-			recoveryCode = m[1]
+			recoveryCode = s.ui.RecoveryCodes[0]
 		}
 
 		// Differential: one file changed, one new, one deleted, the mail
@@ -179,7 +183,7 @@ func writeFixtureBackups(t *testing.T, root string) (recoveryCode string) {
 		}
 		writeFile(t, filepath.Join(docs, "busy.db"), "database, version 2")
 		release = filelock.Hold(t, filepath.Join(docs, "busy.db"))
-		out = runBackup(t, cfg, []string{"y"}, fixturePassword)
+		out := runBackup(t, cfg, yes, fixturePassword)
 		release()
 		if !strings.Contains(out, "DIFF001") {
 			t.Fatalf("the second backup must be a differential: %q", out)
@@ -214,9 +218,10 @@ func restoreFixtureRun(t *testing.T, c fixtureCase, backupDir, runID, dest, code
 	t.Helper()
 	cfg := &config.Config{BackupDirectory: backupDir, LogLevel: "info", Argon2: testutil.FastArgon2Config}
 	sets := runSets(t, cfg, runID)
-	s := useScript(t, []string{"y"}, fixturePassword)
+	s := useScript(t, yes, fixturePassword)
 	if c.recoveryCode {
-		s = useScript(t, []string{"y", "r"}, code)
+		s = useScript(t, yes, code)
+		s.ui.Recovery = []bool{true}
 	}
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: sets, Destination: dest}); err != nil {
 		t.Fatalf("restore %s run %s: %v\n%s", c.name, runID, err, s.output())

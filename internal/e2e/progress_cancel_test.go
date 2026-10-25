@@ -72,7 +72,7 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	writeFile(t, filepath.Join(docs, "sub", "big.bin"), strings.Repeat("x", 2*1024*1024))
 	cfg := progressConfig([]string{docs}, filepath.Join(root, "Backups"))
 
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	o := &observedUI{Script: s.ui}
 	if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
@@ -91,7 +91,7 @@ func TestProgressIsReportedForBackupAndRestore(t *testing.T) {
 	}
 
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	o = &observedUI{Script: s.ui}
 	if err := restore.Run(context.Background(), o, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 		t.Fatalf("restore: %v", err)
@@ -117,7 +117,7 @@ func TestCancelledBackupKeepsCompletedSets(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	// Cancel as soon as the second directory starts.
 	o := &observedUI{Script: s.ui, onProgress: func(p interact.Progress) {
 		if p.Item == "Second" {
@@ -153,7 +153,7 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 	writeFile(t, filepath.Join(docs, "a.txt"), "hello")
 	cfg := progressConfig([]string{docs}, filepath.Join(root, "Backups"))
 
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -162,14 +162,14 @@ func TestCancelledRestoreAndVerify(t *testing.T) {
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	err := restore.Run(cancelled, s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")})
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Restore cancelled." {
 		t.Fatalf("restore: expected the cancellation, got %v", err)
 	}
 
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	err = verify.Run(cancelled, s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)})
 	s.done()
 	if !errors.Is(err, context.Canceled) || err.Error() != "Verification cancelled." {
@@ -223,7 +223,7 @@ func TestProgressPhasesFollowTheRun(t *testing.T) {
 		}
 	}
 
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	o := &observedUI{Script: s.ui}
 	if err := backup.Run(context.Background(), o, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
@@ -235,7 +235,7 @@ func TestProgressPhasesFollowTheRun(t *testing.T) {
 		step(interact.PhaseVerifying, 1, 2), step(interact.PhaseVerifying, 2, 2),
 		step(interact.PhaseCleaningUp, 0, 0))
 
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	o = &observedUI{Script: s.ui}
 	req := restore.Request{Sets: newestRun(t, cfg), Destination: filepath.Join(root, "Restore")}
 	if err := restore.Run(context.Background(), o, cfg, "", req); err != nil {
@@ -244,7 +244,7 @@ func TestProgressPhasesFollowTheRun(t *testing.T) {
 	s.done()
 	check("restore", o, step(interact.PhaseUnlocking, 0, 0), step(interact.PhaseRestoring, 1, 2), step(interact.PhaseRestoring, 2, 2))
 
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	o = &observedUI{Script: s.ui}
 	if err := verify.Run(context.Background(), o, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
 		t.Fatalf("verify: %v", err)

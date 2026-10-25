@@ -15,6 +15,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/inventory"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/job"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
@@ -34,13 +35,12 @@ func TestRunVerifiesAfterUnlockingWithThePassword(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("verify-run-pw"))
 
-	var out testutil.Output
-	s := interacttest.Answering(&out, "y", fx.Password)
+	s := interacttest.Starting(string(fx.Password))
 	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
-		t.Fatalf("Run: %v\n%s", err, out.String())
+		t.Fatalf("Run: %v", err)
 	}
-	if s.LogPath == "" || !strings.Contains(out.String(), "Log file: "+s.LogPath) {
-		t.Fatalf("expected the result with the log file, got %q", out.String())
+	if s.LogPath == "" || len(s.Results) != 1 || s.Results[0].LogPath != s.LogPath {
+		t.Fatalf("expected the result with the log file %q, got %+v", s.LogPath, s.Results)
 	}
 	facts, err := logging.ReadFacts(s.LogPath)
 	if fact := facts.Verify[fx.Entry.String()]; err != nil || len(facts.Verify) != 1 || fact.Result != logging.ResultOK {
@@ -52,7 +52,7 @@ func TestRunStopsWhenTheUserDeclinesTheStart(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
-	s := interacttest.Answering(nil, "n", nil) // no password: unlocking would fail
+	s := &interacttest.Script{Starts: []interact.BackupStart{interact.BackupCancel}} // no password: unlocking would fail
 	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
@@ -65,7 +65,7 @@ func TestRunEndsWhenTheKeysDoNotUnlock(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
-	s := interacttest.Answering(nil, "y", []byte("wrong password"))
+	s := interacttest.Starting("wrong password", "wrong password", "wrong password")
 	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err == nil {
 		t.Fatal("a wrong password must end the verification")
 	}
@@ -89,11 +89,10 @@ func TestRunRefusesADifferentialWithoutItsFullBackupBeforeAsking(t *testing.T) {
 		}
 	}
 
-	var out testutil.Output
-	s := &interacttest.Script{Out: &out} // any question would fail with "no scripted answer"
+	s := &interacttest.Script{} // any question would fail with "no scripted answer"
 	err = Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{diff}})
 	if err == nil || !strings.Contains(err.Error(), "Verification preflight failed") {
-		t.Fatalf("expected the preflight to refuse the differential, got %v\n%s", err, out.String())
+		t.Fatalf("expected the preflight to refuse the differential, got %v", err)
 	}
 }
 
@@ -286,8 +285,7 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
-	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "", Request{Sets: []naming.BackupEntry{fx.Entry}})
+	runErr := Run(context.Background(), &interacttest.Script{}, &config.Config{BackupDirectory: fx.BackupDir, LogLevel: "info"}, "", Request{Sets: []naming.BackupEntry{fx.Entry}})
 	if runErr == nil {
 		t.Fatal("expected an error when the start prompt gets no answer, got nil")
 	}

@@ -41,7 +41,7 @@ func backUpThreeParts(t *testing.T) damagedSet {
 		Argon2:             testutil.FastArgon2Config,
 		Differential:       fullBackupsOnly,
 	}
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -158,14 +158,14 @@ func TestDamagedSetIsRefused(t *testing.T) {
 			sets := newestRun(t, d.cfg)
 			f.damage(t, parts)
 
-			s := useScript(t, []string{"y"}, password)
+			s := useScript(t, yes, password)
 			err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: sets})
 			if err == nil || !strings.Contains(err.Error(), f.want) {
 				t.Errorf("verify: got %v, want %q", err, f.want)
 			}
 
 			dest := filepath.Join(t.TempDir(), "Restore")
-			s = useScript(t, []string{"y"}, password)
+			s = useScript(t, yes, password)
 			err = restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: sets, Destination: dest})
 			if err == nil || !strings.Contains(err.Error(), f.want) {
 				t.Errorf("restore: got %v, want %q", err, f.want)

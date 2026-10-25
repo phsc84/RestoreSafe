@@ -14,6 +14,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
@@ -67,12 +68,12 @@ func (e *previewEnv) setNames(t *testing.T) []string {
 }
 
 // startAnswers are the answers to the start question: "f" shows the full
-// plan, which is then started with "y".
-func startAnswers(answer string) []string {
+// plan, which is then started; "y" starts as planned.
+func startAnswers(answer string) []interact.BackupStart {
 	if answer == "f" {
-		return []string{"f", "y"}
+		return []interact.BackupStart{interact.BackupFull, interact.BackupAsPlanned}
 	}
-	return []string{answer}
+	return []interact.BackupStart{interact.BackupAsPlanned}
 }
 
 // previewAndRun computes the retention preview the way the backup plan does,
@@ -96,8 +97,8 @@ func (e *previewEnv) previewAndRun(t *testing.T, answer string) (previewed, dele
 
 	before := e.setNames(t)
 	ui := &interacttest.Script{
-		ReadLine:     interacttest.Answers(startAnswers(answer)...),
-		ReadPassword: func(string) ([]byte, error) { return []byte("pw"), nil },
+		Starts:  startAnswers(answer),
+		Secrets: []string{"pw", "pw", "pw"},
 	}
 	if err := Run(context.Background(), ui, &cfg, ""); err != nil {
 		t.Fatalf("backup failed: %v", err)

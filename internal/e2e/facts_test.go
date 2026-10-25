@@ -34,7 +34,7 @@ func TestRunFactsAreLogged(t *testing.T) {
 	backupDir := filepath.Join(root, "Backups")
 	cfg := progressConfig([]string{first, second}, backupDir)
 
-	runBackup(t, cfg, []string{"y"}, password, password)
+	runBackup(t, cfg, yes, password, password)
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil || len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d (%v)", len(infos), err)
@@ -53,7 +53,7 @@ func TestRunFactsAreLogged(t *testing.T) {
 	}
 
 	// A verify run adds its results to the log of the run it reads.
-	s := useScript(t, []string{"y"}, password)
+	s := useScript(t, yes, password)
 	if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: []naming.BackupEntry{infos[1].Entry}}); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestCancelledBackupLogsItsFact(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	o := &observedUI{Script: s.ui, onProgress: func(p interact.Progress) {
 		if p.Item == "Second" {
 			cancel()

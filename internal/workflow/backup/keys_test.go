@@ -24,7 +24,6 @@ type enrollStub struct {
 	yubiKey   []byte      // the hmac-secret of the connected YubiKey
 	code      string      // display form of the recovery code
 	secret    []byte      // its key material
-	out       bytes.Buffer
 	ui        *interacttest.Script
 }
 
@@ -41,18 +40,7 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	for _, p := range s.passwords {
 		passwords = append(passwords, p[0], p[1])
 	}
-	s.ui = &interacttest.Script{
-		Out: &s.out,
-		ReadPassword: func(string) ([]byte, error) {
-			if len(passwords) == 0 {
-				return nil, errors.New("no more passwords")
-			}
-			p := passwords[0]
-			passwords = passwords[1:]
-			return []byte(p), nil
-		},
-		ReadLine: func(string) (string, error) { return "", nil },
-	}
+	s.ui = &interacttest.Script{Secrets: passwords}
 	checkYubiKeyConnectedFn = func() error { return nil }
 	combineWithPasswordFn = func(pw []byte, noPassword bool) ([]byte, string, error) {
 		raw, _ := json.Marshal(yubikey.ChallengeData{Version: 1, NoPassword: noPassword, CredID: "Y3JlZC1h", Salt: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="})
@@ -64,11 +52,19 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 	generateRecoveryCodeFn = func() (recovery.Code, error) { return recovery.Parse([]byte(s.code)) }
 }
 
+// enroll creates keys with the scripted answers. Besides the keys, it
+// returns what the user was shown, one per line: why a new password was
+// refused, and the recovery codes.
 func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, string, error) {
 	t.Helper()
-	log, lines := testutil.NewLog(t, "info")
-	ks, master, err := enrollKeySet(s.ui, cfg, log)
-	return ks, master, s.out.String() + lines(), err
+	ks, master, err := enrollKeySet(s.ui, cfg, nil)
+	var shown []string
+	for _, q := range s.ui.Questions {
+		if q, ok := q.(interact.NewPasswordQuestion); ok && q.Failure != nil {
+			shown = append(shown, q.Failure.Error())
+		}
+	}
+	return ks, master, strings.Join(append(shown, s.ui.RecoveryCodes...), "\n"), err
 }
 
 func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {

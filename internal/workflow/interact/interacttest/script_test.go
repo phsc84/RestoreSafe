@@ -1,7 +1,6 @@
 package interacttest
 
 import (
-	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -9,100 +8,68 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-func scripted(lines ...string) (*Script, *bytes.Buffer) {
-	var out bytes.Buffer
-	c := &Script{Out: &out, ReadLine: func(string) (string, error) {
-		if len(lines) == 0 {
-			return "", errors.New("no more lines")
+func TestScriptAnswersInOrderAndNamesAMissingAnswer(t *testing.T) {
+	s := &Script{Starts: []interact.BackupStart{interact.BackupAsPlanned, interact.BackupCancel}}
+	for _, want := range []bool{true, false} {
+		if got, err := s.ConfirmStart("verification"); err != nil || got != want {
+			t.Fatalf("ConfirmStart = %v, %v; want %v", got, err, want)
 		}
-		line := lines[0]
-		lines = lines[1:]
-		return line, nil
-	}}
-	return c, &out
-}
-
-func TestConfirmStartPrintsSingleBlankLineBeforeAndAfterPrompt(t *testing.T) {
-	c, out := scripted("y")
-	var prompts []string
-	read := c.ReadLine
-	c.ReadLine = func(prompt string) (string, error) {
-		prompts = append(prompts, prompt)
-		return read(prompt)
 	}
-
-	confirmed, err := c.ConfirmStart("verification")
-	if err != nil || !confirmed {
-		t.Fatalf("ConfirmStart = %v, %v; want true", confirmed, err)
+	if _, err := s.ConfirmStart("restore"); err == nil || !strings.Contains(err.Error(), "ConfirmStart(restore)") {
+		t.Fatalf("expected the missing answer to be named, got %v", err)
 	}
-	if len(prompts) != 1 || prompts[0] != "Start verification now? [Y/n]: " {
-		t.Fatalf("unexpected prompts: %q", prompts)
-	}
-	if got := out.String(); got != "\n\n" {
-		t.Fatalf("expected exactly one empty line before and after prompt, got %q", got)
+	if len(s.Questions) != 3 || s.Questions[2] != "restore" {
+		t.Fatalf("questions = %v", s.Questions)
 	}
 }
 
-func TestConfirmStartPrintsSingleBlankLineOnRetry(t *testing.T) {
-	c, out := scripted("maybe", "n")
-
-	confirmed, err := c.ConfirmStart("verification")
-	if err != nil || confirmed {
-		t.Fatalf("ConfirmStart = %v, %v; want false", confirmed, err)
-	}
-	expected := "\n\nPlease enter y (yes) or n (no).\n\n\n"
-	if got := out.String(); got != expected {
-		t.Fatalf("unexpected output.\nexpected: %q\n     got: %q", expected, got)
-	}
-}
-
-func TestConfirmBackupStart(t *testing.T) {
-	both := interact.BackupStartOptions{OfferFull: true, OfferNewKeys: true}
-	newKeys := interact.BackupStartOptions{OfferNewKeys: true}
-	blockedFull := interact.BackupStartOptions{Blocked: true, OfferAutomatic: true}
-	afterFull := interact.BackupStartOptions{OfferNewKeys: true, OfferAutomatic: true}
-	const hintNewKeys = "Please enter y (yes), k (new keys), n (no)."
-	const hintBoth = "Please enter y (yes), f (full backup), k (new keys), n (no)."
-	const hintBlocked = "Please enter a (automatic plan), n (no)."
+func TestConfirmBackupStartRefusesAnAnswerThatIsNotOffered(t *testing.T) {
 	cases := []struct {
-		name    string
-		opts    interact.BackupStartOptions
-		answers []string
-		want    interact.BackupStart
-		hint    string
+		name   string
+		opts   interact.BackupStartOptions
+		answer interact.BackupStart
+		ok     bool
 	}{
-		{"new keys not offered asks yes/no", interact.BackupStartOptions{}, []string{"y"}, interact.BackupAsPlanned, ""},
-		{"new keys not offered, no", interact.BackupStartOptions{}, []string{"n"}, interact.BackupCancel, ""},
-		{"default starts as planned", both, []string{""}, interact.BackupAsPlanned, ""},
-		{"f makes full backups", both, []string{"f"}, interact.BackupFull, ""},
-		{"f not offered is invalid", newKeys, []string{"f", "y"}, interact.BackupAsPlanned, hintNewKeys},
-		{"invalid answer is repeated", newKeys, []string{"maybe", "k"}, interact.BackupNewKeys, hintNewKeys},
-		{"k creates new keys", both, []string{"K"}, interact.BackupNewKeys, ""},
-		{"n cancels", both, []string{"x", "no"}, interact.BackupCancel, hintBoth},
-		{"a returns to the automatic plan", afterFull, []string{"a"}, interact.BackupAutomatic, ""},
-		{"a not offered is invalid", both, []string{"a", "y"}, interact.BackupAsPlanned, hintBoth},
-		{"a blocked plan cannot start", blockedFull, []string{"y", "a"}, interact.BackupAutomatic, hintBlocked},
+		{"as planned", interact.BackupStartOptions{}, interact.BackupAsPlanned, true},
+		{"cancel is always offered", interact.BackupStartOptions{Blocked: true}, interact.BackupCancel, true},
+		{"a blocked plan cannot start", interact.BackupStartOptions{Blocked: true}, interact.BackupAsPlanned, false},
+		{"full backup offered", interact.BackupStartOptions{OfferFull: true}, interact.BackupFull, true},
+		{"full backup not offered", interact.BackupStartOptions{OfferNewKeys: true}, interact.BackupFull, false},
+		{"new keys not offered", interact.BackupStartOptions{OfferFull: true}, interact.BackupNewKeys, false},
+		{"automatic plan not offered", interact.BackupStartOptions{OfferFull: true}, interact.BackupAutomatic, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			c, out := scripted(tc.answers...)
-			got, err := c.ConfirmBackupStart(tc.opts)
-			if err != nil || got != tc.want {
-				t.Fatalf("ConfirmBackupStart = %v, %v; want %v", got, err, tc.want)
+			s := &Script{Starts: []interact.BackupStart{tc.answer}}
+			got, err := s.ConfirmBackupStart(tc.opts)
+			if tc.ok && (err != nil || got != tc.answer) {
+				t.Fatalf("ConfirmBackupStart = %v, %v; want %v", got, err, tc.answer)
 			}
-			if tc.hint != "" && !strings.Contains(out.String(), tc.hint) {
-				t.Fatalf("expected hint %q, got %q", tc.hint, out.String())
+			if !tc.ok && (err == nil || got != interact.BackupCancel) {
+				t.Fatalf("ConfirmBackupStart = %v, %v; want an error", got, err)
 			}
 		})
 	}
 }
 
-func TestShowResultPrintsWarningsAndLogFileLast(t *testing.T) {
-	c, out := scripted()
-	c.ShowResult(interact.Result{LogPath: "C:/Backups/run.log"})
-	c.ShowResult(interact.Result{Warnings: 2, LogPath: "C:/Backups/run.log"})
-	want := "\nLog file: C:/Backups/run.log\nWarnings: 2\n\nLog file: C:/Backups/run.log\n"
-	if got := out.String(); got != want {
-		t.Fatalf("unexpected output.\nwant: %q\n got: %q", want, got)
+func TestNewPasswordTakesTwoSecrets(t *testing.T) {
+	s := &Script{Secrets: []string{"long enough", "long enough", "one", "two"}}
+	if pw, err := s.NewPassword(interact.NewPasswordQuestion{}); err != nil || string(pw) != "long enough" {
+		t.Fatalf("NewPassword = %q, %v", pw, err)
+	}
+	if _, err := s.NewPassword(interact.NewPasswordQuestion{}); !errors.Is(err, interact.ErrPasswordMismatch) {
+		t.Fatalf("expected a mismatch, got %v", err)
+	}
+	if _, err := s.Password(interact.SecretQuestion{}); err == nil {
+		t.Fatal("expected an error once the secrets are used up")
+	}
+}
+
+func TestScriptRecordsWhatItIsShown(t *testing.T) {
+	s := &Script{}
+	s.ShowRecoveryCode([]byte("ABCD-EFGH")) //nolint:errcheck
+	s.ShowResult(interact.Result{Warnings: 2, LogPath: "C:/Backups/run.log"})
+	if len(s.RecoveryCodes) != 1 || s.RecoveryCodes[0] != "ABCD-EFGH" || len(s.Results) != 1 || s.Results[0].Warnings != 2 {
+		t.Fatalf("codes %q, results %+v", s.RecoveryCodes, s.Results)
 	}
 }

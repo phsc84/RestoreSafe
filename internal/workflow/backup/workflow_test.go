@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -149,18 +148,16 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 		BackupDirectory:   backupDir,
 		SourceDirectories: []string{sourceDir},
 	}
-	var out strings.Builder
-	ui := &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("n")}
+	ui := &interacttest.Script{Starts: []interact.BackupStart{interact.BackupCancel}}
 	runErr := Run(context.Background(), ui, cfg, "")
-	output := out.String()
 	if runErr != nil {
 		t.Fatalf("expected nil error on cancel, got: %v", runErr)
 	}
 	if log, err := os.ReadFile(ui.LogPath); err != nil || !strings.Contains(string(log), "Backup cancelled by user before start") {
 		t.Fatalf("expected the cancellation in the log, got: %q (%v)", log, err)
 	}
-	if !strings.Contains(output, "new keys will be created") {
-		t.Fatalf("expected key plan in preflight, got: %q", output)
+	if len(ui.BackupPlans) != 1 || !ui.BackupPlans[0].Keys.New {
+		t.Fatalf("expected a plan with new keys, got: %+v", ui.BackupPlans)
 	}
 }
 
@@ -212,8 +209,8 @@ type operationEnv struct {
 	logger    *logging.Logger
 	cfg       *config.Config
 	sources   []plan.Source
-	// out receives what the operation writes to its UI.
-	out bytes.Buffer
+	// ui is the UI of the last run.
+	ui *interacttest.Script
 }
 
 func newOperationEnv(t *testing.T, payload string) *operationEnv {
@@ -242,7 +239,8 @@ func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	t.Helper()
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	op := &operation{cfg: env.cfg, log: env.logger, logPath: env.logPath, backupDir: env.backupDir, date: "2026-05-31", runID: id, keySet: ks, master: master}
-	err := op.run(context.Background(), &interacttest.Script{Out: &env.out}, env.sources, nil)
+	env.ui = &interacttest.Script{}
+	err := op.run(context.Background(), env.ui, env.sources, nil)
 	env.logger.Close()
 	if err != nil {
 		t.Fatalf("backup run failed: %v", err)
@@ -251,7 +249,7 @@ func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return env.out.String() + string(log)
+	return string(log)
 }
 
 // TestOperationRunWritesCompleteSet exercises the operation half of the
@@ -284,13 +282,12 @@ func TestOperationRunVerifiesAfterBackup(t *testing.T) {
 	}
 }
 
-func TestOperationRunShowsTheResultLast(t *testing.T) {
+func TestOperationRunShowsTheResultWithItsLog(t *testing.T) {
 	env := newOperationEnv(t, "operation payload")
 	env.run(t, "OPS004")
 
-	output := env.out.String()
-	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+env.logPath) {
-		t.Fatalf("expected log file line to be last, got: %q", output)
+	if r := env.ui.Results; len(r) != 1 || r[0].LogPath != env.logPath || r[0].Warnings != 0 {
+		t.Fatalf("expected one result with the log file, got: %+v", r)
 	}
 	info := inventory.Find(t, env.backupDir, naming.BackupEntry{DirectoryName: "source", ChainID: "OPS004", Date: "2026-05-31"})
 	if !info.Complete() {
@@ -334,7 +331,7 @@ func TestOperationRunReportsALogLeftInTemp(t *testing.T) {
 	}
 	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
 	op := &operation{cfg: env.cfg, log: env.logger, logPath: env.logPath, backupDir: env.backupDir, date: "2026-05-31", runID: "OPS005", keySet: ks, master: master}
-	ui := &interacttest.Script{Out: &env.out}
+	ui := &interacttest.Script{}
 	if err := op.run(context.Background(), ui, env.sources, nil); err != nil {
 		t.Fatalf("backup run failed: %v", err)
 	}
@@ -350,8 +347,8 @@ func TestOperationRunReportsALogLeftInTemp(t *testing.T) {
 	if err != nil || !strings.Contains(string(data), "Backup completed successfully") {
 		t.Fatalf("the copy in TEMP lacks the run's lines: %v", err)
 	}
-	if out := env.out.String(); !strings.Contains(out, "Warnings: 1") {
-		t.Fatalf("the result doesn't count the problem as a warning: %q", out)
+	if len(ui.Results) != 1 || ui.Results[0].Warnings != 1 {
+		t.Fatalf("the result doesn't count the problem as a warning: %+v", ui.Results)
 	}
 }
 

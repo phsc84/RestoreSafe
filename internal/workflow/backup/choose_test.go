@@ -1,7 +1,6 @@
 package backup
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
@@ -9,17 +8,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
 )
-
-// planRecorder is a script that records the plans it is shown.
-type planRecorder struct {
-	*interacttest.Script
-	plans []interact.BackupPlan
-}
-
-func (r *planRecorder) ShowBackupPlan(p interact.BackupPlan) {
-	r.plans = append(r.plans, p)
-	r.Script.ShowBackupPlan(p)
-}
 
 func TestChoosePlanShowsEveryPlanBeforeItStarts(t *testing.T) {
 	env := newPreviewEnv(t, 0, 0)
@@ -34,27 +22,27 @@ func TestChoosePlanShowsEveryPlanBeforeItStarts(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		answers    []string
+		answers    []interact.BackupStart
 		start      bool
 		plansShown int
 		diff       bool
 		newKeys    bool
 	}{
-		{"as planned", []string{"y"}, true, 1, true, false},
-		{"full backup instead", []string{"f", "y"}, true, 2, false, false},
-		{"back to the automatic plan", []string{"f", "a", "y"}, true, 3, true, false},
-		{"new keys", []string{"k", "y"}, true, 2, false, true},
-		{"cancel after choosing full", []string{"f", "n"}, false, 2, false, false},
+		{"as planned", []interact.BackupStart{interact.BackupAsPlanned}, true, 1, true, false},
+		{"full backup instead", []interact.BackupStart{interact.BackupFull, interact.BackupAsPlanned}, true, 2, false, false},
+		{"back to the automatic plan", []interact.BackupStart{interact.BackupFull, interact.BackupAutomatic, interact.BackupAsPlanned}, true, 3, true, false},
+		{"new keys", []interact.BackupStart{interact.BackupNewKeys, interact.BackupAsPlanned}, true, 2, false, true},
+		{"cancel after choosing full", []interact.BackupStart{interact.BackupFull, interact.BackupCancel}, false, 2, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ui := &planRecorder{Script: &interacttest.Script{Out: &bytes.Buffer{}, ReadLine: interacttest.Answers(tc.answers...)}}
+			ui := &interacttest.Script{Starts: tc.answers}
 			keys, folders, start, err := choosePlan(ui, &cfg, env.dir, sources, infos, "")
 			if err != nil || start != tc.start {
 				t.Fatalf("start=%v err=%v, want start=%v", start, err, tc.start)
 			}
-			if len(ui.plans) != tc.plansShown {
-				t.Fatalf("%d plans shown, want %d", len(ui.plans), tc.plansShown)
+			if len(ui.BackupPlans) != tc.plansShown {
+				t.Fatalf("%d plans shown, want %d", len(ui.BackupPlans), tc.plansShown)
 			}
 			if got := folders["Docs"].IsDiff(); got != tc.diff {
 				t.Fatalf("differential = %v, want %v", got, tc.diff)
@@ -62,7 +50,7 @@ func TestChoosePlanShowsEveryPlanBeforeItStarts(t *testing.T) {
 			if got := keys.Existing == nil; got != tc.newKeys {
 				t.Fatalf("new keys = %v, want %v", got, tc.newKeys)
 			}
-			last := ui.plans[len(ui.plans)-1]
+			last := ui.BackupPlans[len(ui.BackupPlans)-1]
 			if last.Folders[0].Differential != tc.diff || last.Keys.New != tc.newKeys || last.FullRequested != !tc.diff {
 				t.Fatalf("the last plan shown is not the plan returned: %+v", last)
 			}
@@ -81,12 +69,12 @@ func TestBackupPlanDescribesTheRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	sources := plan.ResolveSources(cfg.SourceDirectories, "")
-	ui := &planRecorder{Script: &interacttest.Script{Out: &bytes.Buffer{}, ReadLine: interacttest.Answers("f", "n")}}
+	ui := &interacttest.Script{Starts: []interact.BackupStart{interact.BackupFull, interact.BackupCancel}}
 	if _, _, _, err := choosePlan(ui, &cfg, env.dir, sources, infos, ""); err != nil {
 		t.Fatal(err)
 	}
 
-	auto, forced := ui.plans[0], ui.plans[1]
+	auto, forced := ui.BackupPlans[0], ui.BackupPlans[1]
 	folder := auto.Folders[0]
 	if folder.Name != "Docs" || !folder.Differential || folder.DiffNumber != 1 || folder.Base != full || folder.Reason == "" {
 		t.Fatalf("unexpected folder plan: %+v", folder)

@@ -25,7 +25,7 @@ func TestRunsWaitForTheLockOfAnotherRun(t *testing.T) {
 	docs := filepath.Join(root, "Docs")
 	writeFile(t, filepath.Join(docs, "a.txt"), "content")
 	cfg := progressConfig([]string{docs}, filepath.Join(root, "Backups"))
-	runBackup(t, cfg, []string{"y"}, password, password)
+	runBackup(t, cfg, yes, password, password)
 	sets := newestRun(t, cfg)
 
 	backupLock, err := fsx.AcquireBackupLock(cfg.BackupDirectory)
@@ -71,7 +71,7 @@ func TestRunsWaitForTheLockOfAnotherRun(t *testing.T) {
 	}
 	s.done()
 	// A verification runs next to a restore.
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: sets}); err != nil {
 		t.Fatalf("verify next to a restore: %v", err)
 	}

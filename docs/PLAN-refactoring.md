@@ -31,7 +31,7 @@ Every item in the order of the phases (section "Phases"); the details are in the
 | | RF-110 | P2 | Find unknown config keys without yaml's error text | Open |
 | | RF-111 | P3 | Comments about the log pane and `cmd/yubidiag` | Open |
 | | RF-112 | P3 | `gui/view` stops taking its own words apart | Open |
-| | RF-113 | P3 | Test UI answers with values, not typed text | Open |
+| | RF-113 | P3 | Test UI answers with values, not typed text | Done 2026-10-25 (commit "RF-113: …"). `Script` answers from queues per question (`Starts`, `Recovery`, `Refusals`, `Secrets`) and records what it was shown; 291 to 174 lines, 233 fewer in all. `testutil.Output` and the plan and refusal recorders of the tests went with it |
 | | RF-116 | P3 | Raise the floors of `logging` and `fsx` | Open |
 | 4. Workflows and view | RF-103 | P3 | Restore and verify start the same way | Open |
 | | RF-104 | P3 | One plural helper | Open |

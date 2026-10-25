@@ -53,7 +53,7 @@ func TestCancelAtEachPhase(t *testing.T) {
 				cfg.RetentionKeep = 1
 				// Two runs, so that a third has an old chain to clean up.
 				for i, pw := range [][]string{{password, password}, {password}} {
-					s := useScript(t, []string{"y"}, pw...)
+					s := useScript(t, yes, pw...)
 					if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 						t.Fatalf("backup %d: %v", i+1, err)
 					}
@@ -61,7 +61,7 @@ func TestCancelAtEachPhase(t *testing.T) {
 
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				s := useScript(t, []string{"y"}, password)
+				s := useScript(t, yes, password)
 				o, hit := cancelAt(s, phase, cancel)
 				var err error
 				dest := filepath.Join(root, "Restore")

@@ -18,6 +18,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/filelock"
 	"github.com/phsc84/restoresafe/internal/workflow/backup"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 	"github.com/phsc84/restoresafe/internal/workflow/restore"
 	"github.com/phsc84/restoresafe/internal/workflow/verify"
@@ -31,60 +32,48 @@ var disabled = false
 var fullBackupsOnly = config.Differential{Enabled: &disabled}
 
 // script feeds scripted answers to the workflows. Running out of answers fails
-// the test, so every prompt of a workflow is accounted for.
+// the test, so every question of a workflow is accounted for.
 type script struct {
-	t         *testing.T
-	lines     []string
-	passwords []string
-	ui        *interacttest.Script
-	// out receives what the script writes: the plans and the result.
-	out testutil.Output
+	t  *testing.T
+	ui *interacttest.Script
 }
 
-// output returns what the script wrote, followed by the log file the last
-// workflow reported.
+// yes starts the operation as planned.
+var yes = []interact.BackupStart{interact.BackupAsPlanned}
+
+// output returns the plans shown, as reports, followed by the log file the
+// last workflow reported.
 func (s *script) output() string {
 	s.t.Helper()
-	out := s.out.String()
+	var out strings.Builder
+	for _, p := range s.ui.BackupPlans {
+		interacttest.WriteReport(&out, p.Details)
+	}
+	for _, p := range s.ui.RestorePlans {
+		interacttest.WriteReport(&out, p.Details)
+	}
+	for _, p := range s.ui.VerifyPlans {
+		interacttest.WriteReport(&out, p.Details)
+	}
 	if s.ui.LogPath == "" {
-		return out
+		return out.String()
 	}
 	log, err := os.ReadFile(s.ui.LogPath)
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	return out + string(log)
+	return out.String() + string(log)
 }
 
-func useScript(t *testing.T, lines []string, passwords ...string) *script {
+func useScript(t *testing.T, starts []interact.BackupStart, passwords ...string) *script {
 	t.Helper()
-	s := &script{t: t, lines: lines, passwords: passwords}
-	s.ui = &interacttest.Script{
-		Out: &s.out,
-		ReadLine: func(prompt string) (string, error) {
-			if len(s.lines) == 0 {
-				return "", fmt.Errorf("unexpected line prompt %q", prompt)
-			}
-			line := s.lines[0]
-			s.lines = s.lines[1:]
-			return line, nil
-		},
-		ReadPassword: func(prompt string) ([]byte, error) {
-			if len(s.passwords) == 0 {
-				return nil, fmt.Errorf("unexpected password prompt %q", prompt)
-			}
-			pw := s.passwords[0]
-			s.passwords = s.passwords[1:]
-			return []byte(pw), nil
-		},
-	}
-	return s
+	return &script{t: t, ui: &interacttest.Script{Starts: starts, Secrets: passwords}}
 }
 
 func (s *script) done() {
 	s.t.Helper()
-	if len(s.lines) != 0 || len(s.passwords) != 0 {
-		s.t.Fatalf("not all scripted input was used: lines=%v passwords=%d", s.lines, len(s.passwords))
+	if len(s.ui.Starts) != 0 || len(s.ui.Recovery) != 0 || len(s.ui.Secrets) != 0 {
+		s.t.Fatalf("not all scripted answers were used: starts=%v recovery=%v secrets=%d", s.ui.Starts, s.ui.Recovery, len(s.ui.Secrets))
 	}
 }
 
@@ -205,7 +194,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 
 	// Run 1: new keys (password entered twice), full backup.
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 1: %v", err)
 	}
@@ -229,7 +218,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	for run := 2; run <= 3; run++ {
 		writeFile(t, filepath.Join(docs, fmt.Sprintf("new-%d.txt", run)), "added in run "+fmt.Sprint(run))
 		writeFile(t, filepath.Join(docs, "letter.txt"), fmt.Sprintf("Dear RestoreSafe, version %d", run))
-		s := useScript(t, []string{"y"}, password)
+		s := useScript(t, yes, password)
 		if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 			t.Fatalf("backup %d: %v", run, err)
 		}
@@ -258,7 +247,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 
 	// Verify the newest backup.
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
@@ -270,7 +259,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 
 	// A wrong password three times ends the restore without writing anything.
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{"y"}, "wrong", "wrong", "wrong")
+	s = useScript(t, yes, "wrong", "wrong", "wrong")
 	err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest})
 	s.done()
 	if err == nil || !strings.Contains(err.Error(), "Too many wrong password attempts") {
@@ -281,7 +270,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	}
 
 	// Restore the newest backup and compare with the source.
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -294,7 +283,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 
 	// The full backup still restores the state of run 1.
 	fullDest := filepath.Join(root, "RestoreFull")
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, string(infos[len(infos)-1].Header.RunID)), Destination: fullDest}); err != nil {
 		t.Fatalf("restore full: %v", err)
 	}
@@ -340,7 +329,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	}
 
 	// First backup: everything readable.
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 1: %v", err)
 	}
@@ -348,7 +337,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 
 	// Second backup: the mail archive is locked by another program.
 	release := filelock.Hold(t, locked)
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 2: %v", err)
 	}
@@ -371,7 +360,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	// Restoring the newest backup reports the skipped file; excluded files
 	// were never backed up.
 	dest := filepath.Join(root, "Restore")
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
@@ -398,9 +387,9 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	}
 }
 
-func runBackup(t *testing.T, cfg *config.Config, lines []string, passwords ...string) string {
+func runBackup(t *testing.T, cfg *config.Config, starts []interact.BackupStart, passwords ...string) string {
 	t.Helper()
-	s := useScript(t, lines, passwords...)
+	s := useScript(t, starts, passwords...)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -433,7 +422,7 @@ func TestDifferentialChain(t *testing.T) {
 		Argon2:             testutil.FastArgon2Config,
 	}
 
-	out := runBackup(t, cfg, []string{"y"}, password, password)
+	out := runBackup(t, cfg, yes, password, password)
 	if !strings.Contains(out, "Full backup (reason: new keys)") {
 		t.Fatalf("first backup must be full: %q", out)
 	}
@@ -445,7 +434,7 @@ func TestDifferentialChain(t *testing.T) {
 	if err := os.Remove(filepath.Join(docs, "old.txt")); err != nil {
 		t.Fatal(err)
 	}
-	out = runBackup(t, cfg, []string{"y"}, password)
+	out = runBackup(t, cfg, yes, password)
 	for _, want := range []string{"Differential backup (base: full", "DIFF001-001.enc", "2 new or changed file(s) stored", "1 unchanged file(s)", "Post-backup verification successful"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("differential 1: expected %q in output: %q", want, out)
@@ -454,7 +443,7 @@ func TestDifferentialChain(t *testing.T) {
 
 	// Nothing changed since differential 1, but a differential holds all
 	// changes since the full backup, so differential 2 stores them again.
-	out = runBackup(t, cfg, []string{"y"}, password)
+	out = runBackup(t, cfg, yes, password)
 	if !strings.Contains(out, "DIFF002-001.enc") || !strings.Contains(out, "2 new or changed file(s) stored") {
 		t.Fatalf("differential 2 must contain all changes since the full backup: %q", out)
 	}
@@ -477,7 +466,7 @@ func TestDifferentialChain(t *testing.T) {
 
 	// [F] starts a new chain; retention (keep 1) deletes the old chain with
 	// its differentials and their logs.
-	out = runBackup(t, cfg, []string{"f", "y"}, password)
+	out = runBackup(t, cfg, []interact.BackupStart{interact.BackupFull, interact.BackupAsPlanned}, password)
 	if !strings.Contains(out, "Backup type: full (full backup requested)") {
 		t.Fatalf("expected forced full backup: %q", out)
 	}
@@ -511,7 +500,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 	}
 	const newPassword = "a brand new password"
 
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 1: %v", err)
 	}
@@ -521,7 +510,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 	oldKeys := infos[0].Header.KeySet.ID
 
 	writeFile(t, filepath.Join(docs, "a.txt"), "version 2")
-	s = useScript(t, []string{"k", "y"}, newPassword, newPassword)
+	s = useScript(t, []interact.BackupStart{interact.BackupNewKeys, interact.BackupAsPlanned}, newPassword, newPassword)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 2: %v", err)
 	}
@@ -537,13 +526,13 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 
 	// The old backup: the new password is rejected, the old one works.
 	oldDest := filepath.Join(root, "RestoreOld")
-	s = useScript(t, []string{"y"}, newPassword, newPassword, newPassword)
+	s = useScript(t, yes, newPassword, newPassword, newPassword)
 	err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, oldRun), Destination: oldDest})
 	s.done()
 	if err == nil {
 		t.Fatal("new password must not open the old backup")
 	}
-	s = useScript(t, []string{"y"}, password)
+	s = useScript(t, yes, password)
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: runSets(t, cfg, oldRun), Destination: oldDest}); err != nil {
 		t.Fatalf("restore old: %v", err)
 	}
@@ -554,7 +543,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 
 	// The newest backup opens with the new password.
 	newDest := filepath.Join(root, "RestoreNew")
-	s = useScript(t, []string{"y"}, newPassword)
+	s = useScript(t, yes, newPassword)
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: newDest}); err != nil {
 		t.Fatalf("restore new: %v", err)
 	}
@@ -578,7 +567,7 @@ func TestExistingKeysRejectAnotherPassword(t *testing.T) {
 		Argon2:             testutil.FastArgon2Config,
 	}
 
-	s := useScript(t, []string{"y"}, password, password)
+	s := useScript(t, yes, password, password)
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
@@ -586,7 +575,7 @@ func TestExistingKeysRejectAnotherPassword(t *testing.T) {
 
 	// The next backup reuses the existing keys, so only their password
 	// unlocks them; a different password is rejected three times.
-	s = useScript(t, []string{"y"}, "another password", "another password", "another password")
+	s = useScript(t, yes, "another password", "another password", "another password")
 	err := backup.Run(context.Background(), s.ui, cfg, "")
 	s.done()
 	if err == nil || !strings.Contains(err.Error(), "Too many wrong password attempts") {

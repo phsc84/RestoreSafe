@@ -167,17 +167,6 @@ func TestNewKeysConfirmNamesTheConfiguredLocks(t *testing.T) {
 	}
 }
 
-// planCapture records the backup plans the workflow shows.
-type planCapture struct {
-	*interacttest.Script
-	plans []interact.BackupPlan
-}
-
-func (c *planCapture) ShowBackupPlan(p interact.BackupPlan) {
-	c.plans = append(c.plans, p)
-	c.Script.ShowBackupPlan(p)
-}
-
 // TestBackupPlanOfARealPlan words the plan the workflow builds for the
 // scenarios, so the view reads what the workflow fills in.
 func TestBackupPlanOfARealPlan(t *testing.T) {
@@ -186,12 +175,12 @@ func TestBackupPlanOfARealPlan(t *testing.T) {
 		t.Run(string(c), func(t *testing.T) {
 			t.Parallel()
 			sc := scenario.Build(t, c)
-			ui := &planCapture{Script: &interacttest.Script{ReadLine: interacttest.Answers("n")}}
+			ui := &interacttest.Script{Starts: []interact.BackupStart{interact.BackupCancel}}
 			backup.Run(context.Background(), ui, sc.Config, "") //nolint:errcheck
-			if len(ui.plans) == 0 {
+			if len(ui.BackupPlans) == 0 {
 				t.Fatal("no plan shown")
 			}
-			v := BackupPlanOf(ui.plans[0], &interact.BackupStartOptions{}, sc.Config, sc.Now)
+			v := BackupPlanOf(ui.BackupPlans[0], &interact.BackupStartOptions{}, sc.Config, sc.Now)
 			if len(v.Rows) == 0 || v.Unlock.Text == "" || v.Space.Text == "" || v.Afterwards.Text == "" {
 				t.Fatalf("incomplete plan view: %+v", v)
 			}
