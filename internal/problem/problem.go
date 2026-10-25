@@ -12,7 +12,7 @@ import (
 )
 
 // The labels that join a message and its remedy in the text of an Error, as
-// logs, the log pane and message boxes show it.
+// logs, the log window and message boxes show it.
 const (
 	remedyLabel        = " Remedy: "
 	remedyLabelOwnLine = "\nRemedy: "

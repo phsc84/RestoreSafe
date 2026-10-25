@@ -7,13 +7,13 @@ import (
 	"github.com/phsc84/restoresafe/internal/logging"
 )
 
-// LogLine is a line of the log pane.
+// LogLine is a line of the log window.
 type LogLine struct {
 	Text string
 	Tone Tone
 }
 
-// LogFilter chooses the lines of the log pane.
+// LogFilter chooses the lines of the log window.
 type LogFilter int
 
 const (
