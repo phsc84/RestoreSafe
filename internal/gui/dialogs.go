@@ -41,6 +41,9 @@ type credentialDialog struct {
 	values   [][]byte
 	code     win32.HWND
 	codeFont windows.Handle
+	// copied is the clipboard's sequence number after Copy put the code
+	// on it, 0 while it didn't.
+	copied   uint32
 	ok, open bool
 	// linked is set when the user chose the link.
 	linked bool
@@ -48,7 +51,8 @@ type credentialDialog struct {
 
 // credentialAnswer is how the user closed a credential dialog.
 type credentialAnswer struct {
-	// values are the fields, read when ok; the caller zeroes masked ones.
+	// values are the fields, read when ok; all are secrets, which the
+	// caller zeroes.
 	values [][]byte
 	ok     bool
 	// link is set when the user chose the dialog's link.
@@ -92,7 +96,8 @@ func (a *app) runCredentialDialog(v view.CredentialDialog) credentialAnswer {
 			d.close(false)
 		case idCredentialCopy:
 			// Into a password manager, say; out of the clipboard history.
-			if win32.CopySecret(win.hwnd, v.Code) == nil {
+			if seq, err := win32.CopySecret(win.hwnd, v.Code); err == nil {
+				d.copied = seq
 				win32.SetText(copyButton, view.ButtonCopied)
 			}
 		}
@@ -243,8 +248,11 @@ func codeFont(dpi uint32) (windows.Handle, error) {
 	return win32.CreateFont(&lf)
 }
 
-// close ends the dialog; with ok, the field values are read first. A
-// displayed code is overwritten, so the controls do not keep it.
+// close ends the dialog; with ok, the field values are read first. Every
+// field holds a secret, a password or a typed recovery code, masked or not:
+// each is read without a Go string and its control cleared (GUI spec 13.1),
+// on Cancel too. A displayed code is overwritten, and its copy taken off
+// the clipboard if nothing was copied since (13.3).
 func (d *credentialDialog) close(ok bool) {
 	if !d.open {
 		return
@@ -252,20 +260,15 @@ func (d *credentialDialog) close(ok bool) {
 	if d.code != 0 {
 		win32.OverwriteText(d.code)
 	}
-	if ok {
-		for i, e := range d.edits {
-			if d.fields[i].Masked {
-				d.values = append(d.values, win32.ReadSecret(e))
-			} else {
-				d.values = append(d.values, []byte(win32.Text(e)))
-			}
-		}
-	} else {
-		// Clear masked fields so the controls do not keep a typed secret.
-		for i, e := range d.edits {
-			if d.fields[i].Masked {
-				cryptox.ZeroBytes(win32.ReadSecret(e))
-			}
+	if d.copied != 0 {
+		win32.ClearSecretCopy(d.win.hwnd, d.copied)
+	}
+	for _, e := range d.edits {
+		secret := win32.ReadSecret(e)
+		if ok {
+			d.values = append(d.values, secret)
+		} else {
+			cryptox.ZeroBytes(secret)
 		}
 	}
 	d.ok = ok

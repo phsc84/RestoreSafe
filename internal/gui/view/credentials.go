@@ -8,7 +8,9 @@ import (
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// Field is an edit field of a credential dialog.
+// Field is an edit field of a credential dialog. Every field holds a secret
+// (a password or a typed recovery code): Masked only decides whether it
+// shows dots.
 type Field struct {
 	Label  string
 	Masked bool

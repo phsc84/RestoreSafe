@@ -325,7 +325,7 @@ const (
 	stepNameYubiKey      = "register your YubiKey"
 	stepNameRecovery     = "recovery code"
 	recoveryIntro        = "Store this code in your password manager or write it down now. It's shown only once and opens your backups on its own."
-	recoveryNote         = "Keep it in a safe place, never next to your backups or unencrypted on this computer."
+	recoveryNote         = "Keep it in a safe place, never next to your backups or unencrypted on this computer. The copied code is removed from the clipboard when you continue."
 	recoveryStored       = "I have stored my recovery code"
 	attemptsLeft         = "%d attempts left."
 	attemptLeftOne       = "1 attempt left."

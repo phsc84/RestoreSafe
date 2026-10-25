@@ -19,6 +19,7 @@ var (
 	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
 	procSetClipboardData = user32.NewProc("SetClipboardData")
 	procCloseClipboard   = user32.NewProc("CloseClipboard")
+	procGetClipboardSeq  = user32.NewProc("GetClipboardSequenceNumber")
 	procRegisterClipFmt  = user32.NewProc("RegisterClipboardFormatW")
 	procSetCapture       = user32.NewProc("SetCapture")
 	procReleaseCapture   = user32.NewProc("ReleaseCapture")
@@ -118,11 +119,37 @@ func CopyText(owner HWND, text string) error {
 // CopySecret puts a secret, given as UTF-8 bytes, on the clipboard, marked
 // so that Windows keeps it out of the clipboard history and the cloud
 // clipboard, and clipboard monitors leave it alone. It zeroes its UTF-16
-// copy afterwards; the clipboard keeps its own.
-func CopySecret(owner HWND, secret []byte) error {
+// copy afterwards; the clipboard keeps its own. It returns the clipboard's
+// sequence number with the secret on it, for ClearSecretCopy.
+func CopySecret(owner HWND, secret []byte) (uint32, error) {
 	u := secretUTF16(secret)
 	defer clear(u)
-	return copyUTF16(owner, u, true)
+	if err := copyUTF16(owner, u, true); err != nil {
+		return 0, err
+	}
+	return ClipboardSequence(), nil
+}
+
+// ClipboardSequence returns the clipboard's sequence number, which Windows
+// raises whenever its content changes.
+func ClipboardSequence() uint32 {
+	n, _, _ := procGetClipboardSeq.Call()
+	return uint32(n)
+}
+
+// ClearSecretCopy empties the clipboard if it still holds what CopySecret
+// put on it at sequence number seq; something copied since is left alone
+// (GUI spec 13.3). It reports whether it emptied it.
+func ClearSecretCopy(owner HWND, seq uint32) bool {
+	if seq == 0 || ClipboardSequence() != seq {
+		return false
+	}
+	if r, _, _ := procOpenClipboard.Call(uintptr(owner)); r == 0 {
+		return false
+	}
+	defer procCloseClipboard.Call()
+	r, _, _ := procEmptyClipboard.Call()
+	return r != 0
 }
 
 // Clipboard formats that mark a secret; their value is a DWORD 0.

@@ -12,6 +12,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - A source folder that is a junction or symbolic link (for example a Documents folder redirected to another drive) is backed up again. Until now, its backup was empty and reported as successful.
 - Links inside a source folder (junctions, symbolic links, mount points), which RestoreSafe never follows, are no longer left out without a word: the log names each, and the result card counts them per folder. The Create backup window says how many a folder has, and how many of its cloud files (OneDrive, iCloud) are only online and are downloaded for the backup.
+- The recovery code is handled as carefully as a password: a code typed to unlock is read and cleared like a password, also when you cancel, and a code you copied when it was created is taken off the clipboard when you continue, unless you copied something else since. The dialog says so.
 - When the log of a backup, restore or verification can't be saved in the backup directory, the result card now says so and names the copy in the TEMP folder, which **Show log** opens. Before, this was reported nowhere, and the copy in TEMP was the only one. A log that can't be created, or that misses lines, is reported the same way.
 
 ## [2.1.1] - 2026-10-19

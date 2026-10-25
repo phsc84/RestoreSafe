@@ -56,6 +56,10 @@ func TestNewKeysDialogsCountTheSteps(t *testing.T) {
 	if r.Check != "I have stored my recovery code" || r.OK != "Continue" {
 		t.Fatalf("recovery code checkbox %q, button %q", r.Check, r.OK)
 	}
+	// GUI spec 13.3: the note says that Continue takes the copy away.
+	if !strings.HasSuffix(r.Note, "The copied code is removed from the clipboard when you continue.") {
+		t.Fatalf("recovery code note %q", r.Note)
+	}
 	checkWriting(t, r)
 
 	only := interact.KeyPlan{New: true, Password: true}

@@ -1,6 +1,7 @@
 package win32
 
 import (
+	"os"
 	"runtime"
 	"testing"
 	"unsafe"
@@ -37,6 +38,68 @@ func TestReadSecretReturnsUTF8AndClearsTheControl(t *testing.T) {
 	}
 	if r := SendMessage(edit, emCanUndo, 0, 0); r != 0 {
 		t.Fatal("undo must not bring the secret back")
+	}
+}
+
+// TestReadSecretReadsAnUnmaskedFieldTheSameWay: the typed recovery code is
+// a secret in a field without dots; it is read and cleared like a password
+// (GUI spec 13.1, RF-119).
+func TestReadSecretReadsAnUnmaskedFieldTheSameWay(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	edit, err := CreateWindow(0, "EDIT", "", ES_AUTOHSCROLL, 0, 0, 200, 24, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer DestroyWindow(edit)
+	const code = "K7Q2-M9XD-4TPR-8WZN-C3HF-6JBV"
+	SendMessage(edit, EM_REPLACESEL, 1, uintptr(unsafe.Pointer(UTF16(code))))
+
+	if got := ReadSecret(edit); string(got) != code {
+		t.Fatalf("ReadSecret = %q, want %q", got, code)
+	}
+	if text := Text(edit); text != "" {
+		t.Fatalf("the control must be empty afterwards, got %q", text)
+	}
+	if r := SendMessage(edit, emCanUndo, 0, 0); r != 0 {
+		t.Fatal("undo must not bring the code back")
+	}
+}
+
+// TestClearSecretCopyLeavesWhatWasCopiedSince uses the real clipboard and
+// empties it, so it runs only with RESTORESAFE_CLIPBOARD_TEST=1 (GUI spec
+// 13.3, RF-119; the manual row CR-2 checks the same before a release).
+func TestClearSecretCopyLeavesWhatWasCopiedSince(t *testing.T) {
+	if os.Getenv("RESTORESAFE_CLIPBOARD_TEST") != "1" {
+		t.Skip("uses the clipboard; set RESTORESAFE_CLIPBOARD_TEST=1")
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	owner, err := CreateWindow(0, "STATIC", "", 0, 0, 0, 10, 10, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer DestroyWindow(owner)
+
+	seq, err := CopySecret(owner, []byte("SECRET-CODE"))
+	if err != nil || seq == 0 {
+		t.Fatalf("CopySecret: %d, %v", seq, err)
+	}
+	if !ClearSecretCopy(owner, seq) || ClipboardSequence() == seq {
+		t.Fatal("the code must be taken off the clipboard")
+	}
+
+	seq, err = CopySecret(owner, []byte("SECRET-CODE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyText(owner, "something the user copied"); err != nil {
+		t.Fatal(err)
+	}
+	after := ClipboardSequence()
+	if ClearSecretCopy(owner, seq) || ClipboardSequence() != after {
+		t.Fatal("something copied since must be left alone")
 	}
 }
 
