@@ -54,8 +54,12 @@ func TestNilBackupLockReleaseIsSafe(t *testing.T) {
 }
 
 func TestReadLocksShareButExcludeABackup(t *testing.T) {
-	// The restores stand for RestoreSafe windows of their own on this PC.
+	// The restores and the backup stand for RestoreSafe windows of their own
+	// on this PC.
 	fakeHolders(t, computerName(), true, true)
+	own := thisProcess
+	thisProcess = func() uint32 { return 0 }
+	t.Cleanup(func() { thisProcess = own })
 	dir := t.TempDir()
 
 	read1, err := AcquireReadLock(dir)
@@ -157,8 +161,10 @@ func TestBackupLockWritesItsHolderLine(t *testing.T) {
 	}
 	_, err = AcquireBackupLock(dir)
 	var busy *LockBusy
-	if !errors.As(err, &busy) || busy.Holder == nil || !busy.Running || busy.Orphan() || !strings.Contains(err.Error(), "Another RestoreSafe window") {
-		t.Fatalf("a running backup of this PC: got %v, %+v", err, busy)
+	// Its own line can't be a running operation of this process: it is left
+	// from an earlier run (refactoring plan RF-126).
+	if !errors.As(err, &busy) || busy.Holder == nil || !busy.Orphan() || !strings.Contains(err.Error(), "probably by this PC") {
+		t.Fatalf("a line of this process: got %v, %+v", err, busy)
 	}
 	backup.Release()
 	f, err = os.Open(filepath.Join(dir, lockFileName))

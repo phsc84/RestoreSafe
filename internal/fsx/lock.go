@@ -64,8 +64,8 @@ type LockBusy struct {
 	OtherPC bool
 	// Running is set when a RestoreSafe on this PC holds the lock: the
 	// process of the holder line runs (the three-part test of
-	// processRunning), or, without a line, another RestoreSafe process
-	// runs on this PC.
+	// processRunning) and is not this process, or, without a line, another
+	// RestoreSafe process runs on this PC.
 	Running bool
 }
 
@@ -80,6 +80,7 @@ func (b *LockBusy) Orphan() bool { return !b.OtherPC && !b.Running }
 // The checks of who holds a lock; tests replace them.
 var (
 	thisComputer         = computerName
+	thisProcess          = func() uint32 { return uint32(os.Getpid()) }
 	processRunning       = runningRestoreSafe
 	otherInstanceRunning = otherRestoreSafeRunning
 )
@@ -171,6 +172,11 @@ func inspect(f *os.File, dir string) *LockBusy {
 		b.Running = otherInstanceRunning()
 	case !strings.EqualFold(b.Holder.Computer, thisComputer()):
 		b.OtherPC = true
+	case b.Holder.PID == thisProcess():
+		// This process runs one operation at a time and holds no lock when
+		// it starts one: its own line is left from an earlier run whose
+		// close a server kept after a network drop (refactoring plan
+		// RF-126).
 	default:
 		b.Running = processRunning(b.Holder.PID, b.Holder.Since)
 	}

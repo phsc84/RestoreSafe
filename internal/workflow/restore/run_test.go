@@ -103,7 +103,7 @@ func TestRunRefusesADestinationThatHoldsTheFolderBeforeAsking(t *testing.T) {
 	}
 }
 
-func TestRunRefusesWhileABackupHoldsTheDirectory(t *testing.T) {
+func TestRunWaitsForALockLeftByThisProcess(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	lock, err := fsx.AcquireBackupLock(fx.BackupDir)
@@ -112,9 +112,16 @@ func TestRunRefusesWhileABackupHoldsTheDirectory(t *testing.T) {
 	}
 	defer lock.Release()
 
-	err = Run(context.Background(), &interacttest.Script{}, fx.Config(), "", request(t, fx))
-	if err == nil || !strings.Contains(err.Error(), "A backup is running") {
-		t.Fatalf("expected the running backup to block the restore, got %v", err)
+	// The lock's holder line names this process, which runs one operation
+	// at a time: a lock left from an earlier run, which the restore waits for
+	// until Cancel (core spec 14, refactoring plan RF-126). Another
+	// RestoreSafe's backup is refused at once (fsx tests).
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	u := &interacttest.Script{OnLockWait: cancel}
+	err = Run(ctx, u, fx.Config(), "", request(t, fx))
+	if !errors.Is(err, context.Canceled) || len(u.LockWaits) != 1 {
+		t.Fatalf("expected the restore to wait for the lock until Cancel, got %v, waits %q", err, u.LockWaits)
 	}
 }
 
