@@ -157,6 +157,22 @@ func TestRestorePageListAFailedRunByItsLog(t *testing.T) {
 	}
 }
 
+func TestSetWordsNamesTheDayWithoutATime(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		row  BackupRow
+		want string
+	}{
+		{BackupRow{Folder: "Documents", DiffNumber: 3, Day: "today"}, "Documents, differential 3 of today"},
+		{BackupRow{Folder: "Documents", DiffNumber: 3, Day: "Sun 27 Sep"}, "Documents, differential 3 of Sun 27 Sep"},
+		{BackupRow{Folder: "Pics, 2026", Day: "yesterday"}, "Pics, 2026, full backup of yesterday"},
+	} {
+		if got := setWords(tc.row, tc.row.Day); got != tc.want {
+			t.Errorf("setWords(%+v) = %q, want %q", tc.row, got, tc.want)
+		}
+	}
+}
+
 func TestRestorePageSelection(t *testing.T) {
 	t.Parallel()
 	p, _, _ := restorePageOf(t, scenario.Protected)

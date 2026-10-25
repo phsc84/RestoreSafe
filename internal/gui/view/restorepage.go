@@ -49,10 +49,15 @@ type BackupRow struct {
 	// Set is the set's name, which identifies the row.
 	Set string
 	// Tip describes the row in full: set name, path, created, full backup.
-	Tip        string
-	Folder     string
-	Path       string
-	Badge      Badge
+	Tip    string
+	Folder string
+	Path   string
+	Badge  Badge
+	// DiffNumber is the number of a differential, 0 for a full backup.
+	DiffNumber int
+	// Day is the day of the set's backup run in words ("today"), "" for an
+	// incomplete set, which has no run.
+	Day        string
 	BasedOn    string
 	BasedOnTip string
 	Size       string
@@ -255,7 +260,9 @@ func groupsOf(s *health.Snapshot, r *flow.Run, folder string, now time.Time) []R
 			if info.Complete() && naming.BackupID(info.Header.RunID) == run.RunID {
 				bytes += info.SizeBytes
 				if folder == AllFolders || info.Entry.DirectoryName == folder {
-					g.Rows = append(g.Rows, rowOf(s, info, r, now))
+					row := rowOf(s, info, r, now)
+					row.Day = Day(run.Created, now)
+					g.Rows = append(g.Rows, row)
 				} else {
 					g.Hidden++
 				}
@@ -365,14 +372,15 @@ func rowOf(s *health.Snapshot, info catalog.SetInfo, r *flow.Run, now time.Time)
 	e := info.Entry
 	set := e.String()
 	row := BackupRow{
-		Set:     set,
-		Folder:  e.DirectoryName,
-		Badge:   badgeOf(e),
-		BasedOn: "-",
-		Size:    Size(info.SizeBytes),
-		Chain:   string(e.ChainID),
-		Usable:  true,
-		Status:  Status{Text: statusComplete, Tone: ToneSuccess, Glyph: GlyphCheck},
+		Set:        set,
+		Folder:     e.DirectoryName,
+		Badge:      badgeOf(e),
+		DiffNumber: e.DiffNumber,
+		BasedOn:    "-",
+		Size:       Size(info.SizeBytes),
+		Chain:      string(e.ChainID),
+		Usable:     true,
+		Status:     Status{Text: statusComplete, Tone: ToneSuccess, Glyph: GlyphCheck},
 	}
 	for _, f := range s.Folders {
 		if f.BackupName == e.DirectoryName {

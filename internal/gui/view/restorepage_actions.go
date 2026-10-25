@@ -2,7 +2,6 @@ package view
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/phsc84/restoresafe/internal/format/naming"
 )
@@ -56,7 +55,7 @@ func SelectionOf(p RestorePage, runID naming.BackupID, set string) ActionBar {
 			if row.Set != set {
 				continue
 			}
-			bar.Text = setWords(row, g.When)
+			bar.Text = setWords(row, row.Day)
 			bar.What = bar.Text
 			if row.Usable {
 				bar.Sets = []string{row.Set}
@@ -92,13 +91,9 @@ func enable(bar ActionBar, reason string) ActionBar {
 
 // setWords names a set as GUI spec 3.6 writes it: "Documents, differential 3
 // of today".
-func setWords(row BackupRow, when string) string {
-	day := when
-	if i := strings.Index(day, ","); i > 0 && !strings.Contains(day[:i], " ") {
-		day = day[:i] // "today, 09:12" -> "today"
-	}
-	if row.Badge.Kind == BadgeDiff {
-		return fmt.Sprintf(setDiffOf, row.Folder, strings.TrimPrefix(row.Badge.Text, "DIFF "), day)
+func setWords(row BackupRow, day string) string {
+	if row.DiffNumber > 0 {
+		return fmt.Sprintf(setDiffOf, row.Folder, row.DiffNumber, day)
 	}
 	return fmt.Sprintf(setFullOf, row.Folder, day)
 }

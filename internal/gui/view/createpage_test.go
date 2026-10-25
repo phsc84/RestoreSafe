@@ -66,6 +66,9 @@ func TestCreatePageHeroOfEveryScenario(t *testing.T) {
 			if h.Line == "" && tc.condition != scenario.Empty {
 				t.Fatalf("the hero needs its facts: %+v", h)
 			}
+			if h.TitleIsPath != (tc.condition == scenario.SourceMissing) {
+				t.Fatalf("TitleIsPath = %v for the title %q", h.TitleIsPath, h.Title)
+			}
 			checkWriting(t, o)
 		})
 	}

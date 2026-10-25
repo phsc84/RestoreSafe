@@ -19,6 +19,9 @@ type Hero struct {
 	Tone  Tone
 	Glyph Glyph
 	Title string
+	// TitleIsPath is set when the title holds a path, whose end (the folder)
+	// is kept when the title is shortened.
+	TitleIsPath bool
 	// Line carries the facts.
 	Line string
 	// Primary is the one fix action; Secondary is optional (errors only).
@@ -218,9 +221,9 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 	case interact.CodeBackupDirNotWritable:
 		return Hero{Title: heroDirNotWritable, Line: fmt.Sprintf(heroDirNotWritLine, Path(p.Path)), Primary: checkAgain}
 	case interact.CodeSourceMissing:
-		return Hero{Title: fmt.Sprintf(heroSourceMissing, Path(p.Path)), Line: heroSourceMissLine, Primary: checkAgain, Secondary: editConfig}
+		return Hero{Title: fmt.Sprintf(heroSourceMissing, Path(p.Path)), TitleIsPath: true, Line: heroSourceMissLine, Primary: checkAgain, Secondary: editConfig}
 	case interact.CodeSourceInvalid:
-		return Hero{Title: fmt.Sprintf(heroSourceInvalid, Path(p.Path)), Line: heroSourceInvLine, Primary: checkAgain, Secondary: editConfig}
+		return Hero{Title: fmt.Sprintf(heroSourceInvalid, Path(p.Path)), TitleIsPath: true, Line: heroSourceInvLine, Primary: checkAgain, Secondary: editConfig}
 	case interact.CodeBaseMissing:
 		title, line := fmt.Sprintf(heroBaseMissing, p.Count, p.Folder), heroBaseMissingLine
 		if p.Count == 1 {

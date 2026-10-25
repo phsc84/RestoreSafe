@@ -390,7 +390,7 @@ const (
 	selectionHint       = "Select a backup to restore or verify it."
 	selectionRun        = "Backup of %s (%s)"
 	selectionLogOnly    = "%s: no backup was written. The log says why."
-	setDiffOf           = "%s, differential %s of %s"
+	setDiffOf           = "%s, differential %d of %s"
 	setFullOf           = "%s, full backup of %s"
 	buttonRestore       = "&Restore…"
 	buttonVerify        = "&Verify…"

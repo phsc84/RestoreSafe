@@ -1,8 +1,6 @@
 package gui
 
 import (
-	"strings"
-
 	"github.com/phsc84/restoresafe/internal/gui/view"
 	"github.com/phsc84/restoresafe/internal/gui/widget"
 	"github.com/phsc84/restoresafe/internal/gui/win32"
@@ -42,7 +40,7 @@ func (h *hero) set(v view.Hero) {
 	win32.SetText(h.title, v.Title)
 	// A path in the title keeps its end (the folder) when shortened.
 	style := win32.Style(h.title) &^ (win32.SS_ENDELLIPSIS | win32.SS_PATHELLIPSIS)
-	if strings.Contains(v.Title, `\`) {
+	if v.TitleIsPath {
 		win32.SetStyle(h.title, style|win32.SS_PATHELLIPSIS)
 	} else {
 		win32.SetStyle(h.title, style|win32.SS_ENDELLIPSIS)
