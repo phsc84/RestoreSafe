@@ -32,7 +32,7 @@ Every item in the order of the phases (section "Phases"); the details are in the
 | | RF-111 | P3 | Comments about the log pane and `cmd/yubidiag` | Done 2026-10-25 (commit "RF-111: …"). The comments of `interact.go`, `logging.go` and `testutil/output.go` went with RF-108 and RF-113. `git grep "log pane"` also finds GUI spec BK-5 and its test row, which say that the page has none; they stay |
 | | RF-112 | P3 | `gui/view` stops taking its own words apart | Done 2026-10-25 (commit "RF-112: …"). `BackupRow` carries `Day` and `DiffNumber`, `Hero` carries `TitleIsPath`. The cut at the comma missed days with a space ("Sun 27 Sep, 09:12" kept its time); now every day is named without it, as GUI spec 3.6 says (CHANGELOG) |
 | | RF-113 | P3 | Test UI answers with values, not typed text | Done 2026-10-25 (commit "RF-113: …"). `Script` answers from queues per question (`Starts`, `Recovery`, `Refusals`, `Secrets`) and records what it was shown; 291 to 174 lines, 233 fewer in all. `testutil.Output` and the plan and refusal recorders of the tests went with it |
-| | RF-116 | P3 | Raise the floors of `logging` and `fsx` | Open |
+| | RF-116 | P3 | Raise the floors of `logging` and `fsx` | Done 2026-10-25 (commit "RF-116: …"), measured locally (`go run ./tools/ci test`), not yet in CI: `logging` 93 (93.5 % after RF-108). `fsx` stays at 92: it measures 92.8 %, the 94.2 % of the item was before RF-126 added the holder line and its retry to `lock.go` |
 | 4. Workflows and view | RF-103 | P3 | Restore and verify start the same way | Open |
 | | RF-104 | P3 | One plural helper | Open |
 | | RF-105 | P3 | Restore window's choices as one value | Open |
