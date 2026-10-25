@@ -7,6 +7,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- The README and the Create backup window, when it creates new keys, say that the logs next to your backups are not encrypted and which names they reveal: your source folders and every file or link that wasn't backed up.
 - `retention_keep` keeps at least 2 chains (0 still keeps all). Old chains are deleted right after a new backup; if the backup disk or NAS loses power at that moment, the new backup can be damaged, and with 1 chain no backup would be left. A `retention_keep: 1` is used as 2: Create backup and the Retention card on Settings show a warning until `config.yaml` says 2 or more.
 
 ### Fixed

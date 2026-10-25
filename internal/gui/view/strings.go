@@ -140,7 +140,7 @@ const ButtonClose = buttonClose
 const (
 	planTitle              = "Create backup"
 	planHeading            = "Back up %s to %s"
-	planNewKeys            = "New keys will be created: %s. Every folder gets a full backup."
+	planNewKeys            = "New keys will be created: %s. Every folder gets a full backup. The backups are encrypted, but their logs aren't: they name your folders and every file or link that wasn't backed up."
 	planWhyDiff            = "Based on the full backup of %s"
 	planOnlineOne          = "%s file (%s) is only in the cloud and is downloaded for the backup"
 	planOnline             = "%s files (%s) are only in the cloud and are downloaded for the backup"

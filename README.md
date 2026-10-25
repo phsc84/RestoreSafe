@@ -26,7 +26,7 @@ RestoreSafe is a standalone Windows 64-bit tool that turns your directories into
 
 A plain copy of your files is only as safe as the place where it lies. RestoreSafe makes the backup itself safe, so the place no longer matters:
 
-- **Stolen or leaked backups are useless.** File contents, file names, folders, sizes, and times are encrypted with AES-256-GCM. A thief, a cloud provider, or anyone with access to your cloud account sees only encrypted `.enc` files (see [What is not encrypted](#what-is-not-encrypted) for the few readable details). To open them, they need one of your unlock methods: your password, your YubiKey, or your recovery code.
+- **Stolen or leaked backups are useless.** File contents, file names, folders, sizes, and times are encrypted with AES-256-GCM. A thief, a cloud provider, or anyone with access to your cloud account sees encrypted `.enc` files and, next to them, the logs, which are not encrypted (see [What is not encrypted](#what-is-not-encrypted) for what the logs and the backups reveal). To open them, they need one of your unlock methods: your password, your YubiKey, or your recovery code.
 - **Guessing your password is expensive.** Argon2id key derivation makes every password guess cost time and memory, and with a YubiKey a password alone is not enough.
 - **Tampering is detected.** Every part of a backup is authenticated: the encrypted data, the locked boxes with the master key, the header, and the order and completeness of the data. Someone who modifies, swaps, reorders, or cuts off any part of a backup file - or a disk or upload error that does - cannot produce a backup that RestoreSafe accepts. Restore and verify stop and report the damage instead of giving you altered files.
 - **Every file is checked.** Each backup contains an encrypted list of all its files with their SHA-256 checksums. Restore and verify check every file against it, so you know that what you get back is exactly what you backed up.
@@ -266,6 +266,14 @@ Everything inside a backup is encrypted: the contents of your files, their names
 - the time the backup was made and the RestoreSafe version;
 - the boxes: for each, its kind (password, YubiKey, recovery code), the salt and settings of its key derivation, and for a YubiKey the ID of its registered credential;
 - the total size of the backup files, as for any file.
+
+**The logs are not encrypted.** Each backup run writes a log next to its backups (`YYYY-MM-DD_RUNID.log`), which RestoreSafe reads to show what happened. It names:
+
+- the paths of your source folders (for example `C:\Users\Anna\Documents`);
+- every file or folder that couldn't be read and is missing from a backup, and every link that wasn't backed up, with its path inside the folder;
+- with `log_level: "debug"`, more file paths.
+
+So whoever can read your backup directory can read these names, though not the files themselves. Keep the backup directory where only you can read it (a NAS share of your own, a cloud folder you don't share). If a name must not be known, rename the file or leave it out of the backup with `exclude`.
 
 ### Your unlock methods
 

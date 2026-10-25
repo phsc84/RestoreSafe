@@ -19,7 +19,7 @@ Every item in the order of the phases (section "Phases"); the details are in the
 | | RF-123 | P2 | `retention_keep` at least 2; a 1 is used as 2 with a warning | Done 2026-10-25 (commit "RF-123: retention_keep is at least 2"). The skip of retention after a failed verification has no test of its own: it needs a set damaged between writing and verifying. Owner test before release open |
 | | RF-118 | P1 | Links counted and logged; online-only cloud files announced; classification by reparse tag; a linked source folder resolved (it was backed up empty) | Done 2026-10-25 (commit "RF-118: …"). Owner test before release open (iCloud Drive with online-only files) |
 | | RF-119 | P2 | Recovery code: typed field without a Go string, clipboard emptied on close | Done 2026-10-25 (commit "RF-119: …"). The clipboard test runs only with `RESTORESAFE_CLIPBOARD_TEST=1`; manual row CR-2 extended |
-| | RF-120 | P2 | README says what the logs reveal | Open |
+| | RF-120 | P2 | README says what the logs reveal | Done 2026-10-25 (commit "RF-120: …"); the enrollment text is the Create backup window's note on new keys, the one screen every mode passes when keys are created |
 | | RF-126 | P2 | Lock after a network drop: no orphan, recognise it, wait | Waits for the owner's measurement |
 | 2. Safety net | RF-115 | P2 | Scripts for the GUI rows "Scripted walk possible" | Open |
 | | RF-114 | P3 | Test a full disk during a restore | Open |

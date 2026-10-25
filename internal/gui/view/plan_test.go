@@ -137,7 +137,8 @@ func TestBackupPlanNewKeysAndRemovals(t *testing.T) {
 		set("Documents", "BBB002", 3, jul, 1<<30),
 	}
 	v := BackupPlanOf(p, nil, nil, planNow)
-	if v.KeysNote != "New keys will be created: recovery_code enabled in config.yaml. Every folder gets a full backup." {
+	// Creating keys is where the user learns what the logs reveal (core spec 10, RF-120).
+	if v.KeysNote != "New keys will be created: recovery_code enabled in config.yaml. Every folder gets a full backup. The backups are encrypted, but their logs aren't: they name your folders and every file or link that wasn't backed up." {
 		t.Fatalf("keys note %q", v.KeysNote)
 	}
 	if v.Unlock.Text != "New password, register your YubiKey (2 prompts), store a recovery code" {
