@@ -38,7 +38,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
-	lock, lockIssue, err := job.LockForReading(backupDir)
+	lock, lockIssue, err := job.LockForReading(ctx, u, backupDir)
 	if err != nil {
 		return err
 	}

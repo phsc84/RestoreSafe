@@ -287,3 +287,13 @@ func restoringLine(r *flow.Run, folder string, now time.Time) string {
 	}
 	return folder
 }
+
+// PlanWaitingText is the line of a plan window before its plan arrives:
+// the workflow's wait for the lock of the backup directory when it waits,
+// else "Preparing the backup plan…".
+func PlanWaitingText(lockWait string) string {
+	if lockWait != "" {
+		return lockWait
+	}
+	return progressPreparing
+}

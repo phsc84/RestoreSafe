@@ -38,6 +38,9 @@ type planDialog struct {
 
 	plan *interact.BackupPlan
 	opts *interact.BackupStartOptions
+	// lockWait is the text of the wait for the lock, shown instead of the
+	// marquee's "Preparing" until the plan arrives.
+	lockWait string
 	// answer answers ConfirmBackupStart; nil while no question is open.
 	answer      func(interact.BackupStart, error)
 	showRemoves bool
@@ -92,6 +95,12 @@ func (p *planDialog) setPlan(plan interact.BackupPlan) {
 	p.build(false)
 }
 
+// setLockWait shows that the backup waits for the lock.
+func (p *planDialog) setLockWait(text string) {
+	p.lockWait = text
+	p.build(false)
+}
+
 // ask shows the choices and waits for the user.
 func (p *planDialog) ask(opts interact.BackupStartOptions, answer func(interact.BackupStart, error)) {
 	p.opts, p.answer = &opts, answer
@@ -113,11 +122,12 @@ func (p *planDialog) build(place bool) {
 	p.table.begin(st, p.plan != nil)
 	if p.plan == nil {
 		p.view = view.BackupPlanView{Cancel: view.Button{Text: view.ButtonCancel, Action: view.ActionCancel, Enabled: true}}
-		st.para(view.PlanPreparing, widget.TextBody, pal.Text, view.GlyphNone)
+		text := view.PlanWaitingText(p.lockWait)
+		st.para(text, widget.TextBody, pal.Text, view.GlyphNone)
 		st.gap(8)
 		if bar, err := widget.NewProgressBar(panel.HWND()); err == nil {
 			panel.Adopt(bar.HWND())
-			win32.SetAccessibleName(bar.HWND(), view.PlanPreparing)
+			win32.SetAccessibleName(bar.HWND(), text)
 			bar.Set(-1)
 			st.row(10, cell{hwnd: bar.HWND(), fill: true})
 		}

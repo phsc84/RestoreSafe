@@ -70,5 +70,13 @@ func (w *restoreDialog) destChecked(c *destCheck) {
 func (w *restoreDialog) setPlan(p interact.RestorePlan) {
 	w.checkSeq++ // a check still running is older
 	w.plan, w.checkErr, w.checking = &p, nil, false
+	w.lockWait = ""
+	w.update()
+}
+
+// setLockWait shows that the restore started with Start waits for the
+// lock.
+func (w *restoreDialog) setLockWait(text string) {
+	w.lockWait = text
 	w.update()
 }

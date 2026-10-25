@@ -44,7 +44,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 		return problem.Errorf("Failed to create backup directory: %w.", err).WithRemedy("Check the path (prefer forward slashes in config.yaml, e.g. C:/Backups) and verify write permissions.")
 	}
 
-	lock, err := fsx.AcquireBackupLock(backupDir)
+	lock, err := job.Lock(ctx, u, func() (*fsx.BackupLock, error) { return fsx.AcquireBackupLock(backupDir) })
 	if err != nil {
 		return err
 	}

@@ -49,7 +49,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	}
 	restorePath := req.Destination
 
-	lock, lockIssue, err := job.LockForReading(backupDir)
+	lock, lockIssue, err := job.LockForReading(ctx, u, backupDir)
 	if err != nil {
 		return err
 	}

@@ -15,6 +15,9 @@ type Dialogs interface {
 	ConfirmBackupStart(opts interact.BackupStartOptions, answer func(interact.BackupStart, error))
 	RestorePlan(p interact.RestorePlan, answer func())
 	VerifyPlan(p interact.VerifyPlan, answer func())
+	// LockWait shows, in the open plan window, that the operation waits
+	// for the lock of the backup directory.
+	LockWait(text string, answer func())
 	// ConfirmStart asks to start "restore" or "verification".
 	ConfirmStart(action string, answer func(bool, error))
 	// ChooseUnlockMethod answers true for the recovery code. A dialog that
@@ -71,6 +74,11 @@ func (u *UI) ShowRestorePlan(p interact.RestorePlan) {
 // ShowVerifyPlan shows the plan; it returns once the plan is on screen.
 func (u *UI) ShowVerifyPlan(p interact.VerifyPlan) {
 	u.b.Ask(func(answer func(any, error)) { u.d.VerifyPlan(p, func() { answer(nil, nil) }) }, nil, nil) //nolint:errcheck
+}
+
+// WaitingForLock shows the text; it returns once it is on screen.
+func (u *UI) WaitingForLock(text string) {
+	u.b.Ask(func(answer func(any, error)) { u.d.LockWait(text, func() { answer(nil, nil) }) }, nil, nil) //nolint:errcheck
 }
 
 // ConfirmBackupStart asks whether to start the backup of the plan shown.

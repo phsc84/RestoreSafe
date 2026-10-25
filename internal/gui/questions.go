@@ -51,6 +51,21 @@ func (q questions) VerifyPlan(p interact.VerifyPlan, answer func()) {
 	answer()
 }
 
+// LockWait shows the wait for the lock in the window of the operation: the
+// Create backup window, the Verify window or the Restore backup window,
+// whose Cancel ends the wait.
+func (q questions) LockWait(text string, answer func()) {
+	switch {
+	case q.a.plan != nil:
+		q.a.plan.setLockWait(text)
+	case q.a.verify != nil:
+		q.a.verify.setLockWait(text)
+	case q.a.restore != nil:
+		q.a.restore.setLockWait(text)
+	}
+	answer()
+}
+
 // ConfirmStart waits for Start in the Verify window (figure 7.3); for a
 // restore, the Restore backup window answers it itself, as its Start was the
 // confirmation.

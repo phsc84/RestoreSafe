@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,8 +15,8 @@ import (
 
 // A restore or verification fails before its first question while another
 // RestoreSafe process backs up into the same directory, whose retention
-// could delete the parts it reads (refactoring 2.0 RF-50); a backup fails
-// while a restore runs.
+// could delete the parts it reads (refactoring 2.0 RF-50); a backup waits
+// while a restore holds the lock and no other RestoreSafe process runs.
 func TestRestoreAndVerifyWaitForARunningBackup(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -45,9 +46,15 @@ func TestRestoreAndVerifyWaitForARunningBackup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer readLock.Release()
+	// A shared lock has no holder line, and no other RestoreSafe process runs:
+	// the backup takes it for a lock left after a lost connection and waits
+	// for it, until Cancel (core spec 14, refactoring plan RF-126).
 	s = useScript(t, nil)
-	if err := backup.Run(context.Background(), s.ui, cfg, ""); err == nil || !strings.Contains(err.Error(), "Another RestoreSafe window") {
-		t.Fatalf("backup: expected the running restore, got %v", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.ui.OnLockWait = cancel
+	if err := backup.Run(ctx, s.ui, cfg, ""); !errors.Is(err, context.Canceled) || len(s.ui.LockWaits) != 1 {
+		t.Fatalf("backup: expected the wait for the lock until Cancel, got %v, waits %q", err, s.ui.LockWaits)
 	}
 	s.done()
 	// A verification runs next to a restore.

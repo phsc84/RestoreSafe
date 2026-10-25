@@ -84,6 +84,9 @@ type restoreDialog struct {
 	checkSeq int
 	// starting is set from Start until the workflow asks to start or ends.
 	starting bool
+	// lockWait is the text of the workflow's wait for the lock, after
+	// Start; "" otherwise.
+	lockWait string
 	view     view.RestoreView
 	// listHeight is the table's height in DIPs as the user dragged the
 	// splitter, 0 until then; listTop is the table's top in pixels.
@@ -201,6 +204,9 @@ func (w *restoreDialog) viewOf() view.RestoreView {
 	if w.planErr != nil && (w.plan == nil || !w.plan.HasErrors()) {
 		v.Issues = append(v.Issues, view.IssueLine{Text: view.ErrorText(w.planErr), Tone: view.ToneError, Glyph: view.GlyphError})
 	}
+	if w.starting && w.lockWait != "" {
+		v.Issues = append(v.Issues, view.IssueLine{Text: w.lockWait, Tone: view.ToneInfo, Glyph: view.GlyphInfo})
+	}
 	return v
 }
 
@@ -304,7 +310,7 @@ func (w *restoreDialog) startRestore() {
 		return
 	}
 	a.lastDestination = w.dest
-	w.starting, w.planErr = true, nil
+	w.starting, w.planErr, w.lockWait = true, nil, ""
 	w.update()
 	a.startOperation(opRequest{op: flow.OpRestore, sets: view.Chosen(w.folders, w.checked), destination: w.dest})
 }

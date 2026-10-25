@@ -23,6 +23,7 @@ type fakeDialogs struct {
 	// What the restore and verification dialogs got and answer.
 	restorePlans []interact.RestorePlan
 	verifyPlans  []interact.VerifyPlan
+	lockWaits    []string
 	actions      []string
 	confirmStart bool
 	codes        [][]byte
@@ -44,6 +45,10 @@ func (f *fakeDialogs) RestorePlan(p interact.RestorePlan, answer func()) {
 }
 func (f *fakeDialogs) VerifyPlan(p interact.VerifyPlan, answer func()) {
 	f.verifyPlans = append(f.verifyPlans, p)
+	answer()
+}
+func (f *fakeDialogs) LockWait(text string, answer func()) {
+	f.lockWaits = append(f.lockWaits, text)
 	answer()
 }
 func (f *fakeDialogs) ConfirmStart(action string, answer func(bool, error)) {
@@ -164,6 +169,9 @@ func TestUIRestoreAndVerifyReachTheDialogs(t *testing.T) {
 	}
 	if len(d.restorePlans) != 1 || d.restorePlans[0].Destination != "E:/Restore" || len(d.verifyPlans) != 1 || d.verifyPlans[0].Bytes != 42 {
 		t.Fatalf("plans: restore %+v, verify %+v", d.restorePlans, d.verifyPlans)
+	}
+	if u.WaitingForLock("locked, waiting"); len(d.lockWaits) != 1 || d.lockWaits[0] != "locked, waiting" {
+		t.Fatalf("lock wait: %q", d.lockWaits)
 	}
 
 	d.confirmStart = false

@@ -29,6 +29,9 @@ type verifyDialog struct {
 	win *dialogWindow
 
 	plan *interact.VerifyPlan
+	// lockWait is the text of the wait for the lock, shown instead of the
+	// marquee's "Preparing" until the plan arrives.
+	lockWait string
 	// what names the selection: "today, 09:12"; hidden counts the sets of
 	// that backup the folder filter left out.
 	what   string
@@ -88,6 +91,12 @@ func (d *verifyDialog) setPlan(p interact.VerifyPlan) {
 	d.build(false)
 }
 
+// setLockWait shows that the verification waits for the lock.
+func (d *verifyDialog) setLockWait(text string) {
+	d.lockWait = text
+	d.build(false)
+}
+
 // ask enables Start; the answer goes to the workflow.
 func (d *verifyDialog) ask(answer func(bool, error)) {
 	d.answer = answer
@@ -113,11 +122,12 @@ func (d *verifyDialog) build(place bool) {
 		st.para(issueOf(d.err), widget.TextBody, pal.Error, view.GlyphError)
 	case d.plan == nil:
 		d.view = view.VerifyPlanView{Cancel: view.Button{Text: view.ButtonCancel, Action: view.ActionCancel, Enabled: true}}
-		st.para(view.PlanPreparing, widget.TextBody, pal.Text, view.GlyphNone)
+		text := view.PlanWaitingText(d.lockWait)
+		st.para(text, widget.TextBody, pal.Text, view.GlyphNone)
 		st.gap(8)
 		if bar, err := widget.NewProgressBar(panel.HWND()); err == nil {
 			panel.Adopt(bar.HWND())
-			win32.SetAccessibleName(bar.HWND(), view.PlanPreparing)
+			win32.SetAccessibleName(bar.HWND(), text)
 			bar.Set(-1)
 			st.row(10, cell{hwnd: bar.HWND(), fill: true})
 		}

@@ -71,6 +71,13 @@ type UI interface {
 	ShowRestorePlan(p RestorePlan)
 	ShowVerifyPlan(p VerifyPlan)
 
+	// WaitingForLock reports, before the plan, that the operation waits for
+	// the lock of the backup directory, which is probably left by this PC
+	// after a lost connection; text says so. The workflow tries again until
+	// the lock is free, the wait ends or the context is cancelled. It
+	// returns once the text is shown.
+	WaitingForLock(text string)
+
 	// LogStarted reports the log file the operation writes, as soon as it
 	// is open: a frontend can offer it even when the operation fails.
 	LogStarted(path string)

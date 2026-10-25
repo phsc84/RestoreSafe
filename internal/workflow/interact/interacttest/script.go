@@ -26,6 +26,10 @@ type Script struct {
 	// problems with it the workflow reported.
 	LogPath     string
 	LogFailures []interact.LogFailure
+	// LockWaits are the texts of WaitingForLock; OnLockWait, when set, is
+	// called after each, e.g. to cancel the wait.
+	LockWaits  []string
+	OnLockWait func()
 	// announced is the backup whose other keys were last announced.
 	announced naming.BackupEntry
 }
@@ -275,6 +279,15 @@ func Answers(lines ...string) func(prompt string) (string, error) {
 		line := lines[0]
 		lines = lines[1:]
 		return line, nil
+	}
+}
+
+// WaitingForLock prints and records the text.
+func (s *Script) WaitingForLock(text string) {
+	s.println(text)
+	s.LockWaits = append(s.LockWaits, text)
+	if s.OnLockWait != nil {
+		s.OnLockWait()
 	}
 }
 
