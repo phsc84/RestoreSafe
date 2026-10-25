@@ -206,6 +206,10 @@ func finished(c *ResultCard, r *flow.Run, name string) {
 			warningLines = append(warningLines, strings.Join(parts, " "))
 			explained++
 		}
+		if f := facts.Sets[set]; f.LeftOut > 0 {
+			// Not a warning: RestoreSafe never follows a link (core spec 6.4.1).
+			warningLines = append(warningLines, fmt.Sprintf(pick(f.LeftOut, resultLeftOutOne, resultLeftOut), Count(f.LeftOut), setFolder(set)))
+		}
 		if v, ok := facts.Verify[set]; ok && v.Result == logging.ResultFailed {
 			warningLines = append(warningLines, fmt.Sprintf(resultVerifyFailed, setFolder(set)))
 			explained++

@@ -74,6 +74,25 @@ func TestBackupPlanRowsAndLines(t *testing.T) {
 	checkWriting(t, v)
 }
 
+// TestBackupPlanSaysWhatTheBackupLeavesOutAndDownloads: links aren't
+// backed up, and online-only cloud files are downloaded; the plan says both
+// before the backup starts (core spec 6.4.1, RF-118).
+func TestBackupPlanSaysWhatTheBackupLeavesOutAndDownloads(t *testing.T) {
+	t.Parallel()
+	p := samplePlan()
+	p.Folders[1].LeftOut, p.Folders[1].Online, p.Folders[1].OnlineBytes = 2, 7, 1300<<20
+	p.Folders[0].LeftOut, p.Folders[0].Online, p.Folders[0].OnlineBytes = 1, 1, 5<<20
+	v := BackupPlanOf(p, nil, &config.Config{}, planNow)
+	want := "Based on the full backup of 1 Sep. 1 file (5.0 MB) is only in the cloud and is downloaded for the backup. 1 link isn't backed up"
+	if v.Rows[0].Why != want {
+		t.Fatalf("row %q\nwant %q", v.Rows[0].Why, want)
+	}
+	if !strings.HasSuffix(v.Rows[1].Why, ". 7 files (1.3 GB) are only in the cloud and are downloaded for the backup. 2 links aren't backed up") || v.Rows[1].Tone != ToneNeutral {
+		t.Fatalf("row %+v", v.Rows[1])
+	}
+	checkWriting(t, v)
+}
+
 func TestBackupPlanButtons(t *testing.T) {
 	t.Parallel()
 	p := samplePlan()

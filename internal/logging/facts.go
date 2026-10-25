@@ -25,6 +25,9 @@ type Fact struct {
 	// Stale counts the files a differential could not read and holds in
 	// their older version from the full backup.
 	Stale int `json:"stale,omitempty"`
+	// LeftOut counts the links and other entries a backup set doesn't
+	// record (core spec 6.4.1).
+	LeftOut int `json:"left_out,omitempty"`
 	// Bytes is what a backup set takes in the backup directory, or what a
 	// cleanup removed.
 	Bytes int64 `json:"bytes,omitempty"`

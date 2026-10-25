@@ -135,11 +135,25 @@ func planRow(f interact.FolderPlan, now time.Time) PlanRow {
 		row.Why = capitalize(f.Reason)
 		row.About = Size(f.AllBytes)
 	}
+	if f.Online > 0 {
+		row.Why += ". " + fmt.Sprintf(pick(f.Online, planOnlineOne, planOnline), Count(f.Online), Size(f.OnlineBytes))
+	}
+	if f.LeftOut > 0 {
+		row.Why += ". " + fmt.Sprintf(pick(f.LeftOut, planLeftOutOne, planLeftOut), Count(f.LeftOut))
+	}
 	if f.Warning != "" {
 		row.Why += ". " + capitalize(f.Warning)
 		row.Tone, row.Glyph = ToneWarning, GlyphWarning
 	}
 	return row
+}
+
+// pick returns one for n == 1, else many.
+func pick(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // backedUpCount counts the folders the plan backs up.

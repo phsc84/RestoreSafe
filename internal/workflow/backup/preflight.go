@@ -319,8 +319,13 @@ type spaceEstimate struct {
 	warnings []string
 }
 
-// folderSize is the measured size of one source directory.
-type folderSize struct{ full, likely int64 }
+// folderSize is the measured size of one source directory, with what its
+// backup leaves out and what it downloads (archive.SourceMeasure).
+type folderSize struct {
+	full, likely    int64
+	leftOut, online int
+	onlineBytes     int64
+}
 
 // sourceSizes are the sizes of the source directories, measured once and
 // reused for every plan the user looks at.
@@ -370,7 +375,7 @@ func (s sourceSizes) estimate(plans map[string]*plan.Folder) spaceEstimate {
 	est := spaceEstimate{folders: make(map[string]folderSize), warnings: s.warnings}
 	for _, name := range s.names {
 		m := s.measures[name]
-		size := folderSize{full: m.Total, likely: m.Total}
+		size := folderSize{full: m.Total, likely: m.Total, leftOut: m.LeftOut, online: m.Online, onlineBytes: m.OnlineBytes}
 		if plans[name].IsDiff() && s.diffs[name] {
 			size.likely = m.Changed
 			est.anyDiff = true
@@ -425,6 +430,7 @@ func (p proposal) plan(removes []catalog.SetInfo, fullRequested bool, details in
 			}
 			size := p.est.folders[src.BackupName]
 			fp.EstimatedBytes, fp.AllBytes = size.likely, size.full
+			fp.LeftOut, fp.Online, fp.OnlineBytes = size.leftOut, size.online, size.onlineBytes
 		}
 		bp.Folders = append(bp.Folders, fp)
 	}

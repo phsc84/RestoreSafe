@@ -41,6 +41,9 @@ type Params struct {
 	// OnSkip is called for every skipped file or directory; stale marks a
 	// differential entry that keeps the full backup's older version.
 	OnSkip func(rel, reason string, stale bool)
+	// OnLeftOut is called for every link or other entry the walk leaves out
+	// (archive.BuildOptions.OnLeftOut).
+	OnLeftOut func(rel, what string)
 	// OutputDir is the backup directory that receives the part files.
 	OutputDir string
 	// Entry names the set. For a differential, Entry.ChainID is the base's
@@ -130,6 +133,7 @@ func Write(ctx context.Context, p Params) (*Result, error) {
 			Exclude:        p.Exclude,
 			SkipUnreadable: p.SkipUnreadable,
 			OnSkip:         p.OnSkip,
+			OnLeftOut:      p.OnLeftOut,
 			Stats:          &stats,
 			Base:           baseManifest,
 			Progress:       p.Progress,

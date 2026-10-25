@@ -77,6 +77,23 @@ func TestResultCardExplainsWarnings(t *testing.T) {
 	checkWriting(t, c)
 }
 
+// TestResultCardSaysWhichLinksWerentBackedUp: a set's links are named per
+// folder and are no warning: RestoreSafe never follows a link (RF-118).
+func TestResultCardSaysWhichLinksWerentBackedUp(t *testing.T) {
+	t.Parallel()
+	facts := backupFacts()
+	docs := "Documents_ABC123_2026-09-30_DIFF004"
+	facts.Sets[docs] = logging.Fact{Set: docs, Bytes: 400 << 20, LeftOut: 3}
+	c := ResultCardOf(finishedBackup(&interact.Result{LogPath: "x.log"}, nil, facts, 2))
+	if c.Tone != ToneSuccess || c.Title != "2 folders backed up" {
+		t.Fatalf("card %+v", c)
+	}
+	if len(c.Lines) != 2 || c.Lines[1] != "3 links in Documents weren't backed up: RestoreSafe never follows a link. The log names them." {
+		t.Fatalf("lines %q", c.Lines)
+	}
+	checkWriting(t, c)
+}
+
 // TestResultCardNamesALogLeftInTemp: the workflow counts a log it couldn't
 // add to the backup directory as one warning; the card explains it with the
 // copy in TEMP instead of "1 other warning", also on a failed run (RF-109).

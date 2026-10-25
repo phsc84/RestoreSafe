@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -298,6 +299,28 @@ func TestOperationRunPrintsLogFileLast(t *testing.T) {
 	}
 	if temps, _ := catalog.ListTempParts(env.backupDir); len(temps) != 0 {
 		t.Fatalf("temporary parts left behind: %v", temps)
+	}
+}
+
+// TestOperationRunLogsTheLinksItLeavesOut: a junction inside the source is
+// not backed up; the log names it and the set's fact counts it, which the
+// result card reads (core spec 6.4.1, RF-118).
+func TestOperationRunLogsTheLinksItLeavesOut(t *testing.T) {
+	env := newOperationEnv(t, "operation payload")
+	link := filepath.Join(env.srcDir, "linked")
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, t.TempDir()).CombinedOutput(); err != nil {
+		t.Fatalf("mklink /J: %v: %s", err, out)
+	}
+	output := env.run(t, "OPS006")
+	if !strings.Contains(output, "Not backed up (link): linked") || !strings.Contains(output, "1 link(s) or other entries are not backed up") {
+		t.Fatalf("the log doesn't name the link: %q", output)
+	}
+	facts, err := logging.ReadFacts(env.logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := facts.Sets[naming.BackupEntry{DirectoryName: "source", ChainID: "OPS006", Date: "2026-05-31"}.String()]; f.LeftOut != 1 || f.Result != logging.ResultOK {
+		t.Fatalf("set fact %+v, want 1 left out and no warning", f)
 	}
 }
 

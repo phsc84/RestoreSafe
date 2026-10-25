@@ -10,6 +10,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `retention_keep` keeps at least 2 chains (0 still keeps all). Old chains are deleted right after a new backup; if the backup disk or NAS loses power at that moment, the new backup can be damaged, and with 1 chain no backup would be left. A `retention_keep: 1` is used as 2: Create backup and the Retention card on Settings show a warning until `config.yaml` says 2 or more.
 
 ### Fixed
+- A source folder that is a junction or symbolic link (for example a Documents folder redirected to another drive) is backed up again. Until now, its backup was empty and reported as successful.
+- Links inside a source folder (junctions, symbolic links, mount points), which RestoreSafe never follows, are no longer left out without a word: the log names each, and the result card counts them per folder. The Create backup window says how many a folder has, and how many of its cloud files (OneDrive, iCloud) are only online and are downloaded for the backup.
 - When the log of a backup, restore or verification can't be saved in the backup directory, the result card now says so and names the copy in the TEMP folder, which **Show log** opens. Before, this was reported nowhere, and the copy in TEMP was the only one. A log that can't be created, or that misses lines, is reported the same way.
 
 ## [2.1.1] - 2026-10-19

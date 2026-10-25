@@ -137,12 +137,6 @@ func setAttributes(path string, attrs uint32) error {
 	return nil
 }
 
-// isRegularOrDir reports whether a walked entry is a plain directory or a
-// regular file. Symlinks, junctions, and other reparse points are excluded.
-func isRegularOrDir(fi os.FileInfo) bool {
-	return fi.Mode().IsDir() || fi.Mode().IsRegular()
-}
-
 // openSource opens a file to back up for reading. os.Open asks for backup
 // semantics, and with them a process that holds the backup privilege (an
 // elevated administrator) passes the share-mode check: it would read files

@@ -39,6 +39,9 @@ type BuildOptions struct {
 	// OnSkip is called for every skipped file or directory. stale is true
 	// when a differential keeps the older version from the full backup.
 	OnSkip func(rel, reason string, stale bool)
+	// OnLeftOut is called for every entry the walk doesn't record (core
+	// spec 6.4.1): what names its kind ("link").
+	OnLeftOut func(rel, what string)
 	// Stats receives counts; may be nil.
 	Stats *BuildStats
 	// Base is the manifest of the chain's full backup. When set, BuildTar
@@ -59,6 +62,8 @@ type BuildStats struct {
 	Vanished  int // deleted while the backup was running
 	Unchanged int // differential: unchanged since the full backup
 	Stored    int // files whose content is in this set's TAR
+	Links     int // symbolic links, junctions, mount points: not recorded
+	Other     int // devices, pipes, other non-files: not recorded
 }
 
 type countingWriter struct {
@@ -93,14 +98,15 @@ func newUnreadable(path string, err error, headerWritten bool) error {
 		WithRemedy("Close programs that lock or modify the file and start the backup again, or set 'on_unreadable_file: skip' in config.yaml to back up everything else and list such files as warnings.")
 }
 
-// BuildTar walks opts.SourceDir, writes the content of every regular file as a
-// TAR stream to w, and adds one manifest entry per directory and file to mb.
-// The TAR contains only regular files; directories and all metadata live in
-// the manifest. Symlinks, junctions, and other special entries are skipped.
-// It stops with the error of ctx when ctx is cancelled.
+// BuildTar walks opts.SourceDir, writes the content of every file as a TAR
+// stream to w, and adds one manifest entry per directory and file to mb.
+// The TAR contains only files; directories and all metadata live in the
+// manifest. Links and other special entries are left out, counted and
+// reported (core spec 6.4.1); a source directory that is itself a link is
+// resolved once. It stops with the error of ctx when ctx is cancelled.
 func BuildTar(ctx context.Context, w io.Writer, opts BuildOptions, mb *manifest.Builder) error {
 	b := newTarBuilder(ctx, w, opts, mb)
-	if err := filepath.WalkDir(b.srcDir, b.visit); err != nil {
+	if err := walk(b.srcDir, b.visit); err != nil {
 		return err
 	}
 	if err := b.tw.Close(); err != nil {
@@ -134,7 +140,7 @@ func newTarBuilder(ctx context.Context, w io.Writer, opts BuildOptions, mb *mani
 		ctx: ctx, opts: opts, mb: mb, cw: cw, tw: tar.NewWriter(cw),
 		buf:       make([]byte, copyBufferSize),
 		stats:     opts.Stats,
-		srcDir:    filepath.Clean(opts.SourceDir),
+		srcDir:    resolveRoot(filepath.Clean(opts.SourceDir)),
 		origin:    manifest.OriginFull,
 		baseFiles: make(map[string]*manifest.Entry),
 	}
@@ -174,27 +180,44 @@ func (b *tarBuilder) visit(path string, d fs.DirEntry, err error) error {
 		return b.unlisted(path, rel, d, err)
 	}
 	if isExcluded(path, b.excludes) {
-		return skipDirOrNil(d)
+		return skipDirOrNil(path, d)
 	}
-	if b.opts.Exclude.Match(rel, d.IsDir()) {
+	if b.opts.Exclude.Match(rel, isWalkedDir(path, d)) {
 		b.stats.Excluded++
-		return skipDirOrNil(d)
+		return skipDirOrNil(path, d)
 	}
 
 	info, err := d.Info()
 	if err != nil {
 		return b.unstatable(path, rel, d, err)
 	}
-	if !isRegularOrDir(info) {
-		return nil
+	kind, err := classify(path, info)
+	if err != nil {
+		return b.unstatable(path, rel, d, err)
+	}
+	if kind == kindLink || kind == kindOther {
+		b.leaveOut(rel, kind)
+		return nil // not a walked directory: the walk doesn't follow it
 	}
 	if err := manifest.ValidatePath(rel); err != nil {
 		return err
 	}
-	if info.IsDir() {
+	if kind == kindDir {
 		return b.addDir(path, rel)
 	}
 	return b.addFile(path, rel, info.Size())
+}
+
+// leaveOut counts an entry the walk doesn't record and reports it.
+func (b *tarBuilder) leaveOut(rel string, kind entryKind) {
+	if kind == kindLink {
+		b.stats.Links++
+	} else {
+		b.stats.Other++
+	}
+	if b.opts.OnLeftOut != nil {
+		b.opts.OnLeftOut(rel, leftOutWords[kind])
+	}
 }
 
 // unlisted handles an entry the walk reports with err: one that vanished, or
@@ -202,7 +225,7 @@ func (b *tarBuilder) visit(path string, d fs.DirEntry, err error) error {
 func (b *tarBuilder) unlisted(path, rel string, d fs.DirEntry, err error) error {
 	if errors.Is(err, fs.ErrNotExist) {
 		b.stats.Vanished++
-		return skipDirOrNil(d)
+		return skipDirOrNil(path, d)
 	}
 	if !b.opts.SkipUnreadable {
 		return newUnreadable(path, err, false)
@@ -213,14 +236,14 @@ func (b *tarBuilder) unlisted(path, rel string, d fs.DirEntry, err error) error 
 		b.mb.Add(manifest.Entry{Path: rel, Type: manifest.TypeSkipped, Reason: err.Error()})
 	}
 	b.skip(rel, err)
-	return skipDirOrNil(d)
+	return skipDirOrNil(path, d)
 }
 
 // unstatable handles an entry whose information cannot be read.
 func (b *tarBuilder) unstatable(path, rel string, d fs.DirEntry, err error) error {
 	if errors.Is(err, fs.ErrNotExist) {
 		b.stats.Vanished++
-		return skipDirOrNil(d)
+		return skipDirOrNil(path, d)
 	}
 	if !b.opts.SkipUnreadable {
 		return newUnreadable(path, err, false)
@@ -327,13 +350,6 @@ func fromBase(base *manifest.Entry, stale, void bool) manifest.Entry {
 	e.Stale = stale
 	e.Void = void
 	return e
-}
-
-func skipDirOrNil(d fs.DirEntry) error {
-	if d != nil && d.IsDir() {
-		return filepath.SkipDir
-	}
-	return nil
 }
 
 // copyBufferSize is the size of the reads from source files and the writes of
@@ -494,6 +510,13 @@ type SourceMeasure struct {
 	// times but have a new path) and files whose times a tool set back; the
 	// differential itself also compares the path and the NTFS change time.
 	Changed int64
+	// LeftOut counts the links and other entries the backup leaves out
+	// (core spec 6.4.1).
+	LeftOut int
+	// Online counts the cloud files whose data is not on the device, and
+	// OnlineBytes their size: the backup downloads them by reading them.
+	Online      int
+	OnlineBytes int64
 }
 
 // MeasureSource measures the files BuildTar would back up for opts,
@@ -503,13 +526,13 @@ type SourceMeasure struct {
 // itself cannot be read.
 func MeasureSource(opts BuildOptions, since time.Time) (SourceMeasure, error) {
 	var m SourceMeasure
-	srcDir := filepath.Clean(opts.SourceDir)
+	srcDir := resolveRoot(filepath.Clean(opts.SourceDir))
 	if _, err := os.Stat(srcDir); err != nil {
 		return m, err
 	}
 	excludes := normalizeExcludes(srcDir, opts.ExcludeDirs)
 	sinceNano := since.UnixNano()
-	_ = filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+	_ = walk(srcDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || path == srcDir {
 			return nil
 		}
@@ -517,15 +540,24 @@ func MeasureSource(opts BuildOptions, since time.Time) (SourceMeasure, error) {
 		if relErr != nil {
 			return nil
 		}
-		if isExcluded(path, excludes) || opts.Exclude.Match(filepath.ToSlash(rel), d.IsDir()) {
-			return skipDirOrNil(d)
-		}
-		if d.IsDir() {
-			return nil
+		if isExcluded(path, excludes) || opts.Exclude.Match(filepath.ToSlash(rel), isWalkedDir(path, d)) {
+			return skipDirOrNil(path, d)
 		}
 		info, err := d.Info()
-		if err != nil || !isRegularOrDir(info) {
+		if err != nil {
 			return nil
+		}
+		kind, err := classify(path, info)
+		switch {
+		case err != nil || kind == kindDir:
+			return nil
+		case kind != kindFile:
+			m.LeftOut++
+			return nil
+		}
+		if attributesOf(info)&attrRecallOnDataAccess != 0 {
+			m.Online++
+			m.OnlineBytes += info.Size()
 		}
 		m.Total += info.Size()
 		if since.IsZero() || newestTime(info) >= sinceNano {

@@ -235,7 +235,7 @@ func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Sourc
 			retentionHold[directoryName] = true
 			setResult = logging.ResultWarnings
 		}
-		o.log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, Bytes: stats.Bytes})
+		o.log.Fact(logging.Fact{Kind: logging.FactSet, Result: setResult, Set: entry.String(), Skipped: stats.Skipped, Stale: stats.Stale, LeftOut: stats.LeftOut, Bytes: stats.Bytes})
 		written = append(written, entry)
 	}
 
@@ -421,6 +421,9 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 			}
 			o.log.Warn("  Skipped (could not be read): %s → %s", rel, reason)
 		},
+		OnLeftOut: func(rel, what string) {
+			o.log.Info("  Not backed up (%s): %s", what, rel)
+		},
 		OnPartOpened: func(seq int, path string) {
 			o.log.Info("  Part %03d: %s", seq, filepath.Base(path))
 		},
@@ -442,6 +445,10 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 	if n := res.Stats.Vanished; n > 0 {
 		o.log.Info("  Deleted while the backup was running: %d file(s)/directory(s) (not in this backup)", n)
 	}
+	leftOut := res.Stats.Links + res.Stats.Other
+	if leftOut > 0 {
+		o.log.Info("  [%s] %d link(s) or other entries are not backed up; RestoreSafe never follows a link (see above).", entry.DirectoryName, leftOut)
+	}
 	if n := res.Stats.Skipped; n > 0 {
 		o.log.Warn("  [%s] %d file(s)/directory(s) could not be read and are not in this backup.", entry.DirectoryName, n)
 	}
@@ -456,7 +463,7 @@ func (o *operation) backupDirectory(ctx context.Context, rep interact.ProgressRe
 		progress.Done, progress.Written = done.Load(), size
 		rep.Progress(progress)
 	}
-	return setStats{Skipped: res.Stats.Skipped, Stale: res.Stats.Stale, Bytes: size}, nil
+	return setStats{Skipped: res.Stats.Skipped, Stale: res.Stats.Stale, LeftOut: leftOut, Bytes: size}, nil
 }
 
 // secondsSince returns the seconds since start, rounded up, so that a run
@@ -472,6 +479,8 @@ type setStats struct {
 	// Stale counts the files that could not be read and keep their older
 	// version from the full backup.
 	Stale int
+	// LeftOut counts the links and other entries the walk didn't record.
+	LeftOut int
 	// Bytes is the size of the set's part files.
 	Bytes int64
 }

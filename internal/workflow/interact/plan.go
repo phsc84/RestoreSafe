@@ -52,6 +52,12 @@ type FolderPlan struct {
 	// EstimatedBytes is what the run likely stores for the folder, AllBytes
 	// the size of all its files.
 	EstimatedBytes, AllBytes int64
+	// LeftOut counts the links and other entries the backup doesn't record;
+	// Online the cloud files that reading downloads, OnlineBytes their size
+	// (core spec 6.4.1).
+	LeftOut     int
+	Online      int
+	OnlineBytes int64
 	// Skipped is set for an identical duplicate of another folder, which is
 	// not backed up again.
 	Skipped bool
