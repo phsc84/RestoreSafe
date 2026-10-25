@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -120,12 +119,6 @@ func missingKeys(root *yaml.Node) []string {
 	return out
 }
 
-// unknownField is the error yaml reports for a key that Config doesn't have.
-var unknownField = regexp.MustCompile(`^line (\d+): field (.+) not found in type config\.(\w+)$`)
-
-// blockOfType maps the Go types of the blocks to their config.yaml names.
-var blockOfType = map[string]string{"Config": "", "Differential": "differential", "Argon2": "argon2"}
-
 // retiredKeys are settings that earlier versions had. A file that still has
 // one loads; the setting is ignored and listed in RetiredKeys (GUI spec
 // 11.6). A key belongs here only when ignoring its value is harmless: a
@@ -143,29 +136,41 @@ type Retired struct {
 // String returns the key and its line: "yubikey_spare (line 101)".
 func (r Retired) String() string { return fmt.Sprintf("%s (line %d)", r.Key, r.Line) }
 
-// unknownKeys sorts the keys of an error of yaml about unknown keys into
-// retired ones and an error that names the others, nil when there are none.
-// ok is false when err isn't only about unknown keys.
-func unknownKeys(err error) (retired []Retired, unknownErr error, ok bool) {
-	var te *yaml.TypeError
-	if !errors.As(err, &te) || len(te.Errors) == 0 {
-		return nil, nil, false
+// unknownKeys sorts the keys of root, the top-level mapping of a file, that
+// are neither in settings nor required into retired ones and an error that
+// names the others, nil when there are none. A key of a block is named by
+// its path ("differential.interval") and the line it is on.
+func unknownKeys(root *yaml.Node) (retired []Retired, unknownErr error) {
+	known := make(map[string]bool)
+	blocks := make(map[string]bool)
+	for _, s := range settings {
+		known[s.key] = true
+		if block, _, nested := strings.Cut(s.key, "."); nested {
+			known[block], blocks[block] = true, true
+		}
+	}
+	for _, key := range requiredKeys {
+		known[key] = true
 	}
 	var unknown []string
-	for _, e := range te.Errors {
-		m := unknownField.FindStringSubmatch(e)
-		if m == nil {
-			return nil, nil, false
+	check := func(k *yaml.Node, key string) {
+		switch {
+		case known[key]:
+		case slices.Contains(retiredKeys, key):
+			retired = append(retired, Retired{Key: key, Line: k.Line})
+		default:
+			unknown = append(unknown, fmt.Sprintf("'%s' (line %d)", key, k.Line))
 		}
-		key := m[2]
-		if block := blockOfType[m[3]]; block != "" {
-			key = block + "." + key
-		}
-		if slices.Contains(retiredKeys, key) {
-			line, _ := strconv.Atoi(m[1])
-			retired = append(retired, Retired{Key: key, Line: line})
-		} else {
-			unknown = append(unknown, fmt.Sprintf("'%s' (line %s)", key, m[1]))
+	}
+	if root != nil {
+		for i := 0; i+1 < len(root.Content); i += 2 {
+			k, v := root.Content[i], root.Content[i+1]
+			check(k, k.Value)
+			if blocks[k.Value] && v.Kind == yaml.MappingNode {
+				for j := 0; j+1 < len(v.Content); j += 2 {
+					check(v.Content[j], k.Value+"."+v.Content[j].Value)
+				}
+			}
 		}
 	}
 	remedy := "Check the spelling, or remove the line; config-SAMPLE.yaml describes every setting."
@@ -176,7 +181,7 @@ func unknownKeys(err error) (retired []Retired, unknownErr error, ok bool) {
 	default:
 		unknownErr = problem.New("Config file has unknown settings: " + strings.Join(unknown, ", ") + ".").WithRemedyOnOwnLine(remedy)
 	}
-	return retired, unknownErr, true
+	return retired, unknownErr
 }
 
 // Update brings the configuration file at path up to date (GUI spec

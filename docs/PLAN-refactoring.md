@@ -28,7 +28,7 @@ Every item in the order of the phases (section "Phases"); the details are in the
 | | RF-124 | P3 | Check a TAR entry's offset and the bytes after end-of-archive | Open |
 | | RF-125 | P3 | Refuse a lone surrogate in a typed secret | Open |
 | 3. Legacy code | RF-108 | P2 | Remove the workflows' text output | Done 2026-10-25 (commit "RF-108: …"). The log's writing is unchanged; the tests that read the output read the log file instead (`testutil.NewLog`); `interacttest.Script` keeps its own `Out` for its prompts until RF-113. `verify` got a test for keys that don't unlock: removing covered lines took it under its floor |
-| | RF-110 | P2 | Find unknown config keys without yaml's error text | Open |
+| | RF-110 | P2 | Find unknown config keys without yaml's error text | Done 2026-10-25 (commit "RF-110: …"). The parsed node is walked against `settings` and `requiredKeys`; a syntax or type error is still reported first. The unknown key inside `differential` was already a case of `TestLoadRejectsUnknownKeys`; a case for an unknown block (named once, not with its keys) is new |
 | | RF-111 | P3 | Comments about the log pane and `cmd/yubidiag` | Open |
 | | RF-112 | P3 | `gui/view` stops taking its own words apart | Open |
 | | RF-113 | P3 | Test UI answers with values, not typed text | Done 2026-10-25 (commit "RF-113: …"). `Script` answers from queues per question (`Starts`, `Recovery`, `Refusals`, `Secrets`) and records what it was shown; 291 to 174 lines, 233 fewer in all. `testutil.Output` and the plan and refusal recorders of the tests went with it |

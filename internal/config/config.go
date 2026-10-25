@@ -3,10 +3,7 @@
 package config
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -242,25 +239,23 @@ func Load(path string) (*Config, error) {
 // missing keys get their defaults and are listed in MissingKeys (GUI spec
 // 11.6).
 func parse(data []byte) (*Config, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, syntaxError(err)
+	}
 	var cfg Config
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if err := dec.Decode(&cfg); err != nil && !errors.Is(err, io.EOF) {
-		// yaml decodes the other keys even when some are unknown, so a file
-		// whose only unknown keys are retired ones is complete in cfg.
-		retired, unknown, ok := unknownKeys(err)
-		if unknown != nil {
-			return nil, unknown
-		}
-		if !ok {
+	if doc.Kind != 0 { // an empty file has no document
+		if err := doc.Decode(&cfg); err != nil {
 			return nil, syntaxError(err)
 		}
-		cfg.RetiredKeys = retired
 	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err == nil {
-		cfg.MissingKeys = missingKeys(topMapping(&doc))
+	root := topMapping(&doc)
+	retired, unknown := unknownKeys(root)
+	if unknown != nil {
+		return nil, unknown
 	}
+	cfg.RetiredKeys = retired
+	cfg.MissingKeys = missingKeys(root)
 
 	cfg.withDefaults()
 	cfg.clampArgon2()
@@ -278,7 +273,8 @@ func (c *Config) adjust() {
 	}
 }
 
-// syntaxError explains an error of yaml that isn't about unknown keys.
+// syntaxError explains an error of yaml: the file is no valid YAML, or a
+// value doesn't fit its setting.
 func syntaxError(err error) error {
 	remedy := "Check YAML syntax (space indentation, correct colons, no tabs)."
 	errMsg := strings.ToLower(err.Error())

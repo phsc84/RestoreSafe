@@ -24,6 +24,7 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 		{"argon2:\n  memroy_mb: 1024\n", "'argon2.memroy_mb' (line 5)"},
 		{"differential:\n  enabled: true\n  interval: 3\n", "'differential.interval' (line 6)"},
 		{"foo: 1\nbar: 2\n", "unknown settings: 'foo' (line 4), 'bar' (line 5)"},
+		{"foo:\n  bar: 1\n", "an unknown setting: 'foo' (line 4)."},
 	} {
 		_, err := loadConfigText(t, tc.extra)
 		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "\nRemedy: Check the spelling") {
