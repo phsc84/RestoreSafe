@@ -1,6 +1,7 @@
 package logging_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,17 +137,18 @@ func TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten(t *testing.T) {
 		t.Fatal(err)
 	}
 	log.InfoLogOnly("the only copy")
-	log.Close()
+	err = log.Close()
 
-	output := out.String()
-	_, tempPath, found := strings.Cut(output, "Log file is located in temp directory: ")
-	tempPath = strings.TrimSpace(tempPath)
-	if !strings.Contains(output, "Error writing log file to backup directory") || !found {
-		t.Fatalf("expected the failure and the temp file to be reported, got %q", output)
+	var fe *logging.FileError
+	if !errors.As(err, &fe) || fe.Kept == "" || !strings.Contains(fe.Error(), "could not be added") {
+		t.Fatalf("expected the failure with the temp file, got %v", err)
 	}
-	t.Cleanup(func() { os.Remove(tempPath) })
-	if data, err := os.ReadFile(tempPath); err != nil || !strings.Contains(string(data), "the only copy") {
+	t.Cleanup(func() { os.Remove(fe.Kept) })
+	if data, err := os.ReadFile(fe.Kept); err != nil || !strings.Contains(string(data), "the only copy") {
 		t.Fatalf("expected the temp file to keep the lines, got %q (%v)", data, err)
+	}
+	if err := log.Close(); err != nil {
+		t.Fatalf("a second Close reported %v", err)
 	}
 }
 

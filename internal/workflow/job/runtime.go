@@ -5,23 +5,41 @@ package job
 
 import (
 	"context"
-	"fmt"
-	"io"
+	"errors"
 
 	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/logging"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
 
-// OpenLogger opens the log file at logPath,
-// falling back to a logger without a file when it cannot be opened.
-// Messages are mirrored to output.
-func OpenLogger(cfg *config.Config, logPath string, output io.Writer) *logging.Logger {
-	log, err := logging.NewLogger(logPath, cfg.LogLevel, output)
+// OpenLogger opens the log file at logPath, falling back to a logger without
+// a file when it cannot be opened, which it reports to u (LogNotOpened).
+// Messages are mirrored to u's output.
+func OpenLogger(cfg *config.Config, logPath string, u interact.UI) *logging.Logger {
+	out := u.Output()
+	log, err := logging.NewLogger(logPath, cfg.LogLevel, out)
 	if err != nil {
-		fmt.Fprintf(output, "Warning: Failed to open log file: %v. Remedy: Check write permissions in backup directory; operation continues without a log file.\n", err)
-		return logging.NewOutputLogger(cfg.LogLevel, output)
+		u.LogFailed(interact.LogFailure{Kind: interact.LogNotOpened, Err: err})
+		return logging.NewOutputLogger(cfg.LogLevel, out)
 	}
 	return log
+}
+
+// CloseLog closes log and reports a problem with its file to u. It reports
+// whether there was one, so that a completed run can count it as a warning
+// before it shows its result. A second call does nothing, so a workflow
+// closes the log before its result and defers the call for its error paths.
+func CloseLog(u interact.UI, log *logging.Logger) bool {
+	var fe *logging.FileError
+	if err := log.Close(); !errors.As(err, &fe) {
+		return false
+	}
+	kind := interact.LogIncomplete
+	if fe.Kept != "" {
+		kind = interact.LogKept
+	}
+	u.LogFailed(interact.LogFailure{Kind: kind, Err: fe.Err, Kept: fe.Kept})
+	return true
 }
 
 // cancelledError reports an operation the user cancelled while it ran.

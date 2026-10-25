@@ -203,6 +203,34 @@ func TestUIResultLogAndProgressReachTheBridge(t *testing.T) {
 	}
 }
 
+// TestUILogFailureReachesTheRun: the first problem with the log stays, the
+// run's lines are read from the copy in TEMP, and the machine keeps the
+// failure for the result card (RF-109).
+func TestUILogFailureReachesTheRun(t *testing.T) {
+	t.Parallel()
+	u := NewUI(NewBridge(func(int) {}), &fakeDialogs{})
+	b := u.Bridge()
+	u.LogStarted("D:/Backups/2026-09-30_ABC123.log")
+	if b.LogFailure() != nil || b.RunLog() != "D:/Backups/2026-09-30_ABC123.log" {
+		t.Fatalf("before a failure: %+v, %q", b.LogFailure(), b.RunLog())
+	}
+	u.LogFailed(interact.LogFailure{Kind: interact.LogKept, Err: errors.New("access denied"), Kept: `C:\Temp\restoresafe-1.log`})
+	u.LogFailed(interact.LogFailure{Kind: interact.LogIncomplete})
+	if f := b.LogFailure(); f == nil || f.Kind != interact.LogKept {
+		t.Fatalf("failure %+v, want the first one", f)
+	}
+	if b.RunLog() != `C:\Temp\restoresafe-1.log` {
+		t.Fatalf("run log %q, want the copy in TEMP", b.RunLog())
+	}
+
+	var m Machine
+	m.Start(OpBackup)
+	m.Done(End{Err: errors.New("disk full"), LogPath: b.LogPath(), LogFailure: b.LogFailure()}, time.Now())
+	if r := m.Current(); r.LogFailure == nil || r.LogFailure.Kept != `C:\Temp\restoresafe-1.log` {
+		t.Fatalf("run %+v", r)
+	}
+}
+
 func TestMachineRecordsThePlansShown(t *testing.T) {
 	t.Parallel()
 	var m Machine

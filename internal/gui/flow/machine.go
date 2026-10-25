@@ -55,12 +55,14 @@ type Run struct {
 	// CloseWhenDone closes the window once the worker has finished.
 	CloseWhenDone bool
 	// Result and Err are the outcome, Facts what the run's log recorded,
-	// LogPath its log file, Ended when the worker finished.
-	Result  *interact.Result
-	Err     error
-	Facts   logging.RunFacts
-	LogPath string
-	Ended   time.Time
+	// LogPath its log file, LogFailure a problem with that file (nil
+	// without), Ended when the worker finished.
+	Result     *interact.Result
+	Err        error
+	Facts      logging.RunFacts
+	LogPath    string
+	LogFailure *interact.LogFailure
+	Ended      time.Time
 	// Cancelled is set when the user cancelled.
 	Cancelled bool
 }
@@ -236,9 +238,11 @@ type End struct {
 	// Err is the workflow's error.
 	Err error
 	// Facts are what the run's log recorded; LogPath is the log file, ""
-	// when the workflow opened none.
-	Facts   logging.RunFacts
-	LogPath string
+	// when the workflow opened none; LogFailure a problem with it, nil
+	// without.
+	Facts      logging.RunFacts
+	LogPath    string
+	LogFailure *interact.LogFailure
 }
 
 // Done records the end of the worker. It returns true when the window
@@ -251,7 +255,7 @@ func (m *Machine) Done(end End, now time.Time) (closeWindow bool) {
 	if end.Err == nil && end.Result != nil {
 		r.finishStep()
 	}
-	r.Result, r.Err, r.Facts, r.LogPath, r.Ended = end.Result, end.Err, end.Facts, end.LogPath, now
+	r.Result, r.Err, r.Facts, r.LogPath, r.LogFailure, r.Ended = end.Result, end.Err, end.Facts, end.LogPath, end.LogFailure, now
 	r.Stage = StageFinished
 	return r.CloseWhenDone
 }

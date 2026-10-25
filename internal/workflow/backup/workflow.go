@@ -70,7 +70,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	if err != nil {
 		return err
 	}
-	defer log.Close()
+	defer job.CloseLog(u, log)
 	u.LogStarted(logPath)
 
 	removeLeftoverTempParts(backupDir, log)
@@ -274,6 +274,11 @@ func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Sourc
 		result = logging.ResultWarnings
 	}
 	o.log.Fact(logging.Fact{Kind: logging.FactBackup, Result: result, Warnings: warningCount, Seconds: secondsSince(start)})
+	// The log is complete: close it before the result, so that a problem
+	// with its file is in the result (RF-109).
+	if job.CloseLog(u, o.log) {
+		warningCount++
+	}
 	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }

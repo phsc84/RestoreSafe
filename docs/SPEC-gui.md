@@ -432,6 +432,8 @@ The Create backup window is the backup preflight (core spec 6.2). It opens immed
 
 The warning count and the log file path come from `ShowResult`, which the workflows call before they return without error.
 
+A problem with the log file itself (`LogFailed`, 12.3) adds a last line to every card that has one: "No log was written: <why>", "Some lines are missing from the log: <why>", or "The log couldn't be saved in the backup folder. This run's log is in <path in TEMP>; Show log opens it." A green card turns amber with it; the warning count already includes it, so it is not repeated as "1 other warning".
+
 ### 6.4 Closing the window
 
 Closing the window while an operation runs shows the cancel dialog of 6.2 with the headline "Close RestoreSafe?" and the buttons **Keep running** / **Cancel and close**. On confirmation the window stays open and disabled with "Cancelling…" until the worker has finished, then closes (12.4). Closing during a question cancels the question. Log off and shutdown: 12.4.
@@ -1130,7 +1132,8 @@ Every health check finding and every preflight issue gets a stable code. The UI 
 | `INCOMPLETE_NEWEST` | Warning | An unfinished backup of <folder> is newer than its last complete one | Probably a crash. Look at the log of that run. Action: Show backups. |
 | `SET_FUTURE_DATE` | Warning | A backup of <folder> is dated in the future | Names the set and its date. Check the clock of the PC that made it; the set isn't used for new keys or differentials, and retention keeps it (core spec 6.1.1). Action: Show backups. |
 | `SPACE_LOW` | Warning | The backup directory is running out of space | A full backup of all folders needs about N GB. |
-| `ARGON2_OUT_OF_RANGE` | Warning; Error in the preflight of a backup that creates new keys | A key setting in config.yaml is outside its limits | Names the key, its value and the limit (SPEC-kdf 4.2, 5.1). Reusing the current keys, restore and verify are not affected. Replaces `ARGON2_CAPPED` with 2.2.0: values are no longer capped. Action: Edit config. |
+| `ARGON2_BELOW_RECOMMENDED` | Warning | A key setting in config.yaml should be raised | Names the key, its value and the recommended limit (SPEC-kdf 4.2, 5.1), e.g. "argon2.memory_mb is 2048; new keys should use at least 4096." New keys are still created with it; the preflight of a backup that creates new keys repeats the warning. Action: Edit config. |
+| `ARGON2_OUT_OF_RANGE` | Warning; Error in the preflight of a backup that creates new keys | A key setting in config.yaml is outside its limits | Names the key, its value and the limit (SPEC-kdf 4.3, 5.1). Reusing the current keys, restore and verify are not affected. Together with `ARGON2_BELOW_RECOMMENDED`, replaces `ARGON2_CAPPED` with 2.2.0: values are no longer capped. Action: Edit config. |
 | `YUBIKEY_NOT_CONNECTED` | Info | YubiKey not connected | Connect it before you back up, restore or verify. |
 | `YUBIKEYS_CONNECTED` | Error (blocks backups, not restore or verify) | More than one YubiKey is connected | A backup would register or ask the one you touch. Connect only the YubiKey you back up with. |
 | `NEW_KEYS_NEEDED` | Info | Your next backup creates new keys | The reason from `KeySetMismatch`. |
@@ -1217,6 +1220,7 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 | `ShowVerifyPlan` | Verify window (figure 7.3); its `Details` for "Show details". |
 | `ShowResult` | Result card (6.3). |
 | `LogStarted` | The log file of the run, reported as soon as it is open: "Show log" of the progress and result cards, also after a failure (the workflows call it after opening the log). |
+| `LogFailed` | A problem with the log file itself, which the log can't record (refactoring after 2.1.0 RF-109): not opened, lines missing, or the run's lines left in a copy in TEMP because they couldn't be added to the log in the backup directory. A completed run reports it before `ShowResult` and counts it as one warning. The result card adds a line for it (6.3), "Show log" and the card's facts use the copy in TEMP. |
 | `ConfirmStart` | **Start** in the Verify window (BK-8); answered by the Restore backup window itself after its **Start** (RW-6b). |
 | `ConfirmBackupStart` | **Start**, **Full backup instead**, **New keys + full backup…**, **Cancel** (BP-4). |
 | `ChooseUnlockMethod`, `Password` | Unlock dialog (9.1). |

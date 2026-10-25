@@ -91,7 +91,8 @@ func (a *app) startOperation(req opRequest) {
 			if p := recover(); p != nil {
 				err = fmt.Errorf("Internal error: %v", p)
 			}
-			r.doneCh <- workerEnd{err, runFacts(r.b.LogPath())}
+			// The run's lines, also when they stayed in TEMP (RF-109).
+			r.doneCh <- workerEnd{err, runFacts(r.b.RunLog())}
 			win32.PostMessage(a.hwnd, msgWorkerDone, 0, 0) //nolint:errcheck
 		}()
 		switch op {
@@ -190,7 +191,7 @@ func (a *app) onWorkerDone() {
 		// The plan blocked the start: the result card says why.
 		a.plan.close()
 	}
-	if a.machine.Done(flow.End{Result: r.b.FinalResult(), Err: end.err, Facts: end.facts, LogPath: r.b.LogPath()}, time.Now()) {
+	if a.machine.Done(flow.End{Result: r.b.FinalResult(), Err: end.err, Facts: end.facts, LogPath: r.b.LogPath(), LogFailure: r.b.LogFailure()}, time.Now()) {
 		win32.UnblockShutdown(a.hwnd)
 		win32.DestroyWindow(a.hwnd)
 		return
@@ -225,12 +226,17 @@ func (a *app) dismiss() {
 	a.focusPage()
 }
 
-// runLogPath returns the log file of the operation, "" when none.
+// runLogPath returns the file with the operation's log lines: its copy in
+// TEMP when they could not be added to the log file (RF-109), else the log
+// file; "" when none.
 func (a *app) runLogPath() string {
 	if a.run != nil {
-		return a.run.b.LogPath()
+		return a.run.b.RunLog()
 	}
 	if r := a.machine.Current(); r != nil {
+		if f := r.LogFailure; f != nil && f.Kind == interact.LogKept {
+			return f.Kept
+		}
 		return r.LogPath
 	}
 	return ""

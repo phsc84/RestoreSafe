@@ -305,6 +305,33 @@ func TestOperationRunRestoresFixture(t *testing.T) {
 	assertTreesEqual(t, fx.SrcDir, filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName))
 }
 
+// TestOperationRunCountsALogLeftInTemp: a restore whose log can't be added
+// to the backup directory (its path is a directory) still restores, reports
+// the copy in TEMP and counts it as a warning (RF-109).
+func TestOperationRunCountsALogLeftInTemp(t *testing.T) {
+	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
+	infos := inventory.Read(t, fx.BackupDir)
+	logPath := filepath.Join(t.TempDir(), "restore.log")
+	if err := os.Mkdir(logPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	var out testutil.Output
+	log, _ := logging.NewLogger(logPath, "info", &out)
+	ui := &interacttest.Script{Out: &out}
+
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, logPath: logPath, masters: masterKeys(fx.BackupFixture), log: log}
+	if err := op.run(context.Background(), ui, 0); err != nil {
+		t.Fatalf("operation.run: %v", err)
+	}
+	if len(ui.LogFailures) != 1 || ui.LogFailures[0].Kind != interact.LogKept {
+		t.Fatalf("log failures %+v, want the copy in TEMP", ui.LogFailures)
+	}
+	t.Cleanup(func() { os.Remove(ui.LogFailures[0].Kept) })
+	if !strings.Contains(out.String(), "Warnings: 1") {
+		t.Fatalf("the result doesn't count the problem: %q", out.String())
+	}
+}
+
 func TestRestoreAllRestoresDifferential(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 	if err := os.WriteFile(filepath.Join(fx.SrcDir, "nested", "small.txt"), []byte("edited"), 0o600); err != nil {

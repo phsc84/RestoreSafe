@@ -74,6 +74,12 @@ type UI interface {
 	// LogStarted reports the log file the operation writes, as soon as it
 	// is open: a frontend can offer it even when the operation fails.
 	LogStarted(path string)
+	// LogFailed reports a problem with the log file itself: it could not be
+	// opened, lines could not be written, or the run's lines stayed in a
+	// copy in TEMP. An operation that completes reports it before
+	// ShowResult and counts it in Result.Warnings; one that fails reports it
+	// before it returns.
+	LogFailed(f LogFailure)
 
 	// ShowResult shows the outcome of an operation that completed. It is
 	// called last, before the workflow returns without error.

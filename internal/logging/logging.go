@@ -31,10 +31,26 @@ type Logger struct {
 	file         *os.File
 	originalPath string    // The path the user wanted (may be on network drive)
 	actualPath   string    // The temp file this logger writes to; Close appends it to originalPath
-	output       io.Writer // The user's output, also for problems with the log file (nil: discarded)
+	output       io.Writer // The user's output (nil: discarded)
 	outputOnly   bool
+	writeErr     error // the first line that could not be written to the file
+	closed       bool
 	mu           sync.Mutex
 }
+
+// FileError is a problem with the log file itself, which Close returns:
+// lines that could not be written, or the run's lines left in the temp file
+// because they could not be added to the log file.
+type FileError struct {
+	Err error
+	// Kept is the temp file that holds the run's lines, "" when the log
+	// file has them.
+	Kept string
+}
+
+func (e *FileError) Error() string { return e.Err.Error() }
+
+func (e *FileError) Unwrap() error { return e.Err }
 
 func parseLogLevel(levelStr string) Level {
 	if levelStr == "debug" {
@@ -98,19 +114,25 @@ func (l *Logger) HasFile() bool {
 }
 
 // Close flushes and closes the temp file, then appends its lines to the log
-// file, which it creates if needed.
-func (l *Logger) Close() {
+// file, which it creates if needed. It returns a *FileError when lines are
+// missing from the log file: lines that could not be written, or all of
+// them when the append failed; the temp file is then kept, as the only copy.
+// Calls after the first return nil.
+func (l *Logger) Close() error {
 	if l == nil {
-		return
+		return nil
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.closed {
+		return nil
+	}
+	l.closed = true
 
 	if l.file != nil {
-		if err := l.file.Sync(); err != nil {
-			fmt.Fprintf(l.output, "Warning: Syncing log file before close failed: %v\n", err)
-		}
+		// A failed sync shows in the read or the append below.
+		_ = l.file.Sync()
 		l.file.Close()
 		l.file = nil
 	}
@@ -118,17 +140,17 @@ func (l *Logger) Close() {
 	if l.actualPath != "" && l.originalPath != "" {
 		data, err := os.ReadFile(l.actualPath)
 		if err != nil {
-			fmt.Fprintf(l.output, "Error reading log file in temp directory: %v. Remedy: Check TEMP/TMP path and read permissions.\n", err)
-			return
+			return &FileError{Err: problem.Errorf("The log in the temp directory could not be read: %w.", err).WithRemedy("Check the TEMP/TMP path and its read permissions."), Kept: l.actualPath}
 		}
 		if err := fsx.AppendFile(l.originalPath, data); err != nil {
-			fmt.Fprintf(l.output, "Error writing log file to backup directory: %v. Remedy: Check backup directory write permissions.\n", err)
-			fmt.Fprintf(l.output, "Log file is located in temp directory: %s\n", l.actualPath)
-			// Intentionally do not remove the temp file — it is the user's only copy.
-			return
+			return &FileError{Err: problem.Errorf("The log could not be added to %s: %w.", filepath.ToSlash(l.originalPath), err).WithRemedy("Check the write permissions of the backup directory."), Kept: l.actualPath}
 		}
 		_ = os.Remove(l.actualPath)
 	}
+	if l.writeErr != nil {
+		return &FileError{Err: problem.Errorf("Some lines could not be written to the log: %w.", l.writeErr).WithRemedy("Check the free space and write permissions of the TEMP/TMP directory.")}
+	}
+	return nil
 }
 
 // Info logs an informational message.
@@ -194,9 +216,8 @@ func (l *Logger) writeLine(severity string, mirror bool, format string, args ...
 	}
 	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
-		if _, err := l.file.WriteString(line); err != nil {
-			fmt.Fprintf(l.output, "Warning: Writing to log file failed: %v\n", err)
-			return
+		if _, err := l.file.WriteString(line); err != nil && l.writeErr == nil {
+			l.writeErr = err
 		}
 	}
 }

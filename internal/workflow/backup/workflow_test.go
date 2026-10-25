@@ -15,6 +15,7 @@ import (
 	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/inventory"
+	"github.com/phsc84/restoresafe/internal/workflow/interact"
 	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
@@ -297,6 +298,38 @@ func TestOperationRunPrintsLogFileLast(t *testing.T) {
 	}
 	if temps, _ := catalog.ListTempParts(env.backupDir); len(temps) != 0 {
 		t.Fatalf("temporary parts left behind: %v", temps)
+	}
+}
+
+// TestOperationRunReportsALogLeftInTemp makes the log's append to the
+// backup directory fail (its path is a directory): the backup still
+// succeeds, its result counts the problem as a warning, and the UI learns
+// where the run's lines are, before the result (RF-109).
+func TestOperationRunReportsALogLeftInTemp(t *testing.T) {
+	env := newOperationEnv(t, "operation payload")
+	if err := os.Mkdir(env.logPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	ks, master := testutil.NewPasswordKeySet(t, []byte("op-pw"))
+	op := &operation{cfg: env.cfg, log: env.logger, logPath: env.logPath, backupDir: env.backupDir, date: "2026-05-31", runID: "OPS005", keySet: ks, master: master}
+	ui := &interacttest.Script{Out: &env.out}
+	if err := op.run(context.Background(), ui, env.sources, nil); err != nil {
+		t.Fatalf("backup run failed: %v", err)
+	}
+	if len(ui.LogFailures) != 1 {
+		t.Fatalf("log failures = %+v, want one", ui.LogFailures)
+	}
+	f := ui.LogFailures[0]
+	t.Cleanup(func() { os.Remove(f.Kept) })
+	if f.Kind != interact.LogKept || f.Kept == "" {
+		t.Fatalf("failure = %+v, want the copy in TEMP", f)
+	}
+	data, err := os.ReadFile(f.Kept)
+	if err != nil || !strings.Contains(string(data), "Backup completed successfully") {
+		t.Fatalf("the copy in TEMP lacks the run's lines: %v", err)
+	}
+	if out := env.out.String(); !strings.Contains(out, "Warnings: 1") {
+		t.Fatalf("the result doesn't count the problem as a warning: %q", out)
 	}
 }
 

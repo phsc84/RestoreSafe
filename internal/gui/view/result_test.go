@@ -77,6 +77,37 @@ func TestResultCardExplainsWarnings(t *testing.T) {
 	checkWriting(t, c)
 }
 
+// TestResultCardNamesALogLeftInTemp: the workflow counts a log it couldn't
+// add to the backup directory as one warning; the card explains it with the
+// copy in TEMP instead of "1 other warning", also on a failed run (RF-109).
+func TestResultCardNamesALogLeftInTemp(t *testing.T) {
+	t.Parallel()
+	kept := &interact.LogFailure{Kind: interact.LogKept, Err: errors.New("access denied"), Kept: `C:\Temp\restoresafe-1-x.log`}
+	ok := finishedBackup(&interact.Result{Warnings: 1, LogPath: "x.log"}, nil, backupFacts(), 2)
+	ok.LogFailure = kept
+	c := ResultCardOf(ok)
+	if c.Tone != ToneWarning || c.Title != "2 folders backed up with 1 warning" {
+		t.Fatalf("card %+v", c)
+	}
+	want := "The log couldn't be saved in the backup folder. This run's log is in C:\\Temp\\restoresafe-1-x.log; Show log opens it."
+	if len(c.Lines) != 2 || c.Lines[1] != want {
+		t.Fatalf("lines %q, want the summary and %q", c.Lines, want)
+	}
+	checkWriting(t, c)
+
+	failed := finishedBackup(nil, errors.New("disk full"), logging.RunFacts{}, 1)
+	failed.LogFailure = kept
+	if c := ResultCardOf(failed); c.Tone != ToneError || c.Lines[len(c.Lines)-1] != want {
+		t.Fatalf("failed card %+v", c)
+	}
+
+	notOpened := finishedBackup(&interact.Result{Warnings: 1}, nil, backupFacts(), 2)
+	notOpened.LogFailure = &interact.LogFailure{Kind: interact.LogNotOpened, Err: problem.New("The temp directory is missing.").WithRemedy("Check TEMP.")}
+	if c := ResultCardOf(notOpened); len(c.Lines) != 2 || c.Lines[1] != "No log was written: The temp directory is missing." {
+		t.Fatalf("lines %q", c.Lines)
+	}
+}
+
 func TestResultCardTellsSkippedFromStaleFiles(t *testing.T) {
 	t.Parallel()
 	facts := backupFacts()

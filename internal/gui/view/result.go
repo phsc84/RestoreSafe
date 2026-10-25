@@ -93,7 +93,43 @@ func ResultCardOf(r *flow.Run) *ResultCard {
 		c.Detail = err.Error()
 		c.Details = &Button{Text: linkShowDetails, Action: ActionShowDetails, Enabled: true}
 	}
+	if line := logFailureLine(r.LogFailure); line != "" {
+		c.Lines = append(c.Lines, line)
+		if c.Tone == ToneSuccess {
+			c.Tone, c.Glyph = ToneWarning, GlyphWarning
+		}
+	}
 	return c
+}
+
+// logFailureLine words a problem with the run's log file, "" without one
+// (RF-109).
+func logFailureLine(f *interact.LogFailure) string {
+	if f == nil {
+		return ""
+	}
+	why := ""
+	if f.Err != nil {
+		why = firstSentences(problem.Split(f.Err))
+	}
+	switch f.Kind {
+	case interact.LogNotOpened:
+		return fmt.Sprintf(resultLogNotOpened, why)
+	case interact.LogIncomplete:
+		return fmt.Sprintf(resultLogIncomplete, why)
+	case interact.LogKept:
+		return fmt.Sprintf(resultLogKept, Path(f.Kept))
+	}
+	return ""
+}
+
+// logExplained is the number of warnings of a completed run that its log
+// line explains: the workflow counts a problem with the log file as one.
+func logExplained(r *flow.Run) int {
+	if r.LogFailure != nil {
+		return 1
+	}
+	return 0
 }
 
 func opNoun(op flow.Op) string {
@@ -146,15 +182,15 @@ func finished(c *ResultCard, r *flow.Run, name string) {
 		if warnings == 0 && r.Op == flow.OpVerify {
 			c.Lines[0] += " " + resultEveryFile
 		}
-		if warnings > 0 {
-			c.Lines = append(c.Lines, otherWarnings(warnings))
+		if rest := warnings - logExplained(r); rest > 0 {
+			c.Lines = append(c.Lines, otherWarnings(rest))
 		}
 		return
 	}
 
 	facts := r.Facts
 	summary := backupSummary(r, sets)
-	explained := 0
+	explained := logExplained(r)
 	var warningLines []string
 	for _, set := range sets {
 		if f := facts.Sets[set]; f.Unread() > 0 {
@@ -405,7 +441,7 @@ func setFolder(set string) string {
 // restoreFinished words a restore that ended without error (RW-8).
 func restoreFinished(c *ResultCard, r *flow.Run) {
 	bytes, dest := int64(0), ""
-	explained := 0
+	explained := logExplained(r)
 	var unread []string
 	if p := r.Restore; p != nil {
 		bytes, dest = p.NeededBytes, Path(p.Destination)
@@ -426,7 +462,7 @@ func restoreFinished(c *ResultCard, r *flow.Run) {
 			}
 		}
 		if len(unread) > 0 {
-			explained = 1 // the workflow counts unread files as one warning
+			explained++ // the workflow counts unread files as one warning
 		}
 	}
 	line := fmt.Sprintf(restoredLine, Size(bytes), dest, Duration(r.Ended.Sub(r.Started))) + " " + restoreEveryFile

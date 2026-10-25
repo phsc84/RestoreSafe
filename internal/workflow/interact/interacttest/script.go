@@ -22,8 +22,10 @@ type Script struct {
 	// prompt without an answer function is an error that names the prompt.
 	ReadLine     func(prompt string) (string, error)
 	ReadPassword func(prompt string) ([]byte, error)
-	// LogPath is the log file the workflow reported.
-	LogPath string
+	// LogPath is the log file the workflow reported; LogFailures are the
+	// problems with it the workflow reported.
+	LogPath     string
+	LogFailures []interact.LogFailure
 	// announced is the backup whose other keys were last announced.
 	announced naming.BackupEntry
 }
@@ -278,6 +280,9 @@ func Answers(lines ...string) func(prompt string) (string, error) {
 
 // LogStarted records the log file; the script prints it with the result.
 func (s *Script) LogStarted(path string) { s.LogPath = path }
+
+// LogFailed records a problem with the log file.
+func (s *Script) LogFailed(f interact.LogFailure) { s.LogFailures = append(s.LogFailures, f) }
 
 // Answering returns a Script that writes to out and answers every line
 // prompt with line and every secret prompt with a copy of secret: a run that

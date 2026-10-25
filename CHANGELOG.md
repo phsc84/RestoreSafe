@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- When the log of a backup, restore or verification can't be saved in the backup directory, the result card now says so and names the copy in the TEMP folder, which **Show log** opens. Before, this was reported nowhere, and the copy in TEMP was the only one. A log that can't be created, or that misses lines, is reported the same way.
+
 ## [2.1.1] - 2026-10-19
 
 ### Fixed

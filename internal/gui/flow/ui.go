@@ -56,6 +56,8 @@ func (u *UI) Progress(p interact.Progress) { u.b.Progress(p) }
 func (u *UI) ShowResult(r interact.Result) { u.b.SetResult(r) }
 func (u *UI) LogStarted(path string)       { u.b.SetLogPath(path) }
 
+func (u *UI) LogFailed(f interact.LogFailure) { u.b.SetLogFailure(f) }
+
 // ShowBackupPlan shows the plan; it returns once the plan is on screen.
 func (u *UI) ShowBackupPlan(p interact.BackupPlan) {
 	u.b.Ask(func(answer func(any, error)) { u.d.BackupPlan(p, func() { answer(nil, nil) }) }, nil, nil) //nolint:errcheck

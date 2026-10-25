@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,20 +16,24 @@ import (
 	"github.com/phsc84/restoresafe/internal/security/recovery"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
+	"github.com/phsc84/restoresafe/internal/workflow/interact/interacttest"
 )
 
 func TestOpenLoggerReturnsNonNilLogger(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.Config{LogLevel: "info"}
 
-	log := OpenLogger(cfg, naming.LogFileName(tmpDir, "2026-03-14", naming.BackupID("ABC123")), io.Discard)
+	u := &interacttest.Script{}
+	log := OpenLogger(cfg, naming.LogFileName(tmpDir, "2026-03-14", naming.BackupID("ABC123")), u)
 	if log == nil {
 		t.Fatal("expected non-nil logger for valid target dir")
 	}
 	if !log.HasFile() {
 		t.Fatal("expected file-backed logger for valid target dir")
 	}
-	log.Close()
+	if CloseLog(u, log) || len(u.LogFailures) != 0 {
+		t.Fatalf("a log that was written reports a problem: %+v", u.LogFailures)
+	}
 }
 
 func TestOpenLoggerFallsBackToTheOutputWithoutATempDirectory(t *testing.T) {
@@ -37,11 +41,42 @@ func TestOpenLoggerFallsBackToTheOutputWithoutATempDirectory(t *testing.T) {
 	t.Setenv("TMP", missing)
 	t.Setenv("TEMP", missing)
 
-	var out strings.Builder
-	log := OpenLogger(&config.Config{LogLevel: "info"}, naming.LogFileName(t.TempDir(), "2026-03-14", naming.BackupID("ABC123")), &out)
+	u := &interacttest.Script{}
+	log := OpenLogger(&config.Config{LogLevel: "info"}, naming.LogFileName(t.TempDir(), "2026-03-14", naming.BackupID("ABC123")), u)
 	defer log.Close()
-	if log.HasFile() || !strings.Contains(out.String(), "operation continues without a log file") {
-		t.Fatalf("expected the fallback with a warning, got a log file=%v, output=%q", log.HasFile(), out.String())
+	if log.HasFile() || len(u.LogFailures) != 1 || u.LogFailures[0].Kind != interact.LogNotOpened || u.LogFailures[0].Err == nil {
+		t.Fatalf("expected the fallback, reported as not opened; got a log file=%v, failures=%+v", log.HasFile(), u.LogFailures)
+	}
+}
+
+// TestCloseLogReportsTheCopyInTemp makes the append fail: the log file's
+// path is a directory. The run's lines stay in TEMP, and CloseLog names that
+// copy once (RF-109).
+func TestCloseLogReportsTheCopyInTemp(t *testing.T) {
+	logPath := naming.LogFileName(t.TempDir(), "2026-03-14", naming.BackupID("ABC123"))
+	if err := os.Mkdir(logPath, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	u := &interacttest.Script{}
+	log := OpenLogger(&config.Config{LogLevel: "info"}, logPath, u)
+	log.Info("a line of this run")
+	if !CloseLog(u, log) {
+		t.Fatal("CloseLog reported no problem")
+	}
+	if CloseLog(u, log) {
+		t.Fatal("a second CloseLog reported again")
+	}
+	if len(u.LogFailures) != 1 {
+		t.Fatalf("failures = %+v, want one", u.LogFailures)
+	}
+	f := u.LogFailures[0]
+	if f.Kind != interact.LogKept || f.Err == nil || f.Kept == "" {
+		t.Fatalf("failure = %+v, want LogKept with the copy", f)
+	}
+	t.Cleanup(func() { os.Remove(f.Kept) })
+	data, err := os.ReadFile(f.Kept)
+	if err != nil || !strings.Contains(string(data), "a line of this run") {
+		t.Fatalf("the copy in TEMP lacks the run's line: %q, %v", data, err)
 	}
 }
 

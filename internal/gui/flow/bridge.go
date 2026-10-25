@@ -33,6 +33,7 @@ type Bridge struct {
 	progPosted bool
 	result     *interact.Result
 	logPath    string
+	logFailure *interact.LogFailure
 }
 
 type answer struct {
@@ -189,5 +190,34 @@ func (b *Bridge) SetLogPath(path string) {
 func (b *Bridge) LogPath() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.logPath
+}
+
+// SetLogFailure records a problem with the log file (interact.UI.LogFailed).
+// The first one stays: a log that could not be opened has nothing to close.
+func (b *Bridge) SetLogFailure(f interact.LogFailure) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.logFailure == nil {
+		b.logFailure = &f
+	}
+}
+
+// LogFailure returns the recorded problem with the log file, or nil.
+func (b *Bridge) LogFailure() *interact.LogFailure {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.logFailure
+}
+
+// RunLog returns the file that holds the operation's log lines: the copy in
+// TEMP when they could not be added to the log file, else the log file;
+// "" when there is none.
+func (b *Bridge) RunLog() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if f := b.logFailure; f != nil && f.Kind == interact.LogKept {
+		return f.Kept
+	}
 	return b.logPath
 }

@@ -55,7 +55,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 
 	first := selectedInfos[0].Header
 	logPath := naming.LogFileName(backupDir, first.Date, naming.BackupID(first.RunID))
-	log := job.OpenLogger(cfg, logPath, out)
+	log := job.OpenLogger(cfg, logPath, u)
 	warningCount := 0
 	if log.HasFile() {
 		u.LogStarted(logPath)
@@ -63,7 +63,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 	if !log.HasFile() {
 		warningCount++
 	}
-	defer log.Close()
+	defer job.CloseLog(u, log)
 
 	preflight := job.SelectionPreflight(selectedInfos, infos)
 	details := verifyPreflightReport(cfg, backupDir, preflight, first.KeySet.AuthMode, yubikey.CheckConnected)
@@ -130,6 +130,9 @@ func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) er
 	}
 
 	o.log.Info("Verification completed successfully.")
+	if job.CloseLog(u, o.log) {
+		warningCount++
+	}
 	u.ShowResult(interact.Result{Warnings: warningCount, LogPath: o.logPath})
 	return nil
 }
