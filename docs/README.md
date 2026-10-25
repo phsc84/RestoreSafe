@@ -15,6 +15,8 @@
 
 The names say what kind of document it is: `GUIDE-` how to do something (set up a machine, use CI, test the window), `SPEC-` what the program or a tool must do (living, kept up to date with the code), `PLAN-` work in progress. [CONTRIBUTING.md](CONTRIBUTING.md), the rules of the project, keeps the name GitHub recognises, which links it where pull requests and issues are opened.
 
+Documents in `docs/` cover what the project relies on: the rules, the specifications, and the guides every contributor or every release needs. A tool or script for a single task has a README next to its code, which says how to build and run it: [scripts/gui-test](../scripts/gui-test/README.md) (the scripted window tests), [tools/locktest](../tools/locktest/README.md) (the backup lock after network drops).
+
 An implementation plan is deleted once its work is released; the refactoring plan keeps its name and gets the next round's content. Git history keeps both: the GUI redesign plan and the plan of the round of 2.0 are at the tag `v2.0.0` (`git show v2.0.0:docs/PLAN-gui-redesign.md`).
 
 Code comments refer to sections as "core spec 6.1" or "GUI spec 6.1", and to requirements as "GUI spec OV-8".
