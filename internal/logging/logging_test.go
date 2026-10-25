@@ -9,21 +9,29 @@ import (
 
 	"github.com/phsc84/restoresafe/internal/buildinfo"
 	"github.com/phsc84/restoresafe/internal/logging"
-	"github.com/phsc84/restoresafe/internal/testutil"
 )
 
-func TestNewOutputLogger(t *testing.T) {
-	var out testutil.Output
-	log := logging.NewOutputLogger("debug", &out)
-	if log.HasFile() {
-		t.Fatal("an output logger has no log file")
+func TestLoggerWritesEveryLevel(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "2026-06-05_LEVEL1.log")
+	log, err := logging.NewLogger(logPath, "debug")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !log.HasFile() {
+		t.Fatal("a logger of NewLogger has a log file")
 	}
 	log.Info("output info %d", 1)
 	log.Debug("output debug %d", 2)
 	log.Warn("output warn %d", 3)
 	log.Error("output error %d", 4)
-	log.Close()
-	output := out.String()
+	if err := log.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(data)
 
 	if !strings.Contains(output, "output info 1") {
 		t.Fatalf("expected info output, got %q", output)
@@ -34,7 +42,7 @@ func TestNewOutputLogger(t *testing.T) {
 	if !strings.Contains(output, "] ERROR - output error 4") {
 		t.Fatalf("expected an ERROR line, got %q", output)
 	}
-	if !strings.Contains(output, "output warn 3") {
+	if !strings.Contains(output, "WARN  - output warn 3") {
 		t.Fatalf("expected warn output, got %q", output)
 	}
 }
@@ -45,7 +53,7 @@ func TestNilLoggerMethodsAreSafe(t *testing.T) {
 	log.Info("ignored")
 	log.Debug("ignored")
 	log.Warn("ignored")
-	log.WarnLogOnly("ignored")
+	log.Warn("ignored")
 
 	if log.HasFile() {
 		t.Fatal("a nil logger has no log file")
@@ -60,7 +68,7 @@ func TestNewLoggerRecordsVersionOnFreshLogOnce(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "2026-06-05_ABC123.log")
 
 	// Fresh log: the version banner is written as the first line.
-	log, err := logging.NewLogger(logPath, "info", nil)
+	log, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatalf("NewLogger returned error: %v", err)
 	}
@@ -81,7 +89,7 @@ func TestNewLoggerRecordsVersionOnFreshLogOnce(t *testing.T) {
 	}
 
 	// Reopening the same log (as restore/verify do) appends without a second banner.
-	log2, err := logging.NewLogger(logPath, "info", nil)
+	log2, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatalf("NewLogger (reopen) returned error: %v", err)
 	}
@@ -105,12 +113,12 @@ func TestLoggersOfTheSameFileAtOnceKeepEachOthersLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	restore, err := logging.NewLogger(logPath, "info", nil)
+	restore, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatal(err)
 	}
 	restore.Info("restore work")
-	verify, err := logging.NewLogger(logPath, "info", nil) // starts while the restore runs
+	verify, err := logging.NewLogger(logPath, "info") // starts while the restore runs
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,12 +139,11 @@ func TestLoggersOfTheSameFileAtOnceKeepEachOthersLines(t *testing.T) {
 
 func TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten(t *testing.T) {
 	logPath := filepath.Join(t.TempDir(), "gone", "2026-06-05_GONE01.log")
-	var out testutil.Output
-	log, err := logging.NewLogger(logPath, "info", &out)
+	log, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatal(err)
 	}
-	log.InfoLogOnly("the only copy")
+	log.Info("the only copy")
 	err = log.Close()
 
 	var fe *logging.FileError
@@ -149,29 +156,5 @@ func TestCloseKeepsTheTempFileWhenTheLogCannotBeWritten(t *testing.T) {
 	}
 	if err := log.Close(); err != nil {
 		t.Fatalf("a second Close reported %v", err)
-	}
-}
-
-func TestWarnLogOnlyWritesFileWithoutOutput(t *testing.T) {
-	logPath := filepath.Join(t.TempDir(), "restore.log")
-	var out testutil.Output
-	log, err := logging.NewLogger(logPath, "info", &out)
-	if err != nil {
-		t.Fatalf("NewLogger returned error: %v", err)
-	}
-
-	log.WarnLogOnly("hidden warning %d", 1)
-	output := out.String()
-	log.Close()
-
-	if output != "" {
-		t.Fatalf("expected no output for a log-only warning, got %q", output)
-	}
-	data, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("failed to read log file: %v", err)
-	}
-	if !strings.Contains(string(data), "WARN  - hidden warning 1") {
-		t.Fatalf("expected warning in log file, got %q", string(data))
 	}
 }

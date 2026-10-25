@@ -52,13 +52,26 @@ func TestRunStopsWhenTheUserDeclinesTheStart(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
-	var out testutil.Output
-	s := interacttest.Answering(&out, "n", nil) // no password: unlocking would fail
+	s := interacttest.Answering(nil, "n", nil) // no password: unlocking would fail
 	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
-	if !strings.Contains(out.String(), "Verification cancelled.") {
-		t.Fatalf("expected the cancellation to be reported, got %q", out.String())
+	if log, err := os.ReadFile(s.LogPath); err != nil || !strings.Contains(string(log), "Verification cancelled by user before start") {
+		t.Fatalf("expected the cancellation in the log, got %q (%v)", log, err)
+	}
+}
+
+func TestRunEndsWhenTheKeysDoNotUnlock(t *testing.T) {
+	t.Parallel()
+	fx := testutil.NewBackupFixture(t, []byte("pw"))
+
+	s := interacttest.Answering(nil, "y", []byte("wrong password"))
+	if err := Run(context.Background(), s, fx.Config(), "", Request{Sets: []naming.BackupEntry{fx.Entry}}); err == nil {
+		t.Fatal("a wrong password must end the verification")
+	}
+	facts, err := logging.ReadFacts(s.LogPath)
+	if err != nil || len(facts.Verify) != 0 {
+		t.Fatalf("nothing is verified without the keys, got %+v (%v)", facts.Verify, err)
 	}
 }
 
@@ -120,7 +133,7 @@ func TestVerifyAllReportsADamagedPartAndLogsTheFailure(t *testing.T) {
 	}
 
 	logPath := filepath.Join(t.TempDir(), "verify.log")
-	log, err := logging.NewLogger(logPath, "info", nil)
+	log, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +158,7 @@ func TestRunReportsACancelledVerificationWithoutAFailureFact(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 
 	logPath := filepath.Join(t.TempDir(), "verify.log")
-	log, err := logging.NewLogger(logPath, "info", nil)
+	log, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,13 +195,13 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 	if items[0].Err != nil || items[0].Base == nil || items[0].Base.Entry != fx.Entry {
 		t.Fatalf("differential must find its full backup: %+v", items[0])
 	}
-	var out testutil.Output
-	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewOutputLogger("info", &out)}
+	log, out := testutil.NewLog(t, "info")
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
 	_, err = op.verifyAll(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("verify differential: %v", err)
 	}
-	if output := out.String(); !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Reading unchanged files from the full backup") {
+	if output := out(); !strings.Contains(output, "2 file(s), 1 directory(s)") || !strings.Contains(output, "Reading unchanged files from the full backup") {
 		t.Fatalf("expected the complete restore point to be verified: %q", output)
 	}
 }
@@ -196,14 +209,14 @@ func TestVerifyDifferentialRestorePoint(t *testing.T) {
 func TestOperationRunVerifiesFixture(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("verify-pw"))
 	logPath := filepath.Join(t.TempDir(), "verify.log")
-	var out testutil.Output
-	log, _ := logging.NewLogger(logPath, "info", &out)
+	log, _ := logging.NewLogger(logPath, "info")
 
 	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, logPath: logPath, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
-	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
+	err := op.run(context.Background(), &interacttest.Script{}, 0)
 	log.Close()
-	output := out.String()
+	data, _ := os.ReadFile(logPath)
+	output := string(data)
 	if err != nil {
 		t.Fatalf("operation.run: %v", err)
 	}
@@ -215,7 +228,7 @@ func TestOperationRunVerifiesFixture(t *testing.T) {
 func TestVerifyEntryRejectsWrongKey(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("right"))
 	wrong, _ := cryptox.RandomBytes(cryptox.KeyLen)
-	_, err := (&operation{backupDir: fx.BackupDir, log: logging.NewOutputLogger("info", nil)}).verifyEntry(context.Background(), nil, fx.Entry, nil, wrong)
+	_, err := (&operation{backupDir: fx.BackupDir}).verifyEntry(context.Background(), nil, fx.Entry, nil, wrong)
 	if err == nil || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected authentication failure, got %v", err)
 	}
@@ -228,10 +241,10 @@ func TestVerifyAllVerifiesSeveralSets(t *testing.T) {
 	if len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d", len(infos))
 	}
-	var out testutil.Output
-	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: logging.NewOutputLogger("info", &out)}
+	log, out := testutil.NewLog(t, "info")
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, masters: unlock.MasterKeys{fx.KeySet.ID: fx.Master}, log: log}
 	_, err := op.verifyAll(context.Background(), nil)
-	output := out.String()
+	output := out()
 	if err != nil || strings.Count(output, "successfully verified") != 2 {
 		t.Fatalf("expected both sets verified, err=%v output=%q", err, output)
 	}
@@ -240,7 +253,7 @@ func TestVerifyAllVerifiesSeveralSets(t *testing.T) {
 func TestVerifyEntryReturnsErrorWhenNoPartsFound(t *testing.T) {
 	t.Parallel()
 	entry := naming.BackupEntry{DirectoryName: "Ghost", ChainID: "GHO001", Date: "2026-03-14"}
-	_, err := (&operation{backupDir: t.TempDir(), log: logging.NewOutputLogger("info", nil)}).verifyEntry(context.Background(), nil, entry, nil, make([]byte, 32))
+	_, err := (&operation{backupDir: t.TempDir()}).verifyEntry(context.Background(), nil, entry, nil, make([]byte, 32))
 	if err == nil || !strings.Contains(err.Error(), "No part files found") {
 		t.Fatalf("expected no-parts error, got %v", err)
 	}

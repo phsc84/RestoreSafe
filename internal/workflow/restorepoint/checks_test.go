@@ -9,7 +9,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/container"
 	"github.com/phsc84/restoresafe/internal/format/manifest"
-	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/testutil"
 )
@@ -123,8 +122,7 @@ func TestReportSkippedAndStaleFiles(t *testing.T) {
 		{Path: "Mail/archive.pst", Type: manifest.TypeSkipped},
 		{Path: "busy.db", Type: manifest.TypeFile, Stale: true},
 	}}
-	var out testutil.Output
-	log := logging.NewOutputLogger("info", &out)
+	log, out := testutil.NewLog(t, "info")
 	if n := ReportSkippedFiles(m, "Docs", log); n != 1 {
 		t.Fatalf("ReportSkippedFiles = %d, want 1", n)
 	}
@@ -132,16 +130,15 @@ func TestReportSkippedAndStaleFiles(t *testing.T) {
 		t.Fatalf("ReportStaleFiles = %d, want 1", n)
 	}
 	for _, want := range []string{"[Docs] 1 file(s) are not in this backup", "Mail/archive.pst", "older version of the full backup", "busy.db"} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("expected %q in %q", want, out.String())
+		if !strings.Contains(out(), want) {
+			t.Fatalf("expected %q in %q", want, out())
 		}
 	}
 
 	clean := &manifest.Manifest{Entries: []manifest.Entry{{Path: "ok.txt", Type: manifest.TypeFile}}}
-	var quiet testutil.Output
-	log = logging.NewOutputLogger("info", &quiet)
-	if ReportSkippedFiles(clean, "Docs", log) != 0 || ReportStaleFiles(clean, "Docs", log) != 0 || quiet.String() != "" {
-		t.Fatalf("a clean manifest reports nothing, got %q", quiet.String())
+	log, quiet := testutil.NewLog(t, "info")
+	if ReportSkippedFiles(clean, "Docs", log) != 0 || ReportStaleFiles(clean, "Docs", log) != 0 || strings.Contains(quiet(), "Docs") {
+		t.Fatalf("a clean manifest reports nothing, got %q", quiet())
 	}
 }
 

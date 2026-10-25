@@ -35,7 +35,6 @@ type Request struct {
 // Cancelling ctx stops the verification; the returned error then matches
 // context.Canceled.
 func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, req Request) error {
-	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 
 	lock, lockIssue, err := job.LockForReading(ctx, u, backupDir)
@@ -82,8 +81,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 		return err
 	}
 	if !confirmed {
-		log.InfoLogOnly("Verification cancelled by user before start")
-		fmt.Fprintln(out, "Verification cancelled.")
+		log.Info("Verification cancelled by user before start")
 		return nil
 	}
 
@@ -112,8 +110,6 @@ type operation struct {
 
 // run verifies the selected sets; u receives the progress and the summary.
 func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) error {
-	out := u.Output()
-	fmt.Fprintln(out)
 	job.LogStart(o.log, "Verification", o.selected)
 
 	skipped, err := o.verifyAll(ctx, u)

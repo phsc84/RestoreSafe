@@ -66,8 +66,9 @@ func stubEnrollment(t *testing.T, s *enrollStub) {
 
 func enroll(t *testing.T, s *enrollStub, cfg *config.Config) (*container.KeySet, []byte, string, error) {
 	t.Helper()
-	ks, master, err := enrollKeySet(s.ui, cfg, logging.NewOutputLogger("info", &s.out))
-	return ks, master, s.out.String(), err
+	log, lines := testutil.NewLog(t, "info")
+	ks, master, err := enrollKeySet(s.ui, cfg, log)
+	return ks, master, s.out.String() + lines(), err
 }
 
 func TestEnrollKeySetPasswordModeEnforcesMinimumAndRetries(t *testing.T) {
@@ -161,7 +162,7 @@ func TestObtainKeysReusesExistingKeySet(t *testing.T) {
 		return append([]byte(nil), master...), nil
 	}
 
-	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, plan.Keys{Existing: ks}, logging.NewOutputLogger("info", nil))
+	gotKS, gotMaster, err := obtainKeys(&interacttest.Script{}, &config.Config{}, plan.Keys{Existing: ks}, nil)
 	if err != nil || gotKS.ID != ks.ID || !bytes.Equal(gotMaster, master) {
 		t.Fatalf("existing keys not reused: %v", err)
 	}

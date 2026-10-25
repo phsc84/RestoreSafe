@@ -7,7 +7,6 @@ import (
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/naming"
-	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
@@ -117,12 +116,11 @@ func TestEachRestorePointAndOpen(t *testing.T) {
 func TestLogStartNamesTheSelection(t *testing.T) {
 	t.Parallel()
 	fx, diff, infos := restorePointFixture(t)
-	var out testutil.Output
-	log := logging.NewOutputLogger("info", &out)
+	log, out := testutil.NewLog(t, "info")
 	LogStart(log, "Verification", []catalog.SetInfo{infoOf(t, infos, diff), infoOf(t, infos, fx.Entry)})
 	for _, want := range []string{"Verification started - ID: ", "Verification selection:", "  " + diff.String(), "  " + fx.Entry.String()} {
-		if !strings.Contains(out.String(), want) {
-			t.Fatalf("expected %q in %q", want, out.String())
+		if !strings.Contains(out(), want) {
+			t.Fatalf("expected %q in %q", want, out())
 		}
 	}
 }

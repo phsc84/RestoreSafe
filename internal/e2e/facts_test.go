@@ -3,7 +3,6 @@ package e2e
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/phsc84/restoresafe/internal/format/catalog"
@@ -35,10 +34,7 @@ func TestRunFactsAreLogged(t *testing.T) {
 	backupDir := filepath.Join(root, "Backups")
 	cfg := progressConfig([]string{first, second}, backupDir)
 
-	out := runBackup(t, cfg, []string{"y"}, password, password)
-	if strings.Contains(out, "FACT") {
-		t.Fatalf("facts must not reach the user's output: %q", out)
-	}
+	runBackup(t, cfg, []string{"y"}, password, password)
 	infos, err := catalog.Inventory(backupDir)
 	if err != nil || len(infos) != 2 {
 		t.Fatalf("expected 2 sets, got %d (%v)", len(infos), err)

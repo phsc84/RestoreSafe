@@ -13,7 +13,6 @@ import (
 	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/format/setwriter"
-	"github.com/phsc84/restoresafe/internal/logging"
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/inventory"
 	"github.com/phsc84/restoresafe/internal/workflow/unlock"
@@ -77,7 +76,7 @@ func TestThroughputBenchmarkRestore(t *testing.T) {
 		}
 		masters := unlock.MasterKeys{ks.ID: append([]byte(nil), master...)}
 		start := time.Now()
-		op := &operation{selected: infos, inventory: infos, backupDir: backupDir, restorePath: restoreRoot, masters: masters, log: logging.NewOutputLogger("info", nil)}
+		op := &operation{selected: infos, inventory: infos, backupDir: backupDir, restorePath: restoreRoot, masters: masters}
 		_, err = op.restoreAll(context.Background(), nil)
 		elapsed := time.Since(start)
 		if err != nil {

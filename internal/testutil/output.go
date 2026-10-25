@@ -5,8 +5,8 @@ import (
 	"sync"
 )
 
-// Output collects what a workflow writes to its UI and logger in a test. It
-// takes concurrent writes, like the window's log pane it stands in for.
+// Output collects what an interacttest.Script writes in a test. It takes
+// concurrent writes.
 type Output struct {
 	mu  sync.Mutex
 	buf bytes.Buffer

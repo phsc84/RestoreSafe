@@ -219,7 +219,7 @@ func restoreFixtureRun(t *testing.T, c fixtureCase, backupDir, runID, dest, code
 		s = useScript(t, []string{"y", "r"}, code)
 	}
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: sets, Destination: dest}); err != nil {
-		t.Fatalf("restore %s run %s: %v\n%s", c.name, runID, err, s.out.String())
+		t.Fatalf("restore %s run %s: %v\n%s", c.name, runID, err, s.output())
 	}
 	s.done()
 }

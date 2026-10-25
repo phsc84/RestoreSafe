@@ -5,7 +5,6 @@
 package scenario
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -206,7 +205,7 @@ func (b *builder) source(root, name string) {
 
 // writeLog writes the run log with the facts of the run.
 func (b *builder) writeLog() {
-	log, err := logging.NewLogger(naming.LogFileName(b.s.BackupDir, b.date, b.runID), "info", io.Discard)
+	log, err := logging.NewLogger(naming.LogFileName(b.s.BackupDir, b.date, b.runID), "info")
 	if err != nil {
 		b.t.Fatal(err)
 	}

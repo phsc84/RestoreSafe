@@ -996,7 +996,7 @@ WINDOWS
 
 ## 11. Workflow interface
 
-The UI talks to the workflows through the `interact.UI` contract and the bridge (section 12). It never parses text written for people: not `Output()` lines and not rendered reports. This section lists the structured data the workflows provide for it. The plans of 11.2 carry what the user confirms, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
+The UI talks to the workflows through the `interact.UI` contract and the bridge (section 12). It never parses text written for people, such as rendered reports. The workflows write no text for the window: what a run did is in its log file. This section lists the structured data the workflows provide for it. The plans of 11.2 carry what the user confirms, and restore and verify receive the user's choice as a request instead of asking for it (12.3).
 
 ### 11.1 Status model: `health.Snapshot` (read-only, no password)
 
@@ -1196,7 +1196,6 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
   │  show dialog, read answer            │
   │  ── reply channel ─────────────────► returns []byte
   │                                      │
-  │  ◄── PostMessage(WM_APP_OUTPUT) ──── Output().Write(...)  (buffered, never blocks)
   │  ◄── PostMessage(WM_APP_PROGRESS) ── Progress(p)          (coalesced, never blocks)
   │  Cancel button → cancel(ctx)         │  stops, cleans up
   │  ◄── PostMessage(WM_APP_DONE) ────── returns error
@@ -1207,7 +1206,6 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 - `main` calls `runtime.LockOSThread` before creating any window; all Win32 UI calls happen on that thread. `IsDialogMessageW` in the message loop gives standard dialog navigation in the main window too.
 - At most one operation worker runs at a time. Status computation, restore destination checks and Reload run on their own short-lived goroutines and post their results; a result that arrives after a newer request was made is dropped.
 - **Questions:** the bridge puts a request (kind, parameters, reply channel) into a queue and posts `WM_APP_QUESTION`. The UI thread shows the dialog and sends exactly one reply. If the window is closing or the operation is cancelled, pending and later questions are answered with `interact.ErrCancelled`.
-- **Output:** writes are appended to a mutex-protected buffer; `WM_APP_OUTPUT` is posted only when the buffer changes from empty to non-empty. The UI thread takes the whole buffer and appends it to the live log.
 - **Progress:** the latest `interact.Progress` is stored under a mutex; `WM_APP_PROGRESS` is posted only when no progress message is pending. The workflows report four times per second, which bounds the repaints.
 - **Plans:** the `Show*Plan` calls of 11.2 are questions without an answer: the worker waits until the Create backup window shows them, so the plan and the following `ConfirmBackupStart` / `ConfirmStart` appear together.
 
@@ -1215,7 +1213,6 @@ message loop                           backup.Run(ctx, guiUI, cfg, exeDir)
 
 | Method | GUI |
 |---|---|
-| `Output` | The operation's output; the log window reads the log file. |
 | `ShowBackupPlan` | Create backup window (6.1); its `Details` for "Show details". |
 | `ShowRestorePlan` | Restore backup window (8): the check of Start (RW-6b); its `Details` for "Show details". |
 | `ShowVerifyPlan` | Verify window (figure 7.3); its `Details` for "Show details". |
@@ -1233,7 +1230,7 @@ The user's choice is not a question: the GUI passes it when it starts the workfl
 
 Cancel in any question returns `interact.ErrCancelled` or the method's "no" answer (`ConfirmStart` false, `BackupCancel`). Cancel in a password dialog returns an error "Cancelled."; the workflow ends before anything is written.
 
-Messages the workflows print between questions (e.g. "Wrong password. 2 attempt(s) remaining.", YubiKey instructions) go to the live log. The bridge also remembers the last output line, and a password dialog opened right after it shows that line under the field. This is a presentation aid only; the workflow logic does not depend on it.
+Why the previous answer failed (e.g. "Wrong password." with 2 attempts left) comes with the question (`interact.Attempt`), and the dialog shows it under the field.
 
 ### 12.4 Cancellation, closing and session end
 

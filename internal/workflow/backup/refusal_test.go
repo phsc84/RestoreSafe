@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -96,8 +97,8 @@ func TestRunShowsThePlanWithNewKeysAfterARefusal(t *testing.T) {
 	if !second.Keys.New || second.Keys.NewKeysReason != yubiKeyRefusedReason || second.Folders[0].Differential {
 		t.Fatalf("the second plan should create new keys and back up in full: %+v", second.Keys)
 	}
-	if !strings.Contains(ui.Out.(*bytes.Buffer).String(), "Backup cancelled.") {
-		t.Fatal("the cancelled plan is not reported")
+	if log, err := os.ReadFile(ui.LogPath); err != nil || !strings.Contains(string(log), "Backup cancelled by user before start") {
+		t.Fatalf("the cancelled plan is not logged: %v", err)
 	}
 }
 
@@ -114,7 +115,7 @@ func TestRunEndsWithTheYubiKeyErrorWhenCancelled(t *testing.T) {
 
 func TestAskAfterYubiKeyRefusal(t *testing.T) {
 	ks, master := testutil.NewPasswordKeySet(t, []byte("pw"))
-	log := logging.NewOutputLogger("info", nil)
+	var log *logging.Logger
 	ask := func(keys plan.Keys, err error) (*refusalRecorder, interact.YubiKeyRefusalAnswer) {
 		ui := &refusalRecorder{planRecorder: planRecorder{Script: &interacttest.Script{Out: &bytes.Buffer{}, ReadLine: interacttest.Answers("k")}}}
 		return ui, askAfterYubiKeyRefusal(ui, keys, err, log)

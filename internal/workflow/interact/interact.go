@@ -1,9 +1,8 @@
 // Package interact defines the interface between the backup, restore, and
 // verify workflows and the user. The workflows never read input or show
 // anything themselves: every question goes through a UI method, as a type
-// that carries what a frontend needs to word it (questions.go), and the
-// lines for the user (what the log file records, too) are written to
-// UI.Output, which the window shows in its log pane. The window application
+// that carries what a frontend needs to word it (questions.go), and what an
+// operation did goes to its log file. The window application
 // implements it; interacttest.Script implements it for the tests of the
 // workflows.
 //
@@ -16,10 +15,7 @@
 // returning ErrCancelled.
 package interact
 
-import (
-	"errors"
-	"io"
-)
+import "errors"
 
 // ErrCancelled indicates that the user cancelled a question.
 var ErrCancelled = errors.New("cancelled")
@@ -60,10 +56,6 @@ type BackupStartOptions struct {
 // slices that the caller zeroes after use.
 type UI interface {
 	ProgressReporter
-
-	// Output receives the text the user should see besides reports and
-	// questions: log lines, notices, and results.
-	Output() io.Writer
 
 	// ShowBackupPlan, ShowRestorePlan and ShowVerifyPlan show what the
 	// operation will do, before its start is confirmed.

@@ -27,7 +27,7 @@ Every item in the order of the phases (section "Phases"); the details are in the
 | | RF-121 | P3 | Windows names in backup paths | Open |
 | | RF-124 | P3 | Check a TAR entry's offset and the bytes after end-of-archive | Open |
 | | RF-125 | P3 | Refuse a lone surrogate in a typed secret | Open |
-| 3. Legacy code | RF-108 | P2 | Remove the workflows' text output | Open |
+| 3. Legacy code | RF-108 | P2 | Remove the workflows' text output | Done 2026-10-25 (commit "RF-108: …"). The log's writing is unchanged; the tests that read the output read the log file instead (`testutil.NewLog`); `interacttest.Script` keeps its own `Out` for its prompts until RF-113. `verify` got a test for keys that don't unlock: removing covered lines took it under its floor |
 | | RF-110 | P2 | Find unknown config keys without yaml's error text | Open |
 | | RF-111 | P3 | Comments about the log pane and `cmd/yubidiag` | Open |
 | | RF-112 | P3 | `gui/view` stops taking its own words apart | Open |

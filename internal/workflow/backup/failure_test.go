@@ -19,7 +19,7 @@ import (
 func fileLogger(t *testing.T) (*logging.Logger, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "2026-03-14_RUN001.log")
-	log, err := logging.NewLogger(path, "info", nil)
+	log, err := logging.NewLogger(path, "info")
 	if err != nil {
 		t.Fatal(err)
 	}

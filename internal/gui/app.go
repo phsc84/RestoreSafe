@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -41,7 +40,7 @@ const (
 	idPage    = 310 // idPage+page is the panel of a page
 
 	msgSnapshot    = win32.WM_APP + 1
-	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteOutput, NoteProgress
+	msgBridge      = win32.WM_APP + 2 // wparam: flow.NoteQuestion, NoteProgress
 	msgWorkerDone  = win32.WM_APP + 3
 	msgRunLog      = win32.WM_APP + 4  // wparam: the backups list group whose Show log was clicked
 	msgListFocus   = win32.WM_APP + 5  // the backups list may have moved the focus to a group
@@ -97,8 +96,6 @@ type app struct {
 	// taskbarCreated is the message that says so.
 	taskbar        *win32.Taskbar
 	taskbarCreated uint32
-	// logText is what the operation wrote, for "Show log".
-	logText strings.Builder
 	// verifyWhat names the verified selection; verifyWhole is set when it is
 	// every folder of that backup; verifyHidden counts the sets of that
 	// backup the folder filter left out.
@@ -387,8 +384,6 @@ func (a *app) message(hwnd win32.HWND, msg uint32, wparam, lparam uintptr) uintp
 			switch wparam {
 			case flow.NoteQuestion:
 				a.run.b.ShowNext()
-			case flow.NoteOutput:
-				a.onOutput()
 			case flow.NoteProgress:
 				a.onProgress()
 			}

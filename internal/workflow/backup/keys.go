@@ -38,7 +38,7 @@ func obtainKeys(u interact.UI, cfg *config.Config, keys plan.Keys, log *logging.
 		if err != nil {
 			return nil, nil, err
 		}
-		log.InfoLogOnly("Existing keys unlocked (%s).", keys.Existing.Summary())
+		log.Info("Existing keys unlocked (%s).", keys.Existing.Summary())
 		return keys.Existing, master, nil
 	}
 	return enrollKeySet(u, cfg, log)
@@ -58,14 +58,14 @@ func askAfterYubiKeyRefusal(u interact.UI, keys plan.Keys, err error, log *loggi
 	if keys.Existing == nil || !errors.As(err, &yk) {
 		return interact.RefusalCancel
 	}
-	log.WarnLogOnly("%v", err)
+	log.Warn("%v", err)
 	answer, qerr := u.YubiKeyRefused(interact.YubiKeyRefusal{RecoveryCode: keys.Existing.HasSlotType(container.SlotRecovery)})
 	if qerr != nil {
 		return interact.RefusalCancel
 	}
 	switch answer {
 	case interact.RefusalRetry:
-		log.InfoLogOnly("Trying the YubiKey again.")
+		log.Info("Trying the YubiKey again.")
 	case interact.RefusalNewKeys:
 		log.Info("New keys requested after the YubiKey didn't unlock the current keys.")
 	}
@@ -85,7 +85,6 @@ type newSlot struct {
 // YubiKey registration, and a recovery code (if configured, and always with a
 // YubiKey). Every slot is checked to unlock before anything is written.
 func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*container.KeySet, []byte, error) {
-	out := u.Output()
 	mode := cfg.AuthenticationMode
 	params := cryptox.Argon2Params{
 		Time:     uint32(cfg.Argon2.Time),
@@ -100,7 +99,6 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 		}
 	}()
 
-	fmt.Fprintln(out, "Creating new keys for this backup directory.")
 	var password []byte
 	if mode != config.AuthModeYubiKey {
 		pw, err := readNewPassword(u, cfg.PasswordMinLength)
@@ -109,8 +107,6 @@ func enrollKeySet(u interact.UI, cfg *config.Config, log *logging.Logger) (*cont
 		}
 		password = pw
 		defer cryptox.ZeroBytes(password)
-	} else {
-		fmt.Fprintln(out, "YubiKey-only mode: no password required.")
 	}
 
 	if mode == config.AuthModePassword {
@@ -196,13 +192,9 @@ func readNewPassword(u interact.UI, minLength int) ([]byte, error) {
 // registerYubiKey registers the connected YubiKey: Windows asks for its PIN
 // twice, to register the credential and to derive the secret.
 func registerYubiKey(u interact.UI, password []byte, mode config.AuthMode) (newSlot, error) {
-	out := u.Output()
 	if err := checkYubiKeyConnectedFn(); err != nil {
 		return newSlot{}, yubikey.ErrRequired
 	}
-	fmt.Fprintln(out, "YubiKey:")
-	fmt.Fprintln(out, "  1. Windows first asks for your YubiKey PIN to register the backup credential.")
-	fmt.Fprintln(out, "  2. Windows asks again for your YubiKey PIN to derive the encryption key.")
 	combined, challengeJSON, err := combineWithPasswordFn(password, mode == config.AuthModeYubiKey)
 	if err != nil {
 		return newSlot{}, fmt.Errorf("YubiKey authentication failed: %w", err)

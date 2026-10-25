@@ -1,8 +1,6 @@
 package flow
 
 import (
-	"io"
-
 	"github.com/phsc84/restoresafe/internal/security/cryptox"
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
 )
@@ -54,7 +52,6 @@ func NewUI(b *Bridge, d Dialogs) *UI { return &UI{b: b, d: d} }
 // Bridge returns the bridge of the operation.
 func (u *UI) Bridge() *Bridge { return u.b }
 
-func (u *UI) Output() io.Writer            { return u.b }
 func (u *UI) Progress(p interact.Progress) { u.b.Progress(p) }
 func (u *UI) ShowResult(r interact.Result) { u.b.SetResult(r) }
 func (u *UI) LogStarted(path string)       { u.b.SetLogPath(path) }

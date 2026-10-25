@@ -13,14 +13,13 @@ import (
 )
 
 // OpenLogger opens the log file at logPath, falling back to a logger without
-// a file when it cannot be opened, which it reports to u (LogNotOpened).
-// Messages are mirrored to u's output.
+// a file (nil) when it cannot be opened, which it reports to u
+// (LogNotOpened).
 func OpenLogger(cfg *config.Config, logPath string, u interact.UI) *logging.Logger {
-	out := u.Output()
-	log, err := logging.NewLogger(logPath, cfg.LogLevel, out)
+	log, err := logging.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
 		u.LogFailed(interact.LogFailure{Kind: interact.LogNotOpened, Err: err})
-		return logging.NewOutputLogger(cfg.LogLevel, out)
+		return nil
 	}
 	return log
 }

@@ -73,7 +73,7 @@ func docsSources() []plan.Source {
 func TestApplyRetentionPolicySkipsWhenDisabled(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	log := logging.NewOutputLogger("info", nil)
+	var log *logging.Logger
 	if err := applyRetentionPolicy(dir, 0, 0, []plan.Source{{Resolved: dir}}, nil, log); err != nil {
 		t.Fatalf("expected no error when retention is disabled, got: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	sources := []plan.Source{{Resolved: dir, Err: errors.New("inaccessible")}}
-	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(dir, 1, 0, sources, nil, nil); err != nil {
 		t.Fatalf("expected nil when directorySet is empty, got: %v", err)
 	}
 }
@@ -91,7 +91,7 @@ func TestApplyRetentionPolicySkipsWhenAllSourcesHaveErrors(t *testing.T) {
 func TestApplyRetentionPolicyKeepsAllWhenBelowRetentionLimit(t *testing.T) {
 	env := newRetentionEnv(t)
 	entry := env.writeFull(t, "Docs", "ONE001", "2026-03-14")
-	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, entry) {
@@ -106,7 +106,7 @@ func TestApplyRetentionPolicyDeletesOlderChains(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	other := env.writeFull(t, "Pics", "AAA001", "2026-03-13")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -149,7 +149,7 @@ func TestApplyRetentionPolicyHandlesIncompleteSets(t *testing.T) {
 	old := env.truncateSet(t, oldEntry, time.Now().Add(-24*time.Hour))
 	recent := env.truncateSet(t, recentEntry, time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 5, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	assertNotExists(t, old)
@@ -163,7 +163,7 @@ func TestApplyRetentionPolicySkipsWhenASetIsUnreadable(t *testing.T) {
 	foreign := naming.PartFileName(env.dir, naming.BackupEntry{DirectoryName: "Docs", ChainID: "ZZZ999", Date: "2026-03-15"}, 1)
 	createFile(t, foreign, "not a RestoreSafe backup")
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
@@ -182,7 +182,7 @@ func TestApplyRetentionPolicyNeverTouchesLegacyFiles(t *testing.T) {
 		createFile(t, p, "1.x")
 	}
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range []string{legacyPart, legacyChallenge, legacyLog} {
@@ -201,7 +201,7 @@ func TestApplyRetentionPolicyDeletesChainWithItsDifferentials(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 1)
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range olderParts {
@@ -224,8 +224,8 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	testutil.WriteFullSet(t, src, env.dir, full, env.ks, env.master)
 	diffs := env.writeDiffs(t, full, 3)
 
-	var out strings.Builder
-	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewOutputLogger("info", &out)); err != nil {
+	log, out := testutil.NewLog(t, "info")
+	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, log); err != nil {
 		t.Fatal(err)
 	}
 	infos, _ := catalog.Inventory(env.dir)
@@ -236,8 +236,8 @@ func TestApplyRetentionPolicyKeepsNewestDifferentials(t *testing.T) {
 	if !kept[full] || !kept[diffs[2]] || kept[diffs[0]] || kept[diffs[1]] || len(infos) != 2 {
 		t.Fatalf("expected full + DIFF003 to remain, got %v", kept)
 	}
-	if !strings.Contains(out.String(), "retention: keep all chains, 1 differential(s) per chain") {
-		t.Fatalf("expected the policy in the log, got %q", out.String())
+	if !strings.Contains(out(), "retention: keep all chains, 1 differential(s) per chain") {
+		t.Fatalf("expected the policy in the log, got %q", out())
 	}
 
 	// The next differential continues the numbering: numbers are never reused.
@@ -255,7 +255,7 @@ func TestApplyRetentionPolicyAppliesDifferentialLimitToEveryKeptChain(t *testing
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	newerDiffs := env.writeDiffs(t, newer, 2)
 
-	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 2, 1, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, gone := range []naming.BackupEntry{olderDiffs[0], newerDiffs[0]} {
@@ -274,15 +274,15 @@ func TestApplyRetentionPolicyHoldsDirectoriesWithSkippedFiles(t *testing.T) {
 	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
 	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 
-	var out strings.Builder
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, logging.NewOutputLogger("info", &out)); err != nil {
+	log, out := testutil.NewLog(t, "info")
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), map[string]bool{"Docs": true}, log); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range env.parts(t, older) {
 		assertExists(t, p)
 	}
-	if !strings.Contains(out.String(), "Cleanup old data skipped for [Docs]") {
-		t.Fatalf("expected hold message, got %q", out.String())
+	if !strings.Contains(out(), "Cleanup old data skipped for [Docs]") {
+		t.Fatalf("expected hold message, got %q", out())
 	}
 }
 
@@ -350,7 +350,7 @@ func TestApplyRetentionPolicyCountsOnlyChainsWithACompleteFull(t *testing.T) {
 	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
 	env.truncateSet(t, newer, time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range []naming.BackupEntry{older, newer} {
@@ -372,7 +372,7 @@ func TestApplyRetentionPolicyDeletesDifferentialsFirstAndStopsAChain(t *testing.
 
 	// The highest differential can't be deleted: nothing of the chain is.
 	release := holdAgainstDelete(t, env.parts(t, diffs[1])[0])
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err == nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err == nil {
 		t.Fatal("a locked differential must fail the cleanup")
 	}
 	release()
@@ -386,7 +386,7 @@ func TestApplyRetentionPolicyDeletesDifferentialsFirstAndStopsAChain(t *testing.
 	// full stays.
 	fullParts := env.parts(t, older)
 	release = holdAgainstDelete(t, fullParts[0])
-	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err == nil {
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, nil); err == nil {
 		t.Fatal("a locked full backup must fail the cleanup")
 	}
 	release()
@@ -431,7 +431,7 @@ func TestApplyRetentionPolicyKeepsTheNewestCompleteDifferential(t *testing.T) {
 	diffs := env.writeDiffs(t, full, 3)
 	env.truncateSet(t, diffs[2], time.Now().Add(time.Hour))
 
-	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	infos, _ := catalog.Inventory(env.dir)

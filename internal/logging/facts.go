@@ -55,13 +55,13 @@ const (
 	ResultCancelled = "cancelled"
 )
 
-// Fact writes f to the log file only.
+// Fact writes f to the log file.
 func (l *Logger) Fact(f Fact) {
 	data, err := json.Marshal(f)
 	if err != nil {
 		return
 	}
-	l.writeLogOnly(SeverityFact, "%s", data)
+	l.write(SeverityFact, "%s", data)
 }
 
 // RunFacts are the facts of one log file.

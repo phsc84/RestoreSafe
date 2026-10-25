@@ -174,8 +174,8 @@ func TestDamagedSetIsRefused(t *testing.T) {
 			switch {
 			case f.preflight && !os.IsNotExist(statErr):
 				t.Error("a set refused in the preflight must leave nothing behind")
-			case !f.preflight && !strings.Contains(s.out.String(), "INCOMPLETE"):
-				t.Errorf("a partial restore must be marked INCOMPLETE: %s", s.out.String())
+			case !f.preflight && !strings.Contains(s.output(), "INCOMPLETE"):
+				t.Errorf("a partial restore must be marked INCOMPLETE: %s", s.output())
 			}
 		})
 	}

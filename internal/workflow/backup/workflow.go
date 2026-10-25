@@ -37,7 +37,6 @@ import (
 // completed before are kept, the interrupted one is removed, and the returned
 // error matches context.Canceled.
 func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) error {
-	out := u.Output()
 	// Resolve backup directory (may be relative to exe dir).
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if err := os.MkdirAll(backupDir, 0o750); err != nil {
@@ -66,7 +65,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 
 	// Set up logger.
 	logPath := naming.LogFileName(backupDir, date, runID)
-	log, err := logging.NewLogger(logPath, cfg.LogLevel, out)
+	log, err := logging.NewLogger(logPath, cfg.LogLevel)
 	if err != nil {
 		return err
 	}
@@ -88,8 +87,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	var master []byte
 	for {
 		if !start {
-			log.InfoLogOnly("Backup cancelled by user before start")
-			fmt.Fprintln(out, "Backup cancelled.")
+			log.Info("Backup cancelled by user before start")
 			return nil
 		}
 		job.ReportPhase(u, interact.PhaseUnlocking, "Unlocking keys")
@@ -174,8 +172,6 @@ type operation struct {
 // decides full or differential per directory; directories without a plan
 // (or a nil map) get a full backup.
 func (o *operation) run(ctx context.Context, u interact.UI, sources []plan.Source, plans map[string]*plan.Folder) error {
-	out := u.Output()
-	fmt.Fprintln(out)
 	n := runnableSourceCount(sources)
 	dirWord := "directories"
 	if n == 1 {

@@ -37,8 +37,23 @@ type script struct {
 	lines     []string
 	passwords []string
 	ui        *interacttest.Script
-	// out receives what the workflow writes to the UI.
+	// out receives what the script writes: the plans and the result.
 	out testutil.Output
+}
+
+// output returns what the script wrote, followed by the log file the last
+// workflow reported.
+func (s *script) output() string {
+	s.t.Helper()
+	out := s.out.String()
+	if s.ui.LogPath == "" {
+		return out
+	}
+	log, err := os.ReadFile(s.ui.LogPath)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return out + string(log)
 }
 
 func useScript(t *testing.T, lines []string, passwords ...string) *script {
@@ -194,7 +209,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 1: %v", err)
 	}
-	out := s.out.String()
+	out := s.output()
 	s.done()
 	if !strings.Contains(out, "new keys will be created") || !strings.Contains(out, "Post-backup verification successful") {
 		t.Fatalf("unexpected backup 1 output: %q", out)
@@ -218,7 +233,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 		if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 			t.Fatalf("backup %d: %v", run, err)
 		}
-		out := s.out.String()
+		out := s.output()
 		s.done()
 		if !strings.Contains(out, "existing keys") || !strings.Contains(out, fmt.Sprintf("DIFF%03d", run-1)) {
 			t.Fatalf("run %d must reuse keys and write a differential: %q", run, out)
@@ -247,7 +262,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	if err := verify.Run(context.Background(), s.ui, cfg, "", verify.Request{Sets: newestRun(t, cfg)}); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	out = s.out.String()
+	out = s.output()
 	s.done()
 	if !strings.Contains(out, "Verification completed successfully.") || !strings.Contains(out, "→ with full backup") {
 		t.Fatalf("expected the newest differential to be verified with its full backup: %q", out)
@@ -270,7 +285,7 @@ func TestBackupVerifyRestoreEndToEnd(t *testing.T) {
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	out = s.out.String()
+	out = s.output()
 	s.done()
 	if !strings.Contains(out, "Restore completed successfully.") || !strings.Contains(out, "Reading unchanged files from the full backup") {
 		t.Fatalf("unexpected restore output: %q", out)
@@ -337,7 +352,7 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 2: %v", err)
 	}
-	out := s.out.String()
+	out := s.output()
 	s.done()
 	release()
 	for _, want := range []string{"Skipped (could not be read): Mail/archive.pst", "Excluded by pattern: 2", "Cleanup old data skipped for [Documents]", "Backup completed with warnings", "Exclude            : *.tmp, /Cache"} {
@@ -360,13 +375,12 @@ func TestExcludeAndUnreadableFiles(t *testing.T) {
 	if err := restore.Run(context.Background(), s.ui, cfg, "", restore.Request{Sets: newestRun(t, cfg), Destination: dest}); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	out = s.out.String()
+	out = s.output()
 	s.done()
 	if !strings.Contains(out, "1 file(s) are not in this backup") || !strings.Contains(out, "Mail/archive.pst") {
 		t.Fatalf("expected restore to report the skipped file: %q", out)
 	}
-	_, logPath, _ := strings.Cut(out, "Log file: ")
-	restoreFacts, err := logging.ReadFacts(strings.TrimSpace(logPath))
+	restoreFacts, err := logging.ReadFacts(s.ui.LogPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -390,7 +404,7 @@ func runBackup(t *testing.T, cfg *config.Config, lines []string, passwords ...st
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup: %v", err)
 	}
-	out := s.out.String()
+	out := s.output()
 	s.done()
 	return out
 }
@@ -511,7 +525,7 @@ func TestNewKeysKeepOldBackupsRestorable(t *testing.T) {
 	if err := backup.Run(context.Background(), s.ui, cfg, ""); err != nil {
 		t.Fatalf("backup 2: %v", err)
 	}
-	out := s.out.String()
+	out := s.output()
 	s.done()
 	if !strings.Contains(out, "New keys created") {
 		t.Fatalf("expected new keys, got %q", out)

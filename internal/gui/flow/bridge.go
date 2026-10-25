@@ -1,7 +1,6 @@
 package flow
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/phsc84/restoresafe/internal/workflow/interact"
@@ -11,15 +10,13 @@ import (
 // the UI thread.
 const (
 	NoteQuestion = iota
-	NoteOutput
 	NoteProgress
 )
 
 // Bridge connects the worker goroutine running a workflow with the UI
 // thread (docs/SPEC-gui.md, section 12.2). Questions block the
-// worker until the UI thread answers them; output and progress never block
-// and are coalesced, so the window is posted at most one message of each
-// kind at a time.
+// worker until the UI thread answers them; progress never blocks and is
+// coalesced, so the window is posted at most one progress message at a time.
 type Bridge struct {
 	notify func(kind int)
 
@@ -27,8 +24,6 @@ type Bridge struct {
 	queue      []*question
 	current    *question // shown, not yet answered
 	closed     bool
-	output     strings.Builder
-	outPosted  bool
 	progress   interact.Progress
 	progPosted bool
 	result     *interact.Result
@@ -120,29 +115,6 @@ func (b *Bridge) Close() (hadCurrent bool) {
 		q.answer(q.cancel)
 	}
 	return current != nil
-}
-
-// Write implements io.Writer for interact.UI.Output. It never blocks on the UI.
-func (b *Bridge) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	b.output.Write(p)
-	post := !b.outPosted
-	b.outPosted = true
-	b.mu.Unlock()
-	if post {
-		b.notify(NoteOutput)
-	}
-	return len(p), nil
-}
-
-// TakeOutput returns the output written since the last call.
-func (b *Bridge) TakeOutput() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	s := b.output.String()
-	b.output.Reset()
-	b.outPosted = false
-	return s
 }
 
 // Progress implements interact.ProgressReporter; it keeps only the latest report.

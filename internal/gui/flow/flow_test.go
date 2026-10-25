@@ -2,7 +2,6 @@ package flow
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -100,15 +99,13 @@ func newTestUI(t *testing.T, d Dialogs) *UI {
 	return NewUI(b, d)
 }
 
-// The dialogs get the workflow's question as it is: output written in
-// between (log lines, notices) does not change it (refactoring 2.0 RF-26).
+// The dialogs get the workflow's question as it is (refactoring 2.0 RF-26).
 func TestUIPasswordPassesTheQuestionOn(t *testing.T) {
 	t.Parallel()
 	d := &fakeDialogs{password: func(interact.SecretQuestion) ([]byte, error) { return []byte("pw"), nil }}
 	u := newTestUI(t, d)
 	wrong := errors.New("Wrong password.")
 	retry := interact.SecretQuestion{Action: "backup", Attempt: interact.Attempt{N: 2, Left: 2, Failure: wrong}}
-	fmt.Fprintln(u.Output(), "[2026-09-30 09:12:03] INFO  - a log line")
 	if _, err := u.Password(retry); err != nil {
 		t.Fatal(err)
 	}

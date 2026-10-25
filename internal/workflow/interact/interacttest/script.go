@@ -36,8 +36,8 @@ type Script struct {
 
 var _ interact.UI = (*Script)(nil)
 
-// Output returns where the script writes its output.
-func (s *Script) Output() io.Writer {
+// writer returns where the script writes.
+func (s *Script) writer() io.Writer {
 	if s.Out != nil {
 		return s.Out
 	}
@@ -45,11 +45,11 @@ func (s *Script) Output() io.Writer {
 }
 
 func (s *Script) printf(format string, args ...any) {
-	fmt.Fprintf(s.Output(), format, args...)
+	fmt.Fprintf(s.writer(), format, args...)
 }
 
 func (s *Script) println(args ...any) {
-	fmt.Fprintln(s.Output(), args...)
+	fmt.Fprintln(s.writer(), args...)
 }
 
 func (s *Script) readLine(prompt string) (string, error) {
@@ -250,15 +250,15 @@ func (s *Script) ShowRecoveryCode(code []byte) error {
 	return nil
 }
 
-func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowBackupPlan(p interact.BackupPlan) { WriteReport(s.writer(), p.Details) }
 
 // ShowRestorePlan prints the preflight summary of the plan.
-func (s *Script) ShowRestorePlan(p interact.RestorePlan) { WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowRestorePlan(p interact.RestorePlan) { WriteReport(s.writer(), p.Details) }
 
 // ShowVerifyPlan prints the preflight summary of the plan.
-func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { WriteReport(s.Output(), p.Details) }
+func (s *Script) ShowVerifyPlan(p interact.VerifyPlan) { WriteReport(s.writer(), p.Details) }
 
-// Progress is ignored: the script shows the log lines of each step instead.
+// Progress is ignored.
 func (s *Script) Progress(interact.Progress) {}
 
 // ShowResult prints the warning count (if any) and the log file path.

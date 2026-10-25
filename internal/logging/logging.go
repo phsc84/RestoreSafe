@@ -1,10 +1,9 @@
-// Package logging writes the log file of a backup run and mirrors its messages
-// to the user, and reads the facts of a run back from its log (facts.go).
+// Package logging writes the log file of a backup run, and reads the facts of
+// a run back from its log (facts.go).
 package logging
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,17 +22,14 @@ const (
 	LevelDebug Level = 1
 )
 
-// Logger writes structured log entries to a log file and mirrors them to the
-// user's output (the window's log pane); a logger without a file writes to the
-// output only.
+// Logger writes structured log entries to a log file. Its methods take a nil
+// *Logger, which drops every line.
 type Logger struct {
 	level        Level
 	file         *os.File
-	originalPath string    // The path the user wanted (may be on network drive)
-	actualPath   string    // The temp file this logger writes to; Close appends it to originalPath
-	output       io.Writer // The user's output (nil: discarded)
-	outputOnly   bool
-	writeErr     error // the first line that could not be written to the file
+	originalPath string // The path the user wanted (may be on network drive)
+	actualPath   string // The temp file this logger writes to; Close appends it to originalPath
+	writeErr     error  // the first line that could not be written to the file
 	closed       bool
 	mu           sync.Mutex
 }
@@ -59,22 +55,12 @@ func parseLogLevel(levelStr string) Level {
 	return LevelInfo
 }
 
-// orDiscard returns w, or io.Discard for nil.
-func orDiscard(w io.Writer) io.Writer {
-	if w == nil {
-		return io.Discard
-	}
-	return w
-}
-
-// NewLogger creates a Logger writing to logPath and mirroring messages to
-// output (nil: discarded).
+// NewLogger creates a Logger writing to logPath.
 // The lines go to a temp file of this logger's own, so writing never waits for
 // a network drive; Close appends them to logPath. Two runs that log to the
 // same file at once (a restore and a verification of one backup run) thus
 // each add their own lines.
-func NewLogger(logPath string, levelStr string, output io.Writer) (*Logger, error) {
-	output = orDiscard(output)
+func NewLogger(logPath string, levelStr string) (*Logger, error) {
 	lvl := parseLogLevel(levelStr)
 
 	_, statErr := os.Stat(logPath)
@@ -85,32 +71,22 @@ func NewLogger(logPath string, levelStr string, output io.Writer) (*Logger, erro
 		return nil, problem.Errorf("Log file in temp directory could not be created: %w.", err).WithRemedy("Check TEMP/TMP path and write permissions.")
 	}
 
-	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: f.Name(), output: output}
+	logger := &Logger{level: lvl, file: f, originalPath: logPath, actualPath: f.Name()}
 
-	// Record the RestoreSafe version as the first line of a freshly created log
-	// (file only, so it does not duplicate the startup banner in the output). Later
-	// restore/verify runs reuse and append to the same log, leaving this first
-	// line intact, so a backup's log identifies the version that created it.
+	// Record the RestoreSafe version as the first line of a freshly created
+	// log. Later restore/verify runs reuse and append to the same log, leaving
+	// this first line intact, so a backup's log identifies the version that created it.
 	if !logExists {
-		logger.InfoLogOnly("RestoreSafe v%s", buildinfo.Version)
+		logger.Info("RestoreSafe v%s", buildinfo.Version)
 	}
 
 	return logger, nil
 }
 
-// NewOutputLogger creates a logger without a log file: it writes to output
-// (nil: discarded) only.
-func NewOutputLogger(levelStr string, output io.Writer) *Logger {
-	return &Logger{level: parseLogLevel(levelStr), outputOnly: true, output: orDiscard(output)}
-}
-
-// HasFile reports whether the logger writes a log file; a nil logger does
-// not.
+// HasFile reports whether the logger writes a log file; a nil logger, the
+// logger of a run whose log file could not be opened, does not.
 func (l *Logger) HasFile() bool {
-	if l == nil {
-		return false
-	}
-	return !l.outputOnly
+	return l != nil
 }
 
 // Close flushes and closes the temp file, then appends its lines to the log
@@ -183,25 +159,7 @@ func (l *Logger) Error(format string, args ...any) {
 	l.write(SeverityError, format, args...)
 }
 
-// InfoLogOnly logs an informational message without mirroring it to the output.
-func (l *Logger) InfoLogOnly(format string, args ...any) {
-	l.writeLogOnly(SeverityInfo, format, args...)
-}
-
-// WarnLogOnly logs a warning without mirroring it to the output.
-func (l *Logger) WarnLogOnly(format string, args ...any) {
-	l.writeLogOnly(SeverityWarn, format, args...)
-}
-
 func (l *Logger) write(severity, format string, args ...any) {
-	l.writeLine(severity, true, format, args...)
-}
-
-func (l *Logger) writeLogOnly(severity, format string, args ...any) {
-	l.writeLine(severity, false, format, args...)
-}
-
-func (l *Logger) writeLine(severity string, mirror bool, format string, args ...any) {
 	if l == nil {
 		return
 	}
@@ -210,11 +168,6 @@ func (l *Logger) writeLine(severity string, mirror bool, format string, args ...
 	defer l.mu.Unlock()
 
 	line := FormatLine(time.Now(), severity, fmt.Sprintf(format, args...))
-	if mirror {
-		// Write to the output first so the user sees messages immediately.
-		fmt.Fprint(l.output, line)
-	}
-	// Also append to the log file and sync to ensure visibility.
 	if l.file != nil {
 		if _, err := l.file.WriteString(line); err != nil && l.writeErr == nil {
 			l.writeErr = err

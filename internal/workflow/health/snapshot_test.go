@@ -3,7 +3,6 @@ package health
 import (
 	"context"
 	"errors"
-	"io"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -283,7 +282,7 @@ func TestSnapshotListsTheLogOfAFailedRun(t *testing.T) {
 	t.Parallel()
 	sc := scenario.Build(t, scenario.Protected)
 	path := filepath.Join(sc.BackupDir, "2026-09-30_FAIL01.log")
-	log, err := logging.NewLogger(path, "info", io.Discard)
+	log, err := logging.NewLogger(path, "info")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ func runBackupDirectory(t *testing.T, level string) (string, string) {
 	}
 
 	logPath := filepath.Join(backupDir, fmt.Sprintf("test-%d.log", time.Now().UnixNano()))
-	logger, err := logging.NewLogger(logPath, level, nil)
+	logger, err := logging.NewLogger(logPath, level)
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -149,13 +150,14 @@ func TestRunCancelsBackupWhenUserEntersN(t *testing.T) {
 		SourceDirectories: []string{sourceDir},
 	}
 	var out strings.Builder
-	runErr := Run(context.Background(), &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("n")}, cfg, "")
+	ui := &interacttest.Script{Out: &out, ReadLine: interacttest.Answers("n")}
+	runErr := Run(context.Background(), ui, cfg, "")
 	output := out.String()
 	if runErr != nil {
 		t.Fatalf("expected nil error on cancel, got: %v", runErr)
 	}
-	if !strings.Contains(output, "Backup cancelled.") {
-		t.Fatalf("expected 'Backup cancelled.' in output, got: %q", output)
+	if log, err := os.ReadFile(ui.LogPath); err != nil || !strings.Contains(string(log), "Backup cancelled by user before start") {
+		t.Fatalf("expected the cancellation in the log, got: %q (%v)", log, err)
 	}
 	if !strings.Contains(output, "new keys will be created") {
 		t.Fatalf("expected key plan in preflight, got: %q", output)
@@ -170,7 +172,7 @@ func TestRemoveLeftoverTempPartsDeletesOnlyTempParts(t *testing.T) {
 	for _, p := range []string{temp, keep, other} {
 		createFile(t, p, "x")
 	}
-	removeLeftoverTempParts(dir, logging.NewOutputLogger("info", nil))
+	removeLeftoverTempParts(dir, nil)
 	assertNotExists(t, temp)
 	assertExists(t, keep)
 	assertExists(t, other)
@@ -196,10 +198,10 @@ func TestNewRunIDAvoidsUsedIDs(t *testing.T) {
 
 func TestRemoveLeftoverTempPartsWarnsWhenItCannotLook(t *testing.T) {
 	t.Parallel()
-	var out testutil.Output
-	removeLeftoverTempParts(filepath.Join(t.TempDir(), "missing"), logging.NewOutputLogger("info", &out))
-	if !strings.Contains(out.String(), "Failed to look for leftovers") {
-		t.Fatalf("expected a warning for an unreadable directory, got %q", out.String())
+	log, out := testutil.NewLog(t, "info")
+	removeLeftoverTempParts(filepath.Join(t.TempDir(), "missing"), log)
+	if !strings.Contains(out(), "Failed to look for leftovers") {
+		t.Fatalf("expected a warning for an unreadable directory, got %q", out())
 	}
 }
 
@@ -210,8 +212,8 @@ type operationEnv struct {
 	logger    *logging.Logger
 	cfg       *config.Config
 	sources   []plan.Source
-	// out receives what the operation writes to its UI and logger.
-	out testutil.Output
+	// out receives what the operation writes to its UI.
+	out bytes.Buffer
 }
 
 func newOperationEnv(t *testing.T, payload string) *operationEnv {
@@ -227,7 +229,7 @@ func newOperationEnv(t *testing.T, payload string) *operationEnv {
 	}
 	env.sources = plan.ResolveSources([]string{env.srcDir}, "")
 	env.logPath = filepath.Join(env.backupDir, "operation.log")
-	logger, err := logging.NewLogger(env.logPath, "info", &env.out)
+	logger, err := logging.NewLogger(env.logPath, "info")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -245,7 +247,11 @@ func (env *operationEnv) run(t *testing.T, id naming.BackupID) string {
 	if err != nil {
 		t.Fatalf("backup run failed: %v", err)
 	}
-	return env.out.String()
+	log, err := os.ReadFile(env.logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return env.out.String() + string(log)
 }
 
 // TestOperationRunWritesCompleteSet exercises the operation half of the
@@ -278,18 +284,11 @@ func TestOperationRunVerifiesAfterBackup(t *testing.T) {
 	}
 }
 
-func TestOperationRunPrintsLogFileLast(t *testing.T) {
+func TestOperationRunShowsTheResultLast(t *testing.T) {
 	env := newOperationEnv(t, "operation payload")
-	output := env.run(t, "OPS004")
+	env.run(t, "OPS004")
 
-	successIndex := strings.Index(output, "Backup completed successfully")
-	logFileIndex := strings.LastIndex(output, "Log file:")
-	if successIndex == -1 || logFileIndex == -1 {
-		t.Fatalf("expected completion and log file lines, got: %q", output)
-	}
-	if successIndex > logFileIndex {
-		t.Fatalf("expected success before log file, got: %q", output)
-	}
+	output := env.out.String()
 	if !strings.HasSuffix(strings.TrimSpace(output), "Log file: "+env.logPath) {
 		t.Fatalf("expected log file line to be last, got: %q", output)
 	}
@@ -373,7 +372,7 @@ func TestVerifyBackupAfterWriteReportsCorruptPart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	failures, _ := verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, logging.NewOutputLogger("info", nil))
+	failures, _ := verifyBackupAfterWrite(context.Background(), nil, fx.BackupDir, []naming.BackupEntry{fx.Entry}, fx.Master, nil)
 	if failures != 1 {
 		t.Fatalf("expected 1 verification failure, got %d", failures)
 	}

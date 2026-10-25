@@ -72,12 +72,12 @@ func TestRunWritesNothingWhenTheUserDeclinesTheStart(t *testing.T) {
 	fx := testutil.NewBackupFixture(t, []byte("pw"))
 	req := request(t, fx)
 
-	var out testutil.Output
-	if err := Run(context.Background(), interacttest.Answering(&out, "n", nil), fx.Config(), "", req); err != nil {
+	s := interacttest.Answering(nil, "n", nil)
+	if err := Run(context.Background(), s, fx.Config(), "", req); err != nil {
 		t.Fatalf("a declined start is no error, got %v", err)
 	}
-	if !strings.Contains(out.String(), "Restore cancelled.") {
-		t.Fatalf("expected the cancellation to be reported, got %q", out.String())
+	if log, err := os.ReadFile(s.LogPath); err != nil || !strings.Contains(string(log), "Restore cancelled by user before start") {
+		t.Fatalf("expected the cancellation in the log, got %q (%v)", log, err)
 	}
 	if _, err := os.Stat(req.Destination); !os.IsNotExist(err) {
 		t.Fatalf("a declined restore writes nothing, but %s exists", req.Destination)
@@ -130,18 +130,17 @@ func TestRunReportsADamagedPartAndTheIncompleteFolder(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 	damagePart(t, fx.BackupFixture)
 
-	var out testutil.Output
-	log := logging.NewOutputLogger("info", &out)
+	log, out := testutil.NewLog(t, "info")
 	infos := inventory.Read(t, fx.BackupDir)
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: log}
-	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
+	err := op.run(context.Background(), &interacttest.Script{}, 0)
 	if err == nil || !strings.Contains(err.Error(), "Failed to restore directory") || !strings.Contains(err.Error(), "corrupted or modified") {
 		t.Fatalf("expected the damaged part to fail the restore, got %v", err)
 	}
-	if !strings.Contains(out.String(), "is INCOMPLETE") {
-		t.Fatalf("expected the incomplete folder to be named, got %q", out.String())
+	if !strings.Contains(out(), "is INCOMPLETE") {
+		t.Fatalf("expected the incomplete folder to be named, got %q", out())
 	}
-	lines := testutil.ErrorLines(out.String())
+	lines := testutil.ErrorLines(out())
 	if len(lines) != 2 || !strings.Contains(lines[0], "is INCOMPLETE") || !strings.HasPrefix(lines[1], "Failed to restore directory") {
 		t.Fatalf("the incomplete folder and the failure must be ERROR lines, got %q", lines)
 	}
@@ -179,7 +178,7 @@ func TestRunWarnsAboutFilesTheBackupCouldNotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(t.TempDir(), "2026-03-14_SKP001.log")
-	log, err := logging.NewLogger(logPath, "info", nil)
+	log, err := logging.NewLogger(logPath, "info")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,22 +206,22 @@ func TestRunCancelledBeforeTheFirstSetLeavesNoFolder(t *testing.T) {
 	t.Parallel()
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 
-	var out testutil.Output
+	log, out := testutil.NewLog(t, "info")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	infos := inventory.Read(t, fx.BackupDir)
-	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
-	err := op.run(ctx, &interacttest.Script{Out: &out}, 0)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: log}
+	err := op.run(ctx, &interacttest.Script{}, 0)
 	if !errors.Is(err, context.Canceled) || err.Error() != job.Cancelled("Restore").Error() {
 		t.Fatalf("expected the restore to be cancelled, got %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(fx.RestoreRoot, fx.Entry.DirectoryName)); !os.IsNotExist(statErr) {
 		t.Fatal("a restore cancelled before its first byte must not leave an empty folder")
 	}
-	if !strings.Contains(out.String(), "Restore cancelled.") {
-		t.Fatalf("expected the cancellation in the log, got %q", out.String())
+	if !strings.Contains(out(), "Restore cancelled.") {
+		t.Fatalf("expected the cancellation in the log, got %q", out())
 	}
-	if lines := testutil.ErrorLines(out.String()); len(lines) != 0 {
+	if lines := testutil.ErrorLines(out()); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
 }
@@ -244,19 +243,19 @@ func TestRunCancelledWhileWritingMarksTheFolderIncompleteAsAWarning(t *testing.T
 	t.Parallel()
 	fx := testutil.NewRestoreFixture(t, []byte("pw"))
 
-	var out testutil.Output
+	log, out := testutil.NewLog(t, "info")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	infos := inventory.Read(t, fx.BackupDir)
-	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", &out)}
-	err := op.run(ctx, cancelOnRestore{Script: &interacttest.Script{Out: &out}, cancel: cancel}, 0)
+	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: log}
+	err := op.run(ctx, cancelOnRestore{Script: &interacttest.Script{}, cancel: cancel}, 0)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected the restore to be cancelled, got %v", err)
 	}
-	if !strings.Contains(out.String(), "] "+logging.SeverityWarn+" -   The restore of ["+fx.Entry.DirectoryName+"] is INCOMPLETE") {
-		t.Fatalf("a cancelled folder is INCOMPLETE as a warning, got %q", out.String())
+	if !strings.Contains(out(), "] "+logging.SeverityWarn+" -   The restore of ["+fx.Entry.DirectoryName+"] is INCOMPLETE") {
+		t.Fatalf("a cancelled folder is INCOMPLETE as a warning, got %q", out())
 	}
-	if lines := testutil.ErrorLines(out.String()); len(lines) != 0 {
+	if lines := testutil.ErrorLines(out()); len(lines) != 0 {
 		t.Fatalf("a cancellation is no error, got %q", lines)
 	}
 }
@@ -296,13 +295,13 @@ func TestOperationRunRestoresFixture(t *testing.T) {
 	fx := testutil.NewRestoreFixture(t, []byte("restore-pw"))
 	infos := inventory.Read(t, fx.BackupDir)
 	logPath := filepath.Join(t.TempDir(), "restore.log")
-	var out testutil.Output
-	log, _ := logging.NewLogger(logPath, "info", &out)
+	log, _ := logging.NewLogger(logPath, "info")
 
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, logPath: logPath, masters: masterKeys(fx.BackupFixture), log: log}
-	err := op.run(context.Background(), &interacttest.Script{Out: &out}, 0)
+	err := op.run(context.Background(), &interacttest.Script{}, 0)
 	log.Close()
-	output := out.String()
+	data, _ := os.ReadFile(logPath)
+	output := string(data)
 	if err != nil {
 		t.Fatalf("operation.run: %v", err)
 	}
@@ -323,7 +322,7 @@ func TestOperationRunCountsALogLeftInTemp(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out testutil.Output
-	log, _ := logging.NewLogger(logPath, "info", &out)
+	log, _ := logging.NewLogger(logPath, "info")
 	ui := &interacttest.Script{Out: &out}
 
 	op := &operation{selected: infos, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, logPath: logPath, masters: masterKeys(fx.BackupFixture), log: log}
@@ -351,7 +350,7 @@ func TestRestoreAllRestoresDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture), log: logging.NewOutputLogger("info", nil)}
+	op := &operation{selected: selected, inventory: infos, backupDir: fx.BackupDir, restorePath: fx.RestoreRoot, masters: masterKeys(fx.BackupFixture)}
 	_, err = op.restoreAll(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("restore differential: %v", err)
@@ -438,5 +437,5 @@ func TestRunReturnsErrorWhenStartIsNotAnswered(t *testing.T) {
 // entryOperation is a restore from backupDir into restorePath that logs to
 // nowhere, for tests of single sets.
 func entryOperation(backupDir, restorePath string) *operation {
-	return &operation{backupDir: backupDir, restorePath: restorePath, log: logging.NewOutputLogger("info", nil)}
+	return &operation{backupDir: backupDir, restorePath: restorePath}
 }

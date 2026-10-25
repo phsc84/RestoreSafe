@@ -19,7 +19,7 @@ func TestStreamProgressWritesDebugLine(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress.log")
-	logger, err := logging.NewLogger(logPath, "debug", nil)
+	logger, err := logging.NewLogger(logPath, "debug")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestStreamProgressLogsWhenDoneClosedImmediately(t *testing.T) {
 
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "progress2.log")
-	logger, err := logging.NewLogger(logPath, "debug", nil)
+	logger, err := logging.NewLogger(logPath, "debug")
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -163,9 +163,9 @@ func TestStampAndReportPhase(t *testing.T) {
 func TestStreamProgressReadsMissingCountersAsZero(t *testing.T) {
 	t.Parallel()
 
-	var out testutil.Output
-	streamProgress{log: logging.NewOutputLogger("debug", &out), name: "Docs", label: "verified"}.logLine(false)
-	if !strings.Contains(out.String(), "input=0.00 MB, verified=0.00 MB, writes=0") {
-		t.Fatalf("got %q", out.String())
+	log, out := testutil.NewLog(t, "debug")
+	streamProgress{log: log, name: "Docs", label: "verified"}.logLine(false)
+	if !strings.Contains(out(), "input=0.00 MB, verified=0.00 MB, writes=0") {
+		t.Fatalf("got %q", out())
 	}
 }

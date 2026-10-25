@@ -92,11 +92,11 @@ func TestCancelAtEachPhase(t *testing.T) {
 				switch {
 				case op == "restore" && phase == interact.PhaseUnlocking && !os.IsNotExist(statErr):
 					t.Error("a restore cancelled before writing must leave no folder")
-				case phase == interact.PhaseRestoring && !strings.Contains(s.out.String(), "INCOMPLETE"):
-					t.Errorf("a restore cancelled while writing must be marked INCOMPLETE: %s", s.out.String())
+				case phase == interact.PhaseRestoring && !strings.Contains(s.output(), "INCOMPLETE"):
+					t.Errorf("a restore cancelled while writing must be marked INCOMPLETE: %s", s.output())
 				}
-				if strings.Contains(s.out.String(), "] "+logging.SeverityError+" - ") {
-					t.Errorf("a cancellation is no error: %s", s.out.String())
+				if strings.Contains(s.output(), "] "+logging.SeverityError+" - ") {
+					t.Errorf("a cancellation is no error: %s", s.output())
 				}
 			})
 		}

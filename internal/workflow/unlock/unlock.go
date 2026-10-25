@@ -76,7 +76,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 			}
 			return nil, err
 		}
-		log.InfoLogOnly("YubiKey-only authentication successful (%s).", ks.Slots[slotIndex].Label)
+		log.Info("YubiKey-only authentication successful (%s).", ks.Slots[slotIndex].Label)
 		return master, nil
 	}
 
@@ -95,7 +95,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		cryptox.ZeroBytes(secret)
 		if err == nil {
 			if yubiSecret != nil {
-				log.InfoLogOnly("YubiKey-2FA successful (%s).", ks.Slots[slotIndex].Label)
+				log.Info("YubiKey-2FA successful (%s).", ks.Slots[slotIndex].Label)
 			}
 			return master, nil
 		}
@@ -104,7 +104,7 @@ func KeySet(u interact.UI, ks *container.KeySet, opts Options, log *logging.Logg
 		}
 		failure = errors.New(PasswordFailurePrefix(yubiSecret != nil, false))
 		if attempt < maxPasswordAttempts {
-			log.WarnLogOnly("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
+			log.Warn("Wrong password or invalid second factor; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
 	if yubiSecret != nil {
@@ -148,7 +148,7 @@ func unlockWithRecoveryCode(u interact.UI, ks *container.KeySet, opts Options, l
 		}
 		failure = err
 		if attempt < maxPasswordAttempts {
-			log.WarnLogOnly("Recovery code rejected; attempt %d/%d", attempt, maxPasswordAttempts)
+			log.Warn("Recovery code rejected; attempt %d/%d", attempt, maxPasswordAttempts)
 		}
 	}
 	return nil, fmt.Errorf("Too many failed recovery code attempts.")
@@ -204,7 +204,6 @@ func deriveYubiKeySecret(u interact.UI, slot container.Slot) ([]byte, error) {
 	if err := checkYubiKeyConnectedFn(); err != nil {
 		return nil, yubikey.ErrRequired
 	}
-	fmt.Fprintln(u.Output(), "YubiKey connected. Follow the on-screen prompts to authenticate.")
 	secret, err := deriveYubiKeySecretFn(*slot.Challenge)
 	if err != nil {
 		return nil, &YubiKeyError{Err: fmt.Errorf("YubiKey authentication failed: %w", err)}

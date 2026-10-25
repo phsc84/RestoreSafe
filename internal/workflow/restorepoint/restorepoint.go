@@ -103,7 +103,7 @@ func read(ctx context.Context, set, base *container.Set, master []byte, destDir 
 	}
 	if err := r.Finish(); err != nil {
 		for _, p := range r.MissingFiles() {
-			log.WarnLogOnly("  Missing in backup data: %s", p)
+			log.Warn("  Missing in backup data: %s", p)
 		}
 		return nil, err
 	}

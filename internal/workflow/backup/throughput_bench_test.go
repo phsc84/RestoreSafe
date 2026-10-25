@@ -42,7 +42,7 @@ func TestThroughputBenchmarkBackup(t *testing.T) {
 			t.Fatal(err)
 		}
 		logPath := filepath.Join(t.TempDir(), "bench.log")
-		log, err := logging.NewLogger(logPath, "info", nil)
+		log, err := logging.NewLogger(logPath, "info")
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -42,7 +42,6 @@ type Request struct {
 // and reporting progress to it. Cancelling ctx stops the restore; the
 // returned error then matches context.Canceled.
 func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, req Request) error {
-	out := u.Output()
 	backupDir := fsx.ResolveDir(cfg.BackupDirectory, exeDir)
 	if strings.TrimSpace(req.Destination) == "" {
 		return problem.New("No restore destination chosen.").WithRemedy("Choose the folder to restore into.")
@@ -96,8 +95,7 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string, 
 		return err
 	}
 	if !confirmed {
-		log.InfoLogOnly("Restore cancelled by user before start")
-		fmt.Fprintln(out, "Restore cancelled.")
+		log.Info("Restore cancelled by user before start")
 		return nil
 	}
 
@@ -129,7 +127,6 @@ type operation struct {
 
 // run restores the selected sets; u receives the progress and the summary.
 func (o *operation) run(ctx context.Context, u interact.UI, warningCount int) error {
-	fmt.Fprintln(u.Output())
 	job.LogStart(o.log, "Restore", o.selected)
 
 	unread, err := o.restoreAll(ctx, u)

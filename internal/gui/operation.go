@@ -68,7 +68,6 @@ func (a *app) startOperation(req opRequest) {
 		win32.PostMessage(a.hwnd, msgBridge, uintptr(kind), 0) //nolint:errcheck
 	})
 	a.run = r
-	a.logText.Reset()
 	u := flow.NewUI(r.b, questions{a})
 
 	switch op {
@@ -135,14 +134,6 @@ func (a *app) onProgress() {
 	a.refreshRun()
 }
 
-// onOutput keeps new output.
-func (a *app) onOutput() {
-	if a.run == nil {
-		return
-	}
-	a.logText.WriteString(a.run.b.TakeOutput())
-}
-
 // confirmCancel handles Cancel while an operation runs: it asks first once
 // the operation has started (figure 6.3).
 func (a *app) confirmCancel() {
@@ -185,7 +176,6 @@ func (a *app) onWorkerDone() {
 	}
 	end := <-r.doneCh
 	r.cancel()
-	a.onOutput()
 	a.run = nil
 	if a.plan != nil {
 		// The plan blocked the start: the result card says why.

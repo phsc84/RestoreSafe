@@ -78,27 +78,6 @@ func TestBridgeCloseAnswersShownAndLaterQuestions(t *testing.T) {
 	}
 }
 
-func TestBridgeOutputKeepsOrderAndIsCoalesced(t *testing.T) {
-	t.Parallel()
-	u := newUIThread()
-	for _, s := range []string{"one\n", "two\n", "Wrong password. 2 attempt(s) remaining.\n"} {
-		u.b.Write([]byte(s)) //nolint:errcheck
-	}
-	if k := u.next(t); k != NoteOutput {
-		t.Fatalf("expected an output notification, got %d", k)
-	}
-	if len(u.notes) != 0 {
-		t.Fatalf("output must be posted once until taken, got %d more notifications", len(u.notes))
-	}
-	if got := u.b.TakeOutput(); got != "one\ntwo\nWrong password. 2 attempt(s) remaining.\n" {
-		t.Fatalf("unexpected output %q", got)
-	}
-	u.b.Write([]byte("three\n")) //nolint:errcheck
-	if k := u.next(t); k != NoteOutput {
-		t.Fatal("output after takeOutput must be posted again")
-	}
-}
-
 func TestBridgeProgressKeepsTheLatestReport(t *testing.T) {
 	t.Parallel()
 	u := newUIThread()
