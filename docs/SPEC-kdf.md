@@ -2,7 +2,7 @@
 
 |          |                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------- |
-| Status   | Draft 0.4 (2026-10-24): defaults decided and measured (sections 4.1, 6); K1, K3 and K4 closed. 0.4: enrollment memory rule uses the installed memory (4.4); old sample values and out-of-range values no longer block start (5.1). Not implemented. |
+| Status   | Draft 0.6 (2026-10-25): defaults decided and measured (sections 4.1, 6); all open questions decided (K1–K4, section 8). 0.4: enrollment memory rule uses the installed memory (4.4); old sample values and out-of-range values no longer block start (5.1). 0.5: the development PC is the weakest restore machine (6). 0.6 (2026-10-25): enrollment minimum 4 GiB (K2); RestoreSafe keeps configured values within the read limits valid, with a warning (5.1); 4.4 steps 1–2 reviewed by the owner. Still to do before "Agreed": the measurement of 4.4 step 4. Not implemented. |
 | Applies  | RestoreSafe (key sets, RestoreSafe SPEC-core 4.4) and MountSafe (vault header, MountSafe SPEC-core 5.1) |
 | Origin   | Review of SPEC-refactoring 5.4, refactoring round after 2.1.0                                      |
 | Sources  | RFC 9106 sections 4 and 7; OWASP Password Storage Cheat Sheet                                       |
@@ -104,19 +104,20 @@ Extra passes reuse memory that is already allocated: they add time, not memory. 
 | t | **2** (K1, decided 2026-10-24) | The second pass costs less than the first: on the development PC 4.35 s against 2.97 s for t=1 (section 6), because the first pass also includes getting 4 GiB of fresh memory from Windows. For about 1.4 s more, the attacker's cost per guess rises two- to threefold (2.4), and backups stay readable by RestoreSafe 2.0 and 2.1 (5.2). |
 | p | **4** | RFC 9106 4 step 4; uses four cores to fill 4 GiB in the time budget (2.2). |
 
-The unlock time with the defaults is measured on the development machine and on the weakest machine the user wants to restore on, and recorded in section 6. Target: under 5 seconds on the development machine with other programs closed; met with 4.35 s. In everyday use, with less memory free, it takes 6–7 s (section 6, 4.4).
+The unlock time with the defaults is measured on the weakest machine the user wants to restore on, and recorded in section 6. That machine is the development PC (a six-year-old entry-level AMD Ryzen, 16 GB): every other PC that restores is faster, so its numbers are the ones that count. Target: under 5 seconds on the development machine with other programs closed; met with 4.35 s. In everyday use, with less memory free, it takes 6–7 s (section 6, 4.4).
 
 2 GiB with t=3 (3.13 s) was the alternative that always fits into the free memory of the development PC; by the cost model of 2.4 it costs an attacker about a third of the default per guess, so the default stays at 4 GiB.
 
-### 4.2 Enrollment limits (what a new key set or vault may be created with)
+### 4.2 Enrollment limits (what a new key set or vault should be created with)
 
 | Parameter | Minimum | Maximum |
 | --------- | ------- | ------- |
-| m | 1 GiB | 32 GiB |
+| m | 4 GiB | 32 GiB |
 | t | 1 | 10 |
 | p | 1 | 16 |
 
-- The minimum keeps a configuration from creating key sets that are weak against an offline attacker; it replaces 64 MiB.
+- The minimum equals the default (K2): Windows 11 PCs in use have at least 8 GiB, which is what the rule of 4.4 step 2 needs for 4 GiB, so no machine needs less. It replaces 64 MiB.
+- MountSafe enforces these limits. RestoreSafe still creates keys with configured values that are outside them but within the read limits of 4.3, which include every value 2.0 and 2.1 accepted, and warns that they should be changed in `config.yaml` (5.1).
 - **Values above the default are for machines with very large RAM only.** The memory is needed by **every machine that ever unlocks the key set**, not only by the one that creates it: a replacement laptop after the original was stolen, another PC that mounts the vault. A backup with 32 GiB keys cannot be restored on a 16 GB laptop in reasonable time. Before raising m, make sure every machine that may have to restore has at least twice that much RAM.
 - Raise t only when m cannot grow further on the weakest machine and time is left (2.4).
 
@@ -142,7 +143,7 @@ Windows limits allocations by the commit limit (RAM plus page file), not by phys
 
 Only the last case needs the user. Therefore, before every derivation:
 
-1. Read the installed memory (`GetPhysicallyInstalledSystemMemory`), the total and available physical memory and the available commit (`GlobalMemoryStatusEx`: `ullTotalPhys`, `ullAvailPhys`, `ullAvailPageFile`). `ullTotalPhys` is lower than the installed memory by what the firmware and an integrated GPU reserve (an 8 GiB PC reports about 7.8 GiB), so the enrollment rule uses the installed memory; if that call fails, `ullTotalPhys` rounded up to the next GiB.
+1. Read the installed memory (`GetPhysicallyInstalledSystemMemory`), the total and available physical memory and the available commit (`GlobalMemoryStatusEx`: `ullTotalPhys`, `ullAvailPhys`, `ullAvailPageFile`). `ullTotalPhys` is lower than the installed memory by what the firmware and an integrated GPU reserve: a few hundred MiB without integrated graphics, several GiB with it (the development PC reports 13.9 GiB of 16 GiB, section 6), so the enrollment rule uses the installed memory; if that call fails, `ullTotalPhys` rounded up to the next GiB.
 2. **Enrollment:** if m is larger than half the installed memory, refuse: *"These key settings need 8 GiB of memory; this PC has 8 GiB. Use at most 4 GiB."* With the default of 4 GiB, a PC with 8 GiB installed passes.
 3. **Unlock, m larger than the available commit:** refuse, since the process would end: *"Opening these keys needs 4 GiB of memory, but Windows can provide only 3.1 GiB right now (memory and page file). Close other programs and try again."* – **Try again** / **Cancel**.
 4. **Unlock, m larger than the total physical memory minus 2 GiB:** ask: *"Opening these keys needs 4 GiB of memory; this PC has 5.9 GiB in all. Opening them can take very long. Close other programs and try again, or continue."* – **Try again** / **Continue** / **Cancel**.
@@ -152,12 +153,13 @@ Only the last case needs the user. Therefore, before every derivation:
 
 ### 5.1 Behaviour
 
-- New key sets use the defaults of 4.1 unless `config.yaml` sets other values within 4.2.
-- Existing key sets are not changed; they are reused as before (RestoreSafe SPEC-core D5). When the current key set uses parameters below the enrollment minimum, the Keys card and the preflight say so and offer **New keys + full backup…**; nothing is forced.
+- New key sets use the defaults of 4.1 unless `config.yaml` sets other values within the read limits of 4.3.
+- Existing key sets are not changed; they are reused as before (RestoreSafe SPEC-core D5). When the current key set uses parameters below the enrollment minimum of 4.2, the Keys card and the preflight say so and offer **New keys + full backup…**; nothing is forced.
 - The memory check of 4.4 runs before every derivation.
 - `config.yaml`: the argon2 settings keep their names; their documentation in `config-SAMPLE.yaml` says MiB (refactoring RF-98) and points to sections 2 and 3 of this spec. The argon2 values are used only when new keys are created, so they never stop RestoreSafe from starting, restoring or verifying:
   - **The old sample block.** `config-SAMPLE.yaml` of 2.0 and 2.1 set `time: 3`, `memory_mb: 512`, `threads: 4`, and most configurations are copies of it. A block with exactly these three values is a retired default (GUI spec 11.6): it is ignored, so the defaults of 4.1 apply, and the start dialog of GUI spec ST-10 offers to remove it. Any other explicit value is the user's choice and is kept.
-  - **Values outside 4.2** load; the health check reports `ARGON2_OUT_OF_RANGE` (GUI spec 11.8) naming the key, its value and the limit. It blocks only a backup that creates new keys (the preflight says so, with the remedy); a backup that reuses the current key set, restore and verify are not affected. Values are never capped silently.
+  - **Values outside 4.2 but within 4.3** (for example `memory_mb: 2048`, or `time: 15`) stay valid: new keys are created with them. The health check reports `ARGON2_BELOW_RECOMMENDED` (GUI spec 11.8), a warning naming the key, its value and the limit of 4.2, with the remedy to change it in `config.yaml`; the preflight of a backup that creates new keys repeats it.
+  - **Values outside 4.3** load; the health check reports `ARGON2_OUT_OF_RANGE` (GUI spec 11.8) naming the key, its value and the limit. It blocks only a backup that creates new keys (the preflight says so, with the remedy); a backup that reuses the current key set, restore and verify are not affected. Values are never capped silently.
 
 ### 5.2 Compatibility
 
@@ -176,7 +178,7 @@ The format does not change: the slot's `kdf` object already carries `time`, `mem
 
 ## 6. Measurements
 
-Measured 2026-10-24 with `tools/kdfbench` of MountSafe (`argon2.IDKey` as both tools call it, 32-byte key, median of 3 derivations; Go 1.27.2). Development PC: 8 logical CPUs, 16 GB RAM (13.9 GiB usable).
+Measured 2026-10-24 with `tools/kdfbench` of MountSafe (`argon2.IDKey` as both tools call it, 32-byte key, median of 3 derivations; Go 1.27.2). Development PC: a six-year-old entry-level AMD Ryzen, 8 logical CPUs, 16 GB RAM (13.9 GiB usable). It is also the weakest machine that must restore (4.1), so there is no separate row for one.
 
 | Machine | RAM | m / t / p | Programs closed (≈ 7 GiB available) | Everyday (3.6–4.8 GiB available) |
 | ------- | --- | --------- | ----------------------------------- | -------------------------------- |
@@ -186,7 +188,6 @@ Measured 2026-10-24 with `tools/kdfbench` of MountSafe (`argon2.IDKey` as both t
 | Development PC | 16 GB | 4 GiB / 1 / 4 | 2.97 s | |
 | Development PC | 16 GB | **4 GiB / 2 / 4 (default)** | **4.35 s** | **5.9–7.3 s** (4.1 GiB available; 2 runs) |
 | Development PC | 16 GB | 8 GiB / 1 / 4 | not run: 7.1 GiB available | |
-| Weakest restore machine | | 4 GiB / 2 / 4 | | |
 
 **Above the available memory** (the everyday column of the default): Windows moved idle memory of other programs into the page file; the derivation took up to 3 s longer, the other programs did not feel slower afterwards, and nothing aborted. This is why 4.4 asks only near the total physical memory or above the commit limit. Not measured: m close to the total physical memory (8–12 GiB on this PC), which 4.4 step 4 covers without a measurement.
 
@@ -199,6 +200,6 @@ MountSafe uses the same defaults and limits from its first version (MountSafe SP
 | # | Question | Proposal |
 | - | -------- | -------- |
 | K1 | t=1 (optimal per unit of time; new backups need this version to restore) or t=2 at 4 GiB (twice the unlock time, about three times the attacker cost, 2.0 and 2.1 can still restore; 2.4, 5.2)? | **Decided 2026-10-24: t=2.** 4.35 s on the development PC (section 6), within the budget, and the second pass costs only about 1.4 s. |
-| K2 | Enrollment minimum 1 GiB, or 2 GiB (RFC 9106's first recommended option)? | 1 GiB, so 4 GB machines can still create keys; the default is what matters. |
+| K2 | Enrollment minimum 1 GiB, 2 GiB (RFC 9106's first recommended option), or 4 GiB? | **Decided 2026-10-25: 4 GiB**, equal to the default (first decided 2 GiB on 2026-10-24). Windows 11 PCs in use have at least 8 GiB, enough for 4 GiB by 4.4 step 2; a PC with less can't create keys, which is accepted. In RestoreSafe, configured values below it but within 4.3 stay valid, with a warning (5.1). |
 | K3 | `password_min_length` stays 12, or rises with this change? | **Decided 2026-10-24: 12 stays**, in RestoreSafe and MountSafe. In mode 1 the password's strength and these parameters together set the attacker's cost (section 3); the new default raises the cost per guess about fiftyfold over the old one at the same password length (memory × time, 2.4: 8 times the memory, held about 7 times as long, section 6). |
 | K4 | Release as 2.2.0 (format unchanged, ranges extended) or 3.0.0? | **Decided 2026-10-24: 2.2.0**, with the compatibility note of 5.2 in the release notes. The format does not change; every older backup opens; backups with the new default keys (4 GiB, t=2) also restore with 2.0 and 2.1, whose limits include 4096 MiB and t=2 (`cryptox` `MaxArgonMemoryKB`, `MinArgonTime`). |
