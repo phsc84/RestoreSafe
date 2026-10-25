@@ -72,6 +72,11 @@ func Run(ctx context.Context, u interact.UI, cfg *config.Config, exeDir string) 
 	}
 	defer job.CloseLog(u, log)
 	u.LogStarted(logPath)
+	for _, a := range cfg.Adjusted {
+		// The hero asks to fix the file (CONFIG_ADJUSTED); the log records
+		// which value each run used.
+		log.Info("Setting adjusted: %s %d in config.yaml is used as %d.", a.Key, a.Value, a.Used)
+	}
 
 	removeLeftoverTempParts(backupDir, log)
 

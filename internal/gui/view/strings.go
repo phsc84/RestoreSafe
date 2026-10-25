@@ -68,6 +68,8 @@ const (
 	heroSpaceLowLine       = "A full backup of all folders needs about %s; %s are free."
 	heroArgon2             = "A key setting was too high and was capped"
 	heroArgon2Line         = "Lower the value in config.yaml."
+	heroAdjusted           = "A setting in config.yaml was changed for safety"
+	heroAdjustedLine       = "%s: %d is used as %d. Set %d or more in config.yaml."
 )
 
 // Buttons and links; & marks the access key.
@@ -503,9 +505,10 @@ const (
 	keepDefault         = " (the default; %s recommended)"
 	recommendedKeep     = 3
 	keepNChains         = "%s per folder"
+	keepAdjusted        = ". %d in config.yaml is used as %d; set %d or more there."
 	keepAllDiffs        = "All of a chain"
 	keepNDiffs          = "%d per chain"
-	retentionRuns       = "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files."
+	retentionRuns       = "Runs after each successful backup; skipped after a failed verification or when the newest backup has skipped files. Keeps at least 2 chains, so a backup folder that loses power right after a backup still holds the previous one."
 	cardChecks          = "Checks"
 	settingVerifyAfter  = "Verify each backup after it's written"
 	settingReminder     = "Reminder"

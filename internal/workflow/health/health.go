@@ -116,6 +116,7 @@ func inspect(cfg *config.Config, exeDir, configPath string) inspection {
 	}
 	in.items = append(in.items, checkConfigFileHealth(in.configPath)...)
 	in.items = append(in.items, checkArgon2Health(cfg)...)
+	in.items = append(in.items, checkAdjustedSettings(cfg)...)
 	in.items = append(in.items, sourceItems(in.sources)...)
 	in.items = append(in.items, checkBackupDirectoryHealth(in.backupDir)...)
 
@@ -167,6 +168,22 @@ func checkArgon2Health(cfg *config.Config) []healthItem {
 			Code:     interact.CodeArgon2Capped,
 			Scope:    healthScopeArgon2,
 			Detail:   notice + " Remedy: Lower the value in config.yaml to silence this warning.",
+		})
+	}
+	return items
+}
+
+// checkAdjustedSettings surfaces a warning for each setting Load used with a
+// safe value instead of the file's (CONFIG_ADJUSTED, refactoring after 2.1.0
+// RF-123).
+func checkAdjustedSettings(cfg *config.Config) []healthItem {
+	items := make([]healthItem, 0, len(cfg.Adjusted))
+	for _, a := range cfg.Adjusted {
+		items = append(items, healthItem{
+			Severity: healthWarn,
+			Code:     interact.CodeConfigAdjusted,
+			Scope:    healthScopeConfig,
+			Detail:   fmt.Sprintf("%s: %d in config.yaml is used as %d. Remedy: Set %d or more in config.yaml.", a.Key, a.Value, a.Used, a.Used),
 		})
 	}
 	return items

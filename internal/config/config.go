@@ -104,6 +104,11 @@ type Config struct {
 	// never read from YAML, and surfaced as warnings by the startup health check.
 	Argon2Notices []string `yaml:"-"`
 
+	// Adjusted lists the settings Load used with another value than the
+	// file's, because the file's would be unsafe; the health check reports
+	// each (CONFIG_ADJUSTED, GUI spec 11.8). Set by Load.
+	Adjusted []Adjustment `yaml:"-"`
+
 	// MissingKeys lists the settings the file doesn't contain, in the order
 	// of config-SAMPLE.yaml; their defaults apply. A block missing entirely
 	// is listed by its name ("differential"), single keys of a block by
@@ -114,6 +119,20 @@ type Config struct {
 	// has, in the order of the file; they are ignored. Set by Load.
 	RetiredKeys []Retired `yaml:"-"`
 }
+
+// Adjustment is a setting of config.yaml that Load uses with another value:
+// Key with the file's Value is used as Used.
+type Adjustment struct {
+	Key         string
+	Value, Used int
+}
+
+// MinRetentionKeep is the least number of chains retention keeps, besides 0
+// for all (refactoring after 2.1.0 RF-123): retention deletes old chains
+// right after a backup, and a backup directory that loses power then can
+// lose the new chain's last writes; the second chain is the backup that is
+// left.
+const MinRetentionKeep = 2
 
 // Backup reminder: the start screen warns when the newest backup is older
 // than reminder_days. 0 turns the reminder off.
@@ -245,7 +264,18 @@ func parse(data []byte) (*Config, error) {
 
 	cfg.withDefaults()
 	cfg.clampArgon2()
+	cfg.adjust()
 	return &cfg, cfg.validate()
+}
+
+// adjust uses a safe value for a setting whose value in the file would be
+// unsafe, and records it in Adjusted: such a file still loads, so restores
+// keep working, and the window asks to fix it.
+func (c *Config) adjust() {
+	if c.RetentionKeep > 0 && c.RetentionKeep < MinRetentionKeep {
+		c.Adjusted = append(c.Adjusted, Adjustment{Key: "retention_keep", Value: c.RetentionKeep, Used: MinRetentionKeep})
+		c.RetentionKeep = MinRetentionKeep
+	}
 }
 
 // syntaxError explains an error of yaml that isn't about unknown keys.
@@ -317,7 +347,7 @@ func (c *Config) validate() error {
 		return problem.Errorf("Invalid 'log_level': %q (allowed: debug, info).", c.LogLevel).WithRemedy("Set 'log_level' to 'info' or 'debug'.")
 	}
 	if c.RetentionKeep < 0 {
-		return problem.Errorf("Invalid 'retention_keep': %d (must be >= 0).", c.RetentionKeep).WithRemedy("Use 0 (disabled) or a positive number, e.g. 7.")
+		return problem.Errorf("Invalid 'retention_keep': %d (must be 0 or at least %d).", c.RetentionKeep, MinRetentionKeep).WithRemedy(fmt.Sprintf("Use 0 (keep all backups) or %d or more, e.g. 3.", MinRetentionKeep))
 	}
 	switch c.AuthenticationMode {
 	case AuthModePassword, AuthModePasswordYubiKey, AuthModeYubiKey:

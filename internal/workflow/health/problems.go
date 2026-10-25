@@ -69,7 +69,7 @@ func problems(p Params, in inspection, s *Snapshot) (problems, notes []Problem) 
 	if st := s.Storage; st.Known && st.FullEstimate > st.FreeBytes {
 		problems = append(problems, Problem{Code: interact.CodeSpaceLow, Status: interact.StatusWarn, Path: in.backupDir, Bytes: st.FullEstimate})
 	}
-	problems = append(problems, fromItems(interact.StatusWarn, interact.CodeArgon2Capped)...)
+	problems = append(problems, fromItems(interact.StatusWarn, interact.CodeArgon2Capped, interact.CodeConfigAdjusted)...)
 	for _, item := range in.items {
 		if item.Severity == healthWarn && item.Code == interact.CodeBackupDirNotWritable {
 			problems = append(problems, Problem{Code: item.Code, Status: interact.StatusWarn, Path: in.backupDir, Detail: item.Detail})

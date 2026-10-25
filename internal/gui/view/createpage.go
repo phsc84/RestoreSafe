@@ -180,6 +180,31 @@ func backupProblems(problems []health.Problem) []health.Problem {
 	return out
 }
 
+// adjustedLine names the settings Load used with a safe value (CONFIG_ADJUSTED):
+// "retention_keep: 1 is used as 2. Set 2 or more in config.yaml."
+func adjustedLine(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	var lines []string
+	for _, a := range cfg.Adjusted {
+		lines = append(lines, fmt.Sprintf(heroAdjustedLine, a.Key, a.Value, a.Used, a.Used))
+	}
+	return strings.Join(lines, " ")
+}
+
+// adjustment returns how Load adjusted key, if it did.
+func adjustment(cfg *config.Config, key string) (config.Adjustment, bool) {
+	if cfg != nil {
+		for _, a := range cfg.Adjusted {
+			if a.Key == key {
+				return a, true
+			}
+		}
+	}
+	return config.Adjustment{}, false
+}
+
 // problemHero words the most urgent problem with its fix action.
 func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now time.Time, backUp Button) Hero {
 	checkAgain := Button{Text: buttonCheckAgain, Action: ActionCheckAgain, Enabled: true}
@@ -226,6 +251,8 @@ func problemHero(p health.Problem, s *health.Snapshot, cfg *config.Config, now t
 		return Hero{Title: heroSpaceLow, Line: fmt.Sprintf(heroSpaceLowLine, Size(p.Bytes), Size(s.Storage.FreeBytes)), Primary: showBackups}
 	case interact.CodeArgon2Capped:
 		return Hero{Title: heroArgon2, Line: heroArgon2Line, Primary: *editConfig}
+	case interact.CodeConfigAdjusted:
+		return Hero{Title: heroAdjusted, Line: adjustedLine(cfg), Primary: *editConfig}
 	case interact.CodeYubiKeysConnected:
 		return Hero{Title: heroYubiKeys, Line: heroYubiKeysLine, Primary: checkAgain}
 	}

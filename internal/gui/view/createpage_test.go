@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/phsc84/restoresafe/internal/config"
 	"github.com/phsc84/restoresafe/internal/format/catalog"
 	"github.com/phsc84/restoresafe/internal/format/naming"
 	"github.com/phsc84/restoresafe/internal/testutil/scenario"
@@ -42,6 +43,7 @@ func TestCreatePageHeroOfEveryScenario(t *testing.T) {
 		{scenario.IncompleteNewest, ToneNeutral, "Ready to back up", ActionBackUp, ActionNone},
 		{scenario.VerifyFailed, ToneError, "A backup of Docs is damaged", ActionBackUp, ActionNone},
 		{scenario.Argon2Capped, ToneWarning, "capped", ActionEditConfig, ActionNone},
+		{scenario.ConfigAdjusted, ToneWarning, "changed for safety", ActionEditConfig, ActionNone},
 		{scenario.NewKeysNeeded, ToneSuccess, "Your folders are protected", ActionBackUp, ActionNone},
 		{scenario.Legacy1x, ToneSuccess, "Your folders are protected", ActionBackUp, ActionNone},
 		{scenario.LeftoverTmp, ToneSuccess, "Your folders are protected", ActionBackUp, ActionNone},
@@ -160,9 +162,11 @@ func TestEveryProblemHasWords(t *testing.T) {
 		interact.CodeConfigInvalid, interact.CodeBackupDirUnreachable, interact.CodeBackupDirNotWritable,
 		interact.CodeSourceMissing, interact.CodeSourceInvalid, interact.CodeBaseMissing, interact.CodeSetIncomplete,
 		interact.CodeVerifyFailed, interact.CodeOverdue, interact.CodeFolderNotBackedUp, interact.CodeSkippedFiles,
-		interact.CodeIncompleteNewest, interact.CodeSpaceLow, interact.CodeArgon2Capped, interact.CodeYubiKeysConnected,
+		interact.CodeIncompleteNewest, interact.CodeSpaceLow, interact.CodeArgon2Capped, interact.CodeConfigAdjusted, interact.CodeYubiKeysConnected,
 	} {
-		h := problemHero(health.Problem{Code: code, Folder: "Docs", Path: "C:/Docs", Count: 2}, &s, sc.Config, sc.Now, Button{Action: ActionBackUp})
+		cfg := *sc.Config
+		cfg.Adjusted = []config.Adjustment{{Key: "retention_keep", Value: 1, Used: 2}}
+		h := problemHero(health.Problem{Code: code, Folder: "Docs", Path: "C:/Docs", Count: 2}, &s, &cfg, sc.Now, Button{Action: ActionBackUp})
 		if h.Title == string(code) || h.Title == "" || h.Line == "" || h.Primary.Action == ActionNone {
 			t.Fatalf("%s has no words: %+v", code, h)
 		}

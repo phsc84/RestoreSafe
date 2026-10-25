@@ -19,6 +19,7 @@ const (
 	CodeBackupDirNew         Code = "BACKUP_DIR_NEW"
 	CodeNoBackups            Code = "NO_BACKUPS"
 	CodeArgon2Capped         Code = "ARGON2_CAPPED"
+	CodeConfigAdjusted       Code = "CONFIG_ADJUSTED" // a setting used with a safe value
 	CodeYubiKeyNotConnected  Code = "YUBIKEY_NOT_CONNECTED"
 	CodeYubiKeysConnected    Code = "YUBIKEYS_CONNECTED" // more than one: no backup
 	CodeNewKeysNeeded        Code = "NEW_KEYS_NEEDED"

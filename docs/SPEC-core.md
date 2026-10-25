@@ -557,7 +557,7 @@ Verify performs the restore algorithm of section 7 with all writes replaced by h
 
 **Counting.**
 
-- `retention_keep` = number of **chains** to keep per directory (0 = keep all). Only chains whose full is complete count; they are ordered by their full's `created_utc`, sets dated in the future excluded from the ranking (they are kept in addition).
+- `retention_keep` = number of **chains** to keep per directory: 0 keeps all, otherwise at least 2. Retention deletes right after the new set's last flush, and a backup directory whose flushes are not durable (a NAS whose SMB server confirms a flush before the data is on disk) can lose the new set's last writes in a power loss shortly after; the second chain is then the backup that is left. A 1 in the file is used as 2 and reported (`CONFIG_ADJUSTED`, GUI spec 11.8), so the file still loads and restores keep working (refactoring after 2.1.0 RF-123). Only chains whose full is complete count; they are ordered by their full's `created_utc`, sets dated in the future excluded from the ranking (they are kept in addition).
 - Deleting a chain deletes its full and all its differentials, complete or not: the differentials first, highest number first, the full last, so an interrupted cleanup never leaves differentials without their full.
 - A log file is deleted when no remaining set has its run ID as `run_id` (header).
 - `differential.retention_keep_differentials` (0 = keep all) limits the **complete** differentials within **each** kept chain; the oldest (lowest numbers) are deleted first. The newest complete differential is always kept, and so is any differential with a higher number (complete or not), so differential numbers are never reused. The two settings are independent: either one alone enables cleanup.
@@ -588,7 +588,8 @@ Keys introduced or changed in 2.0 (the other 1.x keys keep their meaning, except
 
 ```yaml
 # Number of backup chains (a full backup plus its differential backups) kept per
-# source directory. 0 = keep all.
+# source directory. 0 = keep all; otherwise at least 2 (section 9). A 1 is used
+# as 2, with a warning.
 retention_keep: 3
 
 # Files and directories to leave out of every backup. See README for the syntax.

@@ -53,6 +53,7 @@ func TestSnapshotOfEveryScenario(t *testing.T) {
 		{scenario.IncompleteNewest, StateWarning, interact.CodeIncompleteNewest, "Docs", ""},
 		{scenario.VerifyFailed, StateError, interact.CodeVerifyFailed, "Docs", ""},
 		{scenario.Argon2Capped, StateWarning, interact.CodeArgon2Capped, "", ""},
+		{scenario.ConfigAdjusted, StateWarning, interact.CodeConfigAdjusted, "", ""},
 		{scenario.NewKeysNeeded, StateProtected, "", "", interact.CodeNewKeysNeeded},
 		{scenario.Legacy1x, StateProtected, "", "", interact.CodeLegacyBackups},
 		{scenario.LeftoverTmp, StateProtected, "", "", interact.CodeLeftoverTempFiles},

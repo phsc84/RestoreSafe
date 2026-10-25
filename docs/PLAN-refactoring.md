@@ -15,8 +15,8 @@ Every item in the order of the phases (section "Phases"); the details are in the
 
 | Phase | Item | P | What | Status |
 |---|---|---|---|---|
-| 1. Fixes (2.1.2) | RF-109 | P1 | Problems with the log file itself reach the user (result warning with the TEMP copy) | Implemented 2026-10-25, `tools/ci fast` passes; not committed |
-| | RF-123 | P2 | `retention_keep` at least 2; a 1 is used as 2 with a warning | Open |
+| 1. Fixes (2.1.2) | RF-109 | P1 | Problems with the log file itself reach the user (result warning with the TEMP copy) | Done in `7768635` |
+| | RF-123 | P2 | `retention_keep` at least 2; a 1 is used as 2 with a warning | Done 2026-10-25 (commit "RF-123: retention_keep is at least 2"). The skip of retention after a failed verification has no test of its own: it needs a set damaged between writing and verifying. Owner test before release open |
 | | RF-118 | P2 | Links counted and logged; online-only cloud files announced; classification by reparse tag | Open |
 | | RF-119 | P2 | Recovery code: typed field without a Go string, clipboard emptied on close | Open |
 | | RF-120 | P2 | README says what the logs reveal | Open |

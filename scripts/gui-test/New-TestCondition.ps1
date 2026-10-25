@@ -12,7 +12,7 @@
 param(
   [Parameter(Mandatory)][string]$Config,
   [Parameter(Mandatory)][ValidateSet("Protected", "Empty", "SkippedFiles", "BaseMissing", "SourceMissing", "BackupDirUnreachable",
-    "IncompleteNewest", "VerifyFailed", "Argon2Capped", "NewKeysNeeded", "Legacy1x", "LeftoverTmp", "FolderNotBackedUp")][string]$Condition,
+    "IncompleteNewest", "VerifyFailed", "Argon2Capped", "ConfigAdjusted", "NewKeysNeeded", "Legacy1x", "LeftoverTmp", "FolderNotBackedUp")][string]$Condition,
   [Parameter(Mandatory)][string]$Out
 )
 $ErrorActionPreference = "Stop"
@@ -77,6 +77,11 @@ switch ($Condition) {
     # the configuration invalid instead of capped.
     if ($text -match '(?m)^\s+memory_mb:') { $text = $text -replace '(?m)^(\s+memory_mb:).*$', '$1 99999' }
     else { $text += "`nargon2:`n  memory_mb: 99999`n" }
+  }
+  "ConfigAdjusted" {
+    # retention_keep 1, which RestoreSafe uses as 2 with a warning (RF-123).
+    if ($text -match '(?m)^retention_keep:') { $text = $text -replace '(?m)^retention_keep:.*$', 'retention_keep: 1' }
+    else { $text += "`nretention_keep: 1`n" }
   }
   "NewKeysNeeded" {
     if ($text -match '(?m)^recovery_code:\s*true') { $text = $text -replace '(?m)^recovery_code:\s*true', 'recovery_code: false' }

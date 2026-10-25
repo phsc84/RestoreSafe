@@ -43,6 +43,8 @@ const (
 	VerifyFailed Condition = "VerifyFailed"
 	// Argon2Capped: an Argon2 value of the configuration was capped.
 	Argon2Capped Condition = "Argon2Capped"
+	// ConfigAdjusted: retention_keep 1 in the configuration is used as 2.
+	ConfigAdjusted Condition = "ConfigAdjusted"
 	// NewKeysNeeded: the configuration asks for a recovery code the keys
 	// do not have.
 	NewKeysNeeded Condition = "NewKeysNeeded"
@@ -58,7 +60,7 @@ const (
 // All lists every condition.
 var All = []Condition{
 	Protected, Empty, Overdue, SkippedFiles, BaseMissing, SourceMissing, BackupDirUnreachable,
-	IncompleteNewest, VerifyFailed, Argon2Capped, NewKeysNeeded, Legacy1x, LeftoverTmp, FolderNotBackedUp,
+	IncompleteNewest, VerifyFailed, Argon2Capped, ConfigAdjusted, NewKeysNeeded, Legacy1x, LeftoverTmp, FolderNotBackedUp,
 }
 
 // Password unlocks the keys of every scenario.
@@ -178,6 +180,10 @@ func Build(t testing.TB, c Condition) Scenario {
 		b.facts = append(b.facts, logging.Fact{Kind: logging.FactVerify, Result: logging.ResultFailed, Set: b.written["Docs"].String(), Error: "checksum mismatch in Docs/report.txt"})
 	case Argon2Capped:
 		b.s.Config.Argon2Notices = []string{"argon2.memory_mb 8192 exceeds the maximum 4096; 4096 will be used."}
+	case ConfigAdjusted:
+		// As Load leaves a file with retention_keep: 1.
+		b.s.Config.RetentionKeep = config.MinRetentionKeep
+		b.s.Config.Adjusted = []config.Adjustment{{Key: "retention_keep", Value: 1, Used: config.MinRetentionKeep}}
 	case NewKeysNeeded:
 		b.s.Config.RecoveryCode = true
 	case Legacy1x:

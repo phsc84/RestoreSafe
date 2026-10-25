@@ -27,6 +27,7 @@ $expected = [ordered]@{
   IncompleteNewest     = @("Ready to back up", $backUp)
   VerifyFailed         = @("A backup of * is damaged", $backUp)
   Argon2Capped         = @("A key setting was too high and was capped", "&Edit config")
+  ConfigAdjusted       = @("A setting in config.yaml was changed for safety", "&Edit config")
   NewKeysNeeded        = @("Your folders are protected", $backUp)
   Legacy1x             = @("Your folders are protected", $backUp)
   LeftoverTmp          = @("Your folders are protected", $backUp)

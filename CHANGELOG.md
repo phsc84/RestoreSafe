@@ -6,6 +6,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `retention_keep` keeps at least 2 chains (0 still keeps all). Old chains are deleted right after a new backup; if the backup disk or NAS loses power at that moment, the new backup can be damaged, and with 1 chain no backup would be left. A `retention_keep: 1` is used as 2: Create backup and the Retention card on Settings show a warning until `config.yaml` says 2 or more.
+
 ### Fixed
 - When the log of a backup, restore or verification can't be saved in the backup directory, the result card now says so and names the copy in the TEMP folder, which **Show log** opens. Before, this was reported nowhere, and the copy in TEMP was the only one. A log that can't be created, or that misses lines, is reported the same way.
 

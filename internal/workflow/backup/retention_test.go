@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/phsc84/restoresafe/internal/testutil"
 	"github.com/phsc84/restoresafe/internal/testutil/filelock"
 	"github.com/phsc84/restoresafe/internal/workflow/plan"
+
+	"golang.org/x/sys/windows"
 )
 
 type retentionEnv struct {
@@ -335,6 +338,109 @@ func assertNotExists(t *testing.T, path string) {
 	t.Helper()
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected file to be removed: %s", path)
+	}
+}
+
+// TestApplyRetentionPolicyCountsOnlyChainsWithACompleteFull: a newer chain
+// whose full backup is incomplete doesn't count, so the older complete
+// chain is the one retention keeps (core spec 9, counting).
+func TestApplyRetentionPolicyCountsOnlyChainsWithACompleteFull(t *testing.T) {
+	env := newRetentionEnv(t)
+	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
+	newer := env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+	env.truncateSet(t, newer, time.Now().Add(time.Hour))
+
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []naming.BackupEntry{older, newer} {
+		for _, p := range env.parts(t, e) {
+			assertExists(t, p)
+		}
+	}
+}
+
+// TestApplyRetentionPolicyDeletesDifferentialsFirstAndStopsAChain: a chain
+// is deleted from its highest differential down to its full backup, and a
+// deletion that fails stops that chain, so no differential is ever left
+// without its full backup (core spec 9).
+func TestApplyRetentionPolicyDeletesDifferentialsFirstAndStopsAChain(t *testing.T) {
+	env := newRetentionEnv(t)
+	older := env.writeFull(t, "Docs", "AAA001", "2026-03-13")
+	diffs := env.writeDiffs(t, older, 2)
+	env.writeFull(t, "Docs", "BBB002", "2026-03-14")
+
+	// The highest differential can't be deleted: nothing of the chain is.
+	release := holdAgainstDelete(t, env.parts(t, diffs[1])[0])
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err == nil {
+		t.Fatal("a locked differential must fail the cleanup")
+	}
+	release()
+	for _, e := range []naming.BackupEntry{older, diffs[0], diffs[1]} {
+		for _, p := range env.parts(t, e) {
+			assertExists(t, p)
+		}
+	}
+
+	// The full backup can't be deleted: both differentials go first, the
+	// full stays.
+	fullParts := env.parts(t, older)
+	release = holdAgainstDelete(t, fullParts[0])
+	if err := applyRetentionPolicy(env.dir, 1, 0, docsSources(), nil, logging.NewOutputLogger("info", nil)); err == nil {
+		t.Fatal("a locked full backup must fail the cleanup")
+	}
+	release()
+	for _, e := range diffs {
+		if parts, _ := catalog.CollectParts(env.dir, e); len(parts) != 0 {
+			t.Fatalf("differential %s should be gone, has %v", e, parts)
+		}
+	}
+	for _, p := range fullParts {
+		assertExists(t, p)
+	}
+}
+
+// holdAgainstDelete opens path so that it can be read but not deleted, as
+// another program reading a part does; unlike filelock.Hold, the inventory
+// still reads it.
+func holdAgainstDelete(t *testing.T, path string) (release func()) {
+	t.Helper()
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := windows.CreateFile(p, windows.GENERIC_READ, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", path, err)
+	}
+	release = sync.OnceFunc(func() { windows.CloseHandle(h) })
+	t.Cleanup(release)
+	return release
+}
+
+// TestApplyRetentionPolicyKeepsTheNewestCompleteDifferential: with one
+// differential per chain, the newest complete one stays, and so does an
+// incomplete one with a higher number, so numbers are never reused (core
+// spec 9).
+func TestApplyRetentionPolicyKeepsTheNewestCompleteDifferential(t *testing.T) {
+	env := newRetentionEnv(t)
+	src := filepath.Join(t.TempDir(), "Docs")
+	createFile(t, filepath.Join(src, "big.bin"), strings.Repeat("x", 200_000))
+	full := naming.BackupEntry{DirectoryName: "Docs", ChainID: "AAA001", Date: "2026-03-13"}
+	testutil.WriteFullSet(t, src, env.dir, full, env.ks, env.master)
+	diffs := env.writeDiffs(t, full, 3)
+	env.truncateSet(t, diffs[2], time.Now().Add(time.Hour))
+
+	if err := applyRetentionPolicy(env.dir, 0, 1, docsSources(), nil, logging.NewOutputLogger("info", nil)); err != nil {
+		t.Fatal(err)
+	}
+	infos, _ := catalog.Inventory(env.dir)
+	kept := map[naming.BackupEntry]bool{}
+	for _, info := range infos {
+		kept[info.Entry] = true
+	}
+	if !kept[full] || kept[diffs[0]] || !kept[diffs[1]] || !kept[diffs[2]] || len(infos) != 3 {
+		t.Fatalf("expected the full, DIFF002 (newest complete) and DIFF003 (incomplete, higher), got %v", kept)
 	}
 }
 

@@ -141,7 +141,7 @@ The **Restore backup** page lists every backup run with its folders, types, size
 
 | Option | Default | Purpose |
 |---|---|---|
-| `retention_keep` | `3` in `config-SAMPLE.yaml`; `0` when the line is missing | Number of backup chains kept per source directory (0 = keep all) |
+| `retention_keep` | `3` in `config-SAMPLE.yaml`; `0` when the line is missing | Number of backup chains kept per source directory: 0 keeps all, otherwise at least 2, so a backup disk or NAS that loses power right after a backup still holds the previous chain. A 1 is used as 2, with a warning to fix it |
 | `differential.enabled` | `true` | Create differential backups when a usable full backup exists |
 | `differential.full_backup_interval_days` | `30` | Create a new full backup when the last one is this many days old |
 | `differential.max_size_percent` | `50` | Create a new full backup when the last differential reached this percentage of the full backup |

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -186,6 +187,32 @@ func TestConfigSampleIsValid(t *testing.T) {
 		!cfg.ExcludeMatcher.Empty(), cfg.RetentionKeep != 3, cfg.ReminderLimit() != DefaultReminderDays,
 		!d.IsEnabled(), d.IntervalDays() != DefaultFullBackupIntervalDays, d.SizePercent() != DefaultMaxSizePercent, d.RetentionKeepDifferentials != 0:
 		t.Fatalf("config-SAMPLE.yaml values differ from the documented defaults: %+v", cfg)
+	}
+}
+
+// TestRetentionKeepIsAtLeastTwo: 0 keeps all and 2 or more load as they
+// are; a 1 is used as 2 and recorded, so the window can ask to fix the file
+// (RF-123).
+func TestRetentionKeepIsAtLeastTwo(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		value, used int
+		adjusted    bool
+	}{{0, 0, false}, {1, 2, true}, {2, 2, false}, {3, 3, false}} {
+		cfg, err := parse(fmt.Appendf(nil, "source_directories: [\"C:/Docs\"]\nbackup_directory: \"C:/Backup\"\nretention_keep: %d\n", tc.value))
+		if err != nil {
+			t.Fatalf("retention_keep %d: %v", tc.value, err)
+		}
+		if cfg.RetentionKeep != tc.used {
+			t.Fatalf("retention_keep %d is used as %d, want %d", tc.value, cfg.RetentionKeep, tc.used)
+		}
+		want := []Adjustment(nil)
+		if tc.adjusted {
+			want = []Adjustment{{Key: "retention_keep", Value: tc.value, Used: tc.used}}
+		}
+		if !slices.Equal(cfg.Adjusted, want) {
+			t.Fatalf("retention_keep %d: adjusted %+v, want %+v", tc.value, cfg.Adjusted, want)
+		}
 	}
 }
 

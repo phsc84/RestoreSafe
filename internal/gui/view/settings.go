@@ -134,6 +134,13 @@ func SettingsOf(cfg *config.Config, configPath, backupDir string, s *health.Snap
 	if slices.Contains(cfg.MissingKeys, "retention_keep") {
 		p.Retention.Rows[0].Value += fmt.Sprintf(keepDefault, chainCount(recommendedKeep))
 	}
+	// A value Load replaced with a safe one: a warning to fix the file
+	// (CONFIG_ADJUSTED).
+	if a, ok := adjustment(cfg, "retention_keep"); ok {
+		row := &p.Retention.Rows[0]
+		row.Value += fmt.Sprintf(keepAdjusted, a.Value, a.Used, a.Used)
+		row.Tone, row.Glyph = ToneWarning, GlyphWarning
+	}
 
 	reminder := settingOff
 	if n := cfg.ReminderLimit(); n > 0 {

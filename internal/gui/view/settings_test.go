@@ -82,6 +82,15 @@ func TestSettingsShowProblemsAndReload(t *testing.T) {
 	if !strings.Contains(p.Keys.Note, "Your next backup creates new keys") {
 		t.Fatalf("keys note %q", p.Keys.Note)
 	}
+
+	// retention_keep 1 is used as 2: the row warns and says what to set
+	// (RF-123).
+	p = settingsOf(t, scenario.ConfigAdjusted, nil, false)
+	keep := p.Retention.Rows[0]
+	if keep.Value != "2 chains per folder. 1 in config.yaml is used as 2; set 2 or more there." || keep.Tone != ToneWarning || keep.Glyph != GlyphWarning {
+		t.Fatalf("adjusted retention row %+v", keep)
+	}
+	checkWriting(t, p)
 }
 
 func TestSettingsRetentionInWords(t *testing.T) {
@@ -92,7 +101,7 @@ func TestSettingsRetentionInWords(t *testing.T) {
 	}{
 		{0, 0, "All backups", ""},
 		{3, 0, "3 chains per folder", "All of a chain"},
-		{1, 5, "1 chain per folder", "5 per chain"},
+		{2, 5, "2 chains per folder", "5 per chain"},
 	} {
 		cfg := &config.Config{RetentionKeep: tc.keep, SourceDirectories: []string{`C:\Docs`}}
 		cfg.Differential.RetentionKeepDifferentials = tc.diffs
